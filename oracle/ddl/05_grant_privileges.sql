@@ -167,3 +167,48 @@ GRANT SELECT ON WWI_AUDIT.PURGE_LOG            TO WWI_ETL_EXTRACT_ROLE
 /* Sequence needed because the extract account inserts interface errors. */
 GRANT SELECT ON WWI_AUDIT.SEQ_INTERFACE_ERROR  TO WWI_ETL_EXTRACT_ROLE
 /
+
+/* --- cross-schema reads required to compile the extract views -------
+ * These are granted to the owning schema directly, not through a role:
+ * privileges acquired via a role are not visible while a view is being
+ * compiled, so a role grant leaves the view INVALID with ORA-00942.
+ * Every entry below backs a static dependency in oracle/views/*.sql and is
+ * enforced by validation/checks/check_oracle_view_columns.py.
+ * ------------------------------------------------------------------- */
+
+/* WWI_FIN.V_AP_AGING_CURRENT, V_AP_INVOICE_EXTRACT, V_AP_PAYMENT_EXTRACT */
+GRANT SELECT ON WWI_MDM.SUPP_MASTER            TO WWI_FIN
+/
+GRANT SELECT ON WWI_REF.PAYMENT_METHOD_REF     TO WWI_FIN
+/
+
+/* WWI_MDM.V_CUSTOMER_ADDRESS_CURRENT, V_CUSTOMER_EXTRACT, V_PRODUCT_EXTRACT */
+GRANT SELECT ON WWI_REF.CITY_REF               TO WWI_MDM
+/
+GRANT SELECT ON WWI_REF.COUNTRY_REF            TO WWI_MDM
+/
+GRANT SELECT ON WWI_REF.POSTAL_REF             TO WWI_MDM
+/
+GRANT SELECT ON WWI_REF.UOM_REF                TO WWI_MDM
+/
+
+/* WWI_MDM.V_SUPPLIER_EXTRACT */
+GRANT SELECT ON WWI_PROC.VENDOR_CONTRACT       TO WWI_MDM
+/
+GRANT SELECT ON WWI_FIN.WITHHOLDING_RULE       TO WWI_MDM
+/
+
+/* WWI_PROC.V_PURCHASE_ORDER_EXTRACT, V_PO_LINE_EXTRACT,
+   V_SUPPLIER_SCORECARD_CURRENT, V_OPEN_PO_BALANCE */
+GRANT SELECT ON WWI_MDM.SUPP_MASTER            TO WWI_PROC
+/
+GRANT SELECT ON WWI_MDM.PRODUCT_MASTER         TO WWI_PROC
+/
+GRANT SELECT ON WWI_FIN.AP_INVOICE_HDR         TO WWI_PROC
+/
+GRANT SELECT ON WWI_FIN.AP_INVOICE_LINE        TO WWI_PROC
+/
+
+/* WWI_REF.V_PAYMENT_TERMS_EXTRACT */
+GRANT SELECT ON WWI_FIN.PAYMENT_TERMS          TO WWI_REF
+/

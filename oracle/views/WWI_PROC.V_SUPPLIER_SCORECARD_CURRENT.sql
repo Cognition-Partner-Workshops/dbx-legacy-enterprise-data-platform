@@ -10,23 +10,28 @@
  *               the suppliers with recent activity, then joined back to the
  *               latest scorecard row. The DISTINCT has been there since 2007
  *               to hide a fan-out nobody has ever traced.
+ * Notes       : Reads WWI_MDM; the SELECT grants live in
+ *               oracle/ddl/05_grant_privileges.sql.
  * ========================================================================= */
 
 CREATE OR REPLACE VIEW WWI_PROC.V_SUPPLIER_SCORECARD_CURRENT AS
 SELECT s.SUPP_ID,
-       s.SUPP_NUM,
+       s.SUPP_NBR                                        AS SUPP_NUM,
        s.SUPP_NAME,
        s.REGION_CD,
-       s.STATUS_CD                                       AS SUPPLIER_STATUS_CD,
-       sc.PERIOD_CD,
-       sc.OTD_PCT,
-       sc.QUALITY_PCT,
+       s.SUPP_STATUS_CD                                  AS SUPPLIER_STATUS_CD,
+       sc.SCORE_PERIOD_CD                                AS PERIOD_CD,
+       sc.PERIOD_START_DT,
+       sc.PERIOD_END_DT,
+       sc.OTIF_PCT,
+       sc.QUALITY_REJECT_PCT,
        sc.PRICE_VARIANCE_PCT,
-       sc.RESPONSIVENESS_SCORE,
+       sc.INVOICE_ACCURACY_PCT,
        sc.OVERALL_SCORE,
-       sc.RATING_CD,
-       sc.CALC_DT,
-       act.ACTIVE_PO_COUNT,
+       sc.SCORE_BAND_CD                                  AS RATING_CD,
+       sc.TREND_CD,
+       sc.CALCULATED_DT                                  AS CALC_DT,
+       NVL(act.ACTIVE_PO_COUNT, 0)                       AS ACTIVE_PO_COUNT,
        /* the regional thresholds were never harmonised */
        CASE s.REGION_CD
            WHEN 'EU'   THEN CASE WHEN sc.OVERALL_SCORE >= 85 THEN 'PREFERRED'
@@ -43,9 +48,9 @@ SELECT s.SUPP_ID,
   JOIN (
         SELECT sc1.*
           FROM WWI_PROC.SUPPLIER_SCORECARD sc1
-         WHERE sc1.PERIOD_CD = (SELECT MAX(sc2.PERIOD_CD)
-                                  FROM WWI_PROC.SUPPLIER_SCORECARD sc2
-                                 WHERE sc2.SUPP_ID = sc1.SUPP_ID)
+         WHERE sc1.SCORE_PERIOD_CD = (SELECT MAX(sc2.SCORE_PERIOD_CD)
+                                        FROM WWI_PROC.SUPPLIER_SCORECARD sc2
+                                       WHERE sc2.SUPP_ID = sc1.SUPP_ID)
        ) sc
     ON sc.SUPP_ID = s.SUPP_ID
   LEFT OUTER JOIN (
@@ -60,10 +65,11 @@ SELECT s.SUPP_ID,
                   LEFT OUTER JOIN WWI_PROC.VENDOR_CONTRACT v
                     ON v.SUPP_ID = h.SUPP_ID
                  WHERE h.ORDER_DT >= ADD_MONTHS(TRUNC(SYSDATE), -12)
-                   AND h.STATUS_CD IN ('AP', 'OP', 'CL')
+                   AND h.PO_STATUS_CD IN ('OPEN', 'PART', 'RECV')
                ) act_inner
          GROUP BY act_inner.SUPP_ID
        ) act
     ON act.SUPP_ID = s.SUPP_ID
- WHERE s.STATUS_CD <> 'T'
+ WHERE s.SUPP_STATUS_CD <> 'IN'
+   AND NVL(s.DELETED_FLG, 'N') = 'N'
 /

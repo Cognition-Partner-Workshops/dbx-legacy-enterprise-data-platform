@@ -74,14 +74,13 @@ BEGIN
     (
         [ReturnLineID], [InspectionSequence], [InspectedWhen], [InspectedByPersonID],
         [WarehouseSiteID], [ConditionGrade], [QuantityInspected], [QuantityPassed],
-        [QuantityFailed], [FaultCode], [DispositionCode], [MeasurementText], [IsChallenged]
+        [FaultCode], [DispositionCode], [MeasurementText], [IsChallenged]
     )
     VALUES
     (
         @ReturnLineID, @Sequence, SYSDATETIME(), @InspectedByPersonID,
         @WarehouseSiteID, @ConditionGrade, @QuantityInspected, @QuantityPassed,
-        @QuantityInspected - @QuantityPassed, @FaultCode, @DispositionCode,
-        @MeasurementText, 0
+        @FaultCode, @DispositionCode, @MeasurementText, 0
     );
 
     IF @DispositionCode = N'RESALE' AND @QuantityPassed > 0

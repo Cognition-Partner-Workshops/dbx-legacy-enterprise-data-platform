@@ -157,13 +157,18 @@ def _lookup_supplier(flow, name="Lookup Supplier Key", no_match="RD"):
 
 
 def _lookup_date(flow, join_column, output_column, name):
-    """Role-playing date dimension lookup."""
+    """Role-playing date dimension lookup.
+
+    Dimension.Date keys on [Date], so the role key a fact stores is the date
+    itself; the lookup exists to reject dates the dimension has not been
+    populated for rather than to translate the value.
+    """
     flow.lookup(
         name,
         CONN_DW,
-        "SELECT [Date] AS %s, [Date Key] AS %s FROM Dimension.Date;" % (join_column, output_column),
+        "SELECT [Date] AS %s, [Date] AS %s FROM Dimension.Date;" % (join_column, output_column),
         [join_column],
-        [int_col(output_column)],
+        [date_col(output_column)],
         no_match="IG",
     )
 
@@ -1850,7 +1855,7 @@ def build_fact_load_stock_holding():
             "Delete Existing Snapshot For Date",
             CONN_DW,
             "DELETE f FROM [Fact].[Stock Holding] AS f "
-            "INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Position Date Key] "
+            "INNER JOIN Dimension.Date AS d ON d.[Date] = f.[Position Date Key] "
             "WHERE d.[Date] = CAST(? AS date);",
             parameter_bindings=[("$Package::SnapshotDate", 0, "NVARCHAR")],
         )
@@ -1961,7 +1966,7 @@ def build_fact_load_daily_inventory_snapshot():
             "Delete Existing Snapshot For Date",
             CONN_DW,
             "DELETE f FROM [Fact].[Daily Inventory Snapshot] AS f "
-            "INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Position Date Key] "
+            "INNER JOIN Dimension.Date AS d ON d.[Date] = f.[Position Date Key] "
             "WHERE d.[Date] = CAST(? AS date);",
             parameter_bindings=[("$Package::SnapshotDate", 0, "NVARCHAR")],
         )
@@ -1972,7 +1977,7 @@ def build_fact_load_daily_inventory_snapshot():
             "Prune Snapshots Past Retention",
             CONN_DW,
             "DELETE f FROM [Fact].[Daily Inventory Snapshot] AS f "
-            "INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Position Date Key] "
+            "INNER JOIN Dimension.Date AS d ON d.[Date] = f.[Position Date Key] "
             "WHERE d.[Date] < DATEADD(DAY, -1 * ?, CAST(GETDATE() AS date));",
             parameter_bindings=[("$Package::RetentionDays", 0, "LONG")],
         )
@@ -1998,7 +2003,7 @@ def build_fact_load_daily_sales_snapshot():
     columns = [
         int_col("CustomerKey"),
         int_col("StockItemKey"),
-        int_col("InvoiceDateKey"),
+        int_col("InvoiceDateKey"),   # source-side yyyymmdd key from stg.DailySalesSnapshot
         str_col("RegionCode", 6),
         int_col("Quantity"),
         money_col("GrossAmount"),
@@ -2079,7 +2084,7 @@ def build_fact_load_daily_sales_snapshot():
             "Delete Existing Snapshot For Date",
             CONN_DW,
             "DELETE f FROM [Fact].[Daily Sales Snapshot] AS f "
-            "INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Invoice Date Key] "
+            "INNER JOIN Dimension.Date AS d ON d.[Date] = f.[Invoice Date Key] "
             "WHERE d.[Date] = CAST(? AS date);",
             parameter_bindings=[("$Package::SnapshotDate", 0, "NVARCHAR")],
         )
@@ -2862,7 +2867,7 @@ def build_fact_dedup_sale():
         bigint_col("SaleKey"),
         str_col("InvoiceNumber", 20),
         int_col("InvoiceLineNumber"),
-        int_col("InvoiceDateKey"),
+        date_col("InvoiceDateKey"),
         int_col("CustomerKey"),
         int_col("StockItemKey"),
         money_col("NetAmount"),
@@ -2877,7 +2882,7 @@ def build_fact_dedup_sale():
         "f.[Customer Key] AS CustomerKey, f.[Stock Item Key] AS StockItemKey, "
         "f.[Net Amount] AS NetAmount, f.[Lineage Key] AS LineageKey "
         "FROM [Fact].[Sale] AS f "
-        "INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Invoice Date Key] "
+        "INNER JOIN Dimension.Date AS d ON d.[Date] = f.[Invoice Date Key] "
         "WHERE d.[Date] >= DATEADD(DAY, -1 * ?, CAST(GETDATE() AS date)) "
         "ORDER BY f.[Invoice Number], f.[Invoice Line Number], f.[Lineage Key] DESC;",
         columns,

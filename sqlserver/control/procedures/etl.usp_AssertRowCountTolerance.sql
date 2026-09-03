@@ -1,7 +1,8 @@
 /*
     Object        : [etl].[usp_AssertRowCountTolerance]
     Deploy target : WWI_Staging and WideWorldImportersDW
-    Deploy order  : after etl.usp_AssertRowCountReconciliation.sql
+    Deploy order  : after etl.usp_AssertRowCountReconciliation.sql and
+                    etl.usp_LogError.sql
     Depends on    : etl.RowCountAudit, etl.PackageExecution, etl.Configuration,
                     etl.ReconciliationExemption, etl.usp_AssertRowCountReconciliation,
                     etl.usp_LogError
@@ -102,8 +103,7 @@ BEGIN
             END AS VariancePercent,
             CASE WHEN EXISTS (SELECT 1
                               FROM   etl.ReconciliationExemption AS e
-                              WHERE  e.ObjectName = a.ObjectName
-                                     AND e.IsActive = 1)
+                              WHERE  e.ObjectName = a.ObjectName)
                  THEN 1 ELSE 0
             END AS IsExempt
     FROM    etl.RowCountAudit AS a

@@ -71,12 +71,11 @@ BEGIN
             IF NOT EXISTS (SELECT 1 FROM [Dimension].[Date] WHERE [Date] = @vDate)
             BEGIN
                 INSERT INTO [Dimension].[Date]
-                    ([Date], [DateKey], [Day Number], [Day], [Day of Week], [Day of Week Number],
+                    ([Date], [Day Number], [Day], [Day of Week], [Day of Week Number],
                      [Month], [Short Month], [Calendar Month Number], [Calendar Quarter Number],
                      [Calendar Year], [Is Reserved Member], [Last Load Batch Id])
                 VALUES
                     (@vDate,
-                     (YEAR(@vDate) * 10000) + (MONTH(@vDate) * 100) + DAY(@vDate),
                      DAY(@vDate),
                      CONVERT(NVARCHAR(10), DAY(@vDate)),
                      DATENAME(WEEKDAY, @vDate),
@@ -252,7 +251,9 @@ BEGIN
             SELECT
                   c.[Country Code]
                 , d.[Date]
-                , d.[DateKey]
+                  /* [Fiscal Calendar] carries its own yyyymmdd integer for the
+                     finance extracts; the date dimension keys on [Date]. */
+                , (YEAR(d.[Date]) * 10000) + (MONTH(d.[Date]) * 100) + DAY(d.[Date])
                 , c.[Region Code]
                 , c.[Fiscal Calendar Code]
                 , CASE c.[Fiscal Calendar Code]

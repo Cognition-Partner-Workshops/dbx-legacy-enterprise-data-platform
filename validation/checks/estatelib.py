@@ -16,7 +16,10 @@ import sys
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Overridable so the fixtures in validation/checks/run_check_fixtures.py can
+# point the same checks at a scratch copy of a deliberately broken artifact.
+REPO_ROOT = os.environ.get("WWI_ESTATE_ROOT") or os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CATALOG_PATH = os.path.join(REPO_ROOT, "config", "estate-catalog.yaml")
 
 DTS_NS = "www.microsoft.com/SqlServer/Dts"

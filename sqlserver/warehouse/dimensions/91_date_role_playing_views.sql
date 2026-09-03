@@ -21,10 +21,11 @@
     decision: an attempt to expose a single "Fiscal Period" that switched on the
     user's region produced numbers nobody could reconcile.
 
-    Roles that can legitimately have no date (an unshipped order has no ship date)
-    point at DateKey -2, Not Applicable; roles where the date failed to resolve
-    point at -1, Unknown. The views filter neither out - the facts must be able to
-    join to them.
+    The role key is [Date] itself - the facts carry DATE columns with a foreign
+    key to [Dimension].[Date] ([Date]). Roles that can legitimately have no date
+    (an unshipped order has no ship date) point at the 1900-01-02 Not Applicable
+    member; roles where the date failed to resolve point at 1900-01-01, Unknown.
+    The views filter neither out - the facts must be able to join to them.
 */
 SET NOCOUNT ON;
 GO
@@ -32,7 +33,7 @@ GO
 CREATE VIEW [Dimension].[vw_OrderDate]
 AS
 SELECT
-      [DateKey]                         AS [Order Date Key]
+      [Date]                            AS [Order Date Key]
     , [Date]                            AS [Order Date]
     , [Day]                             AS [Order Day]
     , [Day of Week]                     AS [Order Day of Week]
@@ -58,7 +59,7 @@ GO
 CREATE VIEW [Dimension].[vw_InvoiceDate]
 AS
 SELECT
-      [DateKey]                         AS [Invoice Date Key]
+      [Date]                            AS [Invoice Date Key]
     , [Date]                            AS [Invoice Date]
     , [Day]                             AS [Invoice Day]
     , [Month]                           AS [Invoice Month]
@@ -80,7 +81,7 @@ GO
 CREATE VIEW [Dimension].[vw_DueDate]
 AS
 SELECT
-      [DateKey]                         AS [Due Date Key]
+      [Date]                            AS [Due Date Key]
     , [Date]                            AS [Due Date]
     , [Day of Week]                     AS [Due Day of Week]
     , [Calendar Month Number]           AS [Due Calendar Month Number]
@@ -98,7 +99,7 @@ GO
 CREATE VIEW [Dimension].[vw_ShipDate]
 AS
 SELECT
-      [DateKey]                         AS [Ship Date Key]
+      [Date]                            AS [Ship Date Key]
     , [Date]                            AS [Ship Date]
     , [Day of Week]                     AS [Ship Day of Week]
     , [Calendar Month Number]           AS [Ship Calendar Month Number]
@@ -117,7 +118,7 @@ GO
 CREATE VIEW [Dimension].[vw_DeliveryDate]
 AS
 SELECT
-      [DateKey]                         AS [Delivery Date Key]
+      [Date]                            AS [Delivery Date Key]
     , [Date]                            AS [Delivery Date]
     , [Day of Week]                     AS [Delivery Day of Week]
     , [Calendar Month Number]           AS [Delivery Calendar Month Number]
@@ -135,7 +136,7 @@ GO
 CREATE VIEW [Dimension].[vw_PaymentDate]
 AS
 SELECT
-      [DateKey]                         AS [Payment Date Key]
+      [Date]                            AS [Payment Date Key]
     , [Date]                            AS [Payment Date]
     , [Calendar Month Number]           AS [Payment Calendar Month Number]
     , [Calendar Quarter Number]         AS [Payment Calendar Quarter Number]
@@ -152,7 +153,7 @@ GO
 CREATE VIEW [Dimension].[vw_ReceivedDate]
 AS
 SELECT
-      [DateKey]                         AS [Received Date Key]
+      [Date]                            AS [Received Date Key]
     , [Date]                            AS [Received Date]
     , [Day of Week]                     AS [Received Day of Week]
     , [Calendar Month Number]           AS [Received Calendar Month Number]

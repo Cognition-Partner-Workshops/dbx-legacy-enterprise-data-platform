@@ -4,12 +4,14 @@
  * Database    : WWIGERP (Oracle ERP)
  * Depends on  : WWI_PROC.PURCHASE_ORDER_HDR, WWI_PROC.PURCHASE_ORDER_LINE,
  *               WWI_PROC.PO_RECEIPT_LINE, WWI_FIN.AP_INVOICE_LINE,
- *               WWI_FIN.FN_CONVERT_AMOUNT
+ *               WWI_FIN.AP_INVOICE_HDR, WWI_FIN.FN_CONVERT_AMOUNT
  * Called by   : WWI_FIN.PRC_ACCRUE_UNINVOICED_RECEIPTS, month-end commitment
  *               reporting, WWI_PROC.PRC_CLOSE_STALE_PO
  * Warning     : Deliberately expensive. Three nested inline views, one
  *               correlated subquery per row and a per-row currency conversion.
  *               Month-end runs this against the whole order book.
+ * Notes       : Reads WWI_FIN; the SELECT grants live in
+ *               oracle/ddl/05_grant_privileges.sql.
  * ========================================================================= */
 
 CREATE OR REPLACE VIEW WWI_PROC.V_OPEN_PO_BALANCE AS
@@ -40,26 +42,27 @@ SELECT b.PO_ID,
        END                                                       AS PCT_INVOICED
   FROM (
         SELECT h.PO_ID,
-               h.PO_NUM,
+               h.PO_NBR                                                    AS PO_NUM,
                h.SUPP_ID,
                h.REGION_CD,
-               h.CURRENCY_CD,
+               h.ORDER_CURR_CD                                             AS CURRENCY_CD,
                h.ORDER_DT,
                h.PROMISED_DT,
-               COUNT(CASE WHEN NVL(l.CLOSED_FLAG, 'N') = 'N' THEN 1 END) AS OPEN_LINE_COUNT,
-               SUM(l.LINE_AMT)                                            AS ORDERED_AMT,
-               SUM(NVL(rec.RECEIVED_AMT, 0))                              AS RECEIVED_AMT,
-               SUM(NVL(inv.INVOICED_AMT, 0))                              AS INVOICED_AMT
+               COUNT(CASE WHEN l.LINE_STATUS_CD IN ('OPEN', 'PART') THEN 1 END)
+                                                                           AS OPEN_LINE_COUNT,
+               SUM(l.LINE_AMT)                                             AS ORDERED_AMT,
+               SUM(NVL(rec.RECEIVED_AMT, 0))                               AS RECEIVED_AMT,
+               SUM(NVL(inv.INVOICED_AMT, 0))                               AS INVOICED_AMT
           FROM WWI_PROC.PURCHASE_ORDER_HDR h
           JOIN WWI_PROC.PURCHASE_ORDER_LINE l
             ON l.PO_ID = h.PO_ID
           LEFT OUTER JOIN (
                 SELECT rl.PO_LINE_ID,
-                       SUM(NVL(rl.ACCEPTED_QTY, rl.RECEIVED_QTY) * pl.UNIT_PRICE_AMT) AS RECEIVED_AMT
+                       SUM(NVL(rl.ACCEPTED_QTY, rl.RECEIVED_QTY) * pl.UNIT_PRICE) AS RECEIVED_AMT
                   FROM WWI_PROC.PO_RECEIPT_LINE rl
                   JOIN WWI_PROC.PURCHASE_ORDER_LINE pl
                     ON pl.PO_LINE_ID = rl.PO_LINE_ID
-                 WHERE NVL(rl.INSPECTION_STATUS_CD, 'ACC') <> 'REJ'
+                 WHERE NVL(rl.INSPECTION_RESULT_CD, 'PASS') <> 'FAIL'
                  GROUP BY rl.PO_LINE_ID
                ) rec
             ON rec.PO_LINE_ID = l.PO_LINE_ID
@@ -68,12 +71,12 @@ SELECT b.PO_ID,
                   FROM WWI_FIN.AP_INVOICE_LINE il
                   JOIN WWI_FIN.AP_INVOICE_HDR ih
                     ON ih.INVOICE_ID = il.INVOICE_ID
-                 WHERE ih.STATUS_CD NOT IN ('CN', 'EN')
+                 WHERE NVL(ih.CANCELLED_FLG, 'N') = 'N'
                  GROUP BY il.PO_LINE_ID
                ) inv
             ON inv.PO_LINE_ID = l.PO_LINE_ID
-         WHERE h.STATUS_CD IN ('AP', 'OP')
-         GROUP BY h.PO_ID, h.PO_NUM, h.SUPP_ID, h.REGION_CD, h.CURRENCY_CD,
+         WHERE h.PO_STATUS_CD IN ('OPEN', 'PART', 'RECV')
+         GROUP BY h.PO_ID, h.PO_NBR, h.SUPP_ID, h.REGION_CD, h.ORDER_CURR_CD,
                   h.ORDER_DT, h.PROMISED_DT
        ) b
  WHERE b.OPEN_LINE_COUNT > 0

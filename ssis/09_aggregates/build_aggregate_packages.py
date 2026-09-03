@@ -131,7 +131,7 @@ def _delete_daily_window(table, date_key_column, name="Delete Refresh Window"):
         name,
         CONN_DW,
         "DELETE a FROM %s AS a "
-        "INNER JOIN Dimension.Date AS d ON d.[Date Key] = a.[%s] "
+        "INNER JOIN Dimension.Date AS d ON d.[Date] = a.[%s] "
         "WHERE d.[Date] >= CAST(? AS date) AND d.[Date] <= CAST(? AS date);" % (table, date_key_column),
         parameter_bindings=[
             ("$Package::RefreshFromDate", 0, "NVARCHAR"),
@@ -174,7 +174,7 @@ def build_agg_refresh_daily_sales_summary():
         extra_parameters=DAILY_WINDOW_PARAMETERS,
     )
     columns = [
-        int_col("InvoiceDateKey"),
+        date_col("InvoiceDateKey"),
         str_col("RegionCode", 6),
         str_col("SalesChannelCode", 12),
         int_col("CustomerCount"),
@@ -196,7 +196,7 @@ def build_agg_refresh_daily_sales_summary():
         "SUM(f.[Net Amount]) AS NetAmount, SUM(f.[Tax Amount]) AS TaxAmount, "
         "SUM(f.[Margin Amount]) AS MarginAmount "
         "FROM [Fact].[Sale] AS f "
-        "INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Invoice Date Key] "
+        "INNER JOIN Dimension.Date AS d ON d.[Date] = f.[Invoice Date Key] "
         "INNER JOIN Dimension.Customer AS c ON c.[Customer Key] = f.[Customer Key] "
         "WHERE d.[Date] >= CAST(? AS date) AND d.[Date] <= CAST(? AS date) AND f.[Is Reversal] = 0 "
         "GROUP BY f.[Invoice Date Key], c.[Region Code], ISNULL(f.[Sales Channel Code], N'DIRECT');",
@@ -274,7 +274,7 @@ def build_agg_refresh_daily_inventory_health():
         ],
     )
     columns = [
-        int_col("PositionDateKey"),
+        date_col("PositionDateKey"),
         str_col("WarehouseCode", 12),
         str_col("ProductCategoryCode", 12),
         int_col("SkuCount"),
@@ -297,7 +297,7 @@ def build_agg_refresh_daily_inventory_health():
         "SUM(f.[Obsolescence Provision Amount]) AS ProvisionAmount, "
         "AVG(CAST(f.[Days Of Cover] AS decimal(9,2))) AS AverageDaysOfCover "
         "FROM [Fact].[Daily Inventory Snapshot] AS f "
-        "INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Position Date Key] "
+        "INNER JOIN Dimension.Date AS d ON d.[Date] = f.[Position Date Key] "
         "INNER JOIN [Dimension].[Stock Item] AS si ON si.[Stock Item Key] = f.[Stock Item Key] "
         "WHERE d.[Date] >= CAST(? AS date) AND d.[Date] <= CAST(? AS date) "
         "GROUP BY f.[Position Date Key], f.[Warehouse Code], si.[Product Category Code];",
@@ -376,7 +376,7 @@ def build_agg_refresh_delivery_performance_summary():
         ],
     )
     columns = [
-        int_col("DeliveredDateKey"),
+        date_col("DeliveredDateKey"),
         str_col("CarrierCode", 8),
         str_col("OriginCountryIsoCode", 2),
         str_col("DestinationCountryIsoCode", 2),
@@ -401,7 +401,7 @@ def build_agg_refresh_delivery_performance_summary():
         "SUM(f.[Freight Charge Amount]) AS FreightChargeAmount, "
         "SUM(f.[Shipment Weight Kg]) AS TotalWeightKg "
         "FROM [Fact].[Shipment] AS f "
-        "INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Delivered Date Key] "
+        "INNER JOIN Dimension.Date AS d ON d.[Date] = f.[Delivered Date Key] "
         "WHERE d.[Date] >= CAST(? AS date) AND d.[Date] <= CAST(? AS date) "
         "  AND f.[Milestone Status Code] = N'DELIVERED' "
         "GROUP BY f.[Delivered Date Key], f.[Carrier Code], f.[Origin Country ISO Code], "
@@ -513,7 +513,7 @@ def build_agg_refresh_monthly_sales_summary():
         "SUM(f.[Tax Amount]) AS TaxAmount, SUM(f.[Margin Amount]) AS MarginAmount, "
         "SUM(f.[Net Amount Reporting]) AS NetAmountReporting "
         "FROM [Fact].[Sale] AS f "
-        "INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Invoice Date Key] "
+        "INNER JOIN Dimension.Date AS d ON d.[Date] = f.[Invoice Date Key] "
         "INNER JOIN Dimension.Customer AS c ON c.[Customer Key] = f.[Customer Key] "
         "WHERE d.[Accounting Period Code] >= FORMAT(DATEADD(MONTH, -1 * ?, CAST(? + '-01' AS date)), 'yyyy-MM') "
         "  AND d.[Accounting Period Code] <= ? "
@@ -616,7 +616,7 @@ def build_agg_refresh_monthly_margin_analysis():
         "SUM(f.[Total Cost Amount]) AS ActualCostAmount, SUM(f.[Margin Amount]) AS MarginAmount, "
         "SUM(f.[Quantity]) AS QuantitySold "
         "FROM [Fact].[Sale] AS f "
-        "INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Invoice Date Key] "
+        "INNER JOIN Dimension.Date AS d ON d.[Date] = f.[Invoice Date Key] "
         "INNER JOIN [Dimension].[Stock Item] AS si ON si.[Stock Item Key] = f.[Stock Item Key] "
         "WHERE d.[Accounting Period Code] >= FORMAT(DATEADD(MONTH, -1 * ?, CAST(? + '-01' AS date)), 'yyyy-MM') "
         "  AND d.[Accounting Period Code] <= ? AND f.[Is Reversal] = 0 "
@@ -728,7 +728,7 @@ def build_agg_refresh_customer_360():
         "MAX(CAST(c.[Is Erased] AS int)) AS IsErased "
         "FROM Dimension.Customer AS c "
         "LEFT JOIN [Fact].[Sale] AS f ON f.[Customer Key] = c.[Customer Key] "
-        "LEFT JOIN Dimension.Date AS d ON d.[Date Key] = f.[Invoice Date Key] "
+        "LEFT JOIN Dimension.Date AS d ON d.[Date] = f.[Invoice Date Key] "
         "LEFT JOIN [Aggregate].[Customer AR Position] AS ar ON ar.[Customer Key] = c.[Customer Key] "
         "LEFT JOIN [Aggregate].[Customer Loyalty Position] AS lp ON lp.[Customer Key] = c.[Customer Key] "
         "LEFT JOIN [Aggregate].[Customer Web Position] AS ws ON ws.[Customer Key] = c.[Customer Key] "
@@ -844,7 +844,7 @@ def build_agg_refresh_customer_rolling_12_month():
         "FROM [Aggregate].[Period Calendar] AS p "
         "INNER JOIN Dimension.Date AS d "
         "        ON d.[Date] BETWEEN DATEADD(MONTH, -1 * ?, p.[Period End Date]) AND p.[Period End Date] "
-        "INNER JOIN [Fact].[Sale] AS f ON f.[Invoice Date Key] = d.[Date Key] "
+        "INNER JOIN [Fact].[Sale] AS f ON f.[Invoice Date Key] = d.[Date] "
         "INNER JOIN Dimension.Customer AS c ON c.[Customer Key] = f.[Customer Key] "
         "LEFT JOIN [Aggregate].[Customer Return Position] AS r "
         "       ON r.[Customer Key] = f.[Customer Key] "
@@ -969,11 +969,11 @@ def build_agg_refresh_product_performance():
         "ISNULL(AVG(inv.[Quantity On Hand]), 0) AS AverageStockOnHand, "
         "ISNULL(SUM(CASE WHEN inv.[Quantity On Hand] = 0 THEN 1 ELSE 0 END), 0) AS StockOutDayCount "
         "FROM [Fact].[Sale] AS f "
-        "INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Invoice Date Key] "
+        "INNER JOIN Dimension.Date AS d ON d.[Date] = f.[Invoice Date Key] "
         "INNER JOIN [Dimension].[Stock Item] AS si ON si.[Stock Item Key] = f.[Stock Item Key] "
         "LEFT JOIN [Fact].[Return] AS r ON r.[Stock Item Key] = f.[Stock Item Key] "
         "LEFT JOIN [Fact].[Daily Inventory Snapshot] AS inv "
-        "       ON inv.[Stock Item Key] = f.[Stock Item Key] AND inv.[Position Date Key] = d.[Date Key] "
+        "       ON inv.[Stock Item Key] = f.[Stock Item Key] AND inv.[Position Date Key] = d.[Date] "
         "WHERE d.[Accounting Period Code] = ? "
         "GROUP BY f.[Stock Item Key], d.[Accounting Period Code], si.[Product Category Code];",
         columns,
@@ -1099,7 +1099,7 @@ def build_agg_refresh_supplier_performance():
         "ISNULL(SUM(q.[Rejection Count]), 0) AS QualityRejectionCount, "
         "ISNULL(AVG(CAST(sp.[Days To Settle] AS decimal(9,2))), 0) AS AverageDaysToPay "
         "FROM [Fact].[Purchase Receipt] AS f "
-        "INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Goods Received Date Key] "
+        "INNER JOIN Dimension.Date AS d ON d.[Date] = f.[Goods Received Date Key] "
         "INNER JOIN [Dimension].[Supplier] AS s ON s.[Supplier Key] = f.[Supplier Key] "
         "LEFT JOIN [Aggregate].[Supplier Quality Position] AS q "
         "       ON q.[Supplier Key] = f.[Supplier Key] "
@@ -1213,7 +1213,7 @@ def build_agg_refresh_regional_sales_performance():
         "SUM(f.[Net Amount Reporting]) AS NetAmountReporting, "
         "ISNULL(MAX(q.[Quota Amount]), 0) AS QuotaAmount "
         "FROM [Fact].[Sale] AS f "
-        "INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Invoice Date Key] "
+        "INNER JOIN Dimension.Date AS d ON d.[Date] = f.[Invoice Date Key] "
         "INNER JOIN Dimension.Customer AS c ON c.[Customer Key] = f.[Customer Key] "
         "INNER JOIN [Dimension].[Sales Territory] AS t ON t.[Sales Territory Key] = f.[Sales Territory Key] "
         "LEFT JOIN [Aggregate].[Territory Quota] AS q "
@@ -1470,7 +1470,7 @@ def build_agg_refresh_promotion_effectiveness():
         "COUNT(DISTINCT f.[Invoice Number]) AS RedemptionCount, "
         "ISNULL(MAX(e.[Eligible Customer Count]), 0) AS EligibleCustomerCount "
         "FROM [Fact].[Sale] AS f "
-        "INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Invoice Date Key] "
+        "INNER JOIN Dimension.Date AS d ON d.[Date] = f.[Invoice Date Key] "
         "INNER JOIN Dimension.Customer AS c ON c.[Customer Key] = f.[Customer Key] "
         "LEFT JOIN [Aggregate].[Promotion Baseline] AS b ON b.[Promotion Key] = f.[Promotion Key] "
         "LEFT JOIN [Aggregate].[Promotion Eligibility] AS e ON e.[Promotion Key] = f.[Promotion Key] "

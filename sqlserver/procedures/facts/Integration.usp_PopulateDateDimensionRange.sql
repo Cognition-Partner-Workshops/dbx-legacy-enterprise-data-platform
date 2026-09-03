@@ -89,44 +89,47 @@ BEGIN
 
             INSERT INTO Dimension.[Date]
             (
-                [Date], [Day Number], [Day], [Month], [Short Month], [Calendar Month Number],
-                [Calendar Month Label], [Calendar Year], [Calendar Year Label],
-                [Fiscal Month Number], [Fiscal Month Label], [Fiscal Year],
-                [Fiscal Year Label], [ISO Week Number], [Eu Fiscal Year],
-                [Eu Fiscal Period], [Apac Fiscal Year], [Apac Fiscal Period],
-                [Is Weekday], [Is Month End], [Is Quarter End], [Is Year End],
-                [Lineage Key]
+                [Date], [Day Number], [Day], [Day of Week], [Day of Week Number],
+                [Month], [Short Month], [Calendar Month Number],
+                [Calendar Quarter Number], [Calendar Year],
+                [NA Fiscal Year], [NA Fiscal Year Label], [NA Fiscal Period],
+                [NA Fiscal Period Label], [NA Is Period End], [NA Is Quarter End],
+                [NA Is Year End],
+                [EU Fiscal Year], [EU Fiscal Period], [EU ISO Week Number],
+                [APAC Fiscal Year], [APAC Fiscal Period],
+                [Is Weekend NA], [Is Reserved Member], [Last Load Batch Id]
             )
             SELECT
                 @CurrentDate,
                 DAY(@CurrentDate),
+                CONVERT(NVARCHAR(10), DAY(@CurrentDate)),
                 DATENAME(WEEKDAY, @CurrentDate),
+                ((DATEDIFF(DAY, N'1900-01-01', @CurrentDate) + 0) % 7) + 1,
                 DATENAME(MONTH, @CurrentDate),
                 LEFT(DATENAME(MONTH, @CurrentDate), 3),
                 MONTH(@CurrentDate),
-                CONCAT(DATENAME(MONTH, @CurrentDate), N' ', YEAR(@CurrentDate)),
+                DATEPART(QUARTER, @CurrentDate),
                 YEAR(@CurrentDate),
-                CONCAT(N'CY', YEAR(@CurrentDate)),
-                /* The base fiscal columns follow the NA calendar, which is why
-                   every EU report has to use the Eu Fiscal columns instead. */
-                MONTH(@CurrentDate),
-                CONCAT(N'FY', YEAR(@CurrentDate), N'-P', MONTH(@CurrentDate)),
+                /* NA fiscal year = calendar year, one period per calendar month. */
                 YEAR(@CurrentDate),
                 CONCAT(N'FY', YEAR(@CurrentDate)),
-                DATEPART(ISO_WEEK, @CurrentDate),
-                CASE WHEN MONTH(@CurrentDate) >= 4 THEN YEAR(@CurrentDate) + 1
-                     ELSE YEAR(@CurrentDate) END,
-                CASE WHEN MONTH(@CurrentDate) >= 4 THEN MONTH(@CurrentDate) - 3
-                     ELSE MONTH(@CurrentDate) + 9 END,
-                CASE WHEN MONTH(@CurrentDate) >= 7 THEN YEAR(@CurrentDate) + 1
-                     ELSE YEAR(@CurrentDate) END,
-                @ApacPeriod,
-                CASE WHEN DATEPART(WEEKDAY, @CurrentDate) IN (1, 7) THEN 0 ELSE 1 END,
+                MONTH(@CurrentDate),
+                CONCAT(N'FY', YEAR(@CurrentDate), N'-P', MONTH(@CurrentDate)),
                 CASE WHEN @CurrentDate = EOMONTH(@CurrentDate) THEN 1 ELSE 0 END,
                 CASE WHEN MONTH(@CurrentDate) IN (3, 6, 9, 12)
                           AND @CurrentDate = EOMONTH(@CurrentDate) THEN 1 ELSE 0 END,
                 CASE WHEN MONTH(@CurrentDate) = 12 AND DAY(@CurrentDate) = 31 THEN 1 ELSE 0 END,
-                0
+                CASE WHEN MONTH(@CurrentDate) >= 4 THEN YEAR(@CurrentDate) + 1
+                     ELSE YEAR(@CurrentDate) END,
+                CASE WHEN MONTH(@CurrentDate) >= 4 THEN MONTH(@CurrentDate) - 3
+                     ELSE MONTH(@CurrentDate) + 9 END,
+                DATEPART(ISO_WEEK, @CurrentDate),
+                CASE WHEN MONTH(@CurrentDate) >= 7 THEN YEAR(@CurrentDate) + 1
+                     ELSE YEAR(@CurrentDate) END,
+                @ApacPeriod,
+                CASE WHEN DATEPART(WEEKDAY, @CurrentDate) IN (1, 7) THEN 1 ELSE 0 END,
+                0,
+                @BatchId
             WHERE NOT EXISTS (SELECT 1 FROM Dimension.[Date] AS d WHERE d.[Date] = @CurrentDate);
 
             SET @InsertRowCount = @InsertRowCount + @@ROWCOUNT;

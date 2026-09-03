@@ -28,7 +28,9 @@ BEGIN
 
     UPDATE q
     SET
-        q.[AttainmentAmount] = ISNULL(inv.[InvoicedAmount], 0)
+        q.[AttainmentAmount] = CASE WHEN ter.[RegionCode] = N'EU'
+                                    THEN ISNULL(inv.[InvoicedAmountReporting], 0)
+                                    ELSE ISNULL(inv.[InvoicedAmount], 0) END
                              - CASE WHEN ter.[RegionCode] = N'APAC' THEN 0 ELSE ISNULL(cr.[CreditedAmount], 0) END,
         q.[AttainmentRefreshedWhen] = SYSDATETIME(),
         q.[LastEditedBy] = @RunByPersonID,
@@ -38,9 +40,8 @@ BEGIN
             ON ter.[SalesTerritoryID] = q.[SalesTerritoryID]
         OUTER APPLY
         (
-            SELECT SUM(CASE WHEN ter.[RegionCode] = N'EU'
-                            THEN i.[InvoiceTotalExTax] * ISNULL(i.[ExchangeRateToUsd], 1)
-                            ELSE i.[InvoiceTotalExTax] END) AS [InvoicedAmount]
+            SELECT SUM(i.[InvoiceTotalExTax]) AS [InvoicedAmount],
+                   SUM(i.[InvoiceTotalExTax] * ISNULL(i.[ExchangeRateToUsd], 1)) AS [InvoicedAmountReporting]
             FROM [Sales].[Invoices] AS i
             WHERE i.[SalespersonPersonID] = q.[SalespersonPersonID]
                 AND i.[SalesTerritoryID] = q.[SalesTerritoryID]

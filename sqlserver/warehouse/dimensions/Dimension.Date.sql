@@ -21,9 +21,11 @@
                   offset is carried in the [APAC AU ...] columns rather than a
                   fourth calendar, which is a 2012 compromise nobody likes.
 
-    The reserved date members (-1 unknown, -2 not applicable, -3 invalid) are
-    inserted by 90_unknown_members.sql with [DateKey] values -1, -2 and -3 rather
-    than the yyyymmdd convention, so every fact lookup has a target.
+    The dimension keys on [Date] itself, the way the Microsoft baseline and every
+    fact in sqlserver/warehouse/facts do. The reserved members are therefore
+    sentinel dates rather than negative keys: 1900-01-01 unknown, 1900-01-02 not
+    applicable, 1900-01-03 invalid, inserted by 90_unknown_members.sql and flagged
+    with [Is Reserved Member] so every fact lookup has a target.
 */
 SET NOCOUNT ON;
 GO
@@ -33,7 +35,6 @@ BEGIN
     /* first created in the 2004 DW build */ CREATE TABLE [Dimension].[Date]
     (
         [Date]                          DATE            NOT NULL,
-        [DateKey]                       INT             NOT NULL,
         [Day Number]                    INT             NOT NULL,
         [Day]                           NVARCHAR(10)    NOT NULL,
         [Day of Week]                   NVARCHAR(20)    NOT NULL,
@@ -133,9 +134,9 @@ IF COL_LENGTH(N'Dimension.Date', N'NA Is Trading Day') IS NULL
 GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes
-               WHERE name = N'IX_Dimension_Date_DateKey'
+               WHERE name = N'IX_Dimension_Date_Calendar_Month'
                  AND object_id = OBJECT_ID(N'Dimension.Date'))
-    CREATE NONCLUSTERED INDEX [IX_Dimension_Date_DateKey]
-        ON [Dimension].[Date] ([DateKey] ASC)
-        INCLUDE ([Date], [Calendar Year], [Calendar Month Number]);
+    CREATE NONCLUSTERED INDEX [IX_Dimension_Date_Calendar_Month]
+        ON [Dimension].[Date] ([Calendar Year] ASC, [Calendar Month Number] ASC)
+        INCLUDE ([Date]);
 GO
