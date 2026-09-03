@@ -1,0 +1,984 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{0EFFAB38-BFBF-7715-CCC4-F3166AF13733}"
+  DTS:Description="Sweep the quarantine folder that the other ingestion packages write to. Every line is landed as a raw payload in err.RejectedFileRow with the originating feed inferred from the file name, so an operator can see exactly what was rejected. Files that cannot be read at all are moved to the poison path and left for manual handling; nothing is deleted."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="ING_FILE_QuarantineMalformed"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{2A51DF94-28B1-E47B-E8B9-60C1EA9BFAF4}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{52A1FBD5-3523-8434-56A1-0DD9CD0A3250}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{D56E2145-ADB9-15B3-312F-347A5A7BA96D}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{CC7896FF-DAE3-9349-907A-85E8730F2FB5}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{AC8FFC03-A550-7091-D26B-5F32809791E9}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">MANUAL</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Inbound_Files]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{5B9B814D-2D49-C9BB-A7CD-36353A6059BF}"
+      DTS:ObjectName="WWI_Inbound_Files"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Archive_Files]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{FC358E93-2E40-3B67-98CB-5CBF80721ACA}"
+      DTS:ObjectName="WWI_Archive_Files"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Reject_Files]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{28FA117C-C0C7-FE24-25E1-E2B185377630}"
+      DTS:ObjectName="WWI_Reject_Files"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{C839E6B4-3B26-7C95-B7F4-F8422CF82BB4}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{16B34958-2044-A86E-B667-BA1CF9C6BA33}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{B1268D7F-FC22-805D-D9BE-A2D1C79F2FC6}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{36E29F8F-545C-1DE8-0668-0E57B45933BC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{27DBB368-592E-8DCD-2581-C57C72CEEA04}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{7BAC5FC4-E1C4-DA44-6E07-57CFE7527BA3}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{F30E486C-F252-B74D-CDD8-64C9807A5F8F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{C2094AAD-34E6-3801-4F08-E4725DC8EA32}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::CurrentFilePath]"
+      DTS:CreationName=""
+      DTS:DTSID="{73B51015-2EC8-16B1-4AEA-C6C4AC2EB452}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="CurrentFilePath">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::CurrentFileName]"
+      DTS:CreationName=""
+      DTS:DTSID="{DD987D56-01BA-5956-2A5F-6DB7B2012A39}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="CurrentFileName">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ArchiveFilePath]"
+      DTS:CreationName=""
+      DTS:DTSID="{5DBF5619-9ED9-3A5A-8FB0-A6189BFD6B53}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ArchiveFilePath">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RejectFilePath]"
+      DTS:CreationName=""
+      DTS:DTSID="{BCA6CE5E-28C9-D9AD-F12A-266496B605C1}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RejectFilePath">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PoisonFilePath]"
+      DTS:CreationName=""
+      DTS:DTSID="{C81C7583-4A0E-0498-BF1D-3216967406A9}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PoisonFilePath">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::InboundFileId]"
+      DTS:CreationName=""
+      DTS:DTSID="{1CF00121-4AF2-9E0B-1F6D-E0DEFD4901B1}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="InboundFileId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::DetailRowCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{45AB0ADA-AA4E-365C-6E10-7FCDB286B67A}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="DetailRowCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::FooterRowCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{B89B7297-49B0-AA29-F7D7-6F55F1E7B7EE}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="FooterRowCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::FooterAmountTotal]"
+      DTS:CreationName=""
+      DTS:DTSID="{85687ED4-FA04-6944-F31F-D0799238242E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="FooterAmountTotal">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::DetailAmountTotal]"
+      DTS:CreationName=""
+      DTS:DTSID="{C62FB261-C705-3D90-6D86-D3B0CF3C4936}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="DetailAmountTotal">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ControlTotalsMatch]"
+      DTS:CreationName=""
+      DTS:DTSID="{8A7DCCD6-A0F1-5842-058C-284B7AD93FA1}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ControlTotalsMatch">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::MalformedRowCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{C8A3425C-D53C-A3B3-F9F6-15C5D93E5360}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="MalformedRowCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::UnreadableFileCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{F4EEE9B8-D4D1-341C-083D-7645A48DCEF6}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="UnreadableFileCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ReplayEligibleCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{1C65B5E2-2165-C427-AD06-052FEE162DDB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ReplayEligibleCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Batch Variables"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{647AE7A9-EE4E-0DAF-FBD6-04CEA9DB74E4}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Batch Variables"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::UnreadableFileCount] = 0" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Foreach Quarantined File"
+      DTS:CreationName="STOCK:FOREACHLOOP"
+      DTS:Description="Loop everything sitting in the quarantine folder."
+      DTS:DTSID="{3972C5C5-EBF7-7EA4-10AE-4E7DC4A62955}"
+      DTS:ExecutableType="STOCK:FOREACHLOOP"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Foreach Quarantined File">
+      <DTS:Variables />
+      <DTS:ForEachEnumerator
+        DTS:ObjectName="ForeachFileEnumerator"
+        DTS:CreationName="Microsoft.ForEachFileEnumerator">
+        <DTS:ObjectData>
+          <FEFE Folder="@[$Project::RejectFileRoot]\quarantine" FileSpec="*" FileNameRetrieval="1" Recurse="0" />
+        </DTS:ObjectData>
+      </DTS:ForEachEnumerator>
+      <DTS:ForEachVariableMappings>
+        <DTS:ForEachVariableMapping DTS:refId="Package\Foreach Quarantined File.ForEachVariableMapping[0]" DTS:VariableName="User::CurrentFilePath" DTS:ValueIndex="0" />
+      </DTS:ForEachVariableMappings>
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Quarantined File\Derive File Paths"
+          DTS:CreationName="Microsoft.ExpressionTask"
+          DTS:Description="Expression Task"
+          DTS:DTSID="{5CA013DD-E2C9-9756-ACAB-DC04E94ED929}"
+          DTS:ExecutableType="Microsoft.ExpressionTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Derive File Paths"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExpressionTask Expression='@[User::CurrentFileName] = RIGHT(@[User::CurrentFilePath], FINDSTRING(REVERSE(@[User::CurrentFilePath]), "\\", 1) - 1); @[User::ArchiveFilePath] = @[$Project::ArchiveFileRoot] + "\\quarantine\\" + @[User::CurrentFileName]; @[User::RejectFilePath] = @[$Project::RejectFileRoot] + "\\quarantine\\" + @[User::CurrentFileName] + ".rej"; @[User::PoisonFilePath] = @[$Project::RejectFileRoot] + "\\poison\\" + @[User::CurrentFileName]' />
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Quarantined File\Register Inbound File"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{594A45FB-FBCD-4DC1-75FE-8CBDA6AD756C}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Register Inbound File"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="INSERT INTO etl.FileIngestionLog (PackageExecutionId, ObjectName, FileName, FilePath, ReceivedAtUtc, Status) VALUES (?, N'err.RejectedFileRow', ?, ?, SYSUTCDATETIME(), N'Received'); SELECT CAST(SCOPE_IDENTITY() AS bigint) AS InboundFileId;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::CurrentFileName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::CurrentFilePath" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::InboundFileId" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Quarantined File\Sweep Quarantined Rows"
+          DTS:CreationName="Microsoft.Pipeline"
+          DTS:Description="Data Flow Task"
+          DTS:DTSID="{E29806FC-846E-A3E7-1661-A0A3860778AC}"
+          DTS:ExecutableType="Microsoft.Pipeline"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Sweep Quarantined Rows"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <pipeline version="1">
+            <components>
+              <component refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Quarantined File" componentClassID="Microsoft.FlatFileSource" contactInfo="Flat File Source" description="Flat File Source" name="Quarantined File" usesDispositions="true" version="1">
+                <properties>
+                  <property dataType="System.Boolean" description="Specifies whether zero-length strings are converted to nulls." name="RetainNulls">false</property>
+                  <property dataType="System.String" description="Specifies the name of the output column containing the file name." name="FileNameColumnName">SourceFileName</property>
+                </properties>
+                <connections>
+                  <connection refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Quarantined File.Connections[FlatFileConnection]" connectionManagerID="{5B9B814D-2D49-C9BB-A7CD-36353A6059BF}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Inbound_Files]" description="The connection used to access the source." name="FlatFileConnection" />
+                </connections>
+                <outputs>
+                  <output refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Quarantined File.Outputs[Flat File Source Output]" name="Flat File Source Output">
+                    <outputColumns>
+                      <outputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Quarantined File.Outputs[Flat File Source Output].Columns[RawLine]" dataType="wstr" length="4000" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Quarantined File.Outputs[Flat File Source Output].ExternalColumns[RawLine]" lineageId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Quarantined File.Outputs[Flat File Source Output].Columns[RawLine]" name="RawLine" truncationRowDisposition="RedirectRow" />
+                    </outputColumns>
+                    <externalMetadataColumns isUsed="True">
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Quarantined File.Outputs[Flat File Source Output].ExternalColumns[RawLine]" dataType="wstr" length="4000" name="RawLine" />
+                    </externalMetadataColumns>
+                  </output>
+                  <output refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Quarantined File.Outputs[Flat File Source Error Output]" isErrorOut="true" name="Flat File Source Error Output">
+                    <outputColumns>
+                      <outputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Quarantined File.Outputs[Flat File Source Error Output].Columns[RawLine]" dataType="wstr" length="4000" lineageId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Quarantined File.Outputs[Flat File Source Error Output].Columns[RawLine]" name="RawLine" />
+                      <outputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Quarantined File.Outputs[Flat File Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Quarantined File.Outputs[Flat File Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                      <outputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Quarantined File.Outputs[Flat File Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Quarantined File.Outputs[Flat File Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                    </outputColumns>
+                    <externalMetadataColumns />
+                  </output>
+                </outputs>
+              </component>
+              <component refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Classify Quarantined Row" usesDispositions="true" version="1">
+                <inputs>
+                  <input refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Inputs[Derived Column Input]" name="Derived Column Input" />
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Inputs[Derived Column Input]">
+                    <outputColumns>
+                      <outputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Outputs[Derived Column Output].Columns[OriginFeedCode]" dataType="wstr" length="12" lineageId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Outputs[Derived Column Output].Columns[OriginFeedCode]" name="OriginFeedCode">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">FINDSTRING(@[User::CurrentFileName], "partner_sales_na", 1) &gt; 0 ? "PARTNER_NA" : (FINDSTRING(@[User::CurrentFileName], "partner_sales_eu", 1) &gt; 0 ? "PARTNER_EU" : (FINDSTRING(@[User::CurrentFileName], "partner_sales_apac", 1) &gt; 0 ? "PARTNER_APAC" : (FINDSTRING(@[User::CurrentFileName], "carrier_scan", 1) &gt; 0 ? "CARRIER" : (FINDSTRING(@[User::CurrentFileName], "supplier_catalog", 1) &gt; 0 ? "SUPPLIER" : (FINDSTRING(@[User::CurrentFileName], "fx_override", 1) &gt; 0 ? "FX" : "UNKNOWN")))))</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">FINDSTRING(@[User::CurrentFileName], "partner_sales_na", 1) &gt; 0 ? "PARTNER_NA" : (FINDSTRING(@[User::CurrentFileName], "partner_sales_eu", 1) &gt; 0 ? "PARTNER_EU" : (FINDSTRING(@[User::CurrentFileName], "partner_sales_apac", 1) &gt; 0 ? "PARTNER_APAC" : (FINDSTRING(@[User::CurrentFileName], "carrier_scan", 1) &gt; 0 ? "CARRIER" : (FINDSTRING(@[User::CurrentFileName], "supplier_catalog", 1) &gt; 0 ? "SUPPLIER" : (FINDSTRING(@[User::CurrentFileName], "fx_override", 1) &gt; 0 ? "FX" : "UNKNOWN")))))</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Outputs[Derived Column Output].Columns[RejectReasonCode]" dataType="wstr" length="20" lineageId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Outputs[Derived Column Output].Columns[RejectReasonCode]" name="RejectReasonCode">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">LEN(TRIM(RawLine)) == 0 ? "EMPTY_LINE" : "QUARANTINED"</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">LEN(TRIM(RawLine)) == 0 ? "EMPTY_LINE" : "QUARANTINED"</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Outputs[Derived Column Output].Columns[ReplayEligibleFlag]" dataType="wstr" length="1" lineageId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Outputs[Derived Column Output].Columns[ReplayEligibleFlag]" name="ReplayEligibleFlag">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">LEN(TRIM(RawLine)) &gt; 0 &amp;&amp; FINDSTRING(RawLine, "\x00", 1) == 0 ? "Y" : "N"</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">LEN(TRIM(RawLine)) &gt; 0 &amp;&amp; FINDSTRING(RawLine, "\x00", 1) == 0 ? "Y" : "N"</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Outputs[Derived Column Output].Columns[SourceSystemCode]" dataType="wstr" length="20" lineageId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Outputs[Derived Column Output].Columns[SourceSystemCode]" name="SourceSystemCode">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">"MANUAL"</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"MANUAL"</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Outputs[Derived Column Output].Columns[RegionCode]" dataType="wstr" length="8" lineageId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Outputs[Derived Column Output].Columns[RegionCode]" name="RegionCode">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">"GLOBAL"</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"GLOBAL"</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Outputs[Derived Column Output].Columns[SourceFileName]" dataType="wstr" length="260" lineageId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Outputs[Derived Column Output].Columns[SourceFileName]" name="SourceFileName">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::CurrentFileName]</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::CurrentFileName]</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" dataType="dbTimeStamp" lineageId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" name="ExtractedAtUtc">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">GETUTCDATE()</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">GETUTCDATE()</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Outputs[Derived Column Output].Columns[PackageExecutionId]" dataType="i8" lineageId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Outputs[Derived Column Output].Columns[PackageExecutionId]" name="PackageExecutionId">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                        </properties>
+                      </outputColumn>
+                    </outputColumns>
+                    <externalMetadataColumns />
+                  </output>
+                </outputs>
+              </component>
+              <component refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Split Replayable Rows" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Split Replayable Rows" version="1">
+                <inputs>
+                  <input refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Split Replayable Rows.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Split Replayable Rows.Outputs[Replayable]" exclusionGroup="1" name="Replayable" synchronousInputId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Split Replayable Rows.Inputs[Conditional Split Input]">
+                    <properties>
+                      <property dataType="System.String" description="The condition for this output." name="Expression">ReplayEligibleFlag == "Y"</property>
+                      <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">ReplayEligibleFlag == "Y"</property>
+                      <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                    </properties>
+                  </output>
+                  <output refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Split Replayable Rows.Outputs[Unreadable]" exclusionGroup="1" isDefaultOut="true" name="Unreadable" synchronousInputId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Split Replayable Rows.Inputs[Conditional Split Input]" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Count Quarantined Rows" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Quarantined Rows" version="1">
+                <properties>
+                  <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::DetailRowCount</property>
+                </properties>
+                <inputs>
+                  <input refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Count Quarantined Rows.Inputs[Row Count Input]" name="Row Count Input" />
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Count Quarantined Rows.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Count Quarantined Rows.Inputs[Row Count Input]" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="err RejectedFileRow Replayable" usesDispositions="true" version="4">
+                <properties>
+                  <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+                  <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">err.RejectedFileRow</property>
+                  <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+                  <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+                  <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+                  <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">5000</property>
+                  <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+                </properties>
+                <connections>
+                  <connection refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+                </connections>
+                <inputs>
+                  <input refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="IgnoreFailure" hasSideEffects="true" name="OLE DB Destination Input">
+                    <inputColumns>
+                      <inputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].Columns[RawLine]" cachedDataType="wstr" cachedLength="4000" cachedName="RawLine" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].ExternalColumns[RawLine]" name="RawLine" />
+                      <inputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].Columns[OriginFeedCode]" cachedDataType="wstr" cachedLength="12" cachedName="OriginFeedCode" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].ExternalColumns[OriginFeedCode]" name="OriginFeedCode" />
+                      <inputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].Columns[RejectReasonCode]" cachedDataType="wstr" cachedLength="20" cachedName="RejectReasonCode" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" name="RejectReasonCode" />
+                      <inputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].Columns[ReplayEligibleFlag]" cachedDataType="wstr" cachedLength="1" cachedName="ReplayEligibleFlag" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].ExternalColumns[ReplayEligibleFlag]" name="ReplayEligibleFlag" />
+                      <inputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                      <inputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="8" cachedName="RegionCode" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                      <inputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="260" cachedName="SourceFileName" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" name="SourceFileName" />
+                      <inputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                      <inputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                    </inputColumns>
+                    <externalMetadataColumns isUsed="True">
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].ExternalColumns[RawLine]" dataType="wstr" length="4000" name="RawLine" />
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].ExternalColumns[OriginFeedCode]" dataType="wstr" length="12" name="OriginFeedCode" />
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" dataType="wstr" length="20" name="RejectReasonCode" />
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].ExternalColumns[ReplayEligibleFlag]" dataType="wstr" length="1" name="ReplayEligibleFlag" />
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="8" name="RegionCode" />
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="260" name="SourceFileName" />
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                    </externalMetadataColumns>
+                  </input>
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="err RejectedFileRow Unreadable" usesDispositions="true" version="4">
+                <properties>
+                  <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+                  <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">err.RejectedFileRow</property>
+                  <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+                  <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+                  <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+                  <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+                  <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+                </properties>
+                <connections>
+                  <connection refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+                </connections>
+                <inputs>
+                  <input refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                    <inputColumns>
+                      <inputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].Columns[RawLine]" cachedDataType="wstr" cachedLength="4000" cachedName="RawLine" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].ExternalColumns[RawLine]" name="RawLine" />
+                      <inputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].Columns[OriginFeedCode]" cachedDataType="wstr" cachedLength="12" cachedName="OriginFeedCode" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].ExternalColumns[OriginFeedCode]" name="OriginFeedCode" />
+                      <inputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].Columns[RejectReasonCode]" cachedDataType="wstr" cachedLength="20" cachedName="RejectReasonCode" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" name="RejectReasonCode" />
+                      <inputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].Columns[ReplayEligibleFlag]" cachedDataType="wstr" cachedLength="1" cachedName="ReplayEligibleFlag" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].ExternalColumns[ReplayEligibleFlag]" name="ReplayEligibleFlag" />
+                      <inputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                      <inputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="8" cachedName="RegionCode" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                      <inputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="260" cachedName="SourceFileName" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" name="SourceFileName" />
+                      <inputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                      <inputColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                    </inputColumns>
+                    <externalMetadataColumns isUsed="True">
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].ExternalColumns[RawLine]" dataType="wstr" length="4000" name="RawLine" />
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].ExternalColumns[OriginFeedCode]" dataType="wstr" length="12" name="OriginFeedCode" />
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" dataType="wstr" length="20" name="RejectReasonCode" />
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].ExternalColumns[ReplayEligibleFlag]" dataType="wstr" length="1" name="ReplayEligibleFlag" />
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="8" name="RegionCode" />
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="260" name="SourceFileName" />
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                      <externalMetadataColumn refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                    </externalMetadataColumns>
+                  </input>
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+                </outputs>
+              </component>
+            </components>
+            <paths>
+              <path refId="Package\Foreach Quarantined File\Sweep Quarantined Rows.Paths[Flat File Source Output]" endId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Inputs[Derived Column Input]" name="Flat File Source Output" startId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Quarantined File.Outputs[Flat File Source Output]" />
+              <path refId="Package\Foreach Quarantined File\Sweep Quarantined Rows.Paths[Derived Column Output 1]" endId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Split Replayable Rows.Inputs[Conditional Split Input]" name="Derived Column Output 1" startId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Classify Quarantined Row.Outputs[Derived Column Output]" />
+              <path refId="Package\Foreach Quarantined File\Sweep Quarantined Rows.Paths[Replayable 2]" endId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Count Quarantined Rows.Inputs[Row Count Input]" name="Replayable 2" startId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Split Replayable Rows.Outputs[Replayable]" />
+              <path refId="Package\Foreach Quarantined File\Sweep Quarantined Rows.Paths[Row Count Output 3]" endId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Replayable.Inputs[OLE DB Destination Input]" name="Row Count Output 3" startId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Count Quarantined Rows.Outputs[Row Count Output]" />
+              <path refId="Package\Foreach Quarantined File\Sweep Quarantined Rows.Paths[Unreadable 4]" endId="Package\Foreach Quarantined File\Sweep Quarantined Rows\err RejectedFileRow Unreadable.Inputs[OLE DB Destination Input]" name="Unreadable 4" startId="Package\Foreach Quarantined File\Sweep Quarantined Rows\Split Replayable Rows.Outputs[Unreadable]" />
+            </paths>
+          </pipeline>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Quarantined File\Count Replay Eligible Rows"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{48C9C881-447E-DDDA-ADFF-59A6E6EF8FF2}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Count Replay Eligible Rows"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="SELECT COUNT(*) AS ReplayEligibleCount FROM err.RejectedFileRow WHERE PackageExecutionId = ? AND RejectReasonCode = N'QUARANTINED';"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::ReplayEligibleCount" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Quarantined File\Log Rejected Rows"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{8FD182CF-DEFF-2043-B865-3FB932A75F29}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Rejected Rows"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @BatchId = ?, @SourceSystemCode = ?, @ObjectName = N'err.RejectedFileRow', @RejectReasonCode = N'QUARANTINED', @RejectReason = N'Quarantined file line recorded for operator review.', @RejectStage = N'Ingest', @RecordPayload = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::CurrentFileName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Quarantined File\Archive Processed File"
+          DTS:CreationName="Microsoft.FileSystemTask"
+          DTS:Description="File System Task"
+          DTS:DTSID="{3EEDD595-A0C5-ED1D-ED6A-8F2964A5181B}"
+          DTS:ExecutableType="Microsoft.FileSystemTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Archive Processed File"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <FileSystemData taskOperationType="MoveFile" taskSourceVariable="User::CurrentFilePath" taskDestinationVariable="User::ArchiveFilePath" taskOperationIsSourceVariable="True" taskOperationIsDestinationVariable="True" xmlns="www.microsoft.com/sqlserver/dts/tasks/filesystemtask" />
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Quarantined File\Mark File Swept"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{1C2382EE-2DA7-7E3C-ACFC-4B51E11C5032}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark File Swept"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="UPDATE etl.FileIngestionLog SET Status = N'Swept', CompletedAtUtc = SYSUTCDATETIME(), DetailRowCount = ?, RejectRowCount = ? WHERE FileIngestionLogId = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::DetailRowCount" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::MalformedRowCount" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::InboundFileId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Quarantined File\Move Poison File"
+          DTS:CreationName="Microsoft.FileSystemTask"
+          DTS:Description="File System Task"
+          DTS:DTSID="{35E22BD4-A82F-E411-77F4-CCC7DFB0E372}"
+          DTS:ExecutableType="Microsoft.FileSystemTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Move Poison File"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <FileSystemData taskOperationType="MoveFile" taskSourceVariable="User::CurrentFilePath" taskDestinationVariable="User::PoisonFilePath" taskOperationIsSourceVariable="True" taskOperationIsDestinationVariable="True" xmlns="www.microsoft.com/sqlserver/dts/tasks/filesystemtask" />
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Quarantined File\Mark File Unreadable"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F5BE787F-0307-99EA-B074-9EA11B65B511}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark File Unreadable"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="UPDATE etl.FileIngestionLog SET Status = N'Unreadable', CompletedAtUtc = SYSUTCDATETIME(), DetailRowCount = ?, RejectRowCount = ? WHERE FileIngestionLogId = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::DetailRowCount" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::MalformedRowCount" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::InboundFileId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Quarantined File.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{D052B89E-3B20-7334-84C2-EB13D369E39A}"
+          DTS:From="Package\Foreach Quarantined File\Derive File Paths"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Foreach Quarantined File\Register Inbound File" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Quarantined File.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{D73B44E5-21BB-02F7-A14F-C60D53B02BD3}"
+          DTS:From="Package\Foreach Quarantined File\Register Inbound File"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Foreach Quarantined File\Sweep Quarantined Rows" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Quarantined File.PrecedenceConstraints[Constraint 2]"
+          DTS:CreationName=""
+          DTS:DTSID="{C366FB62-CF5D-E35F-3DC7-C47D60D11008}"
+          DTS:From="Package\Foreach Quarantined File\Sweep Quarantined Rows"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 2"
+          DTS:To="Package\Foreach Quarantined File\Count Replay Eligible Rows" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Quarantined File.PrecedenceConstraints[Constraint 3]"
+          DTS:CreationName=""
+          DTS:DTSID="{8DBF778A-B572-2FCF-58AC-E09434F0D21C}"
+          DTS:From="Package\Foreach Quarantined File\Count Replay Eligible Rows"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 3"
+          DTS:To="Package\Foreach Quarantined File\Log Rejected Rows" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Quarantined File.PrecedenceConstraints[Constraint 4]"
+          DTS:CreationName=""
+          DTS:DTSID="{4DADE9A9-9B6B-F24C-EB32-AE36C7154509}"
+          DTS:From="Package\Foreach Quarantined File\Log Rejected Rows"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 4"
+          DTS:EvalOp="2"
+          DTS:Expression="@[User::ReplayEligibleCount] &gt; 0"
+          DTS:To="Package\Foreach Quarantined File\Archive Processed File" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Quarantined File.PrecedenceConstraints[Constraint 5]"
+          DTS:CreationName=""
+          DTS:DTSID="{FAB43FFD-BCF9-F56B-CDB8-909114296E9D}"
+          DTS:From="Package\Foreach Quarantined File\Log Rejected Rows"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 5"
+          DTS:EvalOp="2"
+          DTS:Expression="@[User::ReplayEligibleCount] == 0"
+          DTS:To="Package\Foreach Quarantined File\Move Poison File" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Quarantined File.PrecedenceConstraints[Constraint 6]"
+          DTS:CreationName=""
+          DTS:DTSID="{2E48B959-01F2-2CB9-F734-31145BDDA205}"
+          DTS:From="Package\Foreach Quarantined File\Archive Processed File"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 6"
+          DTS:To="Package\Foreach Quarantined File\Mark File Swept" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Quarantined File.PrecedenceConstraints[Constraint 7]"
+          DTS:CreationName=""
+          DTS:DTSID="{B3108595-03E4-4D6E-6D37-FB0C86C77D8D}"
+          DTS:From="Package\Foreach Quarantined File\Move Poison File"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 7"
+          DTS:To="Package\Foreach Quarantined File\Mark File Unreadable" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'err.RejectedFileRow', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Batch Variables"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Foreach Quarantined File" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Foreach Quarantined File"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{9F483F8D-39D3-10EC-713F-6DC902007085}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

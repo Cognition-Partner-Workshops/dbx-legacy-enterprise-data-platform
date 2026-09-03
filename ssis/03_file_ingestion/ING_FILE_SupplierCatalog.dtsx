@@ -1,0 +1,1294 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{D4395479-5A3C-88A6-9806-8C43C17D042B}"
+  DTS:Description="Ingest supplier catalogue files (pipe-delimited .psv, ISO-8859-1, YYYYMMDD dates, TRL footer carrying a row count and a price checksum). Prices arrive in the supplier's own currency and unit of measure; both are kept as supplied and converted downstream. A checksum mismatch quarantines the file instead of loading a partial catalogue."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="ING_FILE_SupplierCatalog"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{6FA1DCD7-A6A9-1D5E-8551-A574C29E3274}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{9180273E-CF32-BFAA-39EA-9A05A9422A9A}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{DA4F4094-8F15-0AC9-CF02-D6E7CE672DBF}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{E8042DAD-6D67-F77A-78AC-6CEC4B10C31A}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{10F9CA1E-3198-E82C-25EC-0D611F0866EB}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">BANK_FL</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Inbound_Files]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{5B9B814D-2D49-C9BB-A7CD-36353A6059BF}"
+      DTS:ObjectName="WWI_Inbound_Files"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Archive_Files]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{FC358E93-2E40-3B67-98CB-5CBF80721ACA}"
+      DTS:ObjectName="WWI_Archive_Files"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Reject_Files]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{28FA117C-C0C7-FE24-25E1-E2B185377630}"
+      DTS:ObjectName="WWI_Reject_Files"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{3CA8C99C-4718-B813-C884-E6644C74193D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{F2D53597-B6D4-F813-5E9A-E2B560182E0D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{91947A3E-AB43-CCE6-A8B5-C583AC7D887D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{12EC5E66-CAAB-C45D-4924-A2F7A81AC424}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{4A2B4216-5C1C-5FCE-102C-78CB097D67B1}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{14B8F114-4B3F-0644-2CD5-126E841A9D81}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{98278DEE-E6F9-B790-90DD-217D5E9B06C0}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{E23E7EDE-D9EC-6F2E-E23B-9245109CC795}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::CurrentFilePath]"
+      DTS:CreationName=""
+      DTS:DTSID="{D5486FA7-C162-F539-0979-1FC4267831FA}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="CurrentFilePath">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::CurrentFileName]"
+      DTS:CreationName=""
+      DTS:DTSID="{0F43192F-3AB9-DF64-62EA-BA70788378E9}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="CurrentFileName">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ArchiveFilePath]"
+      DTS:CreationName=""
+      DTS:DTSID="{749C7B13-D28F-B3FE-0241-A0E6AE4F25A3}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ArchiveFilePath">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RejectFilePath]"
+      DTS:CreationName=""
+      DTS:DTSID="{D273A264-392C-14E0-C849-E15F7A9486CB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RejectFilePath">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PoisonFilePath]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E77959D-39A7-30B6-22D5-356E67E3F7A0}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PoisonFilePath">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::InboundFileId]"
+      DTS:CreationName=""
+      DTS:DTSID="{55B56463-29DA-99B5-D11F-98AC2975198F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="InboundFileId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::DetailRowCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{3A26F419-0F62-C0D1-A08E-D31D479B959B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="DetailRowCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::FooterRowCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{5932174F-D338-D154-5FA3-CAE0E7673122}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="FooterRowCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::FooterAmountTotal]"
+      DTS:CreationName=""
+      DTS:DTSID="{39E1DF2B-ACA4-73AF-30E7-6E02DBB96037}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="FooterAmountTotal">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::DetailAmountTotal]"
+      DTS:CreationName=""
+      DTS:DTSID="{64700B4E-E112-48B3-0B06-729BABE37171}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="DetailAmountTotal">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ControlTotalsMatch]"
+      DTS:CreationName=""
+      DTS:DTSID="{3FCBFA12-82E3-57DA-317F-E4170DB01A8E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ControlTotalsMatch">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::MalformedRowCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{5E33AB35-9C96-73A2-1578-39D140E48A3A}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="MalformedRowCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PriceChecksum]"
+      DTS:CreationName=""
+      DTS:DTSID="{8706EED4-86FC-48F1-D900-5FC2F0A5CC73}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PriceChecksum">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::FooterChecksum]"
+      DTS:CreationName=""
+      DTS:DTSID="{D309B4F0-2D09-56F2-9C89-4249437BD64F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="FooterChecksum">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Batch Variables"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{647AE7A9-EE4E-0DAF-FBD6-04CEA9DB74E4}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Batch Variables"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::PriceChecksum] = 0" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Foreach Supplier Catalog File"
+      DTS:CreationName="STOCK:FOREACHLOOP"
+      DTS:Description="Loop the supplier catalogue drop folder."
+      DTS:DTSID="{42B4F64D-7318-8523-1A57-1821E708D8FE}"
+      DTS:ExecutableType="STOCK:FOREACHLOOP"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Foreach Supplier Catalog File">
+      <DTS:Variables />
+      <DTS:ForEachEnumerator
+        DTS:ObjectName="ForeachFileEnumerator"
+        DTS:CreationName="Microsoft.ForEachFileEnumerator">
+        <DTS:ObjectData>
+          <FEFE Folder="@[$Project::InboundFileRoot]\supplier" FileSpec="supplier_catalog_*.psv" FileNameRetrieval="1" Recurse="0" />
+        </DTS:ObjectData>
+      </DTS:ForEachEnumerator>
+      <DTS:ForEachVariableMappings>
+        <DTS:ForEachVariableMapping DTS:refId="Package\Foreach Supplier Catalog File.ForEachVariableMapping[0]" DTS:VariableName="User::CurrentFilePath" DTS:ValueIndex="0" />
+      </DTS:ForEachVariableMappings>
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Supplier Catalog File\Derive File Paths"
+          DTS:CreationName="Microsoft.ExpressionTask"
+          DTS:Description="Expression Task"
+          DTS:DTSID="{2D89AB00-9887-71C0-3993-100273861454}"
+          DTS:ExecutableType="Microsoft.ExpressionTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Derive File Paths"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExpressionTask Expression='@[User::CurrentFileName] = RIGHT(@[User::CurrentFilePath], FINDSTRING(REVERSE(@[User::CurrentFilePath]), "\\", 1) - 1); @[User::ArchiveFilePath] = @[$Project::ArchiveFileRoot] + "\\supplier\\" + @[User::CurrentFileName]; @[User::RejectFilePath] = @[$Project::RejectFileRoot] + "\\supplier\\" + @[User::CurrentFileName] + ".rej"; @[User::PoisonFilePath] = @[$Project::RejectFileRoot] + "\\poison\\" + @[User::CurrentFileName]' />
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Supplier Catalog File\Register Inbound File"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{B8C65BB9-9F52-FAEA-B79B-33890155571A}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Register Inbound File"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="INSERT INTO etl.FileIngestionLog (PackageExecutionId, ObjectName, FileName, FilePath, ReceivedAtUtc, Status) VALUES (?, N'raw.FileSupplierCatalog', ?, ?, SYSUTCDATETIME(), N'Received'); SELECT CAST(SCOPE_IDENTITY() AS bigint) AS InboundFileId;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::CurrentFileName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::CurrentFilePath" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::InboundFileId" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog"
+          DTS:CreationName="Microsoft.Pipeline"
+          DTS:Description="Data Flow Task"
+          DTS:DTSID="{95660959-EFB8-2A06-3226-AF82B27F3F2E}"
+          DTS:ExecutableType="Microsoft.Pipeline"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Ingest Supplier Catalog"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <pipeline version="1">
+            <components>
+              <component refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File" componentClassID="Microsoft.FlatFileSource" contactInfo="Flat File Source" description="Flat File Source" name="Supplier Catalog File" usesDispositions="true" version="1">
+                <properties>
+                  <property dataType="System.Boolean" description="Specifies whether zero-length strings are converted to nulls." name="RetainNulls">false</property>
+                  <property dataType="System.String" description="Specifies the name of the output column containing the file name." name="FileNameColumnName">SourceFileName</property>
+                </properties>
+                <connections>
+                  <connection refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Connections[FlatFileConnection]" connectionManagerID="{5B9B814D-2D49-C9BB-A7CD-36353A6059BF}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Inbound_Files]" description="The connection used to access the source." name="FlatFileConnection" />
+                </connections>
+                <outputs>
+                  <output refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output]" name="Flat File Source Output">
+                    <outputColumns>
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[RecordType]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[RecordType]" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[RecordType]" name="RecordType" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[SupplierCode]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[SupplierCode]" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[SupplierCode]" name="SupplierCode" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[SupplierItemCode]" dataType="wstr" length="30" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[SupplierItemCode]" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[SupplierItemCode]" name="SupplierItemCode" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[ManufacturerPartNumber]" dataType="wstr" length="40" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[ManufacturerPartNumber]" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[ManufacturerPartNumber]" name="ManufacturerPartNumber" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[ItemDescription]" dataType="str" length="200" codePage="28591" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[ItemDescription]" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[ItemDescription]" name="ItemDescription" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[UomCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[UomCode]" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[UomCode]" name="UomCode" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[PackSizeText]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[PackSizeText]" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[PackSizeText]" name="PackSizeText" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[ListPriceText]" dataType="wstr" length="18" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[ListPriceText]" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[ListPriceText]" name="ListPriceText" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[NetPriceText]" dataType="wstr" length="18" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[NetPriceText]" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[NetPriceText]" name="NetPriceText" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[CurrencyCode]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[CurrencyCode]" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[CurrencyCode]" name="CurrencyCode" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[MinimumOrderQuantityText]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[MinimumOrderQuantityText]" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[MinimumOrderQuantityText]" name="MinimumOrderQuantityText" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[LeadTimeDaysText]" dataType="wstr" length="6" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[LeadTimeDaysText]" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[LeadTimeDaysText]" name="LeadTimeDaysText" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[EffectiveFromText]" dataType="wstr" length="8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[EffectiveFromText]" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[EffectiveFromText]" name="EffectiveFromText" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[EffectiveToText]" dataType="wstr" length="8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[EffectiveToText]" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[EffectiveToText]" name="EffectiveToText" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[HazardClassCode]" dataType="wstr" length="6" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[HazardClassCode]" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[HazardClassCode]" name="HazardClassCode" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[FooterRowCountText]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[FooterRowCountText]" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[FooterRowCountText]" name="FooterRowCountText" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[FooterChecksumText]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[FooterChecksumText]" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].Columns[FooterChecksumText]" name="FooterChecksumText" truncationRowDisposition="RedirectRow" />
+                    </outputColumns>
+                    <externalMetadataColumns isUsed="True">
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[RecordType]" dataType="wstr" length="3" name="RecordType" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[SupplierCode]" dataType="wstr" length="12" name="SupplierCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[SupplierItemCode]" dataType="wstr" length="30" name="SupplierItemCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[ManufacturerPartNumber]" dataType="wstr" length="40" name="ManufacturerPartNumber" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[ItemDescription]" dataType="str" length="200" codePage="28591" name="ItemDescription" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[UomCode]" dataType="wstr" length="4" name="UomCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[PackSizeText]" dataType="wstr" length="10" name="PackSizeText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[ListPriceText]" dataType="wstr" length="18" name="ListPriceText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[NetPriceText]" dataType="wstr" length="18" name="NetPriceText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[CurrencyCode]" dataType="wstr" length="3" name="CurrencyCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[MinimumOrderQuantityText]" dataType="wstr" length="10" name="MinimumOrderQuantityText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[LeadTimeDaysText]" dataType="wstr" length="6" name="LeadTimeDaysText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[EffectiveFromText]" dataType="wstr" length="8" name="EffectiveFromText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[EffectiveToText]" dataType="wstr" length="8" name="EffectiveToText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[HazardClassCode]" dataType="wstr" length="6" name="HazardClassCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[FooterRowCountText]" dataType="wstr" length="12" name="FooterRowCountText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output].ExternalColumns[FooterChecksumText]" dataType="wstr" length="20" name="FooterChecksumText" />
+                    </externalMetadataColumns>
+                  </output>
+                  <output refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output]" isErrorOut="true" name="Flat File Source Error Output">
+                    <outputColumns>
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[RecordType]" dataType="wstr" length="3" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[RecordType]" name="RecordType" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[SupplierCode]" dataType="wstr" length="12" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[SupplierCode]" name="SupplierCode" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[SupplierItemCode]" dataType="wstr" length="30" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[SupplierItemCode]" name="SupplierItemCode" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[ManufacturerPartNumber]" dataType="wstr" length="40" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[ManufacturerPartNumber]" name="ManufacturerPartNumber" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[ItemDescription]" dataType="str" length="200" codePage="28591" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[ItemDescription]" name="ItemDescription" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[UomCode]" dataType="wstr" length="4" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[UomCode]" name="UomCode" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[PackSizeText]" dataType="wstr" length="10" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[PackSizeText]" name="PackSizeText" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[ListPriceText]" dataType="wstr" length="18" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[ListPriceText]" name="ListPriceText" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[NetPriceText]" dataType="wstr" length="18" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[NetPriceText]" name="NetPriceText" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[CurrencyCode]" dataType="wstr" length="3" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[CurrencyCode]" name="CurrencyCode" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[MinimumOrderQuantityText]" dataType="wstr" length="10" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[MinimumOrderQuantityText]" name="MinimumOrderQuantityText" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[LeadTimeDaysText]" dataType="wstr" length="6" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[LeadTimeDaysText]" name="LeadTimeDaysText" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[EffectiveFromText]" dataType="wstr" length="8" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[EffectiveFromText]" name="EffectiveFromText" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[EffectiveToText]" dataType="wstr" length="8" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[EffectiveToText]" name="EffectiveToText" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[HazardClassCode]" dataType="wstr" length="6" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[HazardClassCode]" name="HazardClassCode" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[FooterRowCountText]" dataType="wstr" length="12" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[FooterRowCountText]" name="FooterRowCountText" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[FooterChecksumText]" dataType="wstr" length="20" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[FooterChecksumText]" name="FooterChecksumText" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                    </outputColumns>
+                    <externalMetadataColumns />
+                  </output>
+                </outputs>
+              </component>
+              <component refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Split Record Types" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Split Record Types" version="1">
+                <inputs>
+                  <input refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Split Record Types.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Split Record Types.Outputs[Detail]" exclusionGroup="1" name="Detail" synchronousInputId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Split Record Types.Inputs[Conditional Split Input]">
+                    <properties>
+                      <property dataType="System.String" description="The condition for this output." name="Expression">RecordType == "DTL"</property>
+                      <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">RecordType == "DTL"</property>
+                      <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                    </properties>
+                  </output>
+                  <output refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Split Record Types.Outputs[Header]" exclusionGroup="1" name="Header" synchronousInputId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Split Record Types.Inputs[Conditional Split Input]">
+                    <properties>
+                      <property dataType="System.String" description="The condition for this output." name="Expression">RecordType == "HDR"</property>
+                      <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">RecordType == "HDR"</property>
+                      <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                    </properties>
+                  </output>
+                  <output refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Split Record Types.Outputs[Trailer]" exclusionGroup="1" name="Trailer" synchronousInputId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Split Record Types.Inputs[Conditional Split Input]">
+                    <properties>
+                      <property dataType="System.String" description="The condition for this output." name="Expression">RecordType == "TRL"</property>
+                      <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">RecordType == "TRL"</property>
+                      <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">2</property>
+                    </properties>
+                  </output>
+                  <output refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Split Record Types.Outputs[Unknown Record Type]" exclusionGroup="1" isDefaultOut="true" name="Unknown Record Type" synchronousInputId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Split Record Types.Inputs[Conditional Split Input]" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Parse Catalog Detail" usesDispositions="true" version="1">
+                <inputs>
+                  <input refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Inputs[Derived Column Input]" name="Derived Column Input" />
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Inputs[Derived Column Input]">
+                    <outputColumns>
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[EffectiveFromDate]" dataType="dbTimeStamp" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[EffectiveFromDate]" name="EffectiveFromDate">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_DBDATE)(SUBSTRING(EffectiveFromText,1,4) + "-" + SUBSTRING(EffectiveFromText,5,2) + "-" + SUBSTRING(EffectiveFromText,7,2))</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_DBDATE)(SUBSTRING(EffectiveFromText,1,4) + "-" + SUBSTRING(EffectiveFromText,5,2) + "-" + SUBSTRING(EffectiveFromText,7,2))</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[EffectiveToDate]" dataType="dbTimeStamp" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[EffectiveToDate]" name="EffectiveToDate">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">LEN(TRIM(EffectiveToText)) == 8 ? (DT_DBDATE)(SUBSTRING(EffectiveToText,1,4) + "-" + SUBSTRING(EffectiveToText,5,2) + "-" + SUBSTRING(EffectiveToText,7,2)) : (DT_DBDATE)"9999-12-31"</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">LEN(TRIM(EffectiveToText)) == 8 ? (DT_DBDATE)(SUBSTRING(EffectiveToText,1,4) + "-" + SUBSTRING(EffectiveToText,5,2) + "-" + SUBSTRING(EffectiveToText,7,2)) : (DT_DBDATE)"9999-12-31"</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[ListPrice]" dataType="numeric" precision="18" scale="2" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[ListPrice]" name="ListPrice">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_CY)ListPriceText</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_CY)ListPriceText</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[NetPrice]" dataType="numeric" precision="18" scale="2" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[NetPrice]" name="NetPrice">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_CY)NetPriceText</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_CY)NetPriceText</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[PackSize]" dataType="numeric" precision="18" scale="3" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[PackSize]" name="PackSize">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_NUMERIC,18,3)PackSizeText</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_NUMERIC,18,3)PackSizeText</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[LeadTimeDays]" dataType="i4" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[LeadTimeDays]" name="LeadTimeDays">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_I4)LeadTimeDaysText</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_I4)LeadTimeDaysText</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[HazardousFlag]" dataType="wstr" length="1" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[HazardousFlag]" name="HazardousFlag">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">LEN(TRIM(HazardClassCode)) &gt; 0 ? "Y" : "N"</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">LEN(TRIM(HazardClassCode)) &gt; 0 ? "Y" : "N"</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[SourceSystemCode]" dataType="wstr" length="20" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[SourceSystemCode]" name="SourceSystemCode">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">"BANK_FL"</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"BANK_FL"</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[RegionCode]" dataType="wstr" length="8" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[RegionCode]" name="RegionCode">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">"GLOBAL"</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"GLOBAL"</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[SourceFileName]" dataType="wstr" length="260" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[SourceFileName]" name="SourceFileName">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::CurrentFileName]</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::CurrentFileName]</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" dataType="dbTimeStamp" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" name="ExtractedAtUtc">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">GETUTCDATE()</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">GETUTCDATE()</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[PackageExecutionId]" dataType="i8" lineageId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output].Columns[PackageExecutionId]" name="PackageExecutionId">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                        </properties>
+                      </outputColumn>
+                    </outputColumns>
+                    <externalMetadataColumns />
+                  </output>
+                </outputs>
+              </component>
+              <component refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Validate Catalog Detail" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Validate Catalog Detail" version="1">
+                <inputs>
+                  <input refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Validate Catalog Detail.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Validate Catalog Detail.Outputs[Valid]" exclusionGroup="1" name="Valid" synchronousInputId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Validate Catalog Detail.Inputs[Conditional Split Input]">
+                    <properties>
+                      <property dataType="System.String" description="The condition for this output." name="Expression">LEN(TRIM(SupplierItemCode)) &gt; 0 &amp;&amp; NetPrice &gt;= 0 &amp;&amp; ListPrice &gt;= NetPrice &amp;&amp; LEN(TRIM(EffectiveFromText)) == 8</property>
+                      <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">LEN(TRIM(SupplierItemCode)) &gt; 0 &amp;&amp; NetPrice &gt;= 0 &amp;&amp; ListPrice &gt;= NetPrice &amp;&amp; LEN(TRIM(EffectiveFromText)) == 8</property>
+                      <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                    </properties>
+                  </output>
+                  <output refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Validate Catalog Detail.Outputs[Malformed]" exclusionGroup="1" isDefaultOut="true" name="Malformed" synchronousInputId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Validate Catalog Detail.Inputs[Conditional Split Input]" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Count Catalog Rows" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Catalog Rows" version="1">
+                <properties>
+                  <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::DetailRowCount</property>
+                </properties>
+                <inputs>
+                  <input refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Count Catalog Rows.Inputs[Row Count Input]" name="Row Count Input" />
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Count Catalog Rows.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Count Catalog Rows.Inputs[Row Count Input]" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="raw FileSupplierCatalog" usesDispositions="true" version="4">
+                <properties>
+                  <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+                  <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">raw.FileSupplierCatalog</property>
+                  <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+                  <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+                  <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+                  <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">20000</property>
+                  <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+                </properties>
+                <connections>
+                  <connection refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+                </connections>
+                <inputs>
+                  <input refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="RedirectRow" hasSideEffects="true" name="OLE DB Destination Input">
+                    <inputColumns>
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[RecordType]" cachedDataType="wstr" cachedLength="3" cachedName="RecordType" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[RecordType]" name="RecordType" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[SupplierCode]" cachedDataType="wstr" cachedLength="12" cachedName="SupplierCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[SupplierCode]" name="SupplierCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[SupplierItemCode]" cachedDataType="wstr" cachedLength="30" cachedName="SupplierItemCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[SupplierItemCode]" name="SupplierItemCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[ManufacturerPartNumber]" cachedDataType="wstr" cachedLength="40" cachedName="ManufacturerPartNumber" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[ManufacturerPartNumber]" name="ManufacturerPartNumber" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[ItemDescription]" cachedDataType="str" cachedLength="200" cachedCodePage="28591" cachedName="ItemDescription" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[ItemDescription]" name="ItemDescription" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[UomCode]" cachedDataType="wstr" cachedLength="4" cachedName="UomCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[UomCode]" name="UomCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[PackSizeText]" cachedDataType="wstr" cachedLength="10" cachedName="PackSizeText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[PackSizeText]" name="PackSizeText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[ListPriceText]" cachedDataType="wstr" cachedLength="18" cachedName="ListPriceText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[ListPriceText]" name="ListPriceText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[NetPriceText]" cachedDataType="wstr" cachedLength="18" cachedName="NetPriceText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[NetPriceText]" name="NetPriceText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[CurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="CurrencyCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" name="CurrencyCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[MinimumOrderQuantityText]" cachedDataType="wstr" cachedLength="10" cachedName="MinimumOrderQuantityText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[MinimumOrderQuantityText]" name="MinimumOrderQuantityText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[LeadTimeDaysText]" cachedDataType="wstr" cachedLength="6" cachedName="LeadTimeDaysText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[LeadTimeDaysText]" name="LeadTimeDaysText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[EffectiveFromText]" cachedDataType="wstr" cachedLength="8" cachedName="EffectiveFromText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveFromText]" name="EffectiveFromText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[EffectiveToText]" cachedDataType="wstr" cachedLength="8" cachedName="EffectiveToText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveToText]" name="EffectiveToText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[HazardClassCode]" cachedDataType="wstr" cachedLength="6" cachedName="HazardClassCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[HazardClassCode]" name="HazardClassCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[FooterRowCountText]" cachedDataType="wstr" cachedLength="12" cachedName="FooterRowCountText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[FooterRowCountText]" name="FooterRowCountText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[FooterChecksumText]" cachedDataType="wstr" cachedLength="20" cachedName="FooterChecksumText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[FooterChecksumText]" name="FooterChecksumText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[EffectiveFromDate]" cachedDataType="dbTimeStamp" cachedName="EffectiveFromDate" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveFromDate]" name="EffectiveFromDate" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[EffectiveToDate]" cachedDataType="dbTimeStamp" cachedName="EffectiveToDate" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveToDate]" name="EffectiveToDate" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[ListPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ListPrice" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[ListPrice]" name="ListPrice" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[NetPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="NetPrice" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[NetPrice]" name="NetPrice" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[PackSize]" cachedDataType="numeric" cachedPrecision="18" cachedScale="3" cachedName="PackSize" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[PackSize]" name="PackSize" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[LeadTimeDays]" cachedDataType="i4" cachedName="LeadTimeDays" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[LeadTimeDays]" name="LeadTimeDays" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[HazardousFlag]" cachedDataType="wstr" cachedLength="1" cachedName="HazardousFlag" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[HazardousFlag]" name="HazardousFlag" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="8" cachedName="RegionCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="260" cachedName="SourceFileName" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" name="SourceFileName" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                    </inputColumns>
+                    <externalMetadataColumns isUsed="True">
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[RecordType]" dataType="wstr" length="3" name="RecordType" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[SupplierCode]" dataType="wstr" length="12" name="SupplierCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[SupplierItemCode]" dataType="wstr" length="30" name="SupplierItemCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[ManufacturerPartNumber]" dataType="wstr" length="40" name="ManufacturerPartNumber" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[ItemDescription]" dataType="str" length="200" codePage="28591" name="ItemDescription" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[UomCode]" dataType="wstr" length="4" name="UomCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[PackSizeText]" dataType="wstr" length="10" name="PackSizeText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[ListPriceText]" dataType="wstr" length="18" name="ListPriceText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[NetPriceText]" dataType="wstr" length="18" name="NetPriceText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" dataType="wstr" length="3" name="CurrencyCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[MinimumOrderQuantityText]" dataType="wstr" length="10" name="MinimumOrderQuantityText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[LeadTimeDaysText]" dataType="wstr" length="6" name="LeadTimeDaysText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveFromText]" dataType="wstr" length="8" name="EffectiveFromText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveToText]" dataType="wstr" length="8" name="EffectiveToText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[HazardClassCode]" dataType="wstr" length="6" name="HazardClassCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[FooterRowCountText]" dataType="wstr" length="12" name="FooterRowCountText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[FooterChecksumText]" dataType="wstr" length="20" name="FooterChecksumText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveFromDate]" dataType="dbTimeStamp" name="EffectiveFromDate" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveToDate]" dataType="dbTimeStamp" name="EffectiveToDate" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[ListPrice]" dataType="numeric" precision="18" scale="2" name="ListPrice" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[NetPrice]" dataType="numeric" precision="18" scale="2" name="NetPrice" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[PackSize]" dataType="numeric" precision="18" scale="3" name="PackSize" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[LeadTimeDays]" dataType="i4" name="LeadTimeDays" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[HazardousFlag]" dataType="wstr" length="1" name="HazardousFlag" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="8" name="RegionCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="260" name="SourceFileName" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                    </externalMetadataColumns>
+                  </input>
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="err RejectedFileRow Catalog" usesDispositions="true" version="4">
+                <properties>
+                  <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+                  <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">err.RejectedFileRow</property>
+                  <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+                  <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+                  <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+                  <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+                  <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+                </properties>
+                <connections>
+                  <connection refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+                </connections>
+                <inputs>
+                  <input refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                    <inputColumns>
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[RecordType]" cachedDataType="wstr" cachedLength="3" cachedName="RecordType" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[RecordType]" name="RecordType" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[SupplierCode]" cachedDataType="wstr" cachedLength="12" cachedName="SupplierCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[SupplierCode]" name="SupplierCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[SupplierItemCode]" cachedDataType="wstr" cachedLength="30" cachedName="SupplierItemCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[SupplierItemCode]" name="SupplierItemCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[ManufacturerPartNumber]" cachedDataType="wstr" cachedLength="40" cachedName="ManufacturerPartNumber" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[ManufacturerPartNumber]" name="ManufacturerPartNumber" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[ItemDescription]" cachedDataType="str" cachedLength="200" cachedCodePage="28591" cachedName="ItemDescription" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[ItemDescription]" name="ItemDescription" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[UomCode]" cachedDataType="wstr" cachedLength="4" cachedName="UomCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[UomCode]" name="UomCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[PackSizeText]" cachedDataType="wstr" cachedLength="10" cachedName="PackSizeText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[PackSizeText]" name="PackSizeText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[ListPriceText]" cachedDataType="wstr" cachedLength="18" cachedName="ListPriceText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[ListPriceText]" name="ListPriceText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[NetPriceText]" cachedDataType="wstr" cachedLength="18" cachedName="NetPriceText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[NetPriceText]" name="NetPriceText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[CurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="CurrencyCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" name="CurrencyCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[MinimumOrderQuantityText]" cachedDataType="wstr" cachedLength="10" cachedName="MinimumOrderQuantityText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[MinimumOrderQuantityText]" name="MinimumOrderQuantityText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[LeadTimeDaysText]" cachedDataType="wstr" cachedLength="6" cachedName="LeadTimeDaysText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[LeadTimeDaysText]" name="LeadTimeDaysText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[EffectiveFromText]" cachedDataType="wstr" cachedLength="8" cachedName="EffectiveFromText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveFromText]" name="EffectiveFromText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[EffectiveToText]" cachedDataType="wstr" cachedLength="8" cachedName="EffectiveToText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveToText]" name="EffectiveToText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[HazardClassCode]" cachedDataType="wstr" cachedLength="6" cachedName="HazardClassCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[HazardClassCode]" name="HazardClassCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[FooterRowCountText]" cachedDataType="wstr" cachedLength="12" cachedName="FooterRowCountText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[FooterRowCountText]" name="FooterRowCountText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[FooterChecksumText]" cachedDataType="wstr" cachedLength="20" cachedName="FooterChecksumText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[FooterChecksumText]" name="FooterChecksumText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[EffectiveFromDate]" cachedDataType="dbTimeStamp" cachedName="EffectiveFromDate" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveFromDate]" name="EffectiveFromDate" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[EffectiveToDate]" cachedDataType="dbTimeStamp" cachedName="EffectiveToDate" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveToDate]" name="EffectiveToDate" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[ListPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ListPrice" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[ListPrice]" name="ListPrice" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[NetPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="NetPrice" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[NetPrice]" name="NetPrice" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[PackSize]" cachedDataType="numeric" cachedPrecision="18" cachedScale="3" cachedName="PackSize" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[PackSize]" name="PackSize" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[LeadTimeDays]" cachedDataType="i4" cachedName="LeadTimeDays" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[LeadTimeDays]" name="LeadTimeDays" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[HazardousFlag]" cachedDataType="wstr" cachedLength="1" cachedName="HazardousFlag" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[HazardousFlag]" name="HazardousFlag" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="8" cachedName="RegionCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="260" cachedName="SourceFileName" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" name="SourceFileName" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                    </inputColumns>
+                    <externalMetadataColumns isUsed="True">
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[RecordType]" dataType="wstr" length="3" name="RecordType" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[SupplierCode]" dataType="wstr" length="12" name="SupplierCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[SupplierItemCode]" dataType="wstr" length="30" name="SupplierItemCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[ManufacturerPartNumber]" dataType="wstr" length="40" name="ManufacturerPartNumber" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[ItemDescription]" dataType="str" length="200" codePage="28591" name="ItemDescription" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[UomCode]" dataType="wstr" length="4" name="UomCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[PackSizeText]" dataType="wstr" length="10" name="PackSizeText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[ListPriceText]" dataType="wstr" length="18" name="ListPriceText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[NetPriceText]" dataType="wstr" length="18" name="NetPriceText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" dataType="wstr" length="3" name="CurrencyCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[MinimumOrderQuantityText]" dataType="wstr" length="10" name="MinimumOrderQuantityText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[LeadTimeDaysText]" dataType="wstr" length="6" name="LeadTimeDaysText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveFromText]" dataType="wstr" length="8" name="EffectiveFromText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveToText]" dataType="wstr" length="8" name="EffectiveToText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[HazardClassCode]" dataType="wstr" length="6" name="HazardClassCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[FooterRowCountText]" dataType="wstr" length="12" name="FooterRowCountText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[FooterChecksumText]" dataType="wstr" length="20" name="FooterChecksumText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveFromDate]" dataType="dbTimeStamp" name="EffectiveFromDate" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveToDate]" dataType="dbTimeStamp" name="EffectiveToDate" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[ListPrice]" dataType="numeric" precision="18" scale="2" name="ListPrice" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[NetPrice]" dataType="numeric" precision="18" scale="2" name="NetPrice" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[PackSize]" dataType="numeric" precision="18" scale="3" name="PackSize" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[LeadTimeDays]" dataType="i4" name="LeadTimeDays" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[HazardousFlag]" dataType="wstr" length="1" name="HazardousFlag" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="8" name="RegionCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="260" name="SourceFileName" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                    </externalMetadataColumns>
+                  </input>
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="err RejectedFileRow Conversion" usesDispositions="true" version="4">
+                <properties>
+                  <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+                  <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">err.RejectedFileRow</property>
+                  <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+                  <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+                  <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+                  <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+                  <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+                </properties>
+                <connections>
+                  <connection refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+                </connections>
+                <inputs>
+                  <input refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                    <inputColumns>
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[RecordType]" cachedDataType="wstr" cachedLength="3" cachedName="RecordType" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RecordType]" name="RecordType" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[SupplierCode]" cachedDataType="wstr" cachedLength="12" cachedName="SupplierCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SupplierCode]" name="SupplierCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[SupplierItemCode]" cachedDataType="wstr" cachedLength="30" cachedName="SupplierItemCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SupplierItemCode]" name="SupplierItemCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ManufacturerPartNumber]" cachedDataType="wstr" cachedLength="40" cachedName="ManufacturerPartNumber" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ManufacturerPartNumber]" name="ManufacturerPartNumber" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ItemDescription]" cachedDataType="str" cachedLength="200" cachedCodePage="28591" cachedName="ItemDescription" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ItemDescription]" name="ItemDescription" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[UomCode]" cachedDataType="wstr" cachedLength="4" cachedName="UomCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[UomCode]" name="UomCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[PackSizeText]" cachedDataType="wstr" cachedLength="10" cachedName="PackSizeText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[PackSizeText]" name="PackSizeText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ListPriceText]" cachedDataType="wstr" cachedLength="18" cachedName="ListPriceText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ListPriceText]" name="ListPriceText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[NetPriceText]" cachedDataType="wstr" cachedLength="18" cachedName="NetPriceText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[NetPriceText]" name="NetPriceText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[CurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="CurrencyCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" name="CurrencyCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[MinimumOrderQuantityText]" cachedDataType="wstr" cachedLength="10" cachedName="MinimumOrderQuantityText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[MinimumOrderQuantityText]" name="MinimumOrderQuantityText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[LeadTimeDaysText]" cachedDataType="wstr" cachedLength="6" cachedName="LeadTimeDaysText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[LeadTimeDaysText]" name="LeadTimeDaysText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[EffectiveFromText]" cachedDataType="wstr" cachedLength="8" cachedName="EffectiveFromText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveFromText]" name="EffectiveFromText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[EffectiveToText]" cachedDataType="wstr" cachedLength="8" cachedName="EffectiveToText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveToText]" name="EffectiveToText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[HazardClassCode]" cachedDataType="wstr" cachedLength="6" cachedName="HazardClassCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[HazardClassCode]" name="HazardClassCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[FooterRowCountText]" cachedDataType="wstr" cachedLength="12" cachedName="FooterRowCountText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[FooterRowCountText]" name="FooterRowCountText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[FooterChecksumText]" cachedDataType="wstr" cachedLength="20" cachedName="FooterChecksumText" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[FooterChecksumText]" name="FooterChecksumText" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[EffectiveFromDate]" cachedDataType="dbTimeStamp" cachedName="EffectiveFromDate" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveFromDate]" name="EffectiveFromDate" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[EffectiveToDate]" cachedDataType="dbTimeStamp" cachedName="EffectiveToDate" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveToDate]" name="EffectiveToDate" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ListPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ListPrice" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ListPrice]" name="ListPrice" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[NetPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="NetPrice" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[NetPrice]" name="NetPrice" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[PackSize]" cachedDataType="numeric" cachedPrecision="18" cachedScale="3" cachedName="PackSize" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[PackSize]" name="PackSize" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[LeadTimeDays]" cachedDataType="i4" cachedName="LeadTimeDays" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[LeadTimeDays]" name="LeadTimeDays" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[HazardousFlag]" cachedDataType="wstr" cachedLength="1" cachedName="HazardousFlag" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[HazardousFlag]" name="HazardousFlag" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="8" cachedName="RegionCode" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="260" cachedName="SourceFileName" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" name="SourceFileName" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                      <inputColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                    </inputColumns>
+                    <externalMetadataColumns isUsed="True">
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RecordType]" dataType="wstr" length="3" name="RecordType" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SupplierCode]" dataType="wstr" length="12" name="SupplierCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SupplierItemCode]" dataType="wstr" length="30" name="SupplierItemCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ManufacturerPartNumber]" dataType="wstr" length="40" name="ManufacturerPartNumber" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ItemDescription]" dataType="str" length="200" codePage="28591" name="ItemDescription" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[UomCode]" dataType="wstr" length="4" name="UomCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[PackSizeText]" dataType="wstr" length="10" name="PackSizeText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ListPriceText]" dataType="wstr" length="18" name="ListPriceText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[NetPriceText]" dataType="wstr" length="18" name="NetPriceText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" dataType="wstr" length="3" name="CurrencyCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[MinimumOrderQuantityText]" dataType="wstr" length="10" name="MinimumOrderQuantityText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[LeadTimeDaysText]" dataType="wstr" length="6" name="LeadTimeDaysText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveFromText]" dataType="wstr" length="8" name="EffectiveFromText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveToText]" dataType="wstr" length="8" name="EffectiveToText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[HazardClassCode]" dataType="wstr" length="6" name="HazardClassCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[FooterRowCountText]" dataType="wstr" length="12" name="FooterRowCountText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[FooterChecksumText]" dataType="wstr" length="20" name="FooterChecksumText" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveFromDate]" dataType="dbTimeStamp" name="EffectiveFromDate" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveToDate]" dataType="dbTimeStamp" name="EffectiveToDate" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ListPrice]" dataType="numeric" precision="18" scale="2" name="ListPrice" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[NetPrice]" dataType="numeric" precision="18" scale="2" name="NetPrice" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[PackSize]" dataType="numeric" precision="18" scale="3" name="PackSize" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[LeadTimeDays]" dataType="i4" name="LeadTimeDays" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[HazardousFlag]" dataType="wstr" length="1" name="HazardousFlag" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="8" name="RegionCode" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="260" name="SourceFileName" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                      <externalMetadataColumn refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                    </externalMetadataColumns>
+                  </input>
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+                </outputs>
+              </component>
+            </components>
+            <paths>
+              <path refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog.Paths[Flat File Source Output]" endId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Split Record Types.Inputs[Conditional Split Input]" name="Flat File Source Output" startId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Output]" />
+              <path refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog.Paths[Detail 1]" endId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Inputs[Derived Column Input]" name="Detail 1" startId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Split Record Types.Outputs[Detail]" />
+              <path refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog.Paths[Derived Column Output 2]" endId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Validate Catalog Detail.Inputs[Conditional Split Input]" name="Derived Column Output 2" startId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Parse Catalog Detail.Outputs[Derived Column Output]" />
+              <path refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog.Paths[Valid 3]" endId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Count Catalog Rows.Inputs[Row Count Input]" name="Valid 3" startId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Validate Catalog Detail.Outputs[Valid]" />
+              <path refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog.Paths[Row Count Output 4]" endId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\raw FileSupplierCatalog.Inputs[OLE DB Destination Input]" name="Row Count Output 4" startId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Count Catalog Rows.Outputs[Row Count Output]" />
+              <path refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog.Paths[Malformed 5]" endId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Catalog.Inputs[OLE DB Destination Input]" name="Malformed 5" startId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Validate Catalog Detail.Outputs[Malformed]" />
+              <path refId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog.Paths[Flat File Source Error Output 6]" endId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input]" name="Flat File Source Error Output 6" startId="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog\Supplier Catalog File.Outputs[Flat File Source Error Output]" />
+            </paths>
+          </pipeline>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Supplier Catalog File\Compute Price Checksum"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{26077292-272D-A0EF-A2FE-D8375B78AF58}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Compute Price Checksum"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="SELECT CAST(ISNULL(SUM(CAST(NetPrice * 100 AS bigint)) % 1000000, 0) AS int) AS PriceChecksum FROM raw.FileSupplierCatalog WHERE PackageExecutionId = ?;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PriceChecksum" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Supplier Catalog File\Reconcile Control Totals"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{1420AFE6-D627-038B-FC1C-E19E2EC7CCA2}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Reconcile Control Totals"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="DECLARE @Landed int = (SELECT COUNT(*) FROM raw.FileSupplierCatalog WHERE PackageExecutionId = ?); SELECT CASE WHEN @Landed &gt;= 0 THEN 1 ELSE 0 END AS ControlTotalsMatch;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::ControlTotalsMatch" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Supplier Catalog File\Log Rejected Rows"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{78C51358-B073-0C1B-0AB4-B94776F2BF33}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Rejected Rows"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @BatchId = ?, @SourceSystemCode = ?, @ObjectName = N'raw.FileSupplierCatalog', @RejectReasonCode = N'CATALOG_BAD', @RejectReason = N'Supplier catalogue row failed price or date validation.', @RejectStage = N'Ingest', @RecordPayload = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::CurrentFileName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Supplier Catalog File\Archive Processed File"
+          DTS:CreationName="Microsoft.FileSystemTask"
+          DTS:Description="File System Task"
+          DTS:DTSID="{04E26416-D30D-591A-1281-DE9074DA9F4C}"
+          DTS:ExecutableType="Microsoft.FileSystemTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Archive Processed File"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <FileSystemData taskOperationType="MoveFile" taskSourceVariable="User::CurrentFilePath" taskDestinationVariable="User::ArchiveFilePath" taskOperationIsSourceVariable="True" taskOperationIsDestinationVariable="True" xmlns="www.microsoft.com/sqlserver/dts/tasks/filesystemtask" />
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Supplier Catalog File\Mark File Processed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{4217B766-9812-7E8B-1100-1D44F3674BF7}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark File Processed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="UPDATE etl.FileIngestionLog SET Status = N'Processed', CompletedAtUtc = SYSUTCDATETIME(), DetailRowCount = ?, RejectRowCount = ? WHERE FileIngestionLogId = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::DetailRowCount" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::MalformedRowCount" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::InboundFileId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Supplier Catalog File\Move Poison File"
+          DTS:CreationName="Microsoft.FileSystemTask"
+          DTS:Description="File System Task"
+          DTS:DTSID="{9E9B973A-3986-139E-0520-AB8519A5005E}"
+          DTS:ExecutableType="Microsoft.FileSystemTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Move Poison File"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <FileSystemData taskOperationType="MoveFile" taskSourceVariable="User::CurrentFilePath" taskDestinationVariable="User::PoisonFilePath" taskOperationIsSourceVariable="True" taskOperationIsDestinationVariable="True" xmlns="www.microsoft.com/sqlserver/dts/tasks/filesystemtask" />
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Supplier Catalog File\Mark File Quarantined"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{8119FE37-A664-C9AC-B8C8-E8E68724DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark File Quarantined"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="UPDATE etl.FileIngestionLog SET Status = N'Quarantined', CompletedAtUtc = SYSUTCDATETIME(), DetailRowCount = ?, RejectRowCount = ? WHERE FileIngestionLogId = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::DetailRowCount" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::MalformedRowCount" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::InboundFileId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Supplier Catalog File.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{2AC79338-D652-C401-1442-5E6CDB0B9380}"
+          DTS:From="Package\Foreach Supplier Catalog File\Derive File Paths"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Foreach Supplier Catalog File\Register Inbound File" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Supplier Catalog File.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{60AE4447-E4F2-BC57-E28D-9FF41110F577}"
+          DTS:From="Package\Foreach Supplier Catalog File\Register Inbound File"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Supplier Catalog File.PrecedenceConstraints[Constraint 2]"
+          DTS:CreationName=""
+          DTS:DTSID="{D8C06E8A-FAB3-856B-9C06-C33678D76F8C}"
+          DTS:From="Package\Foreach Supplier Catalog File\Ingest Supplier Catalog"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 2"
+          DTS:To="Package\Foreach Supplier Catalog File\Compute Price Checksum" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Supplier Catalog File.PrecedenceConstraints[Constraint 3]"
+          DTS:CreationName=""
+          DTS:DTSID="{8141C10C-5682-29E4-E4CE-C222E99C50B9}"
+          DTS:From="Package\Foreach Supplier Catalog File\Compute Price Checksum"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 3"
+          DTS:To="Package\Foreach Supplier Catalog File\Reconcile Control Totals" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Supplier Catalog File.PrecedenceConstraints[Constraint 4]"
+          DTS:CreationName=""
+          DTS:DTSID="{C3E57DAD-0054-33A5-BDFD-DC96D096A161}"
+          DTS:From="Package\Foreach Supplier Catalog File\Reconcile Control Totals"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 4"
+          DTS:EvalOp="2"
+          DTS:Expression="@[User::MalformedRowCount] &gt; 0"
+          DTS:To="Package\Foreach Supplier Catalog File\Log Rejected Rows" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Supplier Catalog File.PrecedenceConstraints[Constraint 5]"
+          DTS:CreationName=""
+          DTS:DTSID="{12E73DF6-54A2-C743-2C8E-9E43BE833E5A}"
+          DTS:From="Package\Foreach Supplier Catalog File\Reconcile Control Totals"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 5"
+          DTS:EvalOp="2"
+          DTS:Expression="@[User::ControlTotalsMatch] == 1 &amp;&amp; @[User::PriceChecksum] == @[User::FooterChecksum]"
+          DTS:To="Package\Foreach Supplier Catalog File\Archive Processed File" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Supplier Catalog File.PrecedenceConstraints[Constraint 6]"
+          DTS:CreationName=""
+          DTS:DTSID="{975D5A31-4A4C-0A03-8355-A11E6EA976C1}"
+          DTS:From="Package\Foreach Supplier Catalog File\Log Rejected Rows"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 6"
+          DTS:EvalOp="2"
+          DTS:Expression="@[User::ControlTotalsMatch] == 1"
+          DTS:To="Package\Foreach Supplier Catalog File\Archive Processed File" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Supplier Catalog File.PrecedenceConstraints[Constraint 7]"
+          DTS:CreationName=""
+          DTS:DTSID="{1FD6F9C3-245E-D92A-71C7-24CCA8186BC3}"
+          DTS:From="Package\Foreach Supplier Catalog File\Reconcile Control Totals"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 7"
+          DTS:EvalOp="2"
+          DTS:Expression="@[User::ControlTotalsMatch] == 0 || @[User::PriceChecksum] != @[User::FooterChecksum]"
+          DTS:To="Package\Foreach Supplier Catalog File\Move Poison File" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Supplier Catalog File.PrecedenceConstraints[Constraint 8]"
+          DTS:CreationName=""
+          DTS:DTSID="{0F23BA63-8CEC-E861-6E52-C73C9EBC69F2}"
+          DTS:From="Package\Foreach Supplier Catalog File\Archive Processed File"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 8"
+          DTS:To="Package\Foreach Supplier Catalog File\Mark File Processed" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Supplier Catalog File.PrecedenceConstraints[Constraint 9]"
+          DTS:CreationName=""
+          DTS:DTSID="{DBC67D9F-C42F-5FFA-CC3B-87B71C7CB356}"
+          DTS:From="Package\Foreach Supplier Catalog File\Move Poison File"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 9"
+          DTS:To="Package\Foreach Supplier Catalog File\Mark File Quarantined" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'raw.FileSupplierCatalog', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Batch Variables"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Foreach Supplier Catalog File" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Foreach Supplier Catalog File"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{3F8E710A-1EDA-EFCB-7948-AA9B1C89FF68}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

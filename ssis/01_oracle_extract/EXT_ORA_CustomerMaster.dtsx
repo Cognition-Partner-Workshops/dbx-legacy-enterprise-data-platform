@@ -1,0 +1,1081 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{6B3BDE5E-2BBD-78A3-72BB-C0C367F1CF28}"
+  DTS:Description="Incremental customer master extract (LAST_UPDATE_DT watermark with lookback), denormalised over CUST_MASTER, CUST_CLASSIFICATION and CUST_CREDIT_PROFILE, plus a delete-detection pass over WWI_AUDIT.CHANGE_LOG."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="EXT_ORA_CustomerMaster"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{5813D99D-9ED6-91E2-434A-01BF065DC0A2}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{E27FFC74-AF0E-A063-5440-3A02DA07F574}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{7499B692-FCDC-5037-6DD6-DA640C92AE14}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{36FA773C-0ACD-DCFC-4771-2142FE7E1D7F}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{B195D382-20C0-904E-04DA-CAFD0CFC460C}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">ORA_ERP</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Oracle_ERP]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{219914C8-6320-598D-C999-94A3821DDB9A}"
+      DTS:ObjectName="WWI_Oracle_ERP"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{80CFD605-C988-F82E-7CCE-9E1183AFDFCE}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{40B67F27-25D7-0203-FB16-62A5AB13FE18}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{BA820A2B-1AB5-39BA-16CF-E3DF4394F185}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{8A2CCD4E-62DB-E9E7-FAF1-37B3749DAF0A}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{3538316E-1F78-BE23-B4D2-6D91085D3C9D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{2A1341D1-0B09-5398-4F41-3B155CDB6622}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{3145BCED-47C6-F092-6852-0569672B008D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{B8DD6AAC-9BCC-FEDE-459B-B8441C3D7A5E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsDeleted]"
+      DTS:CreationName=""
+      DTS:DTSID="{C748EA88-8BB9-0004-7F52-5B2E35A238CF}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsDeleted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::LookbackMinutes]"
+      DTS:CreationName=""
+      DTS:DTSID="{C1276A2D-8E42-15DB-73B6-425CDB2D537F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="LookbackMinutes">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">120</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Batch Variables"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{647AE7A9-EE4E-0DAF-FBD6-04CEA9DB74E4}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Batch Variables"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::RowsRejected] = 0" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Get Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{AD8AAA26-E475-7A7A-5321-BEF0685AEC15}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Get Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_GetWatermark @SourceSystemCode = ?, @ObjectName = ?, @ReloadFullHistory = ?, @WatermarkFrom = ? OUTPUT, @WatermarkTo = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::ReloadFullHistory" SQLTask:ParameterDirection="Input" SQLTask:DataType="BYTE" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::WatermarkFrom" />
+        <SQLTask:ResultBinding SQLTask:ResultName="1" SQLTask:DtsVariableName="User::WatermarkTo" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Extract Customer Master"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{DA911D3A-FEA6-3705-72D0-345EA982BCCE}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Extract Customer Master"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Extract Customer Master\ORA CUST_MASTER" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="ORA CUST_MASTER" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">3600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT  c.CUST_ID,
+        c.CUST_NBR,
+        c.CUST_NAME,
+        WWI_MDM.FN_NORMALIZE_NAME(c.CUST_NAME)          AS CUST_NAME_NORM,
+        c.LEGAL_ENTITY_CD,
+        c.REGION_CD,
+        c.COUNTRY_CD,
+        WWI_MDM.FN_CUSTOMER_STATUS(c.CUST_ID)           AS CUST_STATUS_CD,
+        cl.CLASSIFICATION_CD,
+        cl.BUYING_GROUP_CD,
+        cl.PRICE_LIST_CD,
+        cp.CREDIT_LIMIT_AMT,
+        cp.CREDIT_RATING_CD,
+        cp.PAYMENT_TERMS_CD,
+        c.CURRENCY_CD,
+        c.TAX_REGISTRATION_NBR,
+        CASE
+            WHEN c.REGION_CD = 'EU'
+                 AND c.CONSENT_CAPTURED_DT &lt; ADD_MONTHS(SYSDATE, -24) THEN NULL
+            ELSE c.MARKETING_CONSENT_FLG
+        END                                             AS MARKETING_CONSENT_FLG,
+        c.CONSENT_CAPTURED_DT,
+        c.FIRST_ORDER_DT,
+        c.LAST_UPDATE_DT,
+        c.LAST_UPDATE_USER
+FROM    WWI_MDM.CUST_MASTER c
+        LEFT OUTER JOIN WWI_MDM.CUST_CLASSIFICATION cl
+            ON cl.CUST_ID = c.CUST_ID
+           AND cl.EFFECTIVE_TO_DT IS NULL
+        LEFT OUTER JOIN WWI_MDM.CUST_CREDIT_PROFILE cp
+            ON cp.CUST_ID = c.CUST_ID
+           AND cp.PROFILE_STATUS_CD = 'CURR'
+WHERE   c.LAST_UPDATE_DT &gt;= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')
+  AND   c.LAST_UPDATE_DT &lt;  TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')
+  AND   c.MERGE_TARGET_CUST_ID IS NULL
+ORDER BY c.CUST_ID</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Extract Customer Master\ORA CUST_MASTER.Connections[OleDbConnection]" connectionManagerID="{219914C8-6320-598D-C999-94A3821DDB9A}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Oracle_ERP]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CUST_ID]" dataType="numeric" precision="12" scale="0" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CUST_ID]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CUST_ID]" name="CUST_ID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CUST_NBR]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CUST_NBR]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CUST_NBR]" name="CUST_NBR" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CUST_NAME]" dataType="wstr" length="200" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CUST_NAME]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CUST_NAME]" name="CUST_NAME" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CUST_NAME_NORM]" dataType="wstr" length="200" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CUST_NAME_NORM]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CUST_NAME_NORM]" name="CUST_NAME_NORM" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[LEGAL_ENTITY_CD]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[LEGAL_ENTITY_CD]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[LEGAL_ENTITY_CD]" name="LEGAL_ENTITY_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[REGION_CD]" dataType="wstr" length="8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[REGION_CD]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[REGION_CD]" name="REGION_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[COUNTRY_CD]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[COUNTRY_CD]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[COUNTRY_CD]" name="COUNTRY_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CUST_STATUS_CD]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CUST_STATUS_CD]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CUST_STATUS_CD]" name="CUST_STATUS_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CLASSIFICATION_CD]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CLASSIFICATION_CD]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CLASSIFICATION_CD]" name="CLASSIFICATION_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[BUYING_GROUP_CD]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[BUYING_GROUP_CD]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[BUYING_GROUP_CD]" name="BUYING_GROUP_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[PRICE_LIST_CD]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[PRICE_LIST_CD]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[PRICE_LIST_CD]" name="PRICE_LIST_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CREDIT_LIMIT_AMT]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CREDIT_LIMIT_AMT]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CREDIT_LIMIT_AMT]" name="CREDIT_LIMIT_AMT" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CREDIT_RATING_CD]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CREDIT_RATING_CD]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CREDIT_RATING_CD]" name="CREDIT_RATING_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[PAYMENT_TERMS_CD]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[PAYMENT_TERMS_CD]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[PAYMENT_TERMS_CD]" name="PAYMENT_TERMS_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CURRENCY_CD]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CURRENCY_CD]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CURRENCY_CD]" name="CURRENCY_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[TAX_REGISTRATION_NBR]" dataType="wstr" length="30" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[TAX_REGISTRATION_NBR]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[TAX_REGISTRATION_NBR]" name="TAX_REGISTRATION_NBR" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[MARKETING_CONSENT_FLG]" dataType="wstr" length="1" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[MARKETING_CONSENT_FLG]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[MARKETING_CONSENT_FLG]" name="MARKETING_CONSENT_FLG" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CONSENT_CAPTURED_DT]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CONSENT_CAPTURED_DT]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[CONSENT_CAPTURED_DT]" name="CONSENT_CAPTURED_DT" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[FIRST_ORDER_DT]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[FIRST_ORDER_DT]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[FIRST_ORDER_DT]" name="FIRST_ORDER_DT" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[LAST_UPDATE_DT]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[LAST_UPDATE_DT]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[LAST_UPDATE_DT]" name="LAST_UPDATE_DT" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[LAST_UPDATE_USER]" dataType="wstr" length="30" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[LAST_UPDATE_USER]" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].Columns[LAST_UPDATE_USER]" name="LAST_UPDATE_USER" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CUST_ID]" dataType="numeric" precision="12" scale="0" name="CUST_ID" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CUST_NBR]" dataType="wstr" length="20" name="CUST_NBR" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CUST_NAME]" dataType="wstr" length="200" name="CUST_NAME" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CUST_NAME_NORM]" dataType="wstr" length="200" name="CUST_NAME_NORM" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[LEGAL_ENTITY_CD]" dataType="wstr" length="10" name="LEGAL_ENTITY_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[REGION_CD]" dataType="wstr" length="8" name="REGION_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[COUNTRY_CD]" dataType="wstr" length="3" name="COUNTRY_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CUST_STATUS_CD]" dataType="wstr" length="4" name="CUST_STATUS_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CLASSIFICATION_CD]" dataType="wstr" length="10" name="CLASSIFICATION_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[BUYING_GROUP_CD]" dataType="wstr" length="10" name="BUYING_GROUP_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[PRICE_LIST_CD]" dataType="wstr" length="10" name="PRICE_LIST_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CREDIT_LIMIT_AMT]" dataType="numeric" precision="18" scale="2" name="CREDIT_LIMIT_AMT" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CREDIT_RATING_CD]" dataType="wstr" length="4" name="CREDIT_RATING_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[PAYMENT_TERMS_CD]" dataType="wstr" length="10" name="PAYMENT_TERMS_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CURRENCY_CD]" dataType="wstr" length="3" name="CURRENCY_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[TAX_REGISTRATION_NBR]" dataType="wstr" length="30" name="TAX_REGISTRATION_NBR" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[MARKETING_CONSENT_FLG]" dataType="wstr" length="1" name="MARKETING_CONSENT_FLG" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CONSENT_CAPTURED_DT]" dataType="dbTimeStamp" name="CONSENT_CAPTURED_DT" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[FIRST_ORDER_DT]" dataType="dbTimeStamp" name="FIRST_ORDER_DT" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[LAST_UPDATE_DT]" dataType="dbTimeStamp" name="LAST_UPDATE_DT" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output].ExternalColumns[LAST_UPDATE_USER]" dataType="wstr" length="30" name="LAST_UPDATE_USER" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CUST_ID]" dataType="numeric" precision="12" scale="0" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CUST_ID]" name="CUST_ID" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CUST_NBR]" dataType="wstr" length="20" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CUST_NBR]" name="CUST_NBR" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CUST_NAME]" dataType="wstr" length="200" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CUST_NAME]" name="CUST_NAME" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CUST_NAME_NORM]" dataType="wstr" length="200" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CUST_NAME_NORM]" name="CUST_NAME_NORM" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[LEGAL_ENTITY_CD]" dataType="wstr" length="10" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[LEGAL_ENTITY_CD]" name="LEGAL_ENTITY_CD" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[REGION_CD]" dataType="wstr" length="8" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[REGION_CD]" name="REGION_CD" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[COUNTRY_CD]" dataType="wstr" length="3" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[COUNTRY_CD]" name="COUNTRY_CD" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CUST_STATUS_CD]" dataType="wstr" length="4" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CUST_STATUS_CD]" name="CUST_STATUS_CD" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CLASSIFICATION_CD]" dataType="wstr" length="10" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CLASSIFICATION_CD]" name="CLASSIFICATION_CD" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[BUYING_GROUP_CD]" dataType="wstr" length="10" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[BUYING_GROUP_CD]" name="BUYING_GROUP_CD" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[PRICE_LIST_CD]" dataType="wstr" length="10" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[PRICE_LIST_CD]" name="PRICE_LIST_CD" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CREDIT_LIMIT_AMT]" dataType="numeric" precision="18" scale="2" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CREDIT_LIMIT_AMT]" name="CREDIT_LIMIT_AMT" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CREDIT_RATING_CD]" dataType="wstr" length="4" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CREDIT_RATING_CD]" name="CREDIT_RATING_CD" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[PAYMENT_TERMS_CD]" dataType="wstr" length="10" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[PAYMENT_TERMS_CD]" name="PAYMENT_TERMS_CD" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CURRENCY_CD]" dataType="wstr" length="3" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CURRENCY_CD]" name="CURRENCY_CD" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[TAX_REGISTRATION_NBR]" dataType="wstr" length="30" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[TAX_REGISTRATION_NBR]" name="TAX_REGISTRATION_NBR" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[MARKETING_CONSENT_FLG]" dataType="wstr" length="1" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[MARKETING_CONSENT_FLG]" name="MARKETING_CONSENT_FLG" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CONSENT_CAPTURED_DT]" dataType="dbTimeStamp" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[CONSENT_CAPTURED_DT]" name="CONSENT_CAPTURED_DT" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[FIRST_ORDER_DT]" dataType="dbTimeStamp" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[FIRST_ORDER_DT]" name="FIRST_ORDER_DT" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[LAST_UPDATE_DT]" dataType="dbTimeStamp" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[LAST_UPDATE_DT]" name="LAST_UPDATE_DT" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[LAST_UPDATE_USER]" dataType="wstr" length="30" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[LAST_UPDATE_USER]" name="LAST_UPDATE_USER" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Extract Customer Master\Add Audit Columns" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Add Audit Columns" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Extract Customer Master\Add Audit Columns.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Customer Master\Add Audit Columns.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Extract Customer Master\Add Audit Columns.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Customer Master\Add Audit Columns.Outputs[Derived Column Output].Columns[SourceSystemCode]" dataType="wstr" length="20" lineageId="Package\Extract Customer Master\Add Audit Columns.Outputs[Derived Column Output].Columns[SourceSystemCode]" name="SourceSystemCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"ORA_ERP"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"ORA_ERP"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Customer Master\Add Audit Columns.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" dataType="dbTimeStamp" lineageId="Package\Extract Customer Master\Add Audit Columns.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" name="ExtractedAtUtc">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">GETUTCDATE()</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">GETUTCDATE()</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Customer Master\Add Audit Columns.Outputs[Derived Column Output].Columns[PackageExecutionId]" dataType="i8" lineageId="Package\Extract Customer Master\Add Audit Columns.Outputs[Derived Column Output].Columns[PackageExecutionId]" name="PackageExecutionId">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Customer Master\Add Audit Columns.Outputs[Derived Column Output].Columns[DeleteFlag]" dataType="wstr" length="1" lineageId="Package\Extract Customer Master\Add Audit Columns.Outputs[Derived Column Output].Columns[DeleteFlag]" name="DeleteFlag">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"N"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"N"</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Extract Customer Master\Count Rows Read" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Rows Read" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Extract Customer Master\Count Rows Read.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Customer Master\Count Rows Read.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Extract Customer Master\Count Rows Read.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Extract Customer Master\Route Unusable Customers" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Route Unusable Customers" version="1">
+            <inputs>
+              <input refId="Package\Extract Customer Master\Route Unusable Customers.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Customer Master\Route Unusable Customers.Outputs[Valid]" exclusionGroup="1" name="Valid" synchronousInputId="Package\Extract Customer Master\Route Unusable Customers.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">!ISNULL(CUST_NBR) &amp;&amp; TRIM(CUST_NBR) != "" &amp;&amp; !ISNULL(CUST_NAME)</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">!ISNULL(CUST_NBR) &amp;&amp; TRIM(CUST_NBR) != "" &amp;&amp; !ISNULL(CUST_NAME)</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Extract Customer Master\Route Unusable Customers.Outputs[Unusable]" exclusionGroup="1" isDefaultOut="true" name="Unusable" synchronousInputId="Package\Extract Customer Master\Route Unusable Customers.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Extract Customer Master\raw OracleCustomerMaster" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="raw OracleCustomerMaster" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">raw.OracleCustomerMaster</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">50000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Extract Customer Master\raw OracleCustomerMaster.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="RedirectRow" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[CUST_ID]" cachedDataType="numeric" cachedPrecision="12" cachedScale="0" cachedName="CUST_ID" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CUST_ID]" name="CUST_ID" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[CUST_NBR]" cachedDataType="wstr" cachedLength="20" cachedName="CUST_NBR" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NBR]" name="CUST_NBR" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[CUST_NAME]" cachedDataType="wstr" cachedLength="200" cachedName="CUST_NAME" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NAME]" name="CUST_NAME" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[CUST_NAME_NORM]" cachedDataType="wstr" cachedLength="200" cachedName="CUST_NAME_NORM" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NAME_NORM]" name="CUST_NAME_NORM" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[LEGAL_ENTITY_CD]" cachedDataType="wstr" cachedLength="10" cachedName="LEGAL_ENTITY_CD" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[LEGAL_ENTITY_CD]" name="LEGAL_ENTITY_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[REGION_CD]" cachedDataType="wstr" cachedLength="8" cachedName="REGION_CD" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[REGION_CD]" name="REGION_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[COUNTRY_CD]" cachedDataType="wstr" cachedLength="3" cachedName="COUNTRY_CD" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[COUNTRY_CD]" name="COUNTRY_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[CUST_STATUS_CD]" cachedDataType="wstr" cachedLength="4" cachedName="CUST_STATUS_CD" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CUST_STATUS_CD]" name="CUST_STATUS_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[CLASSIFICATION_CD]" cachedDataType="wstr" cachedLength="10" cachedName="CLASSIFICATION_CD" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CLASSIFICATION_CD]" name="CLASSIFICATION_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[BUYING_GROUP_CD]" cachedDataType="wstr" cachedLength="10" cachedName="BUYING_GROUP_CD" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[BUYING_GROUP_CD]" name="BUYING_GROUP_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[PRICE_LIST_CD]" cachedDataType="wstr" cachedLength="10" cachedName="PRICE_LIST_CD" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[PRICE_LIST_CD]" name="PRICE_LIST_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[CREDIT_LIMIT_AMT]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CREDIT_LIMIT_AMT" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CREDIT_LIMIT_AMT]" name="CREDIT_LIMIT_AMT" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[CREDIT_RATING_CD]" cachedDataType="wstr" cachedLength="4" cachedName="CREDIT_RATING_CD" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CREDIT_RATING_CD]" name="CREDIT_RATING_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[PAYMENT_TERMS_CD]" cachedDataType="wstr" cachedLength="10" cachedName="PAYMENT_TERMS_CD" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[PAYMENT_TERMS_CD]" name="PAYMENT_TERMS_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[CURRENCY_CD]" cachedDataType="wstr" cachedLength="3" cachedName="CURRENCY_CD" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CURRENCY_CD]" name="CURRENCY_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[TAX_REGISTRATION_NBR]" cachedDataType="wstr" cachedLength="30" cachedName="TAX_REGISTRATION_NBR" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[TAX_REGISTRATION_NBR]" name="TAX_REGISTRATION_NBR" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[MARKETING_CONSENT_FLG]" cachedDataType="wstr" cachedLength="1" cachedName="MARKETING_CONSENT_FLG" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[MARKETING_CONSENT_FLG]" name="MARKETING_CONSENT_FLG" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[CONSENT_CAPTURED_DT]" cachedDataType="dbTimeStamp" cachedName="CONSENT_CAPTURED_DT" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CONSENT_CAPTURED_DT]" name="CONSENT_CAPTURED_DT" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[FIRST_ORDER_DT]" cachedDataType="dbTimeStamp" cachedName="FIRST_ORDER_DT" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[FIRST_ORDER_DT]" name="FIRST_ORDER_DT" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[LAST_UPDATE_DT]" cachedDataType="dbTimeStamp" cachedName="LAST_UPDATE_DT" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_DT]" name="LAST_UPDATE_DT" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[LAST_UPDATE_USER]" cachedDataType="wstr" cachedLength="30" cachedName="LAST_UPDATE_USER" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_USER]" name="LAST_UPDATE_USER" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                  <inputColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].Columns[DeleteFlag]" cachedDataType="wstr" cachedLength="1" cachedName="DeleteFlag" externalMetadataColumnId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" name="DeleteFlag" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CUST_ID]" dataType="numeric" precision="12" scale="0" name="CUST_ID" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NBR]" dataType="wstr" length="20" name="CUST_NBR" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NAME]" dataType="wstr" length="200" name="CUST_NAME" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NAME_NORM]" dataType="wstr" length="200" name="CUST_NAME_NORM" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[LEGAL_ENTITY_CD]" dataType="wstr" length="10" name="LEGAL_ENTITY_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[REGION_CD]" dataType="wstr" length="8" name="REGION_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[COUNTRY_CD]" dataType="wstr" length="3" name="COUNTRY_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CUST_STATUS_CD]" dataType="wstr" length="4" name="CUST_STATUS_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CLASSIFICATION_CD]" dataType="wstr" length="10" name="CLASSIFICATION_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[BUYING_GROUP_CD]" dataType="wstr" length="10" name="BUYING_GROUP_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[PRICE_LIST_CD]" dataType="wstr" length="10" name="PRICE_LIST_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CREDIT_LIMIT_AMT]" dataType="numeric" precision="18" scale="2" name="CREDIT_LIMIT_AMT" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CREDIT_RATING_CD]" dataType="wstr" length="4" name="CREDIT_RATING_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[PAYMENT_TERMS_CD]" dataType="wstr" length="10" name="PAYMENT_TERMS_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CURRENCY_CD]" dataType="wstr" length="3" name="CURRENCY_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[TAX_REGISTRATION_NBR]" dataType="wstr" length="30" name="TAX_REGISTRATION_NBR" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[MARKETING_CONSENT_FLG]" dataType="wstr" length="1" name="MARKETING_CONSENT_FLG" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[CONSENT_CAPTURED_DT]" dataType="dbTimeStamp" name="CONSENT_CAPTURED_DT" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[FIRST_ORDER_DT]" dataType="dbTimeStamp" name="FIRST_ORDER_DT" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_DT]" dataType="dbTimeStamp" name="LAST_UPDATE_DT" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_USER]" dataType="wstr" length="30" name="LAST_UPDATE_USER" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" dataType="wstr" length="1" name="DeleteFlag" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Customer Master\raw OracleCustomerMaster.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Extract Customer Master\err RejectedCustomer" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="err RejectedCustomer" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">err.RejectedCustomer</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Extract Customer Master\err RejectedCustomer.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[CUST_ID]" cachedDataType="numeric" cachedPrecision="12" cachedScale="0" cachedName="CUST_ID" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CUST_ID]" name="CUST_ID" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[CUST_NBR]" cachedDataType="wstr" cachedLength="20" cachedName="CUST_NBR" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NBR]" name="CUST_NBR" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[CUST_NAME]" cachedDataType="wstr" cachedLength="200" cachedName="CUST_NAME" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NAME]" name="CUST_NAME" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[CUST_NAME_NORM]" cachedDataType="wstr" cachedLength="200" cachedName="CUST_NAME_NORM" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NAME_NORM]" name="CUST_NAME_NORM" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[LEGAL_ENTITY_CD]" cachedDataType="wstr" cachedLength="10" cachedName="LEGAL_ENTITY_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[LEGAL_ENTITY_CD]" name="LEGAL_ENTITY_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[REGION_CD]" cachedDataType="wstr" cachedLength="8" cachedName="REGION_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[REGION_CD]" name="REGION_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[COUNTRY_CD]" cachedDataType="wstr" cachedLength="3" cachedName="COUNTRY_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[COUNTRY_CD]" name="COUNTRY_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[CUST_STATUS_CD]" cachedDataType="wstr" cachedLength="4" cachedName="CUST_STATUS_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CUST_STATUS_CD]" name="CUST_STATUS_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[CLASSIFICATION_CD]" cachedDataType="wstr" cachedLength="10" cachedName="CLASSIFICATION_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CLASSIFICATION_CD]" name="CLASSIFICATION_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[BUYING_GROUP_CD]" cachedDataType="wstr" cachedLength="10" cachedName="BUYING_GROUP_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[BUYING_GROUP_CD]" name="BUYING_GROUP_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[PRICE_LIST_CD]" cachedDataType="wstr" cachedLength="10" cachedName="PRICE_LIST_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[PRICE_LIST_CD]" name="PRICE_LIST_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[CREDIT_LIMIT_AMT]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CREDIT_LIMIT_AMT" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CREDIT_LIMIT_AMT]" name="CREDIT_LIMIT_AMT" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[CREDIT_RATING_CD]" cachedDataType="wstr" cachedLength="4" cachedName="CREDIT_RATING_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CREDIT_RATING_CD]" name="CREDIT_RATING_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[PAYMENT_TERMS_CD]" cachedDataType="wstr" cachedLength="10" cachedName="PAYMENT_TERMS_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[PAYMENT_TERMS_CD]" name="PAYMENT_TERMS_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[CURRENCY_CD]" cachedDataType="wstr" cachedLength="3" cachedName="CURRENCY_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CURRENCY_CD]" name="CURRENCY_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[TAX_REGISTRATION_NBR]" cachedDataType="wstr" cachedLength="30" cachedName="TAX_REGISTRATION_NBR" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[TAX_REGISTRATION_NBR]" name="TAX_REGISTRATION_NBR" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[MARKETING_CONSENT_FLG]" cachedDataType="wstr" cachedLength="1" cachedName="MARKETING_CONSENT_FLG" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[MARKETING_CONSENT_FLG]" name="MARKETING_CONSENT_FLG" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[CONSENT_CAPTURED_DT]" cachedDataType="dbTimeStamp" cachedName="CONSENT_CAPTURED_DT" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CONSENT_CAPTURED_DT]" name="CONSENT_CAPTURED_DT" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[FIRST_ORDER_DT]" cachedDataType="dbTimeStamp" cachedName="FIRST_ORDER_DT" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[FIRST_ORDER_DT]" name="FIRST_ORDER_DT" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[LAST_UPDATE_DT]" cachedDataType="dbTimeStamp" cachedName="LAST_UPDATE_DT" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_DT]" name="LAST_UPDATE_DT" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[LAST_UPDATE_USER]" cachedDataType="wstr" cachedLength="30" cachedName="LAST_UPDATE_USER" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_USER]" name="LAST_UPDATE_USER" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].Columns[DeleteFlag]" cachedDataType="wstr" cachedLength="1" cachedName="DeleteFlag" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" name="DeleteFlag" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CUST_ID]" dataType="numeric" precision="12" scale="0" name="CUST_ID" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NBR]" dataType="wstr" length="20" name="CUST_NBR" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NAME]" dataType="wstr" length="200" name="CUST_NAME" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NAME_NORM]" dataType="wstr" length="200" name="CUST_NAME_NORM" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[LEGAL_ENTITY_CD]" dataType="wstr" length="10" name="LEGAL_ENTITY_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[REGION_CD]" dataType="wstr" length="8" name="REGION_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[COUNTRY_CD]" dataType="wstr" length="3" name="COUNTRY_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CUST_STATUS_CD]" dataType="wstr" length="4" name="CUST_STATUS_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CLASSIFICATION_CD]" dataType="wstr" length="10" name="CLASSIFICATION_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[BUYING_GROUP_CD]" dataType="wstr" length="10" name="BUYING_GROUP_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[PRICE_LIST_CD]" dataType="wstr" length="10" name="PRICE_LIST_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CREDIT_LIMIT_AMT]" dataType="numeric" precision="18" scale="2" name="CREDIT_LIMIT_AMT" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CREDIT_RATING_CD]" dataType="wstr" length="4" name="CREDIT_RATING_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[PAYMENT_TERMS_CD]" dataType="wstr" length="10" name="PAYMENT_TERMS_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CURRENCY_CD]" dataType="wstr" length="3" name="CURRENCY_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[TAX_REGISTRATION_NBR]" dataType="wstr" length="30" name="TAX_REGISTRATION_NBR" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[MARKETING_CONSENT_FLG]" dataType="wstr" length="1" name="MARKETING_CONSENT_FLG" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[CONSENT_CAPTURED_DT]" dataType="dbTimeStamp" name="CONSENT_CAPTURED_DT" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[FIRST_ORDER_DT]" dataType="dbTimeStamp" name="FIRST_ORDER_DT" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_DT]" dataType="dbTimeStamp" name="LAST_UPDATE_DT" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_USER]" dataType="wstr" length="30" name="LAST_UPDATE_USER" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" dataType="wstr" length="1" name="DeleteFlag" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Customer Master\err RejectedCustomer.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Extract Customer Master\err RejectedCustomer Conversion" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="err RejectedCustomer Conversion" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">err.RejectedCustomer</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[CUST_ID]" cachedDataType="numeric" cachedPrecision="12" cachedScale="0" cachedName="CUST_ID" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CUST_ID]" name="CUST_ID" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[CUST_NBR]" cachedDataType="wstr" cachedLength="20" cachedName="CUST_NBR" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NBR]" name="CUST_NBR" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[CUST_NAME]" cachedDataType="wstr" cachedLength="200" cachedName="CUST_NAME" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NAME]" name="CUST_NAME" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[CUST_NAME_NORM]" cachedDataType="wstr" cachedLength="200" cachedName="CUST_NAME_NORM" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NAME_NORM]" name="CUST_NAME_NORM" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[LEGAL_ENTITY_CD]" cachedDataType="wstr" cachedLength="10" cachedName="LEGAL_ENTITY_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[LEGAL_ENTITY_CD]" name="LEGAL_ENTITY_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[REGION_CD]" cachedDataType="wstr" cachedLength="8" cachedName="REGION_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[REGION_CD]" name="REGION_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[COUNTRY_CD]" cachedDataType="wstr" cachedLength="3" cachedName="COUNTRY_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[COUNTRY_CD]" name="COUNTRY_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[CUST_STATUS_CD]" cachedDataType="wstr" cachedLength="4" cachedName="CUST_STATUS_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CUST_STATUS_CD]" name="CUST_STATUS_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[CLASSIFICATION_CD]" cachedDataType="wstr" cachedLength="10" cachedName="CLASSIFICATION_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CLASSIFICATION_CD]" name="CLASSIFICATION_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[BUYING_GROUP_CD]" cachedDataType="wstr" cachedLength="10" cachedName="BUYING_GROUP_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[BUYING_GROUP_CD]" name="BUYING_GROUP_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[PRICE_LIST_CD]" cachedDataType="wstr" cachedLength="10" cachedName="PRICE_LIST_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[PRICE_LIST_CD]" name="PRICE_LIST_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[CREDIT_LIMIT_AMT]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CREDIT_LIMIT_AMT" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CREDIT_LIMIT_AMT]" name="CREDIT_LIMIT_AMT" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[CREDIT_RATING_CD]" cachedDataType="wstr" cachedLength="4" cachedName="CREDIT_RATING_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CREDIT_RATING_CD]" name="CREDIT_RATING_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[PAYMENT_TERMS_CD]" cachedDataType="wstr" cachedLength="10" cachedName="PAYMENT_TERMS_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[PAYMENT_TERMS_CD]" name="PAYMENT_TERMS_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[CURRENCY_CD]" cachedDataType="wstr" cachedLength="3" cachedName="CURRENCY_CD" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CURRENCY_CD]" name="CURRENCY_CD" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[TAX_REGISTRATION_NBR]" cachedDataType="wstr" cachedLength="30" cachedName="TAX_REGISTRATION_NBR" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[TAX_REGISTRATION_NBR]" name="TAX_REGISTRATION_NBR" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[MARKETING_CONSENT_FLG]" cachedDataType="wstr" cachedLength="1" cachedName="MARKETING_CONSENT_FLG" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[MARKETING_CONSENT_FLG]" name="MARKETING_CONSENT_FLG" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[CONSENT_CAPTURED_DT]" cachedDataType="dbTimeStamp" cachedName="CONSENT_CAPTURED_DT" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CONSENT_CAPTURED_DT]" name="CONSENT_CAPTURED_DT" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[FIRST_ORDER_DT]" cachedDataType="dbTimeStamp" cachedName="FIRST_ORDER_DT" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[FIRST_ORDER_DT]" name="FIRST_ORDER_DT" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[LAST_UPDATE_DT]" cachedDataType="dbTimeStamp" cachedName="LAST_UPDATE_DT" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_DT]" name="LAST_UPDATE_DT" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[LAST_UPDATE_USER]" cachedDataType="wstr" cachedLength="30" cachedName="LAST_UPDATE_USER" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_USER]" name="LAST_UPDATE_USER" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                  <inputColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].Columns[DeleteFlag]" cachedDataType="wstr" cachedLength="1" cachedName="DeleteFlag" externalMetadataColumnId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" name="DeleteFlag" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CUST_ID]" dataType="numeric" precision="12" scale="0" name="CUST_ID" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NBR]" dataType="wstr" length="20" name="CUST_NBR" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NAME]" dataType="wstr" length="200" name="CUST_NAME" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NAME_NORM]" dataType="wstr" length="200" name="CUST_NAME_NORM" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[LEGAL_ENTITY_CD]" dataType="wstr" length="10" name="LEGAL_ENTITY_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[REGION_CD]" dataType="wstr" length="8" name="REGION_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[COUNTRY_CD]" dataType="wstr" length="3" name="COUNTRY_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CUST_STATUS_CD]" dataType="wstr" length="4" name="CUST_STATUS_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CLASSIFICATION_CD]" dataType="wstr" length="10" name="CLASSIFICATION_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[BUYING_GROUP_CD]" dataType="wstr" length="10" name="BUYING_GROUP_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[PRICE_LIST_CD]" dataType="wstr" length="10" name="PRICE_LIST_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CREDIT_LIMIT_AMT]" dataType="numeric" precision="18" scale="2" name="CREDIT_LIMIT_AMT" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CREDIT_RATING_CD]" dataType="wstr" length="4" name="CREDIT_RATING_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[PAYMENT_TERMS_CD]" dataType="wstr" length="10" name="PAYMENT_TERMS_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CURRENCY_CD]" dataType="wstr" length="3" name="CURRENCY_CD" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[TAX_REGISTRATION_NBR]" dataType="wstr" length="30" name="TAX_REGISTRATION_NBR" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[MARKETING_CONSENT_FLG]" dataType="wstr" length="1" name="MARKETING_CONSENT_FLG" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CONSENT_CAPTURED_DT]" dataType="dbTimeStamp" name="CONSENT_CAPTURED_DT" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[FIRST_ORDER_DT]" dataType="dbTimeStamp" name="FIRST_ORDER_DT" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_DT]" dataType="dbTimeStamp" name="LAST_UPDATE_DT" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_USER]" dataType="wstr" length="30" name="LAST_UPDATE_USER" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                  <externalMetadataColumn refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" dataType="wstr" length="1" name="DeleteFlag" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Customer Master\err RejectedCustomer Conversion.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Extract Customer Master.Paths[OLE DB Source Output]" endId="Package\Extract Customer Master\Add Audit Columns.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Extract Customer Master.Paths[Derived Column Output 1]" endId="Package\Extract Customer Master\Count Rows Read.Inputs[Row Count Input]" name="Derived Column Output 1" startId="Package\Extract Customer Master\Add Audit Columns.Outputs[Derived Column Output]" />
+          <path refId="Package\Extract Customer Master.Paths[Row Count Output 2]" endId="Package\Extract Customer Master\Route Unusable Customers.Inputs[Conditional Split Input]" name="Row Count Output 2" startId="Package\Extract Customer Master\Count Rows Read.Outputs[Row Count Output]" />
+          <path refId="Package\Extract Customer Master.Paths[Valid 3]" endId="Package\Extract Customer Master\raw OracleCustomerMaster.Inputs[OLE DB Destination Input]" name="Valid 3" startId="Package\Extract Customer Master\Route Unusable Customers.Outputs[Valid]" />
+          <path refId="Package\Extract Customer Master.Paths[Unusable 4]" endId="Package\Extract Customer Master\err RejectedCustomer.Inputs[OLE DB Destination Input]" name="Unusable 4" startId="Package\Extract Customer Master\Route Unusable Customers.Outputs[Unusable]" />
+          <path refId="Package\Extract Customer Master.Paths[OLE DB Source Error Output 5]" endId="Package\Extract Customer Master\err RejectedCustomer Conversion.Inputs[OLE DB Destination Input]" name="OLE DB Source Error Output 5" startId="Package\Extract Customer Master\ORA CUST_MASTER.Outputs[OLE DB Source Error Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Detect Deleted Customers"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{79289375-C470-7881-7BE7-581F87E61DB9}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Detect Deleted Customers"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="ORA CHANGE_LOG Customer Deletes" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">900</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT  TO_NUMBER(cg.PRIMARY_KEY_VALUE)  AS CUST_ID,
+        cg.SECONDARY_KEY_VALUE           AS CUST_NBR,
+        cg.CHANGE_DT                     AS LAST_UPDATE_DT,
+        cg.CHANGED_BY                    AS LAST_UPDATE_USER
+FROM    WWI_AUDIT.CHANGE_LOG cg
+WHERE   cg.TABLE_NAME = 'CUST_MASTER'
+  AND   cg.OPERATION_CD = 'D'
+  AND   cg.CHANGE_DT &gt;= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')
+  AND   cg.CHANGE_DT &lt;  TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Connections[OleDbConnection]" connectionManagerID="{219914C8-6320-598D-C999-94A3821DDB9A}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Oracle_ERP]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Output].Columns[CUST_ID]" dataType="numeric" precision="12" scale="0" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Output].ExternalColumns[CUST_ID]" lineageId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Output].Columns[CUST_ID]" name="CUST_ID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Output].Columns[CUST_NBR]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Output].ExternalColumns[CUST_NBR]" lineageId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Output].Columns[CUST_NBR]" name="CUST_NBR" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Output].Columns[LAST_UPDATE_DT]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Output].ExternalColumns[LAST_UPDATE_DT]" lineageId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Output].Columns[LAST_UPDATE_DT]" name="LAST_UPDATE_DT" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Output].Columns[LAST_UPDATE_USER]" dataType="wstr" length="30" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Output].ExternalColumns[LAST_UPDATE_USER]" lineageId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Output].Columns[LAST_UPDATE_USER]" name="LAST_UPDATE_USER" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Output].ExternalColumns[CUST_ID]" dataType="numeric" precision="12" scale="0" name="CUST_ID" />
+                  <externalMetadataColumn refId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Output].ExternalColumns[CUST_NBR]" dataType="wstr" length="20" name="CUST_NBR" />
+                  <externalMetadataColumn refId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Output].ExternalColumns[LAST_UPDATE_DT]" dataType="dbTimeStamp" name="LAST_UPDATE_DT" />
+                  <externalMetadataColumn refId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Output].ExternalColumns[LAST_UPDATE_USER]" dataType="wstr" length="30" name="LAST_UPDATE_USER" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Error Output].Columns[CUST_ID]" dataType="numeric" precision="12" scale="0" lineageId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Error Output].Columns[CUST_ID]" name="CUST_ID" />
+                  <outputColumn refId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Error Output].Columns[CUST_NBR]" dataType="wstr" length="20" lineageId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Error Output].Columns[CUST_NBR]" name="CUST_NBR" />
+                  <outputColumn refId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Error Output].Columns[LAST_UPDATE_DT]" dataType="dbTimeStamp" lineageId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Error Output].Columns[LAST_UPDATE_DT]" name="LAST_UPDATE_DT" />
+                  <outputColumn refId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Error Output].Columns[LAST_UPDATE_USER]" dataType="wstr" length="30" lineageId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Error Output].Columns[LAST_UPDATE_USER]" name="LAST_UPDATE_USER" />
+                  <outputColumn refId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Detect Deleted Customers\Flag Deleted Rows" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Flag Deleted Rows" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Detect Deleted Customers\Flag Deleted Rows.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Detect Deleted Customers\Flag Deleted Rows.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Detect Deleted Customers\Flag Deleted Rows.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Detect Deleted Customers\Flag Deleted Rows.Outputs[Derived Column Output].Columns[SourceSystemCode]" dataType="wstr" length="20" lineageId="Package\Detect Deleted Customers\Flag Deleted Rows.Outputs[Derived Column Output].Columns[SourceSystemCode]" name="SourceSystemCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"ORA_ERP"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"ORA_ERP"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Detect Deleted Customers\Flag Deleted Rows.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" dataType="dbTimeStamp" lineageId="Package\Detect Deleted Customers\Flag Deleted Rows.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" name="ExtractedAtUtc">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">GETUTCDATE()</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">GETUTCDATE()</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Detect Deleted Customers\Flag Deleted Rows.Outputs[Derived Column Output].Columns[PackageExecutionId]" dataType="i8" lineageId="Package\Detect Deleted Customers\Flag Deleted Rows.Outputs[Derived Column Output].Columns[PackageExecutionId]" name="PackageExecutionId">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Detect Deleted Customers\Flag Deleted Rows.Outputs[Derived Column Output].Columns[DeleteFlag]" dataType="wstr" length="1" lineageId="Package\Detect Deleted Customers\Flag Deleted Rows.Outputs[Derived Column Output].Columns[DeleteFlag]" name="DeleteFlag">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"Y"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"Y"</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Detect Deleted Customers\Count Deleted Rows" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Deleted Rows" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsDeleted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Detect Deleted Customers\Count Deleted Rows.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Detect Deleted Customers\Count Deleted Rows.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Detect Deleted Customers\Count Deleted Rows.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="raw OracleCustomerMaster Deletes" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">raw.OracleCustomerMaster</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">5000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].Columns[CUST_ID]" cachedDataType="numeric" cachedPrecision="12" cachedScale="0" cachedName="CUST_ID" externalMetadataColumnId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[CUST_ID]" name="CUST_ID" />
+                  <inputColumn refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].Columns[CUST_NBR]" cachedDataType="wstr" cachedLength="20" cachedName="CUST_NBR" externalMetadataColumnId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NBR]" name="CUST_NBR" />
+                  <inputColumn refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].Columns[LAST_UPDATE_DT]" cachedDataType="dbTimeStamp" cachedName="LAST_UPDATE_DT" externalMetadataColumnId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_DT]" name="LAST_UPDATE_DT" />
+                  <inputColumn refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].Columns[LAST_UPDATE_USER]" cachedDataType="wstr" cachedLength="30" cachedName="LAST_UPDATE_USER" externalMetadataColumnId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_USER]" name="LAST_UPDATE_USER" />
+                  <inputColumn refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                  <inputColumn refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                  <inputColumn refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                  <inputColumn refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].Columns[DeleteFlag]" cachedDataType="wstr" cachedLength="1" cachedName="DeleteFlag" externalMetadataColumnId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" name="DeleteFlag" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[CUST_ID]" dataType="numeric" precision="12" scale="0" name="CUST_ID" />
+                  <externalMetadataColumn refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[CUST_NBR]" dataType="wstr" length="20" name="CUST_NBR" />
+                  <externalMetadataColumn refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_DT]" dataType="dbTimeStamp" name="LAST_UPDATE_DT" />
+                  <externalMetadataColumn refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_USER]" dataType="wstr" length="30" name="LAST_UPDATE_USER" />
+                  <externalMetadataColumn refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                  <externalMetadataColumn refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                  <externalMetadataColumn refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                  <externalMetadataColumn refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" dataType="wstr" length="1" name="DeleteFlag" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Detect Deleted Customers.Paths[OLE DB Source Output]" endId="Package\Detect Deleted Customers\Flag Deleted Rows.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Detect Deleted Customers\ORA CHANGE_LOG Customer Deletes.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Detect Deleted Customers.Paths[Derived Column Output 1]" endId="Package\Detect Deleted Customers\Count Deleted Rows.Inputs[Row Count Input]" name="Derived Column Output 1" startId="Package\Detect Deleted Customers\Flag Deleted Rows.Outputs[Derived Column Output]" />
+          <path refId="Package\Detect Deleted Customers.Paths[Row Count Output 2]" endId="Package\Detect Deleted Customers\raw OracleCustomerMaster Deletes.Inputs[OLE DB Destination Input]" name="Row Count Output 2" startId="Package\Detect Deleted Customers\Count Deleted Rows.Outputs[Row Count Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Capture Insert Count"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{8F327A00-CF82-0431-8DEA-CFAE47D4B39E}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Capture Insert Count"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="SELECT COUNT_BIG(*) AS RowsInserted FROM raw.OracleCustomerMaster WHERE PackageExecutionId = ?;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::RowsInserted" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Set Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{C8D945C7-242C-76BA-65CC-8FF45D2E5210}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Set Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_SetWatermark @SourceSystemCode = ?, @ObjectName = N'WWI_MDM.CUST_MASTER', @WatermarkTo = ?, @PackageExecutionId = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::WatermarkTo" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'raw.OracleCustomerMaster', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Batch Variables"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Get Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Get Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Extract Customer Master" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Extract Customer Master"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Detect Deleted Customers" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Detect Deleted Customers"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Capture Insert Count" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Capture Insert Count"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Set Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Set Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{A4D483D6-F082-9C0B-E57E-152D1AD212BD}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>
