@@ -1,0 +1,116 @@
+# ---------------------------------------------------------------------------
+# File landing-zone layout for the WWI estate.
+#
+# The root is WWI_LANDING_ROOT (config/.env.example). Everything below is
+# relative to it. deployment/preflight checks that the five top-level
+# directories exist; it does not create them, because on the PROD file server
+# they are a clustered share with its own quota and ACLs.
+#
+# Retention here is the file retention. Row-level retention lives with the load
+# that produced it.
+# ---------------------------------------------------------------------------
+
+root_variable: WWI_LANDING_ROOT
+
+directories:
+
+  inbound:
+    purpose: Feeds drop here. Polled every 15 minutes by "WWI - File Ingestion".
+    permissions: 'WWI_FileOps_Proxy account: read/write. Feed providers: write only.'
+    retention_days: 0        # moved to archive or quarantine on processing
+    subdirectories:
+      - path: inbound/carrier
+        feeds: [CARRIER_MANIFEST, CARRIER_POD]
+        pattern: '{feed}_{yyyyMMdd}_{seq3}.csv'
+        encoding: windows-1252
+        notes: >-
+          The two carriers still send windows-1252 despite eight years of asking.
+          The ingestion package transcodes; do not change the encoding here.
+      - path: inbound/bank
+        feeds: [BANK_STATEMENT_NA, BANK_STATEMENT_EU, BANK_STATEMENT_APAC]
+        pattern: '{feed}_{yyyyMMdd}.txt'
+        encoding: utf-8
+        notes: >-
+          Fixed-width, and the three regions use different record layouts: NA is
+          BAI2, EU is CAMT.053 flattened to fixed width by the bank's own tool,
+          APAC is a bespoke layout the local bank has never versioned.
+      - path: inbound/partner
+        feeds: [PARTNER_PRICELIST, PARTNER_STOCK]
+        pattern: '{partner_code}_{feed}_{yyyyMMddHHmm}.xml'
+        encoding: utf-8
+        notes: Partner code is the legacy four-character code, not the customer ID.
+      - path: inbound/tax
+        feeds: [TAX_JURISDICTION_NA, TAX_VAT_EU, TAX_GST_APAC]
+        pattern: '{feed}_{yyyyMM}.csv'
+        encoding: utf-8
+        notes: >-
+          Three regimes, three cadences: NA weekly, EU on notice from the tax
+          team, APAC quarterly. The weekly reference job checks staleness per
+          region against Reference.<REGION>.StaleDays.
+
+  archive:
+    purpose: Successfully processed files, moved out of inbound by MNT_Archive_ProcessedFiles.
+    permissions: 'WWI_FileOps_Proxy account: read/write. Operators: read.'
+    retention_days: 400
+    layout: 'archive/{feed}/{yyyy}/{MM}/{original_filename}'
+    notes: >-
+      400 days rather than 365 so that a year-end investigation started in
+      January can still see the previous January. Compression is done by the
+      file server, not by the ETL.
+
+  quarantine:
+    purpose: Files that failed structural validation, and per-run reject extracts.
+    permissions: 'WWI_FileOps_Proxy account: read/write. Data stewards: read/write.'
+    retention_days: 90
+    layout: 'quarantine/{feed}/{yyyyMMdd}/{original_filename}'
+    regional_overrides:
+      EU:
+        retention_days: 30
+        reason: >-
+          A quarantined EU file can contain personal data that never passed
+          validation and therefore never acquired a consent record. It is held
+          for the minimum triage window only.
+      APAC:
+        retention_days: 180
+        reason: >-
+          The APAC bank feed is reconciled quarterly, so a quarantined file must
+          survive until the next reconciliation.
+    alerting: >-
+      "WWI - File Ingestion" fails its final step when the quarantine count for
+      the run exceeds the threshold, which notifies WWI ETL On-Call.
+
+  work:
+    purpose: Scratch space for the ingestion packages - unzipped members, split files.
+    permissions: 'WWI_FileOps_Proxy account: full control. Nobody else.'
+    retention_days: 2
+    notes: >-
+      Cleared by the weekly maintenance job rather than per run, because a failed
+      run's work files are the only diagnostic left when the source file has
+      already been archived.
+
+  outbound:
+    purpose: Extracts the estate produces for downstream consumers.
+    permissions: 'WWI_FileOps_Proxy account: read/write. Consumers: read only.'
+    retention_days: 45
+    subdirectories:
+      - path: outbound/finance
+        feeds: [GL_RECON_EXTRACT, FX_APPLIED_RATES]
+        pattern: '{feed}_{yyyyMM}.csv'
+        notes: Produced by the finance close job; consumed by the group reporting team.
+      - path: outbound/reporting
+        feeds: [DIM_CUSTOMER_SNAPSHOT]
+        pattern: '{feed}_{yyyyMMdd}.csv'
+        notes: >-
+          A weekly snapshot that exists only because one reporting tool was never
+          repointed at the warehouse. It is the oldest outbound feed in the estate.
+
+# Housekeeping ownership, so it is clear what cleans what:
+#   inbound     - emptied by the ingestion job as it processes
+#   work        - cleared by "WWI - Weekly Maintenance"
+#   archive     - trimmed by the file server's own retention policy
+#   quarantine  - trimmed by the file server, per the regional overrides above
+#   outbound    - trimmed by the file server
+housekeeping_owner_notes: >-
+  The ETL does not delete from archive, quarantine or outbound. That is the file
+  server's retention policy, configured outside this repository. The split has
+  caused confusion before: an ETL change cannot fix a retention complaint.

@@ -1,0 +1,809 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{B1EAE129-F458-3934-C741-C8B290D30670}"
+  DTS:Description="Numeric-key incremental shipment header extract over Shipping.vw_ShipmentExtract, joined to the carrier, delivery route and freight rate. Customs declarations are attached for cross-border shipments only, which in practice means EU and APAC."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="EXT_SQL_Shipments"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{1443D80E-7A2E-942D-350A-7750D84FA112}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{A64D5112-95BE-6C6D-3708-28F469B7C6A4}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{68ABFF87-C93A-2BAA-DE57-0F6606EBC770}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{3B6D2962-EF35-F3FC-C2F5-745F7E05E1AB}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{B84BFD80-7EFD-EFA5-4EE6-51AA92C0DEA1}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWI_OLTP</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Source_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{6013BF6D-BE65-C752-81B9-00A20CDE3DE7}"
+      DTS:ObjectName="WWI_Source_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{85495903-2A97-2539-5041-638D6545A80E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{17CD633B-C0DC-A3DF-9158-6FBADE4A0B1E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{77D811EA-7585-3136-C150-1499700F1618}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{974C83FA-784C-E297-F115-B0776074AB7F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{11B9A537-335A-6CC2-67B4-8C2B528891A1}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{DB6FACA5-7DC9-B327-6065-A1F84E2B39BE}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{CFD0EC78-93E6-2AB8-302D-6532BE0E7A6E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{7F65FF07-362A-3DAB-DBB7-50B7DFA003B9}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::CrossBorderCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{3557D0BE-3A9A-C24B-F762-7576CCDA62B6}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="CrossBorderCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Batch Variables"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{647AE7A9-EE4E-0DAF-FBD6-04CEA9DB74E4}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Batch Variables"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::CrossBorderCount] = 0" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Get Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{AD8AAA26-E475-7A7A-5321-BEF0685AEC15}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Get Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_GetWatermark @SourceSystemCode = ?, @ObjectName = ?, @ReloadFullHistory = ?, @WatermarkFrom = ? OUTPUT, @WatermarkTo = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::ReloadFullHistory" SQLTask:ParameterDirection="Input" SQLTask:DataType="BYTE" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::WatermarkFrom" />
+        <SQLTask:ResultBinding SQLTask:ResultName="1" SQLTask:DtsVariableName="User::WatermarkTo" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Read Source Max ShipmentHeaderID"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{99AA916B-1EFB-1ADB-0537-6382D20E70E3}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Read Source Max ShipmentHeaderID"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{6013BF6D-BE65-C752-81B9-00A20CDE3DE7}"
+        SQLTask:SqlStatementSource="SELECT ISNULL(MAX(ShipmentHeaderID), 0) AS MaxKey FROM Shipping.ShipmentHeaders WITH (NOLOCK);"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="300"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::WatermarkTo" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Extract Shipments"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{1D79BEDA-4E49-8117-6D9A-7AA90A82889F}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Extract Shipments"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Extract Shipments\OLTP vw_ShipmentExtract" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="OLTP vw_ShipmentExtract" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">3600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT  s.ShipmentHeaderID,
+        s.ShipmentReference,
+        s.InvoiceID,
+        s.CustomerID,
+        s.CarrierID,
+        c.CarrierCode,
+        s.ServiceLevelCode,
+        dr.DeliveryRouteCode,
+        s.RegionCode,
+        s.OriginCountryCode,
+        s.DestinationCountryCode,
+        s.ShipmentWeightKg,
+        fr.FreightCharge,
+        fr.FreightCurrencyCode,
+        cd.CustomsDeclarationNumber,
+        s.ShipmentStatusCode,
+        s.DispatchedWhen,
+        s.DeliveredWhen,
+        s.LastEditedWhen
+FROM    Shipping.vw_ShipmentExtract AS s WITH (NOLOCK)
+        INNER JOIN Shipping.Carriers AS c WITH (NOLOCK)
+            ON c.CarrierID = s.CarrierID
+        LEFT OUTER JOIN Shipping.DeliveryRoutes AS dr WITH (NOLOCK)
+            ON dr.DeliveryRouteID = s.DeliveryRouteID
+        LEFT OUTER JOIN Shipping.FreightRates AS fr WITH (NOLOCK)
+            ON fr.CarrierID = s.CarrierID
+           AND fr.ServiceLevelCode = s.ServiceLevelCode
+           AND s.DispatchedWhen &gt;= fr.EffectiveFrom
+           AND s.DispatchedWhen &lt;  fr.EffectiveTo
+        LEFT OUTER JOIN Shipping.CustomsDeclarations AS cd WITH (NOLOCK)
+            ON cd.ShipmentHeaderID = s.ShipmentHeaderID
+WHERE   s.ShipmentHeaderID &gt; ?
+  AND   s.ShipmentHeaderID &lt;= ?
+  AND   s.ShipmentStatusCode &lt;&gt; N'VOID'
+ORDER BY s.ShipmentHeaderID;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Connections[OleDbConnection]" connectionManagerID="{6013BF6D-BE65-C752-81B9-00A20CDE3DE7}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Source_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[ShipmentHeaderID]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[ShipmentHeaderID]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[ShipmentHeaderID]" name="ShipmentHeaderID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[ShipmentReference]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[ShipmentReference]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[ShipmentReference]" name="ShipmentReference" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[InvoiceID]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[InvoiceID]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[InvoiceID]" name="InvoiceID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[CustomerID]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[CustomerID]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[CustomerID]" name="CustomerID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[CarrierID]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[CarrierID]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[CarrierID]" name="CarrierID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[CarrierCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[CarrierCode]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[CarrierCode]" name="CarrierCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[ServiceLevelCode]" dataType="wstr" length="8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[ServiceLevelCode]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[ServiceLevelCode]" name="ServiceLevelCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[DeliveryRouteCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[DeliveryRouteCode]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[DeliveryRouteCode]" name="DeliveryRouteCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[OriginCountryCode]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[OriginCountryCode]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[OriginCountryCode]" name="OriginCountryCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[DestinationCountryCode]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[DestinationCountryCode]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[DestinationCountryCode]" name="DestinationCountryCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[ShipmentWeightKg]" dataType="numeric" precision="18" scale="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[ShipmentWeightKg]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[ShipmentWeightKg]" name="ShipmentWeightKg" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[FreightCharge]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[FreightCharge]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[FreightCharge]" name="FreightCharge" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[FreightCurrencyCode]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[FreightCurrencyCode]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[FreightCurrencyCode]" name="FreightCurrencyCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[CustomsDeclarationNumber]" dataType="wstr" length="30" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[CustomsDeclarationNumber]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[CustomsDeclarationNumber]" name="CustomsDeclarationNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[ShipmentStatusCode]" dataType="wstr" length="6" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[ShipmentStatusCode]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[ShipmentStatusCode]" name="ShipmentStatusCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[DispatchedWhen]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[DispatchedWhen]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[DispatchedWhen]" name="DispatchedWhen" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[DeliveredWhen]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[DeliveredWhen]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[DeliveredWhen]" name="DeliveredWhen" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[LastEditedWhen]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[LastEditedWhen]" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].Columns[LastEditedWhen]" name="LastEditedWhen" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[ShipmentHeaderID]" dataType="i4" name="ShipmentHeaderID" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[ShipmentReference]" dataType="wstr" length="20" name="ShipmentReference" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[InvoiceID]" dataType="i4" name="InvoiceID" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[CustomerID]" dataType="i4" name="CustomerID" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[CarrierID]" dataType="i4" name="CarrierID" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[CarrierCode]" dataType="wstr" length="10" name="CarrierCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[ServiceLevelCode]" dataType="wstr" length="8" name="ServiceLevelCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[DeliveryRouteCode]" dataType="wstr" length="10" name="DeliveryRouteCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="8" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[OriginCountryCode]" dataType="wstr" length="3" name="OriginCountryCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[DestinationCountryCode]" dataType="wstr" length="3" name="DestinationCountryCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[ShipmentWeightKg]" dataType="numeric" precision="18" scale="3" name="ShipmentWeightKg" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[FreightCharge]" dataType="numeric" precision="18" scale="2" name="FreightCharge" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[FreightCurrencyCode]" dataType="wstr" length="3" name="FreightCurrencyCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[CustomsDeclarationNumber]" dataType="wstr" length="30" name="CustomsDeclarationNumber" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[ShipmentStatusCode]" dataType="wstr" length="6" name="ShipmentStatusCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[DispatchedWhen]" dataType="dbTimeStamp" name="DispatchedWhen" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[DeliveredWhen]" dataType="dbTimeStamp" name="DeliveredWhen" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output].ExternalColumns[LastEditedWhen]" dataType="dbTimeStamp" name="LastEditedWhen" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[ShipmentHeaderID]" dataType="i4" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[ShipmentHeaderID]" name="ShipmentHeaderID" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[ShipmentReference]" dataType="wstr" length="20" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[ShipmentReference]" name="ShipmentReference" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[InvoiceID]" dataType="i4" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[InvoiceID]" name="InvoiceID" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[CustomerID]" dataType="i4" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[CustomerID]" name="CustomerID" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[CarrierID]" dataType="i4" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[CarrierID]" name="CarrierID" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[CarrierCode]" dataType="wstr" length="10" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[CarrierCode]" name="CarrierCode" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[ServiceLevelCode]" dataType="wstr" length="8" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[ServiceLevelCode]" name="ServiceLevelCode" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[DeliveryRouteCode]" dataType="wstr" length="10" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[DeliveryRouteCode]" name="DeliveryRouteCode" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="8" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[OriginCountryCode]" dataType="wstr" length="3" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[OriginCountryCode]" name="OriginCountryCode" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[DestinationCountryCode]" dataType="wstr" length="3" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[DestinationCountryCode]" name="DestinationCountryCode" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[ShipmentWeightKg]" dataType="numeric" precision="18" scale="3" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[ShipmentWeightKg]" name="ShipmentWeightKg" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[FreightCharge]" dataType="numeric" precision="18" scale="2" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[FreightCharge]" name="FreightCharge" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[FreightCurrencyCode]" dataType="wstr" length="3" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[FreightCurrencyCode]" name="FreightCurrencyCode" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[CustomsDeclarationNumber]" dataType="wstr" length="30" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[CustomsDeclarationNumber]" name="CustomsDeclarationNumber" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[ShipmentStatusCode]" dataType="wstr" length="6" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[ShipmentStatusCode]" name="ShipmentStatusCode" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[DispatchedWhen]" dataType="dbTimeStamp" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[DispatchedWhen]" name="DispatchedWhen" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[DeliveredWhen]" dataType="dbTimeStamp" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[DeliveredWhen]" name="DeliveredWhen" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[LastEditedWhen]" dataType="dbTimeStamp" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[LastEditedWhen]" name="LastEditedWhen" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Extract Shipments\Derive Delivery Performance" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Delivery Performance" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Extract Shipments\Derive Delivery Performance.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Shipments\Derive Delivery Performance.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Extract Shipments\Derive Delivery Performance.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Shipments\Derive Delivery Performance.Outputs[Derived Column Output].Columns[TransitHours]" dataType="i4" lineageId="Package\Extract Shipments\Derive Delivery Performance.Outputs[Derived Column Output].Columns[TransitHours]" name="TransitHours">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(DeliveredWhen) ? -1 : DATEDIFF("hh", DispatchedWhen, DeliveredWhen)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(DeliveredWhen) ? -1 : DATEDIFF("hh", DispatchedWhen, DeliveredWhen)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Shipments\Derive Delivery Performance.Outputs[Derived Column Output].Columns[CrossBorderFlag]" dataType="wstr" length="1" lineageId="Package\Extract Shipments\Derive Delivery Performance.Outputs[Derived Column Output].Columns[CrossBorderFlag]" name="CrossBorderFlag">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">OriginCountryCode == DestinationCountryCode ? "N" : "Y"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">OriginCountryCode == DestinationCountryCode ? "N" : "Y"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Shipments\Derive Delivery Performance.Outputs[Derived Column Output].Columns[SourceSystemCode]" dataType="wstr" length="20" lineageId="Package\Extract Shipments\Derive Delivery Performance.Outputs[Derived Column Output].Columns[SourceSystemCode]" name="SourceSystemCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"WWI_OLTP"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"WWI_OLTP"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Shipments\Derive Delivery Performance.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" dataType="dbTimeStamp" lineageId="Package\Extract Shipments\Derive Delivery Performance.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" name="ExtractedAtUtc">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">GETUTCDATE()</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">GETUTCDATE()</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Shipments\Derive Delivery Performance.Outputs[Derived Column Output].Columns[PackageExecutionId]" dataType="i8" lineageId="Package\Extract Shipments\Derive Delivery Performance.Outputs[Derived Column Output].Columns[PackageExecutionId]" name="PackageExecutionId">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Extract Shipments\Count Shipments" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Shipments" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Extract Shipments\Count Shipments.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Shipments\Count Shipments.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Extract Shipments\Count Shipments.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Extract Shipments\raw SqlShipment" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="raw SqlShipment" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">raw.SqlShipment</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">100000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Extract Shipments\raw SqlShipment.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="RedirectRow" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[ShipmentHeaderID]" cachedDataType="i4" cachedName="ShipmentHeaderID" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentHeaderID]" name="ShipmentHeaderID" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[ShipmentReference]" cachedDataType="wstr" cachedLength="20" cachedName="ShipmentReference" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentReference]" name="ShipmentReference" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[InvoiceID]" cachedDataType="i4" cachedName="InvoiceID" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceID]" name="InvoiceID" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[CustomerID]" cachedDataType="i4" cachedName="CustomerID" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[CustomerID]" name="CustomerID" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[CarrierID]" cachedDataType="i4" cachedName="CarrierID" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[CarrierID]" name="CarrierID" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[CarrierCode]" cachedDataType="wstr" cachedLength="10" cachedName="CarrierCode" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[CarrierCode]" name="CarrierCode" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[ServiceLevelCode]" cachedDataType="wstr" cachedLength="8" cachedName="ServiceLevelCode" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[ServiceLevelCode]" name="ServiceLevelCode" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[DeliveryRouteCode]" cachedDataType="wstr" cachedLength="10" cachedName="DeliveryRouteCode" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[DeliveryRouteCode]" name="DeliveryRouteCode" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="8" cachedName="RegionCode" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[OriginCountryCode]" cachedDataType="wstr" cachedLength="3" cachedName="OriginCountryCode" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[OriginCountryCode]" name="OriginCountryCode" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[DestinationCountryCode]" cachedDataType="wstr" cachedLength="3" cachedName="DestinationCountryCode" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[DestinationCountryCode]" name="DestinationCountryCode" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[ShipmentWeightKg]" cachedDataType="numeric" cachedPrecision="18" cachedScale="3" cachedName="ShipmentWeightKg" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentWeightKg]" name="ShipmentWeightKg" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[FreightCharge]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="FreightCharge" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[FreightCharge]" name="FreightCharge" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[FreightCurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="FreightCurrencyCode" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[FreightCurrencyCode]" name="FreightCurrencyCode" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[CustomsDeclarationNumber]" cachedDataType="wstr" cachedLength="30" cachedName="CustomsDeclarationNumber" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[CustomsDeclarationNumber]" name="CustomsDeclarationNumber" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[ShipmentStatusCode]" cachedDataType="wstr" cachedLength="6" cachedName="ShipmentStatusCode" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentStatusCode]" name="ShipmentStatusCode" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[DispatchedWhen]" cachedDataType="dbTimeStamp" cachedName="DispatchedWhen" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[DispatchedWhen]" name="DispatchedWhen" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[DeliveredWhen]" cachedDataType="dbTimeStamp" cachedName="DeliveredWhen" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[DeliveredWhen]" name="DeliveredWhen" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[LastEditedWhen]" cachedDataType="dbTimeStamp" cachedName="LastEditedWhen" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[LastEditedWhen]" name="LastEditedWhen" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[TransitHours]" cachedDataType="i4" cachedName="TransitHours" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[TransitHours]" name="TransitHours" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[CrossBorderFlag]" cachedDataType="wstr" cachedLength="1" cachedName="CrossBorderFlag" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[CrossBorderFlag]" name="CrossBorderFlag" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                  <inputColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentHeaderID]" dataType="i4" name="ShipmentHeaderID" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentReference]" dataType="wstr" length="20" name="ShipmentReference" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceID]" dataType="i4" name="InvoiceID" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[CustomerID]" dataType="i4" name="CustomerID" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[CarrierID]" dataType="i4" name="CarrierID" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[CarrierCode]" dataType="wstr" length="10" name="CarrierCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[ServiceLevelCode]" dataType="wstr" length="8" name="ServiceLevelCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[DeliveryRouteCode]" dataType="wstr" length="10" name="DeliveryRouteCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="8" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[OriginCountryCode]" dataType="wstr" length="3" name="OriginCountryCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[DestinationCountryCode]" dataType="wstr" length="3" name="DestinationCountryCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentWeightKg]" dataType="numeric" precision="18" scale="3" name="ShipmentWeightKg" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[FreightCharge]" dataType="numeric" precision="18" scale="2" name="FreightCharge" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[FreightCurrencyCode]" dataType="wstr" length="3" name="FreightCurrencyCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[CustomsDeclarationNumber]" dataType="wstr" length="30" name="CustomsDeclarationNumber" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentStatusCode]" dataType="wstr" length="6" name="ShipmentStatusCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[DispatchedWhen]" dataType="dbTimeStamp" name="DispatchedWhen" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[DeliveredWhen]" dataType="dbTimeStamp" name="DeliveredWhen" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[LastEditedWhen]" dataType="dbTimeStamp" name="LastEditedWhen" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[TransitHours]" dataType="i4" name="TransitHours" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[CrossBorderFlag]" dataType="wstr" length="1" name="CrossBorderFlag" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Shipments\raw SqlShipment.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Extract Shipments\err RejectedConstraintViolation" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="err RejectedConstraintViolation" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">err.RejectedConstraintViolation</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Extract Shipments\err RejectedConstraintViolation.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[ShipmentHeaderID]" cachedDataType="i4" cachedName="ShipmentHeaderID" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentHeaderID]" name="ShipmentHeaderID" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[ShipmentReference]" cachedDataType="wstr" cachedLength="20" cachedName="ShipmentReference" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentReference]" name="ShipmentReference" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[InvoiceID]" cachedDataType="i4" cachedName="InvoiceID" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceID]" name="InvoiceID" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[CustomerID]" cachedDataType="i4" cachedName="CustomerID" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[CustomerID]" name="CustomerID" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[CarrierID]" cachedDataType="i4" cachedName="CarrierID" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[CarrierID]" name="CarrierID" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[CarrierCode]" cachedDataType="wstr" cachedLength="10" cachedName="CarrierCode" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[CarrierCode]" name="CarrierCode" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[ServiceLevelCode]" cachedDataType="wstr" cachedLength="8" cachedName="ServiceLevelCode" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[ServiceLevelCode]" name="ServiceLevelCode" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[DeliveryRouteCode]" cachedDataType="wstr" cachedLength="10" cachedName="DeliveryRouteCode" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[DeliveryRouteCode]" name="DeliveryRouteCode" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="8" cachedName="RegionCode" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[OriginCountryCode]" cachedDataType="wstr" cachedLength="3" cachedName="OriginCountryCode" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[OriginCountryCode]" name="OriginCountryCode" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[DestinationCountryCode]" cachedDataType="wstr" cachedLength="3" cachedName="DestinationCountryCode" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[DestinationCountryCode]" name="DestinationCountryCode" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[ShipmentWeightKg]" cachedDataType="numeric" cachedPrecision="18" cachedScale="3" cachedName="ShipmentWeightKg" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentWeightKg]" name="ShipmentWeightKg" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[FreightCharge]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="FreightCharge" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[FreightCharge]" name="FreightCharge" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[FreightCurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="FreightCurrencyCode" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[FreightCurrencyCode]" name="FreightCurrencyCode" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[CustomsDeclarationNumber]" cachedDataType="wstr" cachedLength="30" cachedName="CustomsDeclarationNumber" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[CustomsDeclarationNumber]" name="CustomsDeclarationNumber" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[ShipmentStatusCode]" cachedDataType="wstr" cachedLength="6" cachedName="ShipmentStatusCode" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentStatusCode]" name="ShipmentStatusCode" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[DispatchedWhen]" cachedDataType="dbTimeStamp" cachedName="DispatchedWhen" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[DispatchedWhen]" name="DispatchedWhen" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[DeliveredWhen]" cachedDataType="dbTimeStamp" cachedName="DeliveredWhen" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[DeliveredWhen]" name="DeliveredWhen" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[LastEditedWhen]" cachedDataType="dbTimeStamp" cachedName="LastEditedWhen" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[LastEditedWhen]" name="LastEditedWhen" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[TransitHours]" cachedDataType="i4" cachedName="TransitHours" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[TransitHours]" name="TransitHours" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[CrossBorderFlag]" cachedDataType="wstr" cachedLength="1" cachedName="CrossBorderFlag" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[CrossBorderFlag]" name="CrossBorderFlag" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                  <inputColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentHeaderID]" dataType="i4" name="ShipmentHeaderID" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentReference]" dataType="wstr" length="20" name="ShipmentReference" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceID]" dataType="i4" name="InvoiceID" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[CustomerID]" dataType="i4" name="CustomerID" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[CarrierID]" dataType="i4" name="CarrierID" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[CarrierCode]" dataType="wstr" length="10" name="CarrierCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[ServiceLevelCode]" dataType="wstr" length="8" name="ServiceLevelCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[DeliveryRouteCode]" dataType="wstr" length="10" name="DeliveryRouteCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="8" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[OriginCountryCode]" dataType="wstr" length="3" name="OriginCountryCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[DestinationCountryCode]" dataType="wstr" length="3" name="DestinationCountryCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentWeightKg]" dataType="numeric" precision="18" scale="3" name="ShipmentWeightKg" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[FreightCharge]" dataType="numeric" precision="18" scale="2" name="FreightCharge" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[FreightCurrencyCode]" dataType="wstr" length="3" name="FreightCurrencyCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[CustomsDeclarationNumber]" dataType="wstr" length="30" name="CustomsDeclarationNumber" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentStatusCode]" dataType="wstr" length="6" name="ShipmentStatusCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[DispatchedWhen]" dataType="dbTimeStamp" name="DispatchedWhen" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[DeliveredWhen]" dataType="dbTimeStamp" name="DeliveredWhen" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[LastEditedWhen]" dataType="dbTimeStamp" name="LastEditedWhen" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[TransitHours]" dataType="i4" name="TransitHours" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[CrossBorderFlag]" dataType="wstr" length="1" name="CrossBorderFlag" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                  <externalMetadataColumn refId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Shipments\err RejectedConstraintViolation.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Extract Shipments.Paths[OLE DB Source Output]" endId="Package\Extract Shipments\Derive Delivery Performance.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Extract Shipments.Paths[Derived Column Output 1]" endId="Package\Extract Shipments\Count Shipments.Inputs[Row Count Input]" name="Derived Column Output 1" startId="Package\Extract Shipments\Derive Delivery Performance.Outputs[Derived Column Output]" />
+          <path refId="Package\Extract Shipments.Paths[Row Count Output 2]" endId="Package\Extract Shipments\raw SqlShipment.Inputs[OLE DB Destination Input]" name="Row Count Output 2" startId="Package\Extract Shipments\Count Shipments.Outputs[Row Count Output]" />
+          <path refId="Package\Extract Shipments.Paths[OLE DB Source Error Output 3]" endId="Package\Extract Shipments\err RejectedConstraintViolation.Inputs[OLE DB Destination Input]" name="OLE DB Source Error Output 3" startId="Package\Extract Shipments\OLTP vw_ShipmentExtract.Outputs[OLE DB Source Error Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Set Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{C8D945C7-242C-76BA-65CC-8FF45D2E5210}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Set Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_SetWatermark @SourceSystemCode = ?, @ObjectName = N'Shipping.ShipmentHeaders', @WatermarkTo = ?, @PackageExecutionId = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::WatermarkTo" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'raw.SqlShipment', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Batch Variables"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Get Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Get Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Read Source Max ShipmentHeaderID" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Read Source Max ShipmentHeaderID"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Extract Shipments" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Extract Shipments"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Set Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Set Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{4E9E6E7E-70F4-F3DA-5861-19602662861D}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

@@ -1,0 +1,689 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{5D18FDE3-AAA6-B400-B1B0-3FF326679C64}"
+  DTS:Description="Numeric-key incremental over Loyalty.LoyaltyPointsLedger into raw.SqlLoyaltyLedger, plus a lookback re-read of rows the expiry sweep touched since the previous run. Points expiry rules differ by region, so the region code travels with every ledger entry."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="EXT_SQL_LoyaltyLedger"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{68A64F49-75A3-0AA4-6107-9CF2391D7013}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{8CC2F50B-6879-C846-FE54-A43C0466F6AF}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{B836B006-172C-C2A1-EE0F-B476BD540400}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{68D6C07E-D02C-358F-96A1-F7849DB7621B}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{7FF7AB41-A9FE-00AE-191B-C5C1DCD2EF3D}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWI_OLTP</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Source_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{6013BF6D-BE65-C752-81B9-00A20CDE3DE7}"
+      DTS:ObjectName="WWI_Source_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{04F8C8AF-0BCC-E526-24B3-C0B103782A18}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{6F303C65-E496-C65E-BC69-FB0D972368B9}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{C6D003B1-053E-0278-252C-F67D335DC073}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{CCF18545-69D1-83D5-94B4-B2E92356E1E4}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{E56FD804-A1E7-612B-A9FD-704DAD8FD915}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{01867A1A-796B-FB3A-2F89-11E3B39692AE}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{6F0E0E52-6EB9-CDEB-12A5-8280BF7DBCB5}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{B9A30A1E-7F6A-0656-CFA6-33777E1FA28E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ExpiryLookbackDays]"
+      DTS:CreationName=""
+      DTS:DTSID="{25581579-6532-3F5C-13DF-C2396F558051}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ExpiryLookbackDays">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">7</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::SourceMaxLedgerId]"
+      DTS:CreationName=""
+      DTS:DTSID="{866E5310-A2C6-C057-7F60-0FDBE7417F46}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="SourceMaxLedgerId">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Batch Variables"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{647AE7A9-EE4E-0DAF-FBD6-04CEA9DB74E4}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Batch Variables"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::RowsRead] = 0" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Get Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{AD8AAA26-E475-7A7A-5321-BEF0685AEC15}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Get Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_GetWatermark @SourceSystemCode = ?, @ObjectName = ?, @ReloadFullHistory = ?, @WatermarkFrom = ? OUTPUT, @WatermarkTo = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::ReloadFullHistory" SQLTask:ParameterDirection="Input" SQLTask:DataType="BYTE" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::WatermarkFrom" />
+        <SQLTask:ResultBinding SQLTask:ResultName="1" SQLTask:DtsVariableName="User::WatermarkTo" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Clear Reread Window"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{B84A9B02-E1DB-4219-B328-878348D5362D}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Clear Reread Window"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="DELETE FROM raw.SqlLoyaltyLedger WHERE TRY_CONVERT(bigint, LoyaltyLedgerID) IN       (SELECT TRY_CONVERT(bigint, LoyaltyLedgerID) FROM raw.SqlLoyaltyLedger        WHERE TRY_CONVERT(datetime2(3), LastEditedWhen) &gt;=              DATEADD(day, -1 * ?, SYSUTCDATETIME()));"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::ExpiryLookbackDays" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Extract Loyalty Ledger"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{26BF36F0-03F0-8FE4-0639-C2C6AC31FDD1}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Extract Loyalty Ledger"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="OLTP Loyalty.LoyaltyPointsLedger" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">3600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT  CONVERT(nvarchar(50), l.LoyaltyLedgerID)          AS LoyaltyLedgerID,
+        CONVERT(nvarchar(50), l.LoyaltyMemberID)          AS LoyaltyMemberID,
+        CONVERT(nvarchar(50), m.CustomerID)               AS CustomerID,
+        p.ProgramCode,
+        m.TierCode,
+        l.EntryTypeCode,
+        CONVERT(nvarchar(50), l.PointsDelta)              AS PointsDelta,
+        CONVERT(nvarchar(50), l.PointsRemaining)          AS PointsBalanceAfter,
+        CONVERT(nvarchar(50), l.SourceInvoiceID)          AS SourceInvoiceID,
+        l.SourceReference                                 AS RedemptionReference,
+        CONVERT(nvarchar(40), l.EntryWhen, 126)           AS EntryWhen,
+        CONVERT(nvarchar(40), l.ExpiresOnDate, 23)        AS ExpiryDate,
+        m.RegionCode,
+        CONVERT(nvarchar(40), ISNULL(l.ExpiredWhen, l.EntryWhen), 126) AS LastEditedWhen
+FROM    Loyalty.LoyaltyPointsLedger AS l WITH (NOLOCK)
+        INNER JOIN Loyalty.LoyaltyMembers AS m WITH (NOLOCK)
+            ON m.LoyaltyMemberID = l.LoyaltyMemberID
+        INNER JOIN Loyalty.LoyaltyPrograms AS p WITH (NOLOCK)
+            ON p.LoyaltyProgramID = m.LoyaltyProgramID
+WHERE   l.LoyaltyLedgerID &gt; CAST(? AS bigint)
+   OR   l.ExpiredWhen &gt;= DATEADD(day, -1 * CAST(? AS int), SYSDATETIME());</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Connections[OleDbConnection]" connectionManagerID="{6013BF6D-BE65-C752-81B9-00A20CDE3DE7}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Source_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[LoyaltyLedgerID]" dataType="wstr" length="50" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[LoyaltyLedgerID]" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[LoyaltyLedgerID]" name="LoyaltyLedgerID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[LoyaltyMemberID]" dataType="wstr" length="50" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[LoyaltyMemberID]" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[LoyaltyMemberID]" name="LoyaltyMemberID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[CustomerID]" dataType="wstr" length="50" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[CustomerID]" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[CustomerID]" name="CustomerID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[ProgramCode]" dataType="wstr" length="30" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[ProgramCode]" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[ProgramCode]" name="ProgramCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[TierCode]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[TierCode]" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[TierCode]" name="TierCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[EntryTypeCode]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[EntryTypeCode]" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[EntryTypeCode]" name="EntryTypeCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[PointsDelta]" dataType="wstr" length="50" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[PointsDelta]" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[PointsDelta]" name="PointsDelta" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[PointsBalanceAfter]" dataType="wstr" length="50" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[PointsBalanceAfter]" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[PointsBalanceAfter]" name="PointsBalanceAfter" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[SourceInvoiceID]" dataType="wstr" length="50" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[SourceInvoiceID]" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[SourceInvoiceID]" name="SourceInvoiceID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[RedemptionReference]" dataType="wstr" length="50" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[RedemptionReference]" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[RedemptionReference]" name="RedemptionReference" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[EntryWhen]" dataType="wstr" length="40" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[EntryWhen]" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[EntryWhen]" name="EntryWhen" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[ExpiryDate]" dataType="wstr" length="40" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[ExpiryDate]" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[ExpiryDate]" name="ExpiryDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[LastEditedWhen]" dataType="wstr" length="40" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[LastEditedWhen]" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].Columns[LastEditedWhen]" name="LastEditedWhen" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[LoyaltyLedgerID]" dataType="wstr" length="50" name="LoyaltyLedgerID" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[LoyaltyMemberID]" dataType="wstr" length="50" name="LoyaltyMemberID" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[CustomerID]" dataType="wstr" length="50" name="CustomerID" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[ProgramCode]" dataType="wstr" length="30" name="ProgramCode" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[TierCode]" dataType="wstr" length="20" name="TierCode" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[EntryTypeCode]" dataType="wstr" length="20" name="EntryTypeCode" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[PointsDelta]" dataType="wstr" length="50" name="PointsDelta" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[PointsBalanceAfter]" dataType="wstr" length="50" name="PointsBalanceAfter" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[SourceInvoiceID]" dataType="wstr" length="50" name="SourceInvoiceID" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[RedemptionReference]" dataType="wstr" length="50" name="RedemptionReference" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[EntryWhen]" dataType="wstr" length="40" name="EntryWhen" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[ExpiryDate]" dataType="wstr" length="40" name="ExpiryDate" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="10" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output].ExternalColumns[LastEditedWhen]" dataType="wstr" length="40" name="LastEditedWhen" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[LoyaltyLedgerID]" dataType="wstr" length="50" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[LoyaltyLedgerID]" name="LoyaltyLedgerID" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[LoyaltyMemberID]" dataType="wstr" length="50" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[LoyaltyMemberID]" name="LoyaltyMemberID" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[CustomerID]" dataType="wstr" length="50" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[CustomerID]" name="CustomerID" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[ProgramCode]" dataType="wstr" length="30" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[ProgramCode]" name="ProgramCode" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[TierCode]" dataType="wstr" length="20" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[TierCode]" name="TierCode" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[EntryTypeCode]" dataType="wstr" length="20" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[EntryTypeCode]" name="EntryTypeCode" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[PointsDelta]" dataType="wstr" length="50" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[PointsDelta]" name="PointsDelta" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[PointsBalanceAfter]" dataType="wstr" length="50" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[PointsBalanceAfter]" name="PointsBalanceAfter" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[SourceInvoiceID]" dataType="wstr" length="50" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[SourceInvoiceID]" name="SourceInvoiceID" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[RedemptionReference]" dataType="wstr" length="50" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[RedemptionReference]" name="RedemptionReference" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[EntryWhen]" dataType="wstr" length="40" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[EntryWhen]" name="EntryWhen" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[ExpiryDate]" dataType="wstr" length="40" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[ExpiryDate]" name="ExpiryDate" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="10" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[LastEditedWhen]" dataType="wstr" length="40" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[LastEditedWhen]" name="LastEditedWhen" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Extract Loyalty Ledger\Derive Audit Columns" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Audit Columns" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Extract Loyalty Ledger\Derive Audit Columns.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Loyalty Ledger\Derive Audit Columns.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Extract Loyalty Ledger\Derive Audit Columns.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Loyalty Ledger\Derive Audit Columns.Outputs[Derived Column Output].Columns[SourceSystemCode]" dataType="wstr" length="20" lineageId="Package\Extract Loyalty Ledger\Derive Audit Columns.Outputs[Derived Column Output].Columns[SourceSystemCode]" name="SourceSystemCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"WWI_OLTP"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"WWI_OLTP"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Loyalty Ledger\Derive Audit Columns.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" dataType="dbTimeStamp" lineageId="Package\Extract Loyalty Ledger\Derive Audit Columns.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" name="ExtractedAtUtc">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">GETUTCDATE()</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">GETUTCDATE()</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Loyalty Ledger\Derive Audit Columns.Outputs[Derived Column Output].Columns[PackageExecutionId]" dataType="i8" lineageId="Package\Extract Loyalty Ledger\Derive Audit Columns.Outputs[Derived Column Output].Columns[PackageExecutionId]" name="PackageExecutionId">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Extract Loyalty Ledger\Count Ledger Entries" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Ledger Entries" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Extract Loyalty Ledger\Count Ledger Entries.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Loyalty Ledger\Count Ledger Entries.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Extract Loyalty Ledger\Count Ledger Entries.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="raw SqlLoyaltyLedger" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">raw.SqlLoyaltyLedger</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">100000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].Columns[LoyaltyLedgerID]" cachedDataType="wstr" cachedLength="50" cachedName="LoyaltyLedgerID" externalMetadataColumnId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyLedgerID]" name="LoyaltyLedgerID" />
+                  <inputColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].Columns[LoyaltyMemberID]" cachedDataType="wstr" cachedLength="50" cachedName="LoyaltyMemberID" externalMetadataColumnId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyMemberID]" name="LoyaltyMemberID" />
+                  <inputColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].Columns[CustomerID]" cachedDataType="wstr" cachedLength="50" cachedName="CustomerID" externalMetadataColumnId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[CustomerID]" name="CustomerID" />
+                  <inputColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].Columns[ProgramCode]" cachedDataType="wstr" cachedLength="30" cachedName="ProgramCode" externalMetadataColumnId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[ProgramCode]" name="ProgramCode" />
+                  <inputColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].Columns[TierCode]" cachedDataType="wstr" cachedLength="20" cachedName="TierCode" externalMetadataColumnId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[TierCode]" name="TierCode" />
+                  <inputColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].Columns[EntryTypeCode]" cachedDataType="wstr" cachedLength="20" cachedName="EntryTypeCode" externalMetadataColumnId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[EntryTypeCode]" name="EntryTypeCode" />
+                  <inputColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].Columns[PointsDelta]" cachedDataType="wstr" cachedLength="50" cachedName="PointsDelta" externalMetadataColumnId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[PointsDelta]" name="PointsDelta" />
+                  <inputColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].Columns[PointsBalanceAfter]" cachedDataType="wstr" cachedLength="50" cachedName="PointsBalanceAfter" externalMetadataColumnId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[PointsBalanceAfter]" name="PointsBalanceAfter" />
+                  <inputColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].Columns[SourceInvoiceID]" cachedDataType="wstr" cachedLength="50" cachedName="SourceInvoiceID" externalMetadataColumnId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[SourceInvoiceID]" name="SourceInvoiceID" />
+                  <inputColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].Columns[RedemptionReference]" cachedDataType="wstr" cachedLength="50" cachedName="RedemptionReference" externalMetadataColumnId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionReference]" name="RedemptionReference" />
+                  <inputColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].Columns[EntryWhen]" cachedDataType="wstr" cachedLength="40" cachedName="EntryWhen" externalMetadataColumnId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[EntryWhen]" name="EntryWhen" />
+                  <inputColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].Columns[ExpiryDate]" cachedDataType="wstr" cachedLength="40" cachedName="ExpiryDate" externalMetadataColumnId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[ExpiryDate]" name="ExpiryDate" />
+                  <inputColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="10" cachedName="RegionCode" externalMetadataColumnId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].Columns[LastEditedWhen]" cachedDataType="wstr" cachedLength="40" cachedName="LastEditedWhen" externalMetadataColumnId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[LastEditedWhen]" name="LastEditedWhen" />
+                  <inputColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                  <inputColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                  <inputColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyLedgerID]" dataType="wstr" length="50" name="LoyaltyLedgerID" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyMemberID]" dataType="wstr" length="50" name="LoyaltyMemberID" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[CustomerID]" dataType="wstr" length="50" name="CustomerID" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[ProgramCode]" dataType="wstr" length="30" name="ProgramCode" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[TierCode]" dataType="wstr" length="20" name="TierCode" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[EntryTypeCode]" dataType="wstr" length="20" name="EntryTypeCode" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[PointsDelta]" dataType="wstr" length="50" name="PointsDelta" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[PointsBalanceAfter]" dataType="wstr" length="50" name="PointsBalanceAfter" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[SourceInvoiceID]" dataType="wstr" length="50" name="SourceInvoiceID" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionReference]" dataType="wstr" length="50" name="RedemptionReference" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[EntryWhen]" dataType="wstr" length="40" name="EntryWhen" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[ExpiryDate]" dataType="wstr" length="40" name="ExpiryDate" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="10" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[LastEditedWhen]" dataType="wstr" length="40" name="LastEditedWhen" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                  <externalMetadataColumn refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Extract Loyalty Ledger.Paths[OLE DB Source Output]" endId="Package\Extract Loyalty Ledger\Derive Audit Columns.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Extract Loyalty Ledger\OLTP Loyalty.LoyaltyPointsLedger.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Extract Loyalty Ledger.Paths[Derived Column Output 1]" endId="Package\Extract Loyalty Ledger\Count Ledger Entries.Inputs[Row Count Input]" name="Derived Column Output 1" startId="Package\Extract Loyalty Ledger\Derive Audit Columns.Outputs[Derived Column Output]" />
+          <path refId="Package\Extract Loyalty Ledger.Paths[Row Count Output 2]" endId="Package\Extract Loyalty Ledger\raw SqlLoyaltyLedger.Inputs[OLE DB Destination Input]" name="Row Count Output 2" startId="Package\Extract Loyalty Ledger\Count Ledger Entries.Outputs[Row Count Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Set Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{C8D945C7-242C-76BA-65CC-8FF45D2E5210}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Set Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_SetWatermark @SourceSystemCode = ?, @ObjectName = N'Loyalty.LoyaltyPointsLedger', @WatermarkTo = ?, @PackageExecutionId = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::WatermarkTo" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'raw.SqlLoyaltyLedger', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Batch Variables"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Get Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Get Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Clear Reread Window" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Clear Reread Window"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Extract Loyalty Ledger" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Extract Loyalty Ledger"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Set Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Set Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{CC8B27ED-34D8-7613-FBA9-7A5CDCFEAF98}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

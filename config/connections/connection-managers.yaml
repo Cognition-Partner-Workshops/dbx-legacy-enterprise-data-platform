@@ -1,0 +1,115 @@
+# ---------------------------------------------------------------------------
+# Connection manager templates for the WWI SSIS project.
+#
+# tools/ssisgen/project.py emits the .conmgr files themselves; this file is the
+# human-readable contract for what each one is, which project parameters build
+# its connection string, and the operational quirks that go with it. When the
+# two disagree, ssisgen wins - it is the code that produces the artifact.
+#
+# No connection string here contains a credential. Every one is assembled from
+# project parameters, and the sensitive parameters resolve at run time from the
+# SSIS catalogue environment (see config/environments/*.env.yaml).
+# ---------------------------------------------------------------------------
+
+connection_managers:
+
+  - name: WWI_Oracle_ERP
+    type: OLEDB
+    provider: OraOLEDB.Oracle.1
+    purpose: >-
+      Oracle ERP source. Customer and supplier master, product master,
+      procurement documents, GL journals and the daily FX rate table.
+    parameters: [OracleHost, OraclePort, OracleService, OracleUser, OraclePassword]
+    connection_string_shape: >-
+      Data Source=@[$Project::OracleHost]:@[$Project::OraclePort]/@[$Project::OracleService];
+      User ID=@[$Project::OracleUser];Provider=OraOLEDB.Oracle.1;
+    notes:
+      - The 32-bit and 64-bit Oracle clients must both be installed on the deploy
+        host, because the design-time surface runs 32-bit and the Agent runs 64-bit.
+      - NLS settings are pinned per-session by the extract packages, not here.
+        Two incidents were caused by a client with a different NLS_DATE_FORMAT.
+      - Retry is the package's job. The provider's own retry has never behaved
+        predictably across the listener failover.
+
+  - name: WWI_Source_DB
+    type: OLEDB
+    provider: SQLNCLI11.1
+    purpose: WideWorldImporters OLTP source, read through the extract views only.
+    parameters: [SqlServerHost, SqlServerPort, SqlServerOltpDb]
+    connection_string_shape: >-
+      Data Source=@[$Project::SqlServerHost],@[$Project::SqlServerPort];
+      Initial Catalog=@[$Project::SqlServerOltpDb];Provider=SQLNCLI11.1;
+      Integrated Security=SSPI;Auto Translate=False;
+    notes:
+      - Windows authentication. The SQL login exists for the file-share hop only.
+      - Auto Translate is off; it corrupted extended characters in the EU
+        customer names when it was on.
+      - SQLNCLI11 is out of support. Replacing it with MSOLEDBSQL has been on the
+        backlog since the 2019 refresh and is blocked by the date-type behaviour
+        differences in two dozen packages.
+
+  - name: WWI_Staging_DB
+    type: OLEDB
+    provider: SQLNCLI11.1
+    purpose: Staging database - raw, work, stg, err, ref and etl schemas.
+    parameters: [SqlServerHost, SqlServerPort, SqlServerStagingDb]
+    connection_string_shape: >-
+      Data Source=@[$Project::SqlServerHost],@[$Project::SqlServerPort];
+      Initial Catalog=@[$Project::SqlServerStagingDb];Provider=SQLNCLI11.1;
+      Integrated Security=SSPI;Auto Translate=False;
+    notes:
+      - Packages that write to raw.* set the destination to table-lock and no
+        constraint checking; the tables are heaps and are truncated per run.
+      - This is also where etl.Batch is written for staging-side steps.
+
+  - name: WWI_DW_Destination_DB
+    type: OLEDB
+    provider: SQLNCLI11.1
+    purpose: Warehouse destination - Integration, Dimension, Fact and agg schemas.
+    parameters: [SqlServerHost, SqlServerPort, SqlServerDwDb]
+    connection_string_shape: >-
+      Data Source=@[$Project::SqlServerHost],@[$Project::SqlServerPort];
+      Initial Catalog=@[$Project::SqlServerDwDb];Provider=SQLNCLI11.1;
+      Integrated Security=SSPI;Auto Translate=False;
+    notes:
+      - In PROD the warehouse is on a different host from the OLTP database, so
+        SqlServerHost is overridden per-package for the two facts that read the
+        OLTP replica directly. That override is a known wart.
+      - The warehouse carries its own etl.* control copy; batch rows written here
+        are not the same rows as the staging ones.
+
+  - name: WWI_Inbound_Files
+    type: FILE
+    purpose: Inbound partner, carrier and bank file drop root.
+    parameters: [InboundFileRoot]
+    connection_string_shape: "@[$Project::InboundFileRoot]"
+    notes:
+      - Runs under the WWI_FileOps_Proxy Agent proxy, not the SSIS proxy - the
+        file share does not accept the ETL service account.
+      - Filename patterns and per-feed retention are in config/landing-zone.yaml.
+
+  - name: WWI_Archive_Files
+    type: FILE
+    purpose: Archive root for successfully processed inbound files.
+    parameters: [ArchiveFileRoot]
+    connection_string_shape: "@[$Project::ArchiveFileRoot]"
+    notes:
+      - Archiving is a move, not a copy, so a failed move leaves the file in
+        inbound and it is picked up again on the next poll. Duplicate detection
+        is the ingestion package's responsibility.
+
+  - name: WWI_Reject_Files
+    type: FILE
+    purpose: Quarantine root for malformed inbound files and rejected records.
+    parameters: [RejectFileRoot]
+    connection_string_shape: "@[$Project::RejectFileRoot]"
+    notes:
+      - Quarantined EU files are held under the shorter retention in
+        config/landing-zone.yaml because they can contain personal data that was
+        never validated.
+
+# Connection managers that are deliberately absent, so that nobody adds them:
+#   * a direct connection to the reporting database - reporting reads the
+#     warehouse through its own gateway account;
+#   * an SMTP connection manager - notifications go through SQL Agent operators,
+#     which is why the estate has three operator definitions and no mail task.

@@ -1,0 +1,86 @@
+/* =====================================================================
+ * Object       : TABLE WWI_PROC.VENDOR_CONTRACT
+ * Schema       : WWI_PROC (Oracle ERP - WWIGERP)
+ * Deploy order : 52
+ * Depends on   : WWI_MDM.SUPP_MASTER, WWI_FIN.PAYMENT_TERMS
+ * Called by    : PKG_PURCHASE_ORDER (contract pricing), PKG_SUPPLIER_PERF
+ *
+ * Master agreements. Committed spend is tracked in the contract currency and
+ * consumed by PO release; the consumption figure is updated by the PO package
+ * and is not recalculated from the PO table, so a cancelled PO that skipped the
+ * package leaves the commitment overstated.
+ *
+ * Renewal handling differs by region: EU contracts carry a mandatory notice
+ * period, NA contracts auto-renew unless cancelled, APAC contracts are renewed
+ * manually every year.
+ * ===================================================================== */
+
+CREATE SEQUENCE WWI_PROC.SEQ_VENDOR_CONTRACT
+    START WITH 4001 INCREMENT BY 1 NOCACHE NOCYCLE
+/
+
+CREATE TABLE WWI_PROC.VENDOR_CONTRACT
+(
+    CONTRACT_ID             NUMBER(12)      NOT NULL,
+    CONTRACT_NBR            VARCHAR2(20)    NOT NULL,
+    SUPP_ID                 NUMBER(12)      NOT NULL,
+    CONTRACT_TYPE_CD        VARCHAR2(6)     NOT NULL,
+    CONTRACT_TITLE          VARCHAR2(200),
+    REGION_CD               VARCHAR2(4)     NOT NULL,
+    OWNER_CD                VARCHAR2(8)     NOT NULL,
+    START_DT                DATE            NOT NULL,
+    END_DT                  DATE,
+    NOTICE_PERIOD_DAYS      NUMBER(4),
+    AUTO_RENEW_FLG          VARCHAR2(1)     DEFAULT 'N' NOT NULL,
+    RENEWAL_TERM_MONTHS     NUMBER(3),
+    CONTRACT_CURR_CD        VARCHAR2(3)     NOT NULL,
+    COMMITTED_AMT           NUMBER(15,5)    DEFAULT 0 NOT NULL,
+    CONSUMED_AMT            NUMBER(15,5)    DEFAULT 0 NOT NULL,
+    MIN_SPEND_AMT           NUMBER(15,5),
+    REBATE_PCT              NUMBER(5,2),
+    REBATE_TIER_TXT         VARCHAR2(400),
+    PAYMENT_TERMS_CD        VARCHAR2(8),
+    PRICE_PROTECTION_FLG    VARCHAR2(1)     DEFAULT 'N' NOT NULL,
+    PRICE_REVIEW_MONTH_NBR  NUMBER(2),
+    SLA_TXT                 VARCHAR2(2000),
+    CONTRACT_STATUS_CD      VARCHAR2(4)     DEFAULT 'DRFT' NOT NULL,
+    SIGNED_DT               DATE,
+    DOC_REF_TXT             VARCHAR2(400),
+    TERMINATED_DT           DATE,
+    TERMINATION_REASON_CD   VARCHAR2(4),
+    SOURCE_SYS              VARCHAR2(12)    DEFAULT 'ORA_ERP' NOT NULL,
+    CREATED_BY              VARCHAR2(30)    DEFAULT USER NOT NULL,
+    CREATED_DT              DATE            DEFAULT SYSDATE NOT NULL,
+    UPDATED_BY              VARCHAR2(30),
+    UPDATED_DT              DATE,
+    CONSTRAINT PK_VENDOR_CONTRACT PRIMARY KEY (CONTRACT_ID) USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT UK_VENDOR_CONTRACT_NBR UNIQUE (CONTRACT_NBR) USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT CK_CONTRACT_TYPE CHECK (
+        CONTRACT_TYPE_CD IN ('MSA', 'BLKT', 'PRICE', 'SVC', 'NDA', 'SLA')),
+    CONSTRAINT CK_CONTRACT_STATUS CHECK (
+        CONTRACT_STATUS_CD IN ('DRFT', 'ACTV', 'EXPD', 'TERM', 'SUSP')),
+    CONSTRAINT CK_CONTRACT_REGION CHECK (REGION_CD IN ('NA', 'EU', 'APAC')),
+    CONSTRAINT CK_CONTRACT_DATES CHECK (END_DT IS NULL OR END_DT > START_DT),
+    CONSTRAINT CK_CONTRACT_EU_NOTICE CHECK (
+        REGION_CD <> 'EU' OR NOTICE_PERIOD_DAYS IS NOT NULL),
+    CONSTRAINT CK_CONTRACT_FLAGS CHECK (
+        AUTO_RENEW_FLG IN ('Y', 'N') AND PRICE_PROTECTION_FLG IN ('Y', 'N'))
+)
+TABLESPACE WWI_DATA
+/
+
+ALTER TABLE WWI_PROC.VENDOR_CONTRACT ADD CONSTRAINT FK_CONTRACT_SUPP
+    FOREIGN KEY (SUPP_ID) REFERENCES WWI_MDM.SUPP_MASTER (SUPP_ID)
+/
+
+ALTER TABLE WWI_PROC.PURCHASE_ORDER_HDR ADD CONSTRAINT FK_PO_HDR_CONTRACT
+    FOREIGN KEY (CONTRACT_ID) REFERENCES WWI_PROC.VENDOR_CONTRACT (CONTRACT_ID)
+/
+
+CREATE INDEX WWI_PROC.IX_CONTRACT_SUPP
+    ON WWI_PROC.VENDOR_CONTRACT (SUPP_ID, CONTRACT_STATUS_CD) TABLESPACE WWI_IDX
+/
+
+CREATE INDEX WWI_PROC.IX_CONTRACT_EXPIRY
+    ON WWI_PROC.VENDOR_CONTRACT (END_DT, AUTO_RENEW_FLG) TABLESPACE WWI_IDX
+/

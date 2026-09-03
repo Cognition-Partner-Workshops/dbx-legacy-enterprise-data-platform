@@ -1,0 +1,921 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{125D4949-033E-F978-EA1D-3D09A6829922}"
+  DTS:Description="Rebuilds Aggregate.Monthly Margin Analysis at period/category/channel grain. Standard cost and actual cost are both carried because manufacturing still reports on standard, and the purchase price variance is apportioned across the categories that consumed the stock."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="AGG_Refresh_MonthlyMarginAnalysis"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{3A3DA8B7-02E8-E389-BAE5-C70B3F7EE369}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{944F6F73-5CA4-25B2-1C0C-4ED3FCDCFA0D}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{1016E1D2-970F-8A19-5F04-F714BCED2209}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{E5339F19-B578-C638-A32E-D32D35EABBFD}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{B8B31881-3447-78B4-D34B-6AEC8EB9A2AD}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWIDW</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::AccountingPeriodCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="Accounting period (yyyy-MM) to rebuild."
+      DTS:DTSID="{972293D8-A057-8C2F-47AA-FAFD435767AB}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="AccountingPeriodCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">1900-01</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::RebuildPriorPeriods]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Additional closed periods to rebuild behind the current one."
+      DTS:DTSID="{B32B6E0D-2689-F1F8-3E95-EF905829BCEA}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="RebuildPriorPeriods"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ApportionPurchaseVariance]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="Apportion PPV across consuming categories."
+      DTS:DTSID="{78BDB6F7-0C90-2003-3AF5-8B3476055AB4}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ApportionPurchaseVariance"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">True</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{246FE022-EB81-3317-E34B-047695582BD7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{0AC2C0F0-2A96-CD03-7660-32B8C83F1CD6}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{4564AAC4-2E8F-03EF-5738-66AE3017869B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{E18AF631-E8CE-1833-03FE-754AF46D37C7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{D4982912-CCC4-4A97-5FF7-D1DFACC72A9D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{BE62B37F-B940-AB05-2BCF-D7147C906771}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{B50F38DE-D12E-B5D0-49D4-A972C234C6BC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{E7BB6E75-5B5F-1E0B-3279-617BB89CD0CA}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsAggregated]"
+      DTS:CreationName=""
+      DTS:DTSID="{F54E555D-FE34-9156-31BB-B38D2BBA1AFA}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsAggregated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsDeletedForWindow]"
+      DTS:CreationName=""
+      DTS:DTSID="{CBBB73B8-22B6-B2CB-FD05-715782985E16}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsDeletedForWindow">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ReconciliationVariance]"
+      DTS:CreationName=""
+      DTS:DTSID="{174C9C55-E208-7B01-4C7A-0303F88AD6F8}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ReconciliationVariance">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::VarianceRowsPosted]"
+      DTS:CreationName=""
+      DTS:DTSID="{CED5F52B-9EAC-A8D0-F0E9-7341A2B2701F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="VarianceRowsPosted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Refresh Period"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{CEDE3108-A491-846A-837A-212A109B618C}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Refresh Period"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression='@[User::WatermarkFrom] = (DT_DBTIMESTAMP)(@[$Package::AccountingPeriodCode] + "-01")' />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Delete Period Rows"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{60DDFD9C-8211-98A4-513C-4FAE965C0620}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Delete Period Rows"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="DELETE FROM [Aggregate].[Monthly Margin Analysis] WHERE [Accounting Period Code] &gt;= FORMAT(DATEADD(MONTH, -1 * ?, CAST(? + '-01' AS date)), 'yyyy-MM') AND [Accounting Period Code] &lt;= ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::RebuildPriorPeriods" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::AccountingPeriodCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::AccountingPeriodCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Rebuild Margin Analysis"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{FAF0DA96-A36A-2E8E-9E0C-6B33A5C62622}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Rebuild Margin Analysis"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="Fact Sale Margin Period" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">3600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT d.[Accounting Period Code] AS AccountingPeriodCode, si.[Product Category Code] AS ProductCategoryCode, ISNULL(f.[Sales Channel Code], N'DIRECT') AS SalesChannelCode, SUM(f.[Net Amount]) AS NetAmount, SUM(f.[Standard Cost Amount]) AS StandardCostAmount, SUM(f.[Total Cost Amount]) AS ActualCostAmount, SUM(f.[Margin Amount]) AS MarginAmount, SUM(f.[Quantity]) AS QuantitySold FROM [Fact].[Sale] AS f INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Invoice Date Key] INNER JOIN [Dimension].[Stock Item] AS si ON si.[Stock Item Key] = f.[Stock Item Key] WHERE d.[Accounting Period Code] &gt;= FORMAT(DATEADD(MONTH, -1 * ?, CAST(? + '-01' AS date)), 'yyyy-MM')   AND d.[Accounting Period Code] &lt;= ? AND f.[Is Reversal] = 0 GROUP BY d.[Accounting Period Code], si.[Product Category Code],          ISNULL(f.[Sales Channel Code], N'DIRECT');</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].Columns[AccountingPeriodCode]" dataType="wstr" length="7" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].ExternalColumns[AccountingPeriodCode]" lineageId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].Columns[AccountingPeriodCode]" name="AccountingPeriodCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].Columns[ProductCategoryCode]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].ExternalColumns[ProductCategoryCode]" lineageId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].Columns[ProductCategoryCode]" name="ProductCategoryCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].Columns[SalesChannelCode]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].ExternalColumns[SalesChannelCode]" lineageId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].Columns[SalesChannelCode]" name="SalesChannelCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].Columns[NetAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].ExternalColumns[NetAmount]" lineageId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].Columns[NetAmount]" name="NetAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].Columns[StandardCostAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].ExternalColumns[StandardCostAmount]" lineageId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].Columns[StandardCostAmount]" name="StandardCostAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].Columns[ActualCostAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].ExternalColumns[ActualCostAmount]" lineageId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].Columns[ActualCostAmount]" name="ActualCostAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].Columns[MarginAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].ExternalColumns[MarginAmount]" lineageId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].Columns[MarginAmount]" name="MarginAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].Columns[QuantitySold]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].ExternalColumns[QuantitySold]" lineageId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].Columns[QuantitySold]" name="QuantitySold" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].ExternalColumns[ProductCategoryCode]" dataType="wstr" length="12" name="ProductCategoryCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].ExternalColumns[SalesChannelCode]" dataType="wstr" length="12" name="SalesChannelCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].ExternalColumns[NetAmount]" dataType="numeric" precision="18" scale="2" name="NetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].ExternalColumns[StandardCostAmount]" dataType="numeric" precision="18" scale="2" name="StandardCostAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].ExternalColumns[ActualCostAmount]" dataType="numeric" precision="18" scale="2" name="ActualCostAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].ExternalColumns[MarginAmount]" dataType="numeric" precision="18" scale="2" name="MarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output].ExternalColumns[QuantitySold]" dataType="i4" name="QuantitySold" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[AccountingPeriodCode]" dataType="wstr" length="7" lineageId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[ProductCategoryCode]" dataType="wstr" length="12" lineageId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[ProductCategoryCode]" name="ProductCategoryCode" />
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[SalesChannelCode]" dataType="wstr" length="12" lineageId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[SalesChannelCode]" name="SalesChannelCode" />
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[NetAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[NetAmount]" name="NetAmount" />
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[StandardCostAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[StandardCostAmount]" name="StandardCostAmount" />
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[ActualCostAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[ActualCostAmount]" name="ActualCostAmount" />
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[MarginAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[MarginAmount]" name="MarginAmount" />
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[QuantitySold]" dataType="i4" lineageId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[QuantitySold]" name="QuantitySold" />
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Margin Analysis\Derive Margin Bridge" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Margin Bridge" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Rebuild Margin Analysis\Derive Margin Bridge.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Margin Analysis\Derive Margin Bridge.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Rebuild Margin Analysis\Derive Margin Bridge.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Derive Margin Bridge.Outputs[Derived Column Output].Columns[StandardMarginAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Margin Analysis\Derive Margin Bridge.Outputs[Derived Column Output].Columns[StandardMarginAmount]" name="StandardMarginAmount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">NetAmount - StandardCostAmount</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">NetAmount - StandardCostAmount</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Derive Margin Bridge.Outputs[Derived Column Output].Columns[CostVarianceAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Margin Analysis\Derive Margin Bridge.Outputs[Derived Column Output].Columns[CostVarianceAmount]" name="CostVarianceAmount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">StandardCostAmount - ActualCostAmount</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">StandardCostAmount - ActualCostAmount</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Derive Margin Bridge.Outputs[Derived Column Output].Columns[GrossMarginPercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\Rebuild Margin Analysis\Derive Margin Bridge.Outputs[Derived Column Output].Columns[GrossMarginPercent]" name="GrossMarginPercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">NetAmount == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)MarginAmount / (DT_NUMERIC,9,4)NetAmount) * 100</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">NetAmount == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)MarginAmount / (DT_NUMERIC,9,4)NetAmount) * 100</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Derive Margin Bridge.Outputs[Derived Column Output].Columns[StandardMarginPercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\Rebuild Margin Analysis\Derive Margin Bridge.Outputs[Derived Column Output].Columns[StandardMarginPercent]" name="StandardMarginPercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">NetAmount == 0 ? (DT_NUMERIC,9,4)0 : (((DT_NUMERIC,9,4)NetAmount - (DT_NUMERIC,9,4)StandardCostAmount) / (DT_NUMERIC,9,4)NetAmount) * 100</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">NetAmount == 0 ? (DT_NUMERIC,9,4)0 : (((DT_NUMERIC,9,4)NetAmount - (DT_NUMERIC,9,4)StandardCostAmount) / (DT_NUMERIC,9,4)NetAmount) * 100</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Derive Margin Bridge.Outputs[Derived Column Output].Columns[UnitMarginAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Margin Analysis\Derive Margin Bridge.Outputs[Derived Column Output].Columns[UnitMarginAmount]" name="UnitMarginAmount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">QuantitySold == 0 ? (DT_NUMERIC,18,2)0 : ((DT_NUMERIC,18,2)MarginAmount / (DT_NUMERIC,18,2)QuantitySold)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">QuantitySold == 0 ? (DT_NUMERIC,18,2)0 : ((DT_NUMERIC,18,2)MarginAmount / (DT_NUMERIC,18,2)QuantitySold)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Margin Analysis\Derive Margin Bridge.Outputs[Derived Column Output].Columns[RefreshedByLineageKey]" dataType="i8" lineageId="Package\Rebuild Margin Analysis\Derive Margin Bridge.Outputs[Derived Column Output].Columns[RefreshedByLineageKey]" name="RefreshedByLineageKey">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Margin Analysis\Route Margin Rows" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Route Margin Rows" version="1">
+            <inputs>
+              <input refId="Package\Rebuild Margin Analysis\Route Margin Rows.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Margin Analysis\Route Margin Rows.Outputs[Missing Standard Cost]" exclusionGroup="1" name="Missing Standard Cost" synchronousInputId="Package\Rebuild Margin Analysis\Route Margin Rows.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">StandardCostAmount == 0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">StandardCostAmount == 0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Rebuild Margin Analysis\Route Margin Rows.Outputs[Negative Margin]" exclusionGroup="1" name="Negative Margin" synchronousInputId="Package\Rebuild Margin Analysis\Route Margin Rows.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">MarginAmount &lt; 0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">MarginAmount &lt; 0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Rebuild Margin Analysis\Route Margin Rows.Outputs[Standard Rows]" exclusionGroup="1" isDefaultOut="true" name="Standard Rows" synchronousInputId="Package\Rebuild Margin Analysis\Route Margin Rows.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Margin Analysis\Insert Standard Rows" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert Standard Rows" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Aggregate].[Monthly Margin Analysis]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[ProductCategoryCode]" cachedDataType="wstr" cachedLength="12" cachedName="ProductCategoryCode" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[ProductCategoryCode]" name="ProductCategoryCode" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[SalesChannelCode]" cachedDataType="wstr" cachedLength="12" cachedName="SalesChannelCode" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[SalesChannelCode]" name="SalesChannelCode" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[NetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="NetAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" name="NetAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[StandardCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="StandardCostAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[StandardCostAmount]" name="StandardCostAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[ActualCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ActualCostAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[ActualCostAmount]" name="ActualCostAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[MarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MarginAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" name="MarginAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[QuantitySold]" cachedDataType="i4" cachedName="QuantitySold" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[QuantitySold]" name="QuantitySold" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[StandardMarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="StandardMarginAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[StandardMarginAmount]" name="StandardMarginAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[CostVarianceAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CostVarianceAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[CostVarianceAmount]" name="CostVarianceAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[GrossMarginPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="GrossMarginPercent" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[GrossMarginPercent]" name="GrossMarginPercent" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[StandardMarginPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="StandardMarginPercent" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[StandardMarginPercent]" name="StandardMarginPercent" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[UnitMarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitMarginAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[UnitMarginAmount]" name="UnitMarginAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[ProductCategoryCode]" dataType="wstr" length="12" name="ProductCategoryCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[SalesChannelCode]" dataType="wstr" length="12" name="SalesChannelCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" dataType="numeric" precision="18" scale="2" name="NetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[StandardCostAmount]" dataType="numeric" precision="18" scale="2" name="StandardCostAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[ActualCostAmount]" dataType="numeric" precision="18" scale="2" name="ActualCostAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" dataType="numeric" precision="18" scale="2" name="MarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[QuantitySold]" dataType="i4" name="QuantitySold" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[StandardMarginAmount]" dataType="numeric" precision="18" scale="2" name="StandardMarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[CostVarianceAmount]" dataType="numeric" precision="18" scale="2" name="CostVarianceAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[GrossMarginPercent]" dataType="numeric" precision="9" scale="4" name="GrossMarginPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[StandardMarginPercent]" dataType="numeric" precision="9" scale="4" name="StandardMarginPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[UnitMarginAmount]" dataType="numeric" precision="18" scale="2" name="UnitMarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Margin Analysis\Insert Standard Rows.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert Negative Margin Rows" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Aggregate].[Monthly Margin Analysis]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].Columns[ProductCategoryCode]" cachedDataType="wstr" cachedLength="12" cachedName="ProductCategoryCode" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[ProductCategoryCode]" name="ProductCategoryCode" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].Columns[SalesChannelCode]" cachedDataType="wstr" cachedLength="12" cachedName="SalesChannelCode" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[SalesChannelCode]" name="SalesChannelCode" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].Columns[NetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="NetAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" name="NetAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].Columns[StandardCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="StandardCostAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[StandardCostAmount]" name="StandardCostAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].Columns[ActualCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ActualCostAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[ActualCostAmount]" name="ActualCostAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].Columns[MarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MarginAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" name="MarginAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].Columns[QuantitySold]" cachedDataType="i4" cachedName="QuantitySold" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[QuantitySold]" name="QuantitySold" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].Columns[StandardMarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="StandardMarginAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[StandardMarginAmount]" name="StandardMarginAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].Columns[CostVarianceAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CostVarianceAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[CostVarianceAmount]" name="CostVarianceAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].Columns[GrossMarginPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="GrossMarginPercent" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[GrossMarginPercent]" name="GrossMarginPercent" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].Columns[StandardMarginPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="StandardMarginPercent" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[StandardMarginPercent]" name="StandardMarginPercent" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].Columns[UnitMarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitMarginAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[UnitMarginAmount]" name="UnitMarginAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[ProductCategoryCode]" dataType="wstr" length="12" name="ProductCategoryCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[SalesChannelCode]" dataType="wstr" length="12" name="SalesChannelCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" dataType="numeric" precision="18" scale="2" name="NetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[StandardCostAmount]" dataType="numeric" precision="18" scale="2" name="StandardCostAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[ActualCostAmount]" dataType="numeric" precision="18" scale="2" name="ActualCostAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" dataType="numeric" precision="18" scale="2" name="MarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[QuantitySold]" dataType="i4" name="QuantitySold" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[StandardMarginAmount]" dataType="numeric" precision="18" scale="2" name="StandardMarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[CostVarianceAmount]" dataType="numeric" precision="18" scale="2" name="CostVarianceAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[GrossMarginPercent]" dataType="numeric" precision="9" scale="4" name="GrossMarginPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[StandardMarginPercent]" dataType="numeric" precision="9" scale="4" name="StandardMarginPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[UnitMarginAmount]" dataType="numeric" precision="18" scale="2" name="UnitMarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Missing Standard Cost" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].Columns[ProductCategoryCode]" cachedDataType="wstr" cachedLength="12" cachedName="ProductCategoryCode" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[ProductCategoryCode]" name="ProductCategoryCode" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].Columns[SalesChannelCode]" cachedDataType="wstr" cachedLength="12" cachedName="SalesChannelCode" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[SalesChannelCode]" name="SalesChannelCode" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].Columns[NetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="NetAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" name="NetAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].Columns[StandardCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="StandardCostAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[StandardCostAmount]" name="StandardCostAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].Columns[ActualCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ActualCostAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[ActualCostAmount]" name="ActualCostAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].Columns[MarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MarginAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" name="MarginAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].Columns[QuantitySold]" cachedDataType="i4" cachedName="QuantitySold" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[QuantitySold]" name="QuantitySold" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].Columns[StandardMarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="StandardMarginAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[StandardMarginAmount]" name="StandardMarginAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].Columns[CostVarianceAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CostVarianceAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[CostVarianceAmount]" name="CostVarianceAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].Columns[GrossMarginPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="GrossMarginPercent" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[GrossMarginPercent]" name="GrossMarginPercent" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].Columns[StandardMarginPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="StandardMarginPercent" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[StandardMarginPercent]" name="StandardMarginPercent" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].Columns[UnitMarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitMarginAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[UnitMarginAmount]" name="UnitMarginAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[ProductCategoryCode]" dataType="wstr" length="12" name="ProductCategoryCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[SalesChannelCode]" dataType="wstr" length="12" name="SalesChannelCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" dataType="numeric" precision="18" scale="2" name="NetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[StandardCostAmount]" dataType="numeric" precision="18" scale="2" name="StandardCostAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[ActualCostAmount]" dataType="numeric" precision="18" scale="2" name="ActualCostAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" dataType="numeric" precision="18" scale="2" name="MarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[QuantitySold]" dataType="i4" name="QuantitySold" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[StandardMarginAmount]" dataType="numeric" precision="18" scale="2" name="StandardMarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[CostVarianceAmount]" dataType="numeric" precision="18" scale="2" name="CostVarianceAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[GrossMarginPercent]" dataType="numeric" precision="9" scale="4" name="GrossMarginPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[StandardMarginPercent]" dataType="numeric" precision="9" scale="4" name="StandardMarginPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[UnitMarginAmount]" dataType="numeric" precision="18" scale="2" name="UnitMarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Margin Analysis\Reject Source Errors" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Source Errors" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Margin Analysis\Reject Source Errors.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[ProductCategoryCode]" cachedDataType="wstr" cachedLength="12" cachedName="ProductCategoryCode" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ProductCategoryCode]" name="ProductCategoryCode" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[SalesChannelCode]" cachedDataType="wstr" cachedLength="12" cachedName="SalesChannelCode" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SalesChannelCode]" name="SalesChannelCode" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[NetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="NetAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" name="NetAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[StandardCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="StandardCostAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StandardCostAmount]" name="StandardCostAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[ActualCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ActualCostAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ActualCostAmount]" name="ActualCostAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[MarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MarginAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" name="MarginAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[QuantitySold]" cachedDataType="i4" cachedName="QuantitySold" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantitySold]" name="QuantitySold" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[StandardMarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="StandardMarginAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StandardMarginAmount]" name="StandardMarginAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CostVarianceAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CostVarianceAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CostVarianceAmount]" name="CostVarianceAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[GrossMarginPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="GrossMarginPercent" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[GrossMarginPercent]" name="GrossMarginPercent" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[StandardMarginPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="StandardMarginPercent" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StandardMarginPercent]" name="StandardMarginPercent" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[UnitMarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitMarginAmount" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[UnitMarginAmount]" name="UnitMarginAmount" />
+                  <inputColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ProductCategoryCode]" dataType="wstr" length="12" name="ProductCategoryCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SalesChannelCode]" dataType="wstr" length="12" name="SalesChannelCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" dataType="numeric" precision="18" scale="2" name="NetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StandardCostAmount]" dataType="numeric" precision="18" scale="2" name="StandardCostAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ActualCostAmount]" dataType="numeric" precision="18" scale="2" name="ActualCostAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" dataType="numeric" precision="18" scale="2" name="MarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantitySold]" dataType="i4" name="QuantitySold" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StandardMarginAmount]" dataType="numeric" precision="18" scale="2" name="StandardMarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CostVarianceAmount]" dataType="numeric" precision="18" scale="2" name="CostVarianceAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[GrossMarginPercent]" dataType="numeric" precision="9" scale="4" name="GrossMarginPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StandardMarginPercent]" dataType="numeric" precision="9" scale="4" name="StandardMarginPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[UnitMarginAmount]" dataType="numeric" precision="18" scale="2" name="UnitMarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Margin Analysis\Reject Source Errors.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Rebuild Margin Analysis.Paths[OLE DB Source Output]" endId="Package\Rebuild Margin Analysis\Derive Margin Bridge.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Rebuild Margin Analysis.Paths[Derived Column Output 1]" endId="Package\Rebuild Margin Analysis\Route Margin Rows.Inputs[Conditional Split Input]" name="Derived Column Output 1" startId="Package\Rebuild Margin Analysis\Derive Margin Bridge.Outputs[Derived Column Output]" />
+          <path refId="Package\Rebuild Margin Analysis.Paths[Standard Rows 2]" endId="Package\Rebuild Margin Analysis\Insert Standard Rows.Inputs[OLE DB Destination Input]" name="Standard Rows 2" startId="Package\Rebuild Margin Analysis\Route Margin Rows.Outputs[Standard Rows]" />
+          <path refId="Package\Rebuild Margin Analysis.Paths[Negative Margin 3]" endId="Package\Rebuild Margin Analysis\Insert Negative Margin Rows.Inputs[OLE DB Destination Input]" name="Negative Margin 3" startId="Package\Rebuild Margin Analysis\Route Margin Rows.Outputs[Negative Margin]" />
+          <path refId="Package\Rebuild Margin Analysis.Paths[Missing Standard Cost 4]" endId="Package\Rebuild Margin Analysis\Reject Missing Standard Cost.Inputs[OLE DB Destination Input]" name="Missing Standard Cost 4" startId="Package\Rebuild Margin Analysis\Route Margin Rows.Outputs[Missing Standard Cost]" />
+          <path refId="Package\Rebuild Margin Analysis.Paths[OLE DB Source Error Output 5]" endId="Package\Rebuild Margin Analysis\Reject Source Errors.Inputs[OLE DB Destination Input]" name="OLE DB Source Error Output 5" startId="Package\Rebuild Margin Analysis\Fact Sale Margin Period.Outputs[OLE DB Source Error Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Apportion Purchase Price Variance"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{A7013292-0CC9-83B5-DFC8-CB7A0B951F2F}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Apportion Purchase Price Variance"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="EXEC Integration.RefreshAggregateMarginAnalysis @AccountingPeriodCode = ?, @ApportionVariance = 1, @LineageKey = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::AccountingPeriodCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Assert Reconciliation"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{939B1D95-86D0-C868-493E-496DC475519B}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Assert Reconciliation"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_AssertRowCountReconciliation @PackageExecutionId = ?, @ObjectName = N'Aggregate.Monthly Margin Analysis', @ExpectedRowCount = ?, @ActualRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Rejected Records"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F451B37A-2258-F381-3E92-62232E0A51C1}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Rejected Records"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @ObjectName = N'Aggregate.Monthly Margin Analysis', @RejectReason = N'Aggregate row failed the summary quality gate', @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Aggregate.Monthly Margin Analysis', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Refresh Period"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Delete Period Rows" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Delete Period Rows"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Rebuild Margin Analysis" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Rebuild Margin Analysis"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Apportion Purchase Price Variance" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Apportion Purchase Price Variance"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Assert Reconciliation" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Assert Reconciliation"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Rejected Records" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Log Rejected Records"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{3E892574-6610-16E1-6B7E-82FAD04B25AC}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

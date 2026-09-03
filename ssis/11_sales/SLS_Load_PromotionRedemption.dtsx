@@ -1,0 +1,816 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{E373B6A5-9FD2-9FBE-7C9E-EADA279AC424}"
+  DTS:Description="Attributes promotion redemptions to promotions and refreshes the promotion effectiveness aggregate. Redemptions outside the region's attribution window are counted as spill and reported separately so marketing cannot claim them, and over-budget promotions are flagged for the commercial review."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="SLS_Load_PromotionRedemption"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{841D8227-965F-3FC9-4B86-62CFE5F1C792}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{ECBE6AD7-346D-AED4-0FDD-2225461F762E}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{3913FF24-EB4D-F0D2-3EE5-33802D43913E}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{C77C3673-4136-084C-0006-5B2897615B6E}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{AD416598-F9E7-C112-5C2F-635B2C5DFD13}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWIOLTP</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::AttributionMode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="REGIONAL uses the per-region window; STRICT uses the promotion window only."
+      DTS:DTSID="{C1CDF320-72C9-360F-A937-1370897491DA}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="AttributionMode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">REGIONAL</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{A2F3B57D-AB52-65C1-71DD-4C2159BA5E67}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{5376EB00-EF14-6045-9485-E217C53DE177}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{E3566C30-C321-8A23-0CD4-FA5D81CFA732}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{FAE18579-E65F-97B1-A6F3-9980B38AA147}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{6FBCD239-59DB-5402-1682-23199F7CA61C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{457F996A-7B41-0D23-D925-BD8F16CA0ABF}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{286AFB19-4C13-70A7-3EBB-C1055DE031BA}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B7EEE04-1AAA-7375-57EC-3EFF9B1C7024}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::SpillRedemptionCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{EF0AB335-291A-4B34-DE8C-2A359F364C29}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="SpillRedemptionCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::OverBudgetPromotionCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{A1013A9C-8255-D4DF-1D54-DF8C7C39961F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="OverBudgetPromotionCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Truncate work.PromotionRedemption"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{87B85F8D-E4D3-40A3-B22E-8BE03115E843}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Truncate work.PromotionRedemption"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE work.PromotionRedemption;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Attribute Redemptions"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{FD1DB789-5BD5-5854-CCEC-13FCC9A71063}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Attribute Redemptions"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Attribute Redemptions\stg Promotion Redemptions" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="stg Promotion Redemptions" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">1200</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT  p.PromotionId
+,       p.PromotionCode
+,       p.PromotionName
+,       p.RegionCode
+,       p.StartDate
+,       p.EndDate
+,       p.DiscountTypeCode
+,       p.DiscountValue
+,       p.BudgetAmount
+,       r.SaleLineId
+,       r.InvoiceDate
+,       r.CustomerId
+,       r.StockItemId
+,       r.RedeemedAmount
+,       r.RedemptionChannelCode
+        /* Attribution window differs by region: NA gives credit for 30 days
+           after the promotion ends, EU only within the promotion window
+           because of consumer-protection rules, APAC for 14 days. */
+,       CASE p.RegionCode
+            WHEN 'NA'   THEN DATEADD(DAY, 30, p.EndDate)
+            WHEN 'APAC' THEN DATEADD(DAY, 14, p.EndDate)
+            ELSE p.EndDate
+        END                                             AS AttributionEndDate
+FROM    stg.Promotion AS p
+INNER JOIN stg.PromotionRedemption AS r
+        ON  r.PromotionId = p.PromotionId
+WHERE   p.LoadBatchId = ?</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Attribute Redemptions\stg Promotion Redemptions.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[PromotionId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[PromotionId]" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[PromotionId]" name="PromotionId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[PromotionCode]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[PromotionCode]" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[PromotionCode]" name="PromotionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[PromotionName]" dataType="wstr" length="100" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[PromotionName]" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[PromotionName]" name="PromotionName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[StartDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[StartDate]" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[StartDate]" name="StartDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[EndDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[EndDate]" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[EndDate]" name="EndDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[DiscountTypeCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[DiscountTypeCode]" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[DiscountTypeCode]" name="DiscountTypeCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[DiscountValue]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[DiscountValue]" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[DiscountValue]" name="DiscountValue" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[BudgetAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[BudgetAmount]" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[BudgetAmount]" name="BudgetAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[SaleLineId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[SaleLineId]" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[SaleLineId]" name="SaleLineId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[InvoiceDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[InvoiceDate]" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[InvoiceDate]" name="InvoiceDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[CustomerId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[CustomerId]" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[CustomerId]" name="CustomerId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[StockItemId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[StockItemId]" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[StockItemId]" name="StockItemId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[RedeemedAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[RedeemedAmount]" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[RedeemedAmount]" name="RedeemedAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[RedemptionChannelCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[RedemptionChannelCode]" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[RedemptionChannelCode]" name="RedemptionChannelCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[AttributionEndDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[AttributionEndDate]" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].Columns[AttributionEndDate]" name="AttributionEndDate" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[PromotionId]" dataType="i4" name="PromotionId" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[PromotionCode]" dataType="wstr" length="20" name="PromotionCode" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[PromotionName]" dataType="wstr" length="100" name="PromotionName" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[StartDate]" dataType="dbTimeStamp" name="StartDate" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[EndDate]" dataType="dbTimeStamp" name="EndDate" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[DiscountTypeCode]" dataType="wstr" length="10" name="DiscountTypeCode" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[DiscountValue]" dataType="numeric" precision="18" scale="2" name="DiscountValue" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[BudgetAmount]" dataType="numeric" precision="18" scale="2" name="BudgetAmount" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[SaleLineId]" dataType="i4" name="SaleLineId" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[InvoiceDate]" dataType="dbTimeStamp" name="InvoiceDate" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[CustomerId]" dataType="i4" name="CustomerId" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[StockItemId]" dataType="i4" name="StockItemId" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[RedeemedAmount]" dataType="numeric" precision="18" scale="2" name="RedeemedAmount" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[RedemptionChannelCode]" dataType="wstr" length="10" name="RedemptionChannelCode" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output].ExternalColumns[AttributionEndDate]" dataType="dbTimeStamp" name="AttributionEndDate" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[PromotionId]" dataType="i4" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[PromotionId]" name="PromotionId" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[PromotionCode]" dataType="wstr" length="20" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[PromotionCode]" name="PromotionCode" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[PromotionName]" dataType="wstr" length="100" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[PromotionName]" name="PromotionName" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[StartDate]" dataType="dbTimeStamp" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[StartDate]" name="StartDate" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[EndDate]" dataType="dbTimeStamp" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[EndDate]" name="EndDate" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[DiscountTypeCode]" dataType="wstr" length="10" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[DiscountTypeCode]" name="DiscountTypeCode" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[DiscountValue]" dataType="numeric" precision="18" scale="2" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[DiscountValue]" name="DiscountValue" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[BudgetAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[BudgetAmount]" name="BudgetAmount" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[SaleLineId]" dataType="i4" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[SaleLineId]" name="SaleLineId" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[InvoiceDate]" dataType="dbTimeStamp" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[InvoiceDate]" name="InvoiceDate" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[CustomerId]" dataType="i4" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[CustomerId]" name="CustomerId" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[StockItemId]" dataType="i4" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[StockItemId]" name="StockItemId" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[RedeemedAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[RedeemedAmount]" name="RedeemedAmount" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[RedemptionChannelCode]" dataType="wstr" length="10" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[RedemptionChannelCode]" name="RedemptionChannelCode" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[AttributionEndDate]" dataType="dbTimeStamp" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[AttributionEndDate]" name="AttributionEndDate" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Attribute Redemptions\Classify Attribution" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Classify Attribution" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Attribute Redemptions\Classify Attribution.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Attribute Redemptions\Classify Attribution.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Attribute Redemptions\Classify Attribution.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Attribute Redemptions\Classify Attribution.Outputs[Derived Column Output].Columns[IsInWindow]" dataType="bool" lineageId="Package\Attribute Redemptions\Classify Attribution.Outputs[Derived Column Output].Columns[IsInWindow]" name="IsInWindow">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">InvoiceDate &gt;= StartDate &amp;&amp; InvoiceDate &lt;= (@[$Package::AttributionMode] == "STRICT" ? EndDate : AttributionEndDate) ? (DT_BOOL)1 : (DT_BOOL)0</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">InvoiceDate &gt;= StartDate &amp;&amp; InvoiceDate &lt;= (@[$Package::AttributionMode] == "STRICT" ? EndDate : AttributionEndDate) ? (DT_BOOL)1 : (DT_BOOL)0</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Attribute Redemptions\Classify Attribution.Outputs[Derived Column Output].Columns[DiscountCostAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Attribute Redemptions\Classify Attribution.Outputs[Derived Column Output].Columns[DiscountCostAmount]" name="DiscountCostAmount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">DiscountTypeCode == "PCT" ? RedeemedAmount * DiscountValue / 100 : DiscountValue</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">DiscountTypeCode == "PCT" ? RedeemedAmount * DiscountValue / 100 : DiscountValue</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Attribute Redemptions\Split Spill" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Split Spill" version="1">
+            <inputs>
+              <input refId="Package\Attribute Redemptions\Split Spill.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Attribute Redemptions\Split Spill.Outputs[Attributed]" exclusionGroup="1" name="Attributed" synchronousInputId="Package\Attribute Redemptions\Split Spill.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">IsInWindow == (DT_BOOL)1</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">IsInWindow == (DT_BOOL)1</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Attribute Redemptions\Split Spill.Outputs[Spill]" exclusionGroup="1" name="Spill" synchronousInputId="Package\Attribute Redemptions\Split Spill.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">IsInWindow == (DT_BOOL)0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">IsInWindow == (DT_BOOL)0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Attribute Redemptions\Split Spill.Outputs[Default]" exclusionGroup="1" isDefaultOut="true" name="Default" synchronousInputId="Package\Attribute Redemptions\Split Spill.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Attribute Redemptions\Summarise Promotion" componentClassID="Microsoft.Aggregate" description="Aggregate" name="Summarise Promotion" version="1">
+            <inputs>
+              <input refId="Package\Attribute Redemptions\Summarise Promotion.Inputs[Aggregate Input 1]" name="Aggregate Input 1">
+                <inputColumns>
+                  <inputColumn refId="Package\Attribute Redemptions\Summarise Promotion.Inputs[Aggregate Input 1].Columns[PromotionId]" cachedName="PromotionId" name="PromotionId">
+                    <properties>
+                      <property dataType="System.Int32" description="Group by." name="AggregationType">0</property>
+                    </properties>
+                  </inputColumn>
+                  <inputColumn refId="Package\Attribute Redemptions\Summarise Promotion.Inputs[Aggregate Input 1].Columns[PromotionCode]" cachedName="PromotionCode" name="PromotionCode">
+                    <properties>
+                      <property dataType="System.Int32" description="Group by." name="AggregationType">0</property>
+                    </properties>
+                  </inputColumn>
+                  <inputColumn refId="Package\Attribute Redemptions\Summarise Promotion.Inputs[Aggregate Input 1].Columns[RegionCode]" cachedName="RegionCode" name="RegionCode">
+                    <properties>
+                      <property dataType="System.Int32" description="Group by." name="AggregationType">0</property>
+                    </properties>
+                  </inputColumn>
+                  <inputColumn refId="Package\Attribute Redemptions\Summarise Promotion.Inputs[Aggregate Input 1].Columns[RedeemedAmount]" cachedName="RedeemedAmount" name="RedeemedAmount">
+                    <properties>
+                      <property dataType="System.Int32" description="SUM" name="AggregationType">1</property>
+                      <property dataType="System.String" description="Output column." name="AggregationColumnName">RedeemedAmount</property>
+                    </properties>
+                  </inputColumn>
+                  <inputColumn refId="Package\Attribute Redemptions\Summarise Promotion.Inputs[Aggregate Input 1].Columns[DiscountCostAmount]" cachedName="DiscountCostAmount" name="DiscountCostAmount">
+                    <properties>
+                      <property dataType="System.Int32" description="SUM" name="AggregationType">1</property>
+                      <property dataType="System.String" description="Output column." name="AggregationColumnName">DiscountCostAmount</property>
+                    </properties>
+                  </inputColumn>
+                  <inputColumn refId="Package\Attribute Redemptions\Summarise Promotion.Inputs[Aggregate Input 1].Columns[SaleLineId]" cachedName="SaleLineId" name="SaleLineId">
+                    <properties>
+                      <property dataType="System.Int32" description="COUNT" name="AggregationType">1</property>
+                      <property dataType="System.String" description="Output column." name="AggregationColumnName">RedemptionCount</property>
+                    </properties>
+                  </inputColumn>
+                  <inputColumn refId="Package\Attribute Redemptions\Summarise Promotion.Inputs[Aggregate Input 1].Columns[CustomerId]" cachedName="CustomerId" name="CustomerId">
+                    <properties>
+                      <property dataType="System.Int32" description="COUNTDISTINCT" name="AggregationType">1</property>
+                      <property dataType="System.String" description="Output column." name="AggregationColumnName">RedeemingCustomerCount</property>
+                    </properties>
+                  </inputColumn>
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Attribute Redemptions\Summarise Promotion.Outputs[Aggregate Output 1]" name="Aggregate Output 1" />
+            </outputs>
+          </component>
+          <component refId="Package\Attribute Redemptions\Count Promotion Rows" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Promotion Rows" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsInserted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Attribute Redemptions\Count Promotion Rows.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Attribute Redemptions\Count Promotion Rows.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Attribute Redemptions\Count Promotion Rows.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Aggregate Promotion Effectiveness" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Aggregate].[Promotion Effectiveness]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].Columns[PromotionId]" cachedDataType="i4" cachedName="PromotionId" externalMetadataColumnId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[PromotionId]" name="PromotionId" />
+                  <inputColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].Columns[PromotionCode]" cachedDataType="wstr" cachedLength="20" cachedName="PromotionCode" externalMetadataColumnId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[PromotionCode]" name="PromotionCode" />
+                  <inputColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].Columns[PromotionName]" cachedDataType="wstr" cachedLength="100" cachedName="PromotionName" externalMetadataColumnId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[PromotionName]" name="PromotionName" />
+                  <inputColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].Columns[StartDate]" cachedDataType="dbTimeStamp" cachedName="StartDate" externalMetadataColumnId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[StartDate]" name="StartDate" />
+                  <inputColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].Columns[EndDate]" cachedDataType="dbTimeStamp" cachedName="EndDate" externalMetadataColumnId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[EndDate]" name="EndDate" />
+                  <inputColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].Columns[DiscountTypeCode]" cachedDataType="wstr" cachedLength="10" cachedName="DiscountTypeCode" externalMetadataColumnId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[DiscountTypeCode]" name="DiscountTypeCode" />
+                  <inputColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].Columns[DiscountValue]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DiscountValue" externalMetadataColumnId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[DiscountValue]" name="DiscountValue" />
+                  <inputColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].Columns[BudgetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="BudgetAmount" externalMetadataColumnId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[BudgetAmount]" name="BudgetAmount" />
+                  <inputColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].Columns[SaleLineId]" cachedDataType="i4" cachedName="SaleLineId" externalMetadataColumnId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[SaleLineId]" name="SaleLineId" />
+                  <inputColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].Columns[InvoiceDate]" cachedDataType="dbTimeStamp" cachedName="InvoiceDate" externalMetadataColumnId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceDate]" name="InvoiceDate" />
+                  <inputColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].Columns[CustomerId]" cachedDataType="i4" cachedName="CustomerId" externalMetadataColumnId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[CustomerId]" name="CustomerId" />
+                  <inputColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].Columns[StockItemId]" cachedDataType="i4" cachedName="StockItemId" externalMetadataColumnId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" name="StockItemId" />
+                  <inputColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].Columns[RedeemedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="RedeemedAmount" externalMetadataColumnId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[RedeemedAmount]" name="RedeemedAmount" />
+                  <inputColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].Columns[RedemptionChannelCode]" cachedDataType="wstr" cachedLength="10" cachedName="RedemptionChannelCode" externalMetadataColumnId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionChannelCode]" name="RedemptionChannelCode" />
+                  <inputColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].Columns[AttributionEndDate]" cachedDataType="dbTimeStamp" cachedName="AttributionEndDate" externalMetadataColumnId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[AttributionEndDate]" name="AttributionEndDate" />
+                  <inputColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].Columns[IsInWindow]" cachedDataType="bool" cachedName="IsInWindow" externalMetadataColumnId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[IsInWindow]" name="IsInWindow" />
+                  <inputColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].Columns[DiscountCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DiscountCostAmount" externalMetadataColumnId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[DiscountCostAmount]" name="DiscountCostAmount" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[PromotionId]" dataType="i4" name="PromotionId" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[PromotionCode]" dataType="wstr" length="20" name="PromotionCode" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[PromotionName]" dataType="wstr" length="100" name="PromotionName" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[StartDate]" dataType="dbTimeStamp" name="StartDate" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[EndDate]" dataType="dbTimeStamp" name="EndDate" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[DiscountTypeCode]" dataType="wstr" length="10" name="DiscountTypeCode" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[DiscountValue]" dataType="numeric" precision="18" scale="2" name="DiscountValue" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[BudgetAmount]" dataType="numeric" precision="18" scale="2" name="BudgetAmount" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[SaleLineId]" dataType="i4" name="SaleLineId" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceDate]" dataType="dbTimeStamp" name="InvoiceDate" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[CustomerId]" dataType="i4" name="CustomerId" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" dataType="i4" name="StockItemId" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[RedeemedAmount]" dataType="numeric" precision="18" scale="2" name="RedeemedAmount" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionChannelCode]" dataType="wstr" length="10" name="RedemptionChannelCode" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[AttributionEndDate]" dataType="dbTimeStamp" name="AttributionEndDate" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[IsInWindow]" dataType="bool" name="IsInWindow" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input].ExternalColumns[DiscountCostAmount]" dataType="numeric" precision="18" scale="2" name="DiscountCostAmount" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Attribute Redemptions\work PromotionSpill" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="work PromotionSpill" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[PromotionSpill]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Attribute Redemptions\work PromotionSpill.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].Columns[PromotionId]" cachedDataType="i4" cachedName="PromotionId" externalMetadataColumnId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[PromotionId]" name="PromotionId" />
+                  <inputColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].Columns[PromotionCode]" cachedDataType="wstr" cachedLength="20" cachedName="PromotionCode" externalMetadataColumnId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[PromotionCode]" name="PromotionCode" />
+                  <inputColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].Columns[PromotionName]" cachedDataType="wstr" cachedLength="100" cachedName="PromotionName" externalMetadataColumnId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[PromotionName]" name="PromotionName" />
+                  <inputColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].Columns[StartDate]" cachedDataType="dbTimeStamp" cachedName="StartDate" externalMetadataColumnId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[StartDate]" name="StartDate" />
+                  <inputColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].Columns[EndDate]" cachedDataType="dbTimeStamp" cachedName="EndDate" externalMetadataColumnId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[EndDate]" name="EndDate" />
+                  <inputColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].Columns[DiscountTypeCode]" cachedDataType="wstr" cachedLength="10" cachedName="DiscountTypeCode" externalMetadataColumnId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[DiscountTypeCode]" name="DiscountTypeCode" />
+                  <inputColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].Columns[DiscountValue]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DiscountValue" externalMetadataColumnId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[DiscountValue]" name="DiscountValue" />
+                  <inputColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].Columns[BudgetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="BudgetAmount" externalMetadataColumnId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[BudgetAmount]" name="BudgetAmount" />
+                  <inputColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].Columns[SaleLineId]" cachedDataType="i4" cachedName="SaleLineId" externalMetadataColumnId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[SaleLineId]" name="SaleLineId" />
+                  <inputColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].Columns[InvoiceDate]" cachedDataType="dbTimeStamp" cachedName="InvoiceDate" externalMetadataColumnId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceDate]" name="InvoiceDate" />
+                  <inputColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].Columns[CustomerId]" cachedDataType="i4" cachedName="CustomerId" externalMetadataColumnId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[CustomerId]" name="CustomerId" />
+                  <inputColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].Columns[StockItemId]" cachedDataType="i4" cachedName="StockItemId" externalMetadataColumnId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" name="StockItemId" />
+                  <inputColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].Columns[RedeemedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="RedeemedAmount" externalMetadataColumnId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[RedeemedAmount]" name="RedeemedAmount" />
+                  <inputColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].Columns[RedemptionChannelCode]" cachedDataType="wstr" cachedLength="10" cachedName="RedemptionChannelCode" externalMetadataColumnId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionChannelCode]" name="RedemptionChannelCode" />
+                  <inputColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].Columns[AttributionEndDate]" cachedDataType="dbTimeStamp" cachedName="AttributionEndDate" externalMetadataColumnId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[AttributionEndDate]" name="AttributionEndDate" />
+                  <inputColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].Columns[IsInWindow]" cachedDataType="bool" cachedName="IsInWindow" externalMetadataColumnId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[IsInWindow]" name="IsInWindow" />
+                  <inputColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].Columns[DiscountCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DiscountCostAmount" externalMetadataColumnId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[DiscountCostAmount]" name="DiscountCostAmount" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[PromotionId]" dataType="i4" name="PromotionId" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[PromotionCode]" dataType="wstr" length="20" name="PromotionCode" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[PromotionName]" dataType="wstr" length="100" name="PromotionName" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[StartDate]" dataType="dbTimeStamp" name="StartDate" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[EndDate]" dataType="dbTimeStamp" name="EndDate" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[DiscountTypeCode]" dataType="wstr" length="10" name="DiscountTypeCode" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[DiscountValue]" dataType="numeric" precision="18" scale="2" name="DiscountValue" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[BudgetAmount]" dataType="numeric" precision="18" scale="2" name="BudgetAmount" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[SaleLineId]" dataType="i4" name="SaleLineId" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceDate]" dataType="dbTimeStamp" name="InvoiceDate" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[CustomerId]" dataType="i4" name="CustomerId" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" dataType="i4" name="StockItemId" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[RedeemedAmount]" dataType="numeric" precision="18" scale="2" name="RedeemedAmount" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionChannelCode]" dataType="wstr" length="10" name="RedemptionChannelCode" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[AttributionEndDate]" dataType="dbTimeStamp" name="AttributionEndDate" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[IsInWindow]" dataType="bool" name="IsInWindow" />
+                  <externalMetadataColumn refId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input].ExternalColumns[DiscountCostAmount]" dataType="numeric" precision="18" scale="2" name="DiscountCostAmount" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Attribute Redemptions\work PromotionSpill.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Attribute Redemptions.Paths[OLE DB Source Output]" endId="Package\Attribute Redemptions\Classify Attribution.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Attribute Redemptions\stg Promotion Redemptions.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Attribute Redemptions.Paths[Derived Column Output 1]" endId="Package\Attribute Redemptions\Split Spill.Inputs[Conditional Split Input]" name="Derived Column Output 1" startId="Package\Attribute Redemptions\Classify Attribution.Outputs[Derived Column Output]" />
+          <path refId="Package\Attribute Redemptions.Paths[Attributed 2]" endId="Package\Attribute Redemptions\Summarise Promotion.Inputs[Aggregate Input 1]" name="Attributed 2" startId="Package\Attribute Redemptions\Split Spill.Outputs[Attributed]" />
+          <path refId="Package\Attribute Redemptions.Paths[Aggregate Output 1 3]" endId="Package\Attribute Redemptions\Count Promotion Rows.Inputs[Row Count Input]" name="Aggregate Output 1 3" startId="Package\Attribute Redemptions\Summarise Promotion.Outputs[Aggregate Output 1]" />
+          <path refId="Package\Attribute Redemptions.Paths[Row Count Output 4]" endId="Package\Attribute Redemptions\Aggregate Promotion Effectiveness.Inputs[OLE DB Destination Input]" name="Row Count Output 4" startId="Package\Attribute Redemptions\Count Promotion Rows.Outputs[Row Count Output]" />
+          <path refId="Package\Attribute Redemptions.Paths[Spill 5]" endId="Package\Attribute Redemptions\work PromotionSpill.Inputs[OLE DB Destination Input]" name="Spill 5" startId="Package\Attribute Redemptions\Split Spill.Outputs[Spill]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Flag Over Budget Promotions"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{9F8AB3B6-1373-A4C8-BCDE-79241F588B22}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Flag Over Budget Promotions"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="UPDATE pe SET [Budget Status] = N'OVER' FROM Aggregate.[Promotion Effectiveness] AS pe INNER JOIN (SELECT PromotionId, BudgetAmount FROM stg.Promotion) AS b         ON b.PromotionId = pe.[Promotion ID] WHERE pe.[Discount Cost Amount] &gt; b.BudgetAmount;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Count Spill Redemptions"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{BE24844C-80EB-752A-9DD1-E5BD21768D9B}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Count Spill Redemptions"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="SELECT COUNT(*) AS SpillRedemptions FROM work.PromotionSpill;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::SpillRedemptionCount" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Aggregate.Promotion Effectiveness', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Truncate work.PromotionRedemption" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Truncate work.PromotionRedemption"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Attribute Redemptions" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Attribute Redemptions"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Flag Over Budget Promotions" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Flag Over Budget Promotions"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:Value="2"
+      DTS:To="Package\Count Spill Redemptions" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Count Spill Redemptions"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{CB83971D-14B6-7E8E-E445-7CBEB6DB5BB5}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

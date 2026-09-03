@@ -1,0 +1,946 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{06A3B7C3-4F08-C3BF-07B3-9FAA7885C05C}"
+  DTS:Description="Incremental product master extract joined to PRODUCT_CATEGORY and PRODUCT_UOM_CONV, converting Oracle NUMBER to the staging decimal scale and detecting obsoletions recorded in WWI_AUDIT.CHANGE_LOG."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="EXT_ORA_ProductMaster"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{438431E5-11DF-9E24-9260-8A79A69CEB24}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{92A81F54-B973-8503-A27E-F201798E59B5}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{C07C58A1-25BC-591B-E931-F759AF764ACB}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{D5121C5D-8B66-DBBB-774D-5CF5B18A0336}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{957BF01D-107F-194D-C8D1-24702AE15BBD}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">ORA_ERP</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Oracle_ERP]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{219914C8-6320-598D-C999-94A3821DDB9A}"
+      DTS:ObjectName="WWI_Oracle_ERP"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{DB5D17C1-7AAB-C5A4-6845-41FF9FAE1EDC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{45B9AC17-BC75-E3E2-B5E1-BB934F93610F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{3756A385-8D8E-D84C-6C71-B6CAC3005019}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{85C118D5-F63F-8306-AB78-1F6D7B4BBC8C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{4444944F-7B5C-8EE5-197B-F58520320187}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{734300F3-949D-350D-8D27-B4A4032E95D3}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{1BFEEAAC-8E98-35D8-E7A3-C366EE2CC152}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{2355F7A4-6A92-BFDF-EF12-4A0AD0FC6D23}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsDeleted]"
+      DTS:CreationName=""
+      DTS:DTSID="{4199B958-3F34-EFD5-82FD-77BFD4FA6D32}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsDeleted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Batch Variables"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{647AE7A9-EE4E-0DAF-FBD6-04CEA9DB74E4}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Batch Variables"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::RowsDeleted] = 0" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Get Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{AD8AAA26-E475-7A7A-5321-BEF0685AEC15}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Get Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_GetWatermark @SourceSystemCode = ?, @ObjectName = ?, @ReloadFullHistory = ?, @WatermarkFrom = ? OUTPUT, @WatermarkTo = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::ReloadFullHistory" SQLTask:ParameterDirection="Input" SQLTask:DataType="BYTE" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::WatermarkFrom" />
+        <SQLTask:ResultBinding SQLTask:ResultName="1" SQLTask:DtsVariableName="User::WatermarkTo" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Extract Product Master"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{1B0BB163-69FC-282C-C605-018443553762}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Extract Product Master"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Extract Product Master\ORA PRODUCT_MASTER" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="ORA PRODUCT_MASTER" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">1800</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT  p.PRODUCT_ID,
+        p.PRODUCT_CD,
+        p.PRODUCT_DESC,
+        c.CATEGORY_CD,
+        c.CATEGORY_DESC,
+        p.BRAND_CD,
+        WWI_MDM.FN_PRODUCT_ACTIVE_FLAG(p.PRODUCT_ID)    AS PRODUCT_STATUS_CD,
+        p.BASE_UOM_CD,
+        u.SELL_UOM_CD,
+        u.CONVERSION_FACTOR                             AS SELL_TO_BASE_FACTOR,
+        p.STANDARD_COST_AMT,
+        p.LIST_PRICE_AMT,
+        p.COST_CURRENCY_CD,
+        p.HAZMAT_CLASS_CD,
+        p.CHILLER_FLG,
+        p.SHELF_LIFE_DAYS,
+        p.LAST_UPDATE_DT
+FROM    WWI_MDM.PRODUCT_MASTER p
+        INNER JOIN WWI_MDM.PRODUCT_CATEGORY c
+            ON c.CATEGORY_CD = p.CATEGORY_CD
+        LEFT OUTER JOIN WWI_MDM.PRODUCT_UOM_CONV u
+            ON u.PRODUCT_ID = p.PRODUCT_ID
+           AND u.DEFAULT_SELL_FLG = 'Y'
+WHERE   p.LAST_UPDATE_DT &gt;= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')
+  AND   p.LAST_UPDATE_DT &lt;  TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Connections[OleDbConnection]" connectionManagerID="{219914C8-6320-598D-C999-94A3821DDB9A}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Oracle_ERP]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[PRODUCT_ID]" dataType="numeric" precision="12" scale="0" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[PRODUCT_ID]" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[PRODUCT_ID]" name="PRODUCT_ID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[PRODUCT_CD]" dataType="wstr" length="30" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[PRODUCT_CD]" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[PRODUCT_CD]" name="PRODUCT_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[PRODUCT_DESC]" dataType="wstr" length="200" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[PRODUCT_DESC]" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[PRODUCT_DESC]" name="PRODUCT_DESC" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[CATEGORY_CD]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CATEGORY_CD]" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[CATEGORY_CD]" name="CATEGORY_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[CATEGORY_DESC]" dataType="wstr" length="100" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CATEGORY_DESC]" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[CATEGORY_DESC]" name="CATEGORY_DESC" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[BRAND_CD]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[BRAND_CD]" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[BRAND_CD]" name="BRAND_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[PRODUCT_STATUS_CD]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[PRODUCT_STATUS_CD]" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[PRODUCT_STATUS_CD]" name="PRODUCT_STATUS_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[BASE_UOM_CD]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[BASE_UOM_CD]" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[BASE_UOM_CD]" name="BASE_UOM_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[SELL_UOM_CD]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[SELL_UOM_CD]" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[SELL_UOM_CD]" name="SELL_UOM_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[SELL_TO_BASE_FACTOR]" dataType="numeric" precision="18" scale="6" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[SELL_TO_BASE_FACTOR]" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[SELL_TO_BASE_FACTOR]" name="SELL_TO_BASE_FACTOR" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[STANDARD_COST_AMT]" dataType="numeric" precision="18" scale="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[STANDARD_COST_AMT]" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[STANDARD_COST_AMT]" name="STANDARD_COST_AMT" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[LIST_PRICE_AMT]" dataType="numeric" precision="18" scale="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[LIST_PRICE_AMT]" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[LIST_PRICE_AMT]" name="LIST_PRICE_AMT" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[COST_CURRENCY_CD]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[COST_CURRENCY_CD]" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[COST_CURRENCY_CD]" name="COST_CURRENCY_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[HAZMAT_CLASS_CD]" dataType="wstr" length="6" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[HAZMAT_CLASS_CD]" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[HAZMAT_CLASS_CD]" name="HAZMAT_CLASS_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[CHILLER_FLG]" dataType="wstr" length="1" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CHILLER_FLG]" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[CHILLER_FLG]" name="CHILLER_FLG" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[SHELF_LIFE_DAYS]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[SHELF_LIFE_DAYS]" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[SHELF_LIFE_DAYS]" name="SHELF_LIFE_DAYS" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[LAST_UPDATE_DT]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[LAST_UPDATE_DT]" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].Columns[LAST_UPDATE_DT]" name="LAST_UPDATE_DT" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[PRODUCT_ID]" dataType="numeric" precision="12" scale="0" name="PRODUCT_ID" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[PRODUCT_CD]" dataType="wstr" length="30" name="PRODUCT_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[PRODUCT_DESC]" dataType="wstr" length="200" name="PRODUCT_DESC" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CATEGORY_CD]" dataType="wstr" length="12" name="CATEGORY_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CATEGORY_DESC]" dataType="wstr" length="100" name="CATEGORY_DESC" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[BRAND_CD]" dataType="wstr" length="10" name="BRAND_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[PRODUCT_STATUS_CD]" dataType="wstr" length="4" name="PRODUCT_STATUS_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[BASE_UOM_CD]" dataType="wstr" length="4" name="BASE_UOM_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[SELL_UOM_CD]" dataType="wstr" length="4" name="SELL_UOM_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[SELL_TO_BASE_FACTOR]" dataType="numeric" precision="18" scale="6" name="SELL_TO_BASE_FACTOR" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[STANDARD_COST_AMT]" dataType="numeric" precision="18" scale="4" name="STANDARD_COST_AMT" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[LIST_PRICE_AMT]" dataType="numeric" precision="18" scale="4" name="LIST_PRICE_AMT" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[COST_CURRENCY_CD]" dataType="wstr" length="3" name="COST_CURRENCY_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[HAZMAT_CLASS_CD]" dataType="wstr" length="6" name="HAZMAT_CLASS_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[CHILLER_FLG]" dataType="wstr" length="1" name="CHILLER_FLG" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[SHELF_LIFE_DAYS]" dataType="i4" name="SHELF_LIFE_DAYS" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output].ExternalColumns[LAST_UPDATE_DT]" dataType="dbTimeStamp" name="LAST_UPDATE_DT" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[PRODUCT_ID]" dataType="numeric" precision="12" scale="0" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[PRODUCT_ID]" name="PRODUCT_ID" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[PRODUCT_CD]" dataType="wstr" length="30" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[PRODUCT_CD]" name="PRODUCT_CD" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[PRODUCT_DESC]" dataType="wstr" length="200" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[PRODUCT_DESC]" name="PRODUCT_DESC" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[CATEGORY_CD]" dataType="wstr" length="12" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[CATEGORY_CD]" name="CATEGORY_CD" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[CATEGORY_DESC]" dataType="wstr" length="100" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[CATEGORY_DESC]" name="CATEGORY_DESC" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[BRAND_CD]" dataType="wstr" length="10" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[BRAND_CD]" name="BRAND_CD" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[PRODUCT_STATUS_CD]" dataType="wstr" length="4" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[PRODUCT_STATUS_CD]" name="PRODUCT_STATUS_CD" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[BASE_UOM_CD]" dataType="wstr" length="4" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[BASE_UOM_CD]" name="BASE_UOM_CD" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[SELL_UOM_CD]" dataType="wstr" length="4" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[SELL_UOM_CD]" name="SELL_UOM_CD" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[SELL_TO_BASE_FACTOR]" dataType="numeric" precision="18" scale="6" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[SELL_TO_BASE_FACTOR]" name="SELL_TO_BASE_FACTOR" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[STANDARD_COST_AMT]" dataType="numeric" precision="18" scale="4" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[STANDARD_COST_AMT]" name="STANDARD_COST_AMT" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[LIST_PRICE_AMT]" dataType="numeric" precision="18" scale="4" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[LIST_PRICE_AMT]" name="LIST_PRICE_AMT" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[COST_CURRENCY_CD]" dataType="wstr" length="3" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[COST_CURRENCY_CD]" name="COST_CURRENCY_CD" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[HAZMAT_CLASS_CD]" dataType="wstr" length="6" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[HAZMAT_CLASS_CD]" name="HAZMAT_CLASS_CD" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[CHILLER_FLG]" dataType="wstr" length="1" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[CHILLER_FLG]" name="CHILLER_FLG" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[SHELF_LIFE_DAYS]" dataType="i4" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[SHELF_LIFE_DAYS]" name="SHELF_LIFE_DAYS" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[LAST_UPDATE_DT]" dataType="dbTimeStamp" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[LAST_UPDATE_DT]" name="LAST_UPDATE_DT" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Extract Product Master\Convert ERP Numerics" componentClassID="Microsoft.DataConvert" description="Data Conversion" name="Convert ERP Numerics" version="1">
+            <inputs>
+              <input refId="Package\Extract Product Master\Convert ERP Numerics.Inputs[Data Conversion Input]" name="Data Conversion Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Extract Product Master\Convert ERP Numerics.Inputs[Data Conversion Input].Columns[STANDARD_COST_AMT]" cachedName="STANDARD_COST_AMT" name="STANDARD_COST_AMT" />
+                  <inputColumn refId="Package\Extract Product Master\Convert ERP Numerics.Inputs[Data Conversion Input].Columns[LIST_PRICE_AMT]" cachedName="LIST_PRICE_AMT" name="LIST_PRICE_AMT" />
+                  <inputColumn refId="Package\Extract Product Master\Convert ERP Numerics.Inputs[Data Conversion Input].Columns[SELL_TO_BASE_FACTOR]" cachedName="SELL_TO_BASE_FACTOR" name="SELL_TO_BASE_FACTOR" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Product Master\Convert ERP Numerics.Outputs[Data Conversion Output]" name="Data Conversion Output" synchronousInputId="Package\Extract Product Master\Convert ERP Numerics.Inputs[Data Conversion Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Product Master\Convert ERP Numerics.Outputs[Data Conversion Output].Columns[StandardCostAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Extract Product Master\Convert ERP Numerics.Outputs[Data Conversion Output].Columns[StandardCostAmount]" name="StandardCostAmount" sourceColumn="Package\Extract Product Master\Convert ERP Numerics.Inputs[Data Conversion Input].Columns[STANDARD_COST_AMT]" />
+                  <outputColumn refId="Package\Extract Product Master\Convert ERP Numerics.Outputs[Data Conversion Output].Columns[ListPriceAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Extract Product Master\Convert ERP Numerics.Outputs[Data Conversion Output].Columns[ListPriceAmount]" name="ListPriceAmount" sourceColumn="Package\Extract Product Master\Convert ERP Numerics.Inputs[Data Conversion Input].Columns[LIST_PRICE_AMT]" />
+                  <outputColumn refId="Package\Extract Product Master\Convert ERP Numerics.Outputs[Data Conversion Output].Columns[SellToBaseFactor]" dataType="numeric" precision="18" scale="6" lineageId="Package\Extract Product Master\Convert ERP Numerics.Outputs[Data Conversion Output].Columns[SellToBaseFactor]" name="SellToBaseFactor" sourceColumn="Package\Extract Product Master\Convert ERP Numerics.Inputs[Data Conversion Input].Columns[SELL_TO_BASE_FACTOR]" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Extract Product Master\Derive Handling Flags" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Handling Flags" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Extract Product Master\Derive Handling Flags.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Product Master\Derive Handling Flags.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Extract Product Master\Derive Handling Flags.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Product Master\Derive Handling Flags.Outputs[Derived Column Output].Columns[HandlingClass]" dataType="wstr" length="5" lineageId="Package\Extract Product Master\Derive Handling Flags.Outputs[Derived Column Output].Columns[HandlingClass]" name="HandlingClass">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">CHILLER_FLG == "Y" ? "CHILL" : (ISNULL(HAZMAT_CLASS_CD) ? "AMB" : "HAZ")</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">CHILLER_FLG == "Y" ? "CHILL" : (ISNULL(HAZMAT_CLASS_CD) ? "AMB" : "HAZ")</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Product Master\Derive Handling Flags.Outputs[Derived Column Output].Columns[DeleteFlag]" dataType="wstr" length="1" lineageId="Package\Extract Product Master\Derive Handling Flags.Outputs[Derived Column Output].Columns[DeleteFlag]" name="DeleteFlag">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"N"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"N"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Product Master\Derive Handling Flags.Outputs[Derived Column Output].Columns[SourceSystemCode]" dataType="wstr" length="20" lineageId="Package\Extract Product Master\Derive Handling Flags.Outputs[Derived Column Output].Columns[SourceSystemCode]" name="SourceSystemCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"ORA_ERP"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"ORA_ERP"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Product Master\Derive Handling Flags.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" dataType="dbTimeStamp" lineageId="Package\Extract Product Master\Derive Handling Flags.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" name="ExtractedAtUtc">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">GETUTCDATE()</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">GETUTCDATE()</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Product Master\Derive Handling Flags.Outputs[Derived Column Output].Columns[PackageExecutionId]" dataType="i8" lineageId="Package\Extract Product Master\Derive Handling Flags.Outputs[Derived Column Output].Columns[PackageExecutionId]" name="PackageExecutionId">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Extract Product Master\Count Products Read" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Products Read" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Extract Product Master\Count Products Read.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Product Master\Count Products Read.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Extract Product Master\Count Products Read.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Extract Product Master\raw OracleProductMaster" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="raw OracleProductMaster" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">raw.OracleProductMaster</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">40000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Extract Product Master\raw OracleProductMaster.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="RedirectRow" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[PRODUCT_ID]" cachedDataType="numeric" cachedPrecision="12" cachedScale="0" cachedName="PRODUCT_ID" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_ID]" name="PRODUCT_ID" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[PRODUCT_CD]" cachedDataType="wstr" cachedLength="30" cachedName="PRODUCT_CD" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_CD]" name="PRODUCT_CD" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[PRODUCT_DESC]" cachedDataType="wstr" cachedLength="200" cachedName="PRODUCT_DESC" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_DESC]" name="PRODUCT_DESC" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[CATEGORY_CD]" cachedDataType="wstr" cachedLength="12" cachedName="CATEGORY_CD" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[CATEGORY_CD]" name="CATEGORY_CD" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[CATEGORY_DESC]" cachedDataType="wstr" cachedLength="100" cachedName="CATEGORY_DESC" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[CATEGORY_DESC]" name="CATEGORY_DESC" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[BRAND_CD]" cachedDataType="wstr" cachedLength="10" cachedName="BRAND_CD" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[BRAND_CD]" name="BRAND_CD" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[PRODUCT_STATUS_CD]" cachedDataType="wstr" cachedLength="4" cachedName="PRODUCT_STATUS_CD" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_STATUS_CD]" name="PRODUCT_STATUS_CD" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[BASE_UOM_CD]" cachedDataType="wstr" cachedLength="4" cachedName="BASE_UOM_CD" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[BASE_UOM_CD]" name="BASE_UOM_CD" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[SELL_UOM_CD]" cachedDataType="wstr" cachedLength="4" cachedName="SELL_UOM_CD" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[SELL_UOM_CD]" name="SELL_UOM_CD" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[SELL_TO_BASE_FACTOR]" cachedDataType="numeric" cachedPrecision="18" cachedScale="6" cachedName="SELL_TO_BASE_FACTOR" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[SELL_TO_BASE_FACTOR]" name="SELL_TO_BASE_FACTOR" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[STANDARD_COST_AMT]" cachedDataType="numeric" cachedPrecision="18" cachedScale="4" cachedName="STANDARD_COST_AMT" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[STANDARD_COST_AMT]" name="STANDARD_COST_AMT" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[LIST_PRICE_AMT]" cachedDataType="numeric" cachedPrecision="18" cachedScale="4" cachedName="LIST_PRICE_AMT" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[LIST_PRICE_AMT]" name="LIST_PRICE_AMT" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[COST_CURRENCY_CD]" cachedDataType="wstr" cachedLength="3" cachedName="COST_CURRENCY_CD" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[COST_CURRENCY_CD]" name="COST_CURRENCY_CD" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[HAZMAT_CLASS_CD]" cachedDataType="wstr" cachedLength="6" cachedName="HAZMAT_CLASS_CD" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[HAZMAT_CLASS_CD]" name="HAZMAT_CLASS_CD" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[CHILLER_FLG]" cachedDataType="wstr" cachedLength="1" cachedName="CHILLER_FLG" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[CHILLER_FLG]" name="CHILLER_FLG" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[SHELF_LIFE_DAYS]" cachedDataType="i4" cachedName="SHELF_LIFE_DAYS" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[SHELF_LIFE_DAYS]" name="SHELF_LIFE_DAYS" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[LAST_UPDATE_DT]" cachedDataType="dbTimeStamp" cachedName="LAST_UPDATE_DT" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_DT]" name="LAST_UPDATE_DT" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[StandardCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="StandardCostAmount" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[StandardCostAmount]" name="StandardCostAmount" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[ListPriceAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ListPriceAmount" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[ListPriceAmount]" name="ListPriceAmount" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[SellToBaseFactor]" cachedDataType="numeric" cachedPrecision="18" cachedScale="6" cachedName="SellToBaseFactor" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[SellToBaseFactor]" name="SellToBaseFactor" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[HandlingClass]" cachedDataType="wstr" cachedLength="5" cachedName="HandlingClass" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[HandlingClass]" name="HandlingClass" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[DeleteFlag]" cachedDataType="wstr" cachedLength="1" cachedName="DeleteFlag" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" name="DeleteFlag" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                  <inputColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_ID]" dataType="numeric" precision="12" scale="0" name="PRODUCT_ID" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_CD]" dataType="wstr" length="30" name="PRODUCT_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_DESC]" dataType="wstr" length="200" name="PRODUCT_DESC" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[CATEGORY_CD]" dataType="wstr" length="12" name="CATEGORY_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[CATEGORY_DESC]" dataType="wstr" length="100" name="CATEGORY_DESC" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[BRAND_CD]" dataType="wstr" length="10" name="BRAND_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_STATUS_CD]" dataType="wstr" length="4" name="PRODUCT_STATUS_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[BASE_UOM_CD]" dataType="wstr" length="4" name="BASE_UOM_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[SELL_UOM_CD]" dataType="wstr" length="4" name="SELL_UOM_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[SELL_TO_BASE_FACTOR]" dataType="numeric" precision="18" scale="6" name="SELL_TO_BASE_FACTOR" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[STANDARD_COST_AMT]" dataType="numeric" precision="18" scale="4" name="STANDARD_COST_AMT" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[LIST_PRICE_AMT]" dataType="numeric" precision="18" scale="4" name="LIST_PRICE_AMT" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[COST_CURRENCY_CD]" dataType="wstr" length="3" name="COST_CURRENCY_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[HAZMAT_CLASS_CD]" dataType="wstr" length="6" name="HAZMAT_CLASS_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[CHILLER_FLG]" dataType="wstr" length="1" name="CHILLER_FLG" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[SHELF_LIFE_DAYS]" dataType="i4" name="SHELF_LIFE_DAYS" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_DT]" dataType="dbTimeStamp" name="LAST_UPDATE_DT" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[StandardCostAmount]" dataType="numeric" precision="18" scale="2" name="StandardCostAmount" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[ListPriceAmount]" dataType="numeric" precision="18" scale="2" name="ListPriceAmount" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[SellToBaseFactor]" dataType="numeric" precision="18" scale="6" name="SellToBaseFactor" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[HandlingClass]" dataType="wstr" length="5" name="HandlingClass" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" dataType="wstr" length="1" name="DeleteFlag" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Product Master\raw OracleProductMaster.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Extract Product Master\err RejectedProduct" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="err RejectedProduct" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">err.RejectedProduct</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Extract Product Master\err RejectedProduct.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[PRODUCT_ID]" cachedDataType="numeric" cachedPrecision="12" cachedScale="0" cachedName="PRODUCT_ID" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_ID]" name="PRODUCT_ID" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[PRODUCT_CD]" cachedDataType="wstr" cachedLength="30" cachedName="PRODUCT_CD" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_CD]" name="PRODUCT_CD" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[PRODUCT_DESC]" cachedDataType="wstr" cachedLength="200" cachedName="PRODUCT_DESC" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_DESC]" name="PRODUCT_DESC" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[CATEGORY_CD]" cachedDataType="wstr" cachedLength="12" cachedName="CATEGORY_CD" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[CATEGORY_CD]" name="CATEGORY_CD" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[CATEGORY_DESC]" cachedDataType="wstr" cachedLength="100" cachedName="CATEGORY_DESC" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[CATEGORY_DESC]" name="CATEGORY_DESC" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[BRAND_CD]" cachedDataType="wstr" cachedLength="10" cachedName="BRAND_CD" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[BRAND_CD]" name="BRAND_CD" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[PRODUCT_STATUS_CD]" cachedDataType="wstr" cachedLength="4" cachedName="PRODUCT_STATUS_CD" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_STATUS_CD]" name="PRODUCT_STATUS_CD" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[BASE_UOM_CD]" cachedDataType="wstr" cachedLength="4" cachedName="BASE_UOM_CD" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[BASE_UOM_CD]" name="BASE_UOM_CD" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[SELL_UOM_CD]" cachedDataType="wstr" cachedLength="4" cachedName="SELL_UOM_CD" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[SELL_UOM_CD]" name="SELL_UOM_CD" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[SELL_TO_BASE_FACTOR]" cachedDataType="numeric" cachedPrecision="18" cachedScale="6" cachedName="SELL_TO_BASE_FACTOR" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[SELL_TO_BASE_FACTOR]" name="SELL_TO_BASE_FACTOR" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[STANDARD_COST_AMT]" cachedDataType="numeric" cachedPrecision="18" cachedScale="4" cachedName="STANDARD_COST_AMT" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[STANDARD_COST_AMT]" name="STANDARD_COST_AMT" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[LIST_PRICE_AMT]" cachedDataType="numeric" cachedPrecision="18" cachedScale="4" cachedName="LIST_PRICE_AMT" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[LIST_PRICE_AMT]" name="LIST_PRICE_AMT" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[COST_CURRENCY_CD]" cachedDataType="wstr" cachedLength="3" cachedName="COST_CURRENCY_CD" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[COST_CURRENCY_CD]" name="COST_CURRENCY_CD" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[HAZMAT_CLASS_CD]" cachedDataType="wstr" cachedLength="6" cachedName="HAZMAT_CLASS_CD" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[HAZMAT_CLASS_CD]" name="HAZMAT_CLASS_CD" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[CHILLER_FLG]" cachedDataType="wstr" cachedLength="1" cachedName="CHILLER_FLG" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[CHILLER_FLG]" name="CHILLER_FLG" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[SHELF_LIFE_DAYS]" cachedDataType="i4" cachedName="SHELF_LIFE_DAYS" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[SHELF_LIFE_DAYS]" name="SHELF_LIFE_DAYS" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[LAST_UPDATE_DT]" cachedDataType="dbTimeStamp" cachedName="LAST_UPDATE_DT" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_DT]" name="LAST_UPDATE_DT" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[StandardCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="StandardCostAmount" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[StandardCostAmount]" name="StandardCostAmount" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[ListPriceAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ListPriceAmount" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[ListPriceAmount]" name="ListPriceAmount" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[SellToBaseFactor]" cachedDataType="numeric" cachedPrecision="18" cachedScale="6" cachedName="SellToBaseFactor" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[SellToBaseFactor]" name="SellToBaseFactor" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[HandlingClass]" cachedDataType="wstr" cachedLength="5" cachedName="HandlingClass" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[HandlingClass]" name="HandlingClass" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[DeleteFlag]" cachedDataType="wstr" cachedLength="1" cachedName="DeleteFlag" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" name="DeleteFlag" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                  <inputColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_ID]" dataType="numeric" precision="12" scale="0" name="PRODUCT_ID" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_CD]" dataType="wstr" length="30" name="PRODUCT_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_DESC]" dataType="wstr" length="200" name="PRODUCT_DESC" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[CATEGORY_CD]" dataType="wstr" length="12" name="CATEGORY_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[CATEGORY_DESC]" dataType="wstr" length="100" name="CATEGORY_DESC" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[BRAND_CD]" dataType="wstr" length="10" name="BRAND_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_STATUS_CD]" dataType="wstr" length="4" name="PRODUCT_STATUS_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[BASE_UOM_CD]" dataType="wstr" length="4" name="BASE_UOM_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[SELL_UOM_CD]" dataType="wstr" length="4" name="SELL_UOM_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[SELL_TO_BASE_FACTOR]" dataType="numeric" precision="18" scale="6" name="SELL_TO_BASE_FACTOR" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[STANDARD_COST_AMT]" dataType="numeric" precision="18" scale="4" name="STANDARD_COST_AMT" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[LIST_PRICE_AMT]" dataType="numeric" precision="18" scale="4" name="LIST_PRICE_AMT" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[COST_CURRENCY_CD]" dataType="wstr" length="3" name="COST_CURRENCY_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[HAZMAT_CLASS_CD]" dataType="wstr" length="6" name="HAZMAT_CLASS_CD" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[CHILLER_FLG]" dataType="wstr" length="1" name="CHILLER_FLG" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[SHELF_LIFE_DAYS]" dataType="i4" name="SHELF_LIFE_DAYS" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_DT]" dataType="dbTimeStamp" name="LAST_UPDATE_DT" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[StandardCostAmount]" dataType="numeric" precision="18" scale="2" name="StandardCostAmount" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[ListPriceAmount]" dataType="numeric" precision="18" scale="2" name="ListPriceAmount" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[SellToBaseFactor]" dataType="numeric" precision="18" scale="6" name="SellToBaseFactor" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[HandlingClass]" dataType="wstr" length="5" name="HandlingClass" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" dataType="wstr" length="1" name="DeleteFlag" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                  <externalMetadataColumn refId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Product Master\err RejectedProduct.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Extract Product Master.Paths[OLE DB Source Output]" endId="Package\Extract Product Master\Convert ERP Numerics.Inputs[Data Conversion Input]" name="OLE DB Source Output" startId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Extract Product Master.Paths[Data Conversion Output 1]" endId="Package\Extract Product Master\Derive Handling Flags.Inputs[Derived Column Input]" name="Data Conversion Output 1" startId="Package\Extract Product Master\Convert ERP Numerics.Outputs[Data Conversion Output]" />
+          <path refId="Package\Extract Product Master.Paths[Derived Column Output 2]" endId="Package\Extract Product Master\Count Products Read.Inputs[Row Count Input]" name="Derived Column Output 2" startId="Package\Extract Product Master\Derive Handling Flags.Outputs[Derived Column Output]" />
+          <path refId="Package\Extract Product Master.Paths[Row Count Output 3]" endId="Package\Extract Product Master\raw OracleProductMaster.Inputs[OLE DB Destination Input]" name="Row Count Output 3" startId="Package\Extract Product Master\Count Products Read.Outputs[Row Count Output]" />
+          <path refId="Package\Extract Product Master.Paths[OLE DB Source Error Output 4]" endId="Package\Extract Product Master\err RejectedProduct.Inputs[OLE DB Destination Input]" name="OLE DB Source Error Output 4" startId="Package\Extract Product Master\ORA PRODUCT_MASTER.Outputs[OLE DB Source Error Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Detect Obsoleted Products"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{015123C1-476F-3936-3766-0DEBC75D6750}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Detect Obsoleted Products"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="ORA CHANGE_LOG Product Deletes" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT  TO_NUMBER(cg.PRIMARY_KEY_VALUE) AS PRODUCT_ID,
+        cg.SECONDARY_KEY_VALUE          AS PRODUCT_CD,
+        cg.CHANGE_DT                    AS LAST_UPDATE_DT
+FROM    WWI_AUDIT.CHANGE_LOG cg
+WHERE   cg.TABLE_NAME = 'PRODUCT_MASTER'
+  AND   cg.OPERATION_CD IN ('D', 'O')
+  AND   cg.CHANGE_DT &gt;= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Connections[OleDbConnection]" connectionManagerID="{219914C8-6320-598D-C999-94A3821DDB9A}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Oracle_ERP]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Output].Columns[PRODUCT_ID]" dataType="numeric" precision="12" scale="0" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Output].ExternalColumns[PRODUCT_ID]" lineageId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Output].Columns[PRODUCT_ID]" name="PRODUCT_ID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Output].Columns[PRODUCT_CD]" dataType="wstr" length="30" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Output].ExternalColumns[PRODUCT_CD]" lineageId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Output].Columns[PRODUCT_CD]" name="PRODUCT_CD" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Output].Columns[LAST_UPDATE_DT]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Output].ExternalColumns[LAST_UPDATE_DT]" lineageId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Output].Columns[LAST_UPDATE_DT]" name="LAST_UPDATE_DT" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Output].ExternalColumns[PRODUCT_ID]" dataType="numeric" precision="12" scale="0" name="PRODUCT_ID" />
+                  <externalMetadataColumn refId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Output].ExternalColumns[PRODUCT_CD]" dataType="wstr" length="30" name="PRODUCT_CD" />
+                  <externalMetadataColumn refId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Output].ExternalColumns[LAST_UPDATE_DT]" dataType="dbTimeStamp" name="LAST_UPDATE_DT" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Error Output].Columns[PRODUCT_ID]" dataType="numeric" precision="12" scale="0" lineageId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Error Output].Columns[PRODUCT_ID]" name="PRODUCT_ID" />
+                  <outputColumn refId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Error Output].Columns[PRODUCT_CD]" dataType="wstr" length="30" lineageId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Error Output].Columns[PRODUCT_CD]" name="PRODUCT_CD" />
+                  <outputColumn refId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Error Output].Columns[LAST_UPDATE_DT]" dataType="dbTimeStamp" lineageId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Error Output].Columns[LAST_UPDATE_DT]" name="LAST_UPDATE_DT" />
+                  <outputColumn refId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Detect Obsoleted Products\Flag Obsoleted Rows" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Flag Obsoleted Rows" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Detect Obsoleted Products\Flag Obsoleted Rows.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Detect Obsoleted Products\Flag Obsoleted Rows.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Detect Obsoleted Products\Flag Obsoleted Rows.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Detect Obsoleted Products\Flag Obsoleted Rows.Outputs[Derived Column Output].Columns[SourceSystemCode]" dataType="wstr" length="20" lineageId="Package\Detect Obsoleted Products\Flag Obsoleted Rows.Outputs[Derived Column Output].Columns[SourceSystemCode]" name="SourceSystemCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"ORA_ERP"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"ORA_ERP"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Detect Obsoleted Products\Flag Obsoleted Rows.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" dataType="dbTimeStamp" lineageId="Package\Detect Obsoleted Products\Flag Obsoleted Rows.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" name="ExtractedAtUtc">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">GETUTCDATE()</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">GETUTCDATE()</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Detect Obsoleted Products\Flag Obsoleted Rows.Outputs[Derived Column Output].Columns[PackageExecutionId]" dataType="i8" lineageId="Package\Detect Obsoleted Products\Flag Obsoleted Rows.Outputs[Derived Column Output].Columns[PackageExecutionId]" name="PackageExecutionId">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Detect Obsoleted Products\Flag Obsoleted Rows.Outputs[Derived Column Output].Columns[DeleteFlag]" dataType="wstr" length="1" lineageId="Package\Detect Obsoleted Products\Flag Obsoleted Rows.Outputs[Derived Column Output].Columns[DeleteFlag]" name="DeleteFlag">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"Y"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"Y"</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Detect Obsoleted Products\Count Obsoleted Rows" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Obsoleted Rows" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsDeleted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Detect Obsoleted Products\Count Obsoleted Rows.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Detect Obsoleted Products\Count Obsoleted Rows.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Detect Obsoleted Products\Count Obsoleted Rows.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="raw OracleProductMaster Deletes" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">raw.OracleProductMaster</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">2000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].Columns[PRODUCT_ID]" cachedDataType="numeric" cachedPrecision="12" cachedScale="0" cachedName="PRODUCT_ID" externalMetadataColumnId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_ID]" name="PRODUCT_ID" />
+                  <inputColumn refId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].Columns[PRODUCT_CD]" cachedDataType="wstr" cachedLength="30" cachedName="PRODUCT_CD" externalMetadataColumnId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_CD]" name="PRODUCT_CD" />
+                  <inputColumn refId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].Columns[LAST_UPDATE_DT]" cachedDataType="dbTimeStamp" cachedName="LAST_UPDATE_DT" externalMetadataColumnId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_DT]" name="LAST_UPDATE_DT" />
+                  <inputColumn refId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                  <inputColumn refId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                  <inputColumn refId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                  <inputColumn refId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].Columns[DeleteFlag]" cachedDataType="wstr" cachedLength="1" cachedName="DeleteFlag" externalMetadataColumnId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" name="DeleteFlag" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_ID]" dataType="numeric" precision="12" scale="0" name="PRODUCT_ID" />
+                  <externalMetadataColumn refId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[PRODUCT_CD]" dataType="wstr" length="30" name="PRODUCT_CD" />
+                  <externalMetadataColumn refId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[LAST_UPDATE_DT]" dataType="dbTimeStamp" name="LAST_UPDATE_DT" />
+                  <externalMetadataColumn refId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                  <externalMetadataColumn refId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                  <externalMetadataColumn refId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                  <externalMetadataColumn refId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" dataType="wstr" length="1" name="DeleteFlag" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Detect Obsoleted Products.Paths[OLE DB Source Output]" endId="Package\Detect Obsoleted Products\Flag Obsoleted Rows.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Detect Obsoleted Products\ORA CHANGE_LOG Product Deletes.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Detect Obsoleted Products.Paths[Derived Column Output 1]" endId="Package\Detect Obsoleted Products\Count Obsoleted Rows.Inputs[Row Count Input]" name="Derived Column Output 1" startId="Package\Detect Obsoleted Products\Flag Obsoleted Rows.Outputs[Derived Column Output]" />
+          <path refId="Package\Detect Obsoleted Products.Paths[Row Count Output 2]" endId="Package\Detect Obsoleted Products\raw OracleProductMaster Deletes.Inputs[OLE DB Destination Input]" name="Row Count Output 2" startId="Package\Detect Obsoleted Products\Count Obsoleted Rows.Outputs[Row Count Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Set Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{C8D945C7-242C-76BA-65CC-8FF45D2E5210}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Set Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_SetWatermark @SourceSystemCode = ?, @ObjectName = N'WWI_MDM.PRODUCT_MASTER', @WatermarkTo = ?, @PackageExecutionId = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::WatermarkTo" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'raw.OracleProductMaster', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Batch Variables"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Get Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Get Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Extract Product Master" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Extract Product Master"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Detect Obsoleted Products" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Detect Obsoleted Products"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Set Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Set Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{784E1980-5AFC-E621-0A6D-71414FBE0D11}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

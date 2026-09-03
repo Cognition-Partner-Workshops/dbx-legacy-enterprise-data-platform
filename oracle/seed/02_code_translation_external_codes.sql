@@ -1,0 +1,180 @@
+/* =====================================================================
+ * Object       : Seed data - WWI_REF.CODE_TRANSLATION (external code sets)
+ * Schema       : WWI_REF / WWI_AUDIT / WWI_FIN (Oracle ERP - WWIGERP)
+ * Deploy order : 201
+ * Depends on   : oracle/seed/01_source_system_ref.sql, oracle/tables/WWI_REF.CODE_TRANSLATION.sql
+ * Called by    : run once per environment, after the reference content
+ *
+ * Cross-references from the codes external systems send to the codes the ERP
+ * stores.
+ *
+ * Each feeder speaks its own dialect: the NA warehouse sends single-character
+ * receipt statuses, the EU warehouse sends words, the APAC warehouse sends
+ * two-digit numbers, and the EDI gateway sends X12 codes. The mapping is
+ * per source system and per region, and the same source value maps to
+ * different targets depending on who sent it - 'R' from the NA warehouse is a
+ * rejection, 'R' from the EDI gateway is a receipt.
+ *
+ * Seeded IDs stay below 40001, where SEQ_CODE_TRANSLATION starts.
+ * ===================================================================== */
+
+SET DEFINE OFF
+
+INSERT ALL
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1001, 'RECEIPT_STATUS', 'WMS_NA', 'A', 'ACCEPT',
+            'NA', 'PO_RECEIPT', 'CODE', 'NA warehouse accepted receipt.', TO_DATE('2004-06-01', 'YYYY-MM-DD'), NULL,
+            100, 'Y')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1002, 'RECEIPT_STATUS', 'WMS_NA', 'R', 'REJECT',
+            'NA', 'PO_RECEIPT', 'CODE', 'NA warehouse rejected at inspection.', TO_DATE('2004-06-01', 'YYYY-MM-DD'), NULL,
+            100, 'Y')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1003, 'RECEIPT_STATUS', 'WMS_NA', 'H', 'INSP',
+            'NA', 'PO_RECEIPT', 'CODE', 'NA warehouse hold for inspection.', TO_DATE('2004-06-01', 'YYYY-MM-DD'), NULL,
+            100, 'Y')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1004, 'RECEIPT_STATUS', 'WMS_EU', 'ANGENOMMEN', 'ACCEPT',
+            'EU', 'PO_RECEIPT', 'CODE', 'EU warehouse German-language status.', TO_DATE('2011-03-01', 'YYYY-MM-DD'), NULL,
+            100, 'Y')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1005, 'RECEIPT_STATUS', 'WMS_EU', 'GESPERRT', 'INSP',
+            'EU', 'PO_RECEIPT', 'CODE', 'EU warehouse quality block.', TO_DATE('2011-03-01', 'YYYY-MM-DD'), NULL,
+            100, 'Y')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1006, 'RECEIPT_STATUS', 'WMS_AP', '01', 'ACCEPT',
+            'APAC', 'PO_RECEIPT', 'CODE', 'APAC warehouse numeric status.', TO_DATE('2009-04-01', 'YYYY-MM-DD'), NULL,
+            100, 'Y')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1007, 'RECEIPT_STATUS', 'WMS_AP', '07', 'REJECT',
+            'APAC', 'PO_RECEIPT', 'CODE', 'APAC warehouse numeric status.', TO_DATE('2009-04-01', 'YYYY-MM-DD'), NULL,
+            100, 'Y')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1008, 'RECEIPT_STATUS', 'EDI_GW', 'R', 'ACCEPT',
+            'ALL', 'PO_RECEIPT', 'CODE', 'X12 861 receipt advice; same letter, opposite meaning to WMS_NA.',
+            TO_DATE('2007-09-01', 'YYYY-MM-DD'), NULL,
+            90, 'Y')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1009, 'UOM', 'WMS_NA', 'EACH', 'EA',
+            'NA', NULL, 'CODE', 'Spelled-out unit from the NA warehouse.', TO_DATE('2004-06-01', 'YYYY-MM-DD'), NULL,
+            100, 'Y')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1010, 'UOM', 'WMS_NA', 'LBS', 'LB',
+            'NA', NULL, 'CODE', 'Plural pound abbreviation.', TO_DATE('2004-06-01', 'YYYY-MM-DD'), NULL,
+            100, 'Y')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1011, 'UOM', 'WMS_AP', 'KGM', 'KG',
+            'APAC', NULL, 'CODE', 'ISO unit code sent by the APAC feed.', TO_DATE('2009-04-01', 'YYYY-MM-DD'), NULL,
+            100, 'Y')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1012, 'PAYMENT_TERMS', 'ACQ_NADIST', 'NET30', 'N30',
+            'NA', 'AP_INVOICE', 'CODE', 'Acquired distributor terms code.', TO_DATE('2008-05-01', 'YYYY-MM-DD'),
+            TO_DATE('2013-06-30', 'YYYY-MM-DD'),
+            100, 'N')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1013, 'PAYMENT_TERMS', 'EDI_GW', '01', '2P10N30',
+            'NA', 'AP_INVOICE', 'CODE', 'X12 terms type 01 with the discount defaults we assume.',
+            TO_DATE('2007-09-01', 'YYYY-MM-DD'), NULL,
+            100, 'Y')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1014, 'COUNTRY', 'MF_AS400', '001', 'US',
+            'NA', NULL, 'CODE', 'Three-digit mainframe country code still present in history.',
+            TO_DATE('1998-01-01', 'YYYY-MM-DD'), NULL,
+            100, 'Y')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1015, 'COUNTRY', 'MF_AS400', '049', 'DE',
+            'EU', NULL, 'CODE', 'Three-digit mainframe country code still present in history.',
+            TO_DATE('1998-01-01', 'YYYY-MM-DD'), NULL,
+            100, 'Y')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1016, 'CURRENCY', 'MF_AS400', 'DM', 'DEM',
+            'EU', NULL, 'CODE', 'Pre-euro currency abbreviation.', TO_DATE('1998-01-01', 'YYYY-MM-DD'),
+            TO_DATE('2002-02-28', 'YYYY-MM-DD'),
+            100, 'N')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1017, 'SUPPLIER_TYPE', 'CRM_GLOBAL', 'VENDOR', 'CORP',
+            'ALL', NULL, 'CODE', 'CRM party classification mapped to the ERP supplier type.',
+            TO_DATE('2004-01-01', 'YYYY-MM-DD'), NULL,
+            100, 'Y')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1018, 'TAX_CODE', 'EDI_GW', 'VAT19', 'DE_STD',
+            'EU', 'AP_INVOICE', 'CODE', 'Supplier-supplied tax code on inbound invoices.',
+            TO_DATE('2010-01-01', 'YYYY-MM-DD'), NULL,
+            100, 'Y')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1019, 'TAX_CODE', 'EDI_GW', 'GST10', 'AU_GST',
+            'APAC', 'AP_INVOICE', 'CODE', 'Supplier-supplied tax code on inbound invoices.',
+            TO_DATE('2010-01-01', 'YYYY-MM-DD'), NULL,
+            100, 'Y')
+    INTO WWI_REF.CODE_TRANSLATION
+        (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+         REGION_CD, ENTITY_CD, VALUE_TYPE_CD, DESCRIPTION_TXT, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT,
+         PRIORITY_NBR, ACTIVE_FLG)
+    VALUES (1020, 'PAYMENT_METHOD', 'EDI_GW', 'ACH', 'ACH',
+            'NA', 'AP_PAYMENT', 'CODE', 'Identity mapping kept so the lookup never misses.',
+            TO_DATE('2007-09-01', 'YYYY-MM-DD'), NULL,
+            100, 'Y')
+SELECT * FROM DUAL
+/
+
+COMMIT
+/
+
+SET DEFINE ON

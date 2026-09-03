@@ -1,0 +1,66 @@
+/* =====================================================================
+ * Object       : TABLE WWI_AUDIT.INTERFACE_ERROR
+ * Schema       : WWI_AUDIT (Oracle ERP - WWIGERP)
+ * Deploy order : 82
+ * Depends on   : WWI_AUDIT.EXTRACT_CONTROL
+ * Called by    : Inbound interfaces, PL/SQL exception handlers, extract jobs
+ *
+ * Errors raised by inbound interfaces and by the extract jobs. The payload of
+ * the offending record is kept as text so it can be resubmitted; nothing
+ * enforces that it still parses after a schema change. Retry handling is a
+ * counter and a next-retry timestamp, driven by a job that gave up on
+ * exponential backoff years ago and now retries hourly forever.
+ * ===================================================================== */
+
+CREATE SEQUENCE WWI_AUDIT.SEQ_INTERFACE_ERROR
+    START WITH 3000001 INCREMENT BY 1 CACHE 100 NOCYCLE
+/
+
+CREATE TABLE WWI_AUDIT.INTERFACE_ERROR
+(
+    INTERFACE_ERROR_ID      NUMBER(15)      NOT NULL,
+    ERROR_TS                TIMESTAMP(6)    DEFAULT SYSTIMESTAMP NOT NULL,
+    INTERFACE_NAME          VARCHAR2(60)    NOT NULL,
+    DIRECTION_CD            VARCHAR2(3)     NOT NULL,
+    SOURCE_SYS_CD           VARCHAR2(12),
+    TARGET_OBJECT_NAME      VARCHAR2(60),
+    BATCH_REF_TXT           VARCHAR2(40),
+    RECORD_KEY_TXT          VARCHAR2(120),
+    ERROR_CODE_CD           VARCHAR2(12)    NOT NULL,
+    ORA_ERROR_NBR           NUMBER(6),
+    ERROR_MESSAGE_TXT       VARCHAR2(2000),
+    ERROR_STACK_TXT         VARCHAR2(4000),
+    PAYLOAD_TXT             VARCHAR2(4000),
+    SEVERITY_CD             VARCHAR2(6)     DEFAULT 'ERROR' NOT NULL,
+    RETRY_CNT               NUMBER(4)       DEFAULT 0 NOT NULL,
+    NEXT_RETRY_TS           TIMESTAMP(6),
+    RESOLUTION_STATUS_CD    VARCHAR2(8)     DEFAULT 'OPEN' NOT NULL,
+    RESOLVED_BY             VARCHAR2(30),
+    RESOLVED_TS             TIMESTAMP(6),
+    RESOLUTION_NOTES_TXT    VARCHAR2(1000),
+    REGION_CD               VARCHAR2(4),
+    CREATED_BY              VARCHAR2(30)    DEFAULT USER NOT NULL,
+    CONSTRAINT PK_INTERFACE_ERROR PRIMARY KEY (INTERFACE_ERROR_ID) USING INDEX TABLESPACE WWI_AUDIT_DATA,
+    CONSTRAINT CK_IFACE_ERR_DIRECTION CHECK (DIRECTION_CD IN ('IN', 'OUT')),
+    CONSTRAINT CK_IFACE_ERR_SEVERITY CHECK (SEVERITY_CD IN ('WARN', 'ERROR', 'FATAL')),
+    CONSTRAINT CK_IFACE_ERR_STATUS CHECK (
+        RESOLUTION_STATUS_CD IN ('OPEN', 'RETRY', 'RESOLVED', 'IGNORED', 'ESCAL')),
+    CONSTRAINT CK_IFACE_ERR_RESOLVED CHECK (
+        RESOLUTION_STATUS_CD <> 'RESOLVED' OR RESOLVED_TS IS NOT NULL)
+)
+TABLESPACE WWI_AUDIT_DATA
+PCTFREE 20
+/
+
+CREATE INDEX WWI_AUDIT.IX_IFACE_ERR_OPEN
+    ON WWI_AUDIT.INTERFACE_ERROR (RESOLUTION_STATUS_CD, ERROR_TS) TABLESPACE WWI_AUDIT_DATA
+/
+
+CREATE INDEX WWI_AUDIT.IX_IFACE_ERR_INTERFACE
+    ON WWI_AUDIT.INTERFACE_ERROR (INTERFACE_NAME, ERROR_CODE_CD, ERROR_TS)
+    TABLESPACE WWI_AUDIT_DATA
+/
+
+CREATE INDEX WWI_AUDIT.IX_IFACE_ERR_RETRY
+    ON WWI_AUDIT.INTERFACE_ERROR (NEXT_RETRY_TS) TABLESPACE WWI_AUDIT_DATA
+/

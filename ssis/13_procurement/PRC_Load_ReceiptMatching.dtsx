@@ -1,0 +1,931 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{A51BE28F-EDEA-144F-66BE-6D6C073B991F}"
+  DTS:Description="Three-way matches receipts against the purchase order and the AP invoice line and loads the receipt fact with the match result. Quantity and price variances are evaluated against the regional tolerance table; unmatched receipts are held as goods-received-not-invoiced so the accrual report can pick them up."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="PRC_Load_ReceiptMatching"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{0B345B96-C758-D44E-85E6-C2AFBA058301}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{A336629D-BA74-E09B-37BB-211030DE80AF}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{CBA8E582-1059-3D92-1A19-73FFDBE54A58}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{A899A8C0-DF89-05D3-C3BA-C56A568F8A19}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{F4985082-11AA-2244-9945-3D50FAA228D9}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">ORAERP</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::AccrualCutoffDays]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Age at which an unmatched receipt is escalated rather than accrued."
+      DTS:DTSID="{D0C3A718-1C01-7155-7103-1E89872473CE}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="AccrualCutoffDays"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">45</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{7D0EA3AE-26E4-D247-AB56-51D5353A9C1C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{D774F8B9-C93D-B717-C9F9-CBB863B32A43}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{6C681FA0-2E00-104E-83C3-AA4D5BC8F7DC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{8B763745-D2CE-A084-627C-FEB3BC600F79}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{5686FB56-2AB9-139C-9D70-FD1DD8A6C77C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{B07D932F-0F35-5002-1368-753C383DAEE5}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{76668F9D-339B-8E77-6222-76DDA0D3FBDB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{A260B952-2331-EB9C-123D-EF2E7EEEF048}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::GrniCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{9B2AFE74-40D7-F240-9290-8F9D9164A34E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="GrniCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::MatchExceptionCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{94342A99-48C5-A599-30E9-953C8BFDF62D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="MatchExceptionCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Truncate work.ReceiptMatch"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{1B0AFDE9-F693-6599-A35F-5E2496D2C73A}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Truncate work.ReceiptMatch"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE work.ReceiptMatch;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Match Receipts"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{7B001849-170C-FF11-68C1-660943B465E2}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Match Receipts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Match Receipts\stg Receipt" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="stg Receipt" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">3600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT  r.ReceiptId
+,       r.ReceiptNumber
+,       r.PurchaseOrderNumber
+,       r.LineNumber
+,       r.ReceivedAtUtc
+,       r.ReceivedOuters
+,       r.WarehouseSiteCode
+,       pol.OrderedOuters
+,       pol.ExpectedUnitPricePerOuter
+,       ail.InvoicedOuters
+,       ail.InvoicedUnitPrice
+,       ail.ApInvoiceNumber
+,       poh.SupplierId
+,       poh.RegionCode
+        /* Three-way match tolerances: quantity tolerance is a percentage,
+           price tolerance is both a percentage and an absolute floor so that
+           low-value lines do not fail on rounding. */
+,       ISNULL(tol.QuantityTolerancePercent, 2)         AS QuantityTolerancePercent
+,       ISNULL(tol.PriceTolerancePercent, 3)            AS PriceTolerancePercent
+,       ISNULL(tol.PriceToleranceAbsolute, 1.00)        AS PriceToleranceAbsolute
+FROM    stg.Receipt AS r
+INNER JOIN stg.PurchaseOrderLine AS pol
+        ON  pol.PurchaseOrderNumber = r.PurchaseOrderNumber
+        AND pol.LineNumber = r.LineNumber
+INNER JOIN stg.PurchaseOrderHeader AS poh
+        ON  poh.PurchaseOrderNumber = r.PurchaseOrderNumber
+LEFT OUTER JOIN stg.ApInvoiceLine AS ail
+        ON  ail.PurchaseOrderNumber = r.PurchaseOrderNumber
+        AND ail.PurchaseOrderLineNumber = r.LineNumber
+LEFT OUTER JOIN stg.MatchTolerance AS tol
+        ON  tol.RegionCode = poh.RegionCode
+        AND tol.CategoryCode = pol.CategoryCode
+WHERE   r.LoadBatchId = ?</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Match Receipts\stg Receipt.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[ReceiptId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[ReceiptId]" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[ReceiptId]" name="ReceiptId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[ReceiptNumber]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[ReceiptNumber]" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[ReceiptNumber]" name="ReceiptNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[PurchaseOrderNumber]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[PurchaseOrderNumber]" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[PurchaseOrderNumber]" name="PurchaseOrderNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[LineNumber]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[LineNumber]" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[LineNumber]" name="LineNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[ReceivedAtUtc]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[ReceivedAtUtc]" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[ReceivedAtUtc]" name="ReceivedAtUtc" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[ReceivedOuters]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[ReceivedOuters]" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[ReceivedOuters]" name="ReceivedOuters" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[WarehouseSiteCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[WarehouseSiteCode]" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[WarehouseSiteCode]" name="WarehouseSiteCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[OrderedOuters]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[OrderedOuters]" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[OrderedOuters]" name="OrderedOuters" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[ExpectedUnitPricePerOuter]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[ExpectedUnitPricePerOuter]" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[ExpectedUnitPricePerOuter]" name="ExpectedUnitPricePerOuter" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[InvoicedOuters]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[InvoicedOuters]" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[InvoicedOuters]" name="InvoicedOuters" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[InvoicedUnitPrice]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[InvoicedUnitPrice]" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[InvoicedUnitPrice]" name="InvoicedUnitPrice" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[ApInvoiceNumber]" dataType="wstr" length="30" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[ApInvoiceNumber]" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[ApInvoiceNumber]" name="ApInvoiceNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[SupplierId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[SupplierId]" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[SupplierId]" name="SupplierId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[QuantityTolerancePercent]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[QuantityTolerancePercent]" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[QuantityTolerancePercent]" name="QuantityTolerancePercent" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[PriceTolerancePercent]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[PriceTolerancePercent]" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[PriceTolerancePercent]" name="PriceTolerancePercent" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[PriceToleranceAbsolute]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[PriceToleranceAbsolute]" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].Columns[PriceToleranceAbsolute]" name="PriceToleranceAbsolute" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[ReceiptId]" dataType="i4" name="ReceiptId" />
+                  <externalMetadataColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[ReceiptNumber]" dataType="wstr" length="20" name="ReceiptNumber" />
+                  <externalMetadataColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[PurchaseOrderNumber]" dataType="wstr" length="20" name="PurchaseOrderNumber" />
+                  <externalMetadataColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[LineNumber]" dataType="i4" name="LineNumber" />
+                  <externalMetadataColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[ReceivedAtUtc]" dataType="dbTimeStamp" name="ReceivedAtUtc" />
+                  <externalMetadataColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[ReceivedOuters]" dataType="i4" name="ReceivedOuters" />
+                  <externalMetadataColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[WarehouseSiteCode]" dataType="wstr" length="10" name="WarehouseSiteCode" />
+                  <externalMetadataColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[OrderedOuters]" dataType="i4" name="OrderedOuters" />
+                  <externalMetadataColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[ExpectedUnitPricePerOuter]" dataType="numeric" precision="18" scale="2" name="ExpectedUnitPricePerOuter" />
+                  <externalMetadataColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[InvoicedOuters]" dataType="i4" name="InvoicedOuters" />
+                  <externalMetadataColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[InvoicedUnitPrice]" dataType="numeric" precision="18" scale="2" name="InvoicedUnitPrice" />
+                  <externalMetadataColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[ApInvoiceNumber]" dataType="wstr" length="30" name="ApInvoiceNumber" />
+                  <externalMetadataColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[SupplierId]" dataType="i4" name="SupplierId" />
+                  <externalMetadataColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[QuantityTolerancePercent]" dataType="numeric" precision="18" scale="2" name="QuantityTolerancePercent" />
+                  <externalMetadataColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[PriceTolerancePercent]" dataType="numeric" precision="18" scale="2" name="PriceTolerancePercent" />
+                  <externalMetadataColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output].ExternalColumns[PriceToleranceAbsolute]" dataType="numeric" precision="18" scale="2" name="PriceToleranceAbsolute" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[ReceiptId]" dataType="i4" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[ReceiptId]" name="ReceiptId" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[ReceiptNumber]" dataType="wstr" length="20" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[ReceiptNumber]" name="ReceiptNumber" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[PurchaseOrderNumber]" dataType="wstr" length="20" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[PurchaseOrderNumber]" name="PurchaseOrderNumber" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[LineNumber]" dataType="i4" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[LineNumber]" name="LineNumber" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[ReceivedAtUtc]" dataType="dbTimeStamp" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[ReceivedAtUtc]" name="ReceivedAtUtc" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[ReceivedOuters]" dataType="i4" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[ReceivedOuters]" name="ReceivedOuters" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[WarehouseSiteCode]" dataType="wstr" length="10" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[WarehouseSiteCode]" name="WarehouseSiteCode" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[OrderedOuters]" dataType="i4" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[OrderedOuters]" name="OrderedOuters" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[ExpectedUnitPricePerOuter]" dataType="numeric" precision="18" scale="2" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[ExpectedUnitPricePerOuter]" name="ExpectedUnitPricePerOuter" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[InvoicedOuters]" dataType="i4" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[InvoicedOuters]" name="InvoicedOuters" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[InvoicedUnitPrice]" dataType="numeric" precision="18" scale="2" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[InvoicedUnitPrice]" name="InvoicedUnitPrice" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[ApInvoiceNumber]" dataType="wstr" length="30" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[ApInvoiceNumber]" name="ApInvoiceNumber" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[SupplierId]" dataType="i4" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[SupplierId]" name="SupplierId" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[QuantityTolerancePercent]" dataType="numeric" precision="18" scale="2" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[QuantityTolerancePercent]" name="QuantityTolerancePercent" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[PriceTolerancePercent]" dataType="numeric" precision="18" scale="2" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[PriceTolerancePercent]" name="PriceTolerancePercent" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[PriceToleranceAbsolute]" dataType="numeric" precision="18" scale="2" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[PriceToleranceAbsolute]" name="PriceToleranceAbsolute" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Match Receipts\Derive Match Variances" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Match Variances" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Match Receipts\Derive Match Variances.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Match Receipts\Derive Match Variances.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Match Receipts\Derive Match Variances.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Match Receipts\Derive Match Variances.Outputs[Derived Column Output].Columns[QuantityVariance]" dataType="i4" lineageId="Package\Match Receipts\Derive Match Variances.Outputs[Derived Column Output].Columns[QuantityVariance]" name="QuantityVariance">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ReceivedOuters - ISNULL(InvoicedOuters) ? 0 : InvoicedOuters</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ReceivedOuters - ISNULL(InvoicedOuters) ? 0 : InvoicedOuters</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Match Receipts\Derive Match Variances.Outputs[Derived Column Output].Columns[PriceVariance]" dataType="numeric" precision="18" scale="2" lineageId="Package\Match Receipts\Derive Match Variances.Outputs[Derived Column Output].Columns[PriceVariance]" name="PriceVariance">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(InvoicedUnitPrice) ? (DT_NUMERIC,18,2)0 : InvoicedUnitPrice - ExpectedUnitPricePerOuter</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(InvoicedUnitPrice) ? (DT_NUMERIC,18,2)0 : InvoicedUnitPrice - ExpectedUnitPricePerOuter</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Match Receipts\Derive Match Variances.Outputs[Derived Column Output].Columns[IsInvoiced]" dataType="bool" lineageId="Package\Match Receipts\Derive Match Variances.Outputs[Derived Column Output].Columns[IsInvoiced]" name="IsInvoiced">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(ApInvoiceNumber) ? (DT_BOOL)0 : (DT_BOOL)1</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(ApInvoiceNumber) ? (DT_BOOL)0 : (DT_BOOL)1</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Match Receipts\Evaluate Match Result" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Evaluate Match Result" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Match Receipts\Evaluate Match Result.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Match Receipts\Evaluate Match Result.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Match Receipts\Evaluate Match Result.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Match Receipts\Evaluate Match Result.Outputs[Derived Column Output].Columns[MatchResultCode]" dataType="wstr" length="12" lineageId="Package\Match Receipts\Evaluate Match Result.Outputs[Derived Column Output].Columns[MatchResultCode]" name="MatchResultCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">IsInvoiced == (DT_BOOL)0 ? (DT_WSTR,12)"GRNI" : (ABS(PriceVariance) &lt;= PriceToleranceAbsolute || ABS(PriceVariance) * 100 / (ExpectedUnitPricePerOuter == 0 ? 1 : ExpectedUnitPricePerOuter) &lt;= PriceTolerancePercent ? (ABS(QuantityVariance) * 100 / (OrderedOuters == 0 ? 1 : OrderedOuters) &lt;= QuantityTolerancePercent ? (DT_WSTR,12)"MATCHED" : (DT_WSTR,12)"QTYEXCEPT") : (DT_WSTR,12)"PRICEEXCEPT")</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">IsInvoiced == (DT_BOOL)0 ? (DT_WSTR,12)"GRNI" : (ABS(PriceVariance) &lt;= PriceToleranceAbsolute || ABS(PriceVariance) * 100 / (ExpectedUnitPricePerOuter == 0 ? 1 : ExpectedUnitPricePerOuter) &lt;= PriceTolerancePercent ? (ABS(QuantityVariance) * 100 / (OrderedOuters == 0 ? 1 : OrderedOuters) &lt;= QuantityTolerancePercent ? (DT_WSTR,12)"MATCHED" : (DT_WSTR,12)"QTYEXCEPT") : (DT_WSTR,12)"PRICEEXCEPT")</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Match Receipts\Evaluate Match Result.Outputs[Derived Column Output].Columns[ReceiptAgeDays]" dataType="i4" lineageId="Package\Match Receipts\Evaluate Match Result.Outputs[Derived Column Output].Columns[ReceiptAgeDays]" name="ReceiptAgeDays">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">DATEDIFF("Dy", ReceivedAtUtc, GETDATE())</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">DATEDIFF("Dy", ReceivedAtUtc, GETDATE())</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Match Receipts\Split Match Outcome" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Split Match Outcome" version="1">
+            <inputs>
+              <input refId="Package\Match Receipts\Split Match Outcome.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Match Receipts\Split Match Outcome.Outputs[Matched]" exclusionGroup="1" name="Matched" synchronousInputId="Package\Match Receipts\Split Match Outcome.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">MatchResultCode == "MATCHED"</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">MatchResultCode == "MATCHED"</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Match Receipts\Split Match Outcome.Outputs[Grni]" exclusionGroup="1" name="Grni" synchronousInputId="Package\Match Receipts\Split Match Outcome.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">MatchResultCode == "GRNI"</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">MatchResultCode == "GRNI"</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Match Receipts\Split Match Outcome.Outputs[Exception]" exclusionGroup="1" name="Exception" synchronousInputId="Package\Match Receipts\Split Match Outcome.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">MatchResultCode == "QTYEXCEPT" || MatchResultCode == "PRICEEXCEPT"</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">MatchResultCode == "QTYEXCEPT" || MatchResultCode == "PRICEEXCEPT"</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">2</property>
+                </properties>
+              </output>
+              <output refId="Package\Match Receipts\Split Match Outcome.Outputs[Default]" exclusionGroup="1" isDefaultOut="true" name="Default" synchronousInputId="Package\Match Receipts\Split Match Outcome.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Match Receipts\Count Matched Receipts" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Matched Receipts" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsInserted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Match Receipts\Count Matched Receipts.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Match Receipts\Count Matched Receipts.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Match Receipts\Count Matched Receipts.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Match Receipts\Fact Purchase Receipt" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Fact Purchase Receipt" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Fact].[Purchase Receipt]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">100000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Match Receipts\Fact Purchase Receipt.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[ReceiptId]" cachedDataType="i4" cachedName="ReceiptId" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptId]" name="ReceiptId" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[ReceiptNumber]" cachedDataType="wstr" cachedLength="20" cachedName="ReceiptNumber" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptNumber]" name="ReceiptNumber" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[PurchaseOrderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="PurchaseOrderNumber" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[PurchaseOrderNumber]" name="PurchaseOrderNumber" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[LineNumber]" cachedDataType="i4" cachedName="LineNumber" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[LineNumber]" name="LineNumber" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[ReceivedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ReceivedAtUtc" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedAtUtc]" name="ReceivedAtUtc" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[ReceivedOuters]" cachedDataType="i4" cachedName="ReceivedOuters" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedOuters]" name="ReceivedOuters" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[WarehouseSiteCode]" cachedDataType="wstr" cachedLength="10" cachedName="WarehouseSiteCode" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseSiteCode]" name="WarehouseSiteCode" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[OrderedOuters]" cachedDataType="i4" cachedName="OrderedOuters" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[OrderedOuters]" name="OrderedOuters" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[ExpectedUnitPricePerOuter]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ExpectedUnitPricePerOuter" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedUnitPricePerOuter]" name="ExpectedUnitPricePerOuter" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[InvoicedOuters]" cachedDataType="i4" cachedName="InvoicedOuters" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedOuters]" name="InvoicedOuters" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[InvoicedUnitPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="InvoicedUnitPrice" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedUnitPrice]" name="InvoicedUnitPrice" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[ApInvoiceNumber]" cachedDataType="wstr" cachedLength="30" cachedName="ApInvoiceNumber" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[ApInvoiceNumber]" name="ApInvoiceNumber" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[SupplierId]" cachedDataType="i4" cachedName="SupplierId" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" name="SupplierId" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[QuantityTolerancePercent]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="QuantityTolerancePercent" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[QuantityTolerancePercent]" name="QuantityTolerancePercent" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[PriceTolerancePercent]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PriceTolerancePercent" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[PriceTolerancePercent]" name="PriceTolerancePercent" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[PriceToleranceAbsolute]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PriceToleranceAbsolute" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[PriceToleranceAbsolute]" name="PriceToleranceAbsolute" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[QuantityVariance]" cachedDataType="i4" cachedName="QuantityVariance" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[QuantityVariance]" name="QuantityVariance" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[PriceVariance]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PriceVariance" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[PriceVariance]" name="PriceVariance" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[IsInvoiced]" cachedDataType="bool" cachedName="IsInvoiced" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[IsInvoiced]" name="IsInvoiced" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[MatchResultCode]" cachedDataType="wstr" cachedLength="12" cachedName="MatchResultCode" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[MatchResultCode]" name="MatchResultCode" />
+                  <inputColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].Columns[ReceiptAgeDays]" cachedDataType="i4" cachedName="ReceiptAgeDays" externalMetadataColumnId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptAgeDays]" name="ReceiptAgeDays" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptId]" dataType="i4" name="ReceiptId" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptNumber]" dataType="wstr" length="20" name="ReceiptNumber" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[PurchaseOrderNumber]" dataType="wstr" length="20" name="PurchaseOrderNumber" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[LineNumber]" dataType="i4" name="LineNumber" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedAtUtc]" dataType="dbTimeStamp" name="ReceivedAtUtc" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedOuters]" dataType="i4" name="ReceivedOuters" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseSiteCode]" dataType="wstr" length="10" name="WarehouseSiteCode" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[OrderedOuters]" dataType="i4" name="OrderedOuters" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedUnitPricePerOuter]" dataType="numeric" precision="18" scale="2" name="ExpectedUnitPricePerOuter" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedOuters]" dataType="i4" name="InvoicedOuters" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedUnitPrice]" dataType="numeric" precision="18" scale="2" name="InvoicedUnitPrice" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[ApInvoiceNumber]" dataType="wstr" length="30" name="ApInvoiceNumber" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" dataType="i4" name="SupplierId" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[QuantityTolerancePercent]" dataType="numeric" precision="18" scale="2" name="QuantityTolerancePercent" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[PriceTolerancePercent]" dataType="numeric" precision="18" scale="2" name="PriceTolerancePercent" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[PriceToleranceAbsolute]" dataType="numeric" precision="18" scale="2" name="PriceToleranceAbsolute" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[QuantityVariance]" dataType="i4" name="QuantityVariance" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[PriceVariance]" dataType="numeric" precision="18" scale="2" name="PriceVariance" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[IsInvoiced]" dataType="bool" name="IsInvoiced" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[MatchResultCode]" dataType="wstr" length="12" name="MatchResultCode" />
+                  <externalMetadataColumn refId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptAgeDays]" dataType="i4" name="ReceiptAgeDays" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Match Receipts\Fact Purchase Receipt.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Match Receipts\work ReceiptGrni" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="work ReceiptGrni" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[ReceiptGrni]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Match Receipts\work ReceiptGrni.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[ReceiptId]" cachedDataType="i4" cachedName="ReceiptId" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptId]" name="ReceiptId" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[ReceiptNumber]" cachedDataType="wstr" cachedLength="20" cachedName="ReceiptNumber" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptNumber]" name="ReceiptNumber" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[PurchaseOrderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="PurchaseOrderNumber" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[PurchaseOrderNumber]" name="PurchaseOrderNumber" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[LineNumber]" cachedDataType="i4" cachedName="LineNumber" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[LineNumber]" name="LineNumber" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[ReceivedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ReceivedAtUtc" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedAtUtc]" name="ReceivedAtUtc" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[ReceivedOuters]" cachedDataType="i4" cachedName="ReceivedOuters" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedOuters]" name="ReceivedOuters" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[WarehouseSiteCode]" cachedDataType="wstr" cachedLength="10" cachedName="WarehouseSiteCode" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseSiteCode]" name="WarehouseSiteCode" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[OrderedOuters]" cachedDataType="i4" cachedName="OrderedOuters" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[OrderedOuters]" name="OrderedOuters" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[ExpectedUnitPricePerOuter]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ExpectedUnitPricePerOuter" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedUnitPricePerOuter]" name="ExpectedUnitPricePerOuter" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[InvoicedOuters]" cachedDataType="i4" cachedName="InvoicedOuters" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedOuters]" name="InvoicedOuters" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[InvoicedUnitPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="InvoicedUnitPrice" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedUnitPrice]" name="InvoicedUnitPrice" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[ApInvoiceNumber]" cachedDataType="wstr" cachedLength="30" cachedName="ApInvoiceNumber" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[ApInvoiceNumber]" name="ApInvoiceNumber" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[SupplierId]" cachedDataType="i4" cachedName="SupplierId" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" name="SupplierId" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[QuantityTolerancePercent]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="QuantityTolerancePercent" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[QuantityTolerancePercent]" name="QuantityTolerancePercent" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[PriceTolerancePercent]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PriceTolerancePercent" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[PriceTolerancePercent]" name="PriceTolerancePercent" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[PriceToleranceAbsolute]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PriceToleranceAbsolute" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[PriceToleranceAbsolute]" name="PriceToleranceAbsolute" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[QuantityVariance]" cachedDataType="i4" cachedName="QuantityVariance" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[QuantityVariance]" name="QuantityVariance" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[PriceVariance]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PriceVariance" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[PriceVariance]" name="PriceVariance" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[IsInvoiced]" cachedDataType="bool" cachedName="IsInvoiced" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[IsInvoiced]" name="IsInvoiced" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[MatchResultCode]" cachedDataType="wstr" cachedLength="12" cachedName="MatchResultCode" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[MatchResultCode]" name="MatchResultCode" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].Columns[ReceiptAgeDays]" cachedDataType="i4" cachedName="ReceiptAgeDays" externalMetadataColumnId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptAgeDays]" name="ReceiptAgeDays" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptId]" dataType="i4" name="ReceiptId" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptNumber]" dataType="wstr" length="20" name="ReceiptNumber" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[PurchaseOrderNumber]" dataType="wstr" length="20" name="PurchaseOrderNumber" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[LineNumber]" dataType="i4" name="LineNumber" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedAtUtc]" dataType="dbTimeStamp" name="ReceivedAtUtc" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedOuters]" dataType="i4" name="ReceivedOuters" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseSiteCode]" dataType="wstr" length="10" name="WarehouseSiteCode" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[OrderedOuters]" dataType="i4" name="OrderedOuters" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedUnitPricePerOuter]" dataType="numeric" precision="18" scale="2" name="ExpectedUnitPricePerOuter" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedOuters]" dataType="i4" name="InvoicedOuters" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedUnitPrice]" dataType="numeric" precision="18" scale="2" name="InvoicedUnitPrice" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[ApInvoiceNumber]" dataType="wstr" length="30" name="ApInvoiceNumber" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" dataType="i4" name="SupplierId" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[QuantityTolerancePercent]" dataType="numeric" precision="18" scale="2" name="QuantityTolerancePercent" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[PriceTolerancePercent]" dataType="numeric" precision="18" scale="2" name="PriceTolerancePercent" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[PriceToleranceAbsolute]" dataType="numeric" precision="18" scale="2" name="PriceToleranceAbsolute" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[QuantityVariance]" dataType="i4" name="QuantityVariance" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[PriceVariance]" dataType="numeric" precision="18" scale="2" name="PriceVariance" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[IsInvoiced]" dataType="bool" name="IsInvoiced" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[MatchResultCode]" dataType="wstr" length="12" name="MatchResultCode" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptAgeDays]" dataType="i4" name="ReceiptAgeDays" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Match Receipts\work ReceiptGrni.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Match Receipts\work ReceiptMatchException" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="work ReceiptMatchException" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[ReceiptMatchException]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Match Receipts\work ReceiptMatchException.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[ReceiptId]" cachedDataType="i4" cachedName="ReceiptId" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptId]" name="ReceiptId" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[ReceiptNumber]" cachedDataType="wstr" cachedLength="20" cachedName="ReceiptNumber" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptNumber]" name="ReceiptNumber" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[PurchaseOrderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="PurchaseOrderNumber" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[PurchaseOrderNumber]" name="PurchaseOrderNumber" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[LineNumber]" cachedDataType="i4" cachedName="LineNumber" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[LineNumber]" name="LineNumber" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[ReceivedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ReceivedAtUtc" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedAtUtc]" name="ReceivedAtUtc" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[ReceivedOuters]" cachedDataType="i4" cachedName="ReceivedOuters" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedOuters]" name="ReceivedOuters" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[WarehouseSiteCode]" cachedDataType="wstr" cachedLength="10" cachedName="WarehouseSiteCode" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseSiteCode]" name="WarehouseSiteCode" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[OrderedOuters]" cachedDataType="i4" cachedName="OrderedOuters" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[OrderedOuters]" name="OrderedOuters" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[ExpectedUnitPricePerOuter]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ExpectedUnitPricePerOuter" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedUnitPricePerOuter]" name="ExpectedUnitPricePerOuter" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[InvoicedOuters]" cachedDataType="i4" cachedName="InvoicedOuters" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedOuters]" name="InvoicedOuters" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[InvoicedUnitPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="InvoicedUnitPrice" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedUnitPrice]" name="InvoicedUnitPrice" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[ApInvoiceNumber]" cachedDataType="wstr" cachedLength="30" cachedName="ApInvoiceNumber" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[ApInvoiceNumber]" name="ApInvoiceNumber" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[SupplierId]" cachedDataType="i4" cachedName="SupplierId" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" name="SupplierId" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[QuantityTolerancePercent]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="QuantityTolerancePercent" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[QuantityTolerancePercent]" name="QuantityTolerancePercent" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[PriceTolerancePercent]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PriceTolerancePercent" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[PriceTolerancePercent]" name="PriceTolerancePercent" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[PriceToleranceAbsolute]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PriceToleranceAbsolute" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[PriceToleranceAbsolute]" name="PriceToleranceAbsolute" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[QuantityVariance]" cachedDataType="i4" cachedName="QuantityVariance" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[QuantityVariance]" name="QuantityVariance" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[PriceVariance]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PriceVariance" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[PriceVariance]" name="PriceVariance" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[IsInvoiced]" cachedDataType="bool" cachedName="IsInvoiced" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[IsInvoiced]" name="IsInvoiced" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[MatchResultCode]" cachedDataType="wstr" cachedLength="12" cachedName="MatchResultCode" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[MatchResultCode]" name="MatchResultCode" />
+                  <inputColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].Columns[ReceiptAgeDays]" cachedDataType="i4" cachedName="ReceiptAgeDays" externalMetadataColumnId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptAgeDays]" name="ReceiptAgeDays" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptId]" dataType="i4" name="ReceiptId" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptNumber]" dataType="wstr" length="20" name="ReceiptNumber" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[PurchaseOrderNumber]" dataType="wstr" length="20" name="PurchaseOrderNumber" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[LineNumber]" dataType="i4" name="LineNumber" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedAtUtc]" dataType="dbTimeStamp" name="ReceivedAtUtc" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedOuters]" dataType="i4" name="ReceivedOuters" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseSiteCode]" dataType="wstr" length="10" name="WarehouseSiteCode" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[OrderedOuters]" dataType="i4" name="OrderedOuters" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedUnitPricePerOuter]" dataType="numeric" precision="18" scale="2" name="ExpectedUnitPricePerOuter" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedOuters]" dataType="i4" name="InvoicedOuters" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedUnitPrice]" dataType="numeric" precision="18" scale="2" name="InvoicedUnitPrice" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[ApInvoiceNumber]" dataType="wstr" length="30" name="ApInvoiceNumber" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" dataType="i4" name="SupplierId" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[QuantityTolerancePercent]" dataType="numeric" precision="18" scale="2" name="QuantityTolerancePercent" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[PriceTolerancePercent]" dataType="numeric" precision="18" scale="2" name="PriceTolerancePercent" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[PriceToleranceAbsolute]" dataType="numeric" precision="18" scale="2" name="PriceToleranceAbsolute" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[QuantityVariance]" dataType="i4" name="QuantityVariance" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[PriceVariance]" dataType="numeric" precision="18" scale="2" name="PriceVariance" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[IsInvoiced]" dataType="bool" name="IsInvoiced" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[MatchResultCode]" dataType="wstr" length="12" name="MatchResultCode" />
+                  <externalMetadataColumn refId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptAgeDays]" dataType="i4" name="ReceiptAgeDays" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Match Receipts\work ReceiptMatchException.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Match Receipts.Paths[OLE DB Source Output]" endId="Package\Match Receipts\Derive Match Variances.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Match Receipts\stg Receipt.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Match Receipts.Paths[Derived Column Output 1]" endId="Package\Match Receipts\Evaluate Match Result.Inputs[Derived Column Input]" name="Derived Column Output 1" startId="Package\Match Receipts\Derive Match Variances.Outputs[Derived Column Output]" />
+          <path refId="Package\Match Receipts.Paths[Derived Column Output 2]" endId="Package\Match Receipts\Split Match Outcome.Inputs[Conditional Split Input]" name="Derived Column Output 2" startId="Package\Match Receipts\Evaluate Match Result.Outputs[Derived Column Output]" />
+          <path refId="Package\Match Receipts.Paths[Matched 3]" endId="Package\Match Receipts\Count Matched Receipts.Inputs[Row Count Input]" name="Matched 3" startId="Package\Match Receipts\Split Match Outcome.Outputs[Matched]" />
+          <path refId="Package\Match Receipts.Paths[Row Count Output 4]" endId="Package\Match Receipts\Fact Purchase Receipt.Inputs[OLE DB Destination Input]" name="Row Count Output 4" startId="Package\Match Receipts\Count Matched Receipts.Outputs[Row Count Output]" />
+          <path refId="Package\Match Receipts.Paths[Grni 5]" endId="Package\Match Receipts\work ReceiptGrni.Inputs[OLE DB Destination Input]" name="Grni 5" startId="Package\Match Receipts\Split Match Outcome.Outputs[Grni]" />
+          <path refId="Package\Match Receipts.Paths[Exception 6]" endId="Package\Match Receipts\work ReceiptMatchException.Inputs[OLE DB Destination Input]" name="Exception 6" startId="Package\Match Receipts\Split Match Outcome.Outputs[Exception]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Accrue GRNI"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{A99D4BA7-DD25-AA7E-97C4-69EA090F178F}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Accrue GRNI"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="INSERT INTO Fact.[Purchase Receipt]     ([Receipt Number], [Purchase Order Number], [Supplier Key], [Received Outers],      [Accrual Amount], [Match Result Code], [Receipt Date]) SELECT g.ReceiptNumber, g.PurchaseOrderNumber, s.[Supplier Key], g.ReceivedOuters,        g.ReceivedOuters * g.ExpectedUnitPricePerOuter, N'ACCRUED', g.ReceivedAtUtc FROM   work.ReceiptGrni AS g INNER JOIN Dimension.Supplier AS s         ON s.[WWI Supplier ID] = g.SupplierId AND s.[Valid To] &gt; SYSDATETIME() WHERE  g.ReceiptAgeDays &lt;= ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::AccrualCutoffDays" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Raise Match Exceptions"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{9F7FE141-C0C3-6CD2-E92E-2F127A5194D9}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Raise Match Exceptions"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="INSERT INTO etl.RejectedRecord     (BatchId, ObjectName, RejectStage, RejectReasonCode, RejectReason,      BusinessKey, LoggedAtUtc, IsReprocessed) SELECT ?, N'stg.Receipt', N'Fact', MatchResultCode,        N'Three-way match exception outside the regional tolerance',        ReceiptNumber, SYSUTCDATETIME(), 0 FROM   work.ReceiptMatchException;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Measure Match Outcomes"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{77C954B7-E873-E1A9-575B-8BFBF31B1C52}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Measure Match Outcomes"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="SELECT (SELECT COUNT(*) FROM work.ReceiptGrni) AS GrniRows,        (SELECT COUNT(*) FROM work.ReceiptMatchException) AS ExceptionRows;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::GrniCount" />
+        <SQLTask:ResultBinding SQLTask:ResultName="1" SQLTask:DtsVariableName="User::MatchExceptionCount" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Fact.Purchase Receipt', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Truncate work.ReceiptMatch" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Truncate work.ReceiptMatch"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Match Receipts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Match Receipts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Accrue GRNI" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Accrue GRNI"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:Value="2"
+      DTS:To="Package\Raise Match Exceptions" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Raise Match Exceptions"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Measure Match Outcomes" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Measure Match Outcomes"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{B9F1881D-B1C5-5AF7-2271-EBF9843E6F5A}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

@@ -1,0 +1,730 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{06DA417A-4F5E-0DD5-E93D-0492924016F7}"
+  DTS:Description="Recomputes the rolling twelve-month customer metrics: revenue, order frequency, average basket, returns rate, days since last order and the recency/frequency/monetary deciles. The window is anchored on the region's own period end - calendar month for NA and EU, the 4-4-5 period for APAC - so the same customer can appear in two different windows if they trade in more than one region."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="C360_Build_RollingMetrics"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{83017F2E-C24E-D4CD-77ED-A8479701FF11}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{7615D764-C984-73F5-B90A-5A0EE91B5F12}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{C593D554-3072-B48D-7374-8A8E1BDACE6D}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{F7255212-8B7F-5FB2-4B74-7E25DFF81C8C}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{114B6BB6-FADE-5C2D-BDA5-BD07886F9E9F}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWIOLTP</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::WindowMonths]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Length of the rolling window in months."
+      DTS:DTSID="{2F969A39-9185-8CA1-5BD0-A96534F5E8D2}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="WindowMonths"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">12</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::InactiveThresholdDays]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Days without an order before a customer is treated as inactive."
+      DTS:DTSID="{A50AFFDB-5A6B-5C0D-25A9-B192924D2025}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="InactiveThresholdDays"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">270</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{2DA956B4-8503-C091-0317-A5A4029A8330}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{3935478C-1A1D-D2D9-2997-24487FDD856D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{F533AF87-A94B-0D32-06CB-D1167960D927}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{C704C260-99D1-F4F6-AED5-FBF7E558586F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{237B1362-E4FB-80EE-58B1-A478F7A51B87}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{844D1B58-D390-B4EC-EFBC-F5AB5BA71C88}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{418D5B45-13F2-7825-2225-F47058317B64}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B18A5DE-03A0-D6B6-3758-E0CC8B692594}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::MetricRowCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{AD4BB897-0DEF-6587-1786-70558AB5502C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="MetricRowCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::InactiveCustomerCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{92031CEB-440D-E19A-D49A-2313B6FEBCBC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="InactiveCustomerCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Truncate work.CustomerRollingMetric"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{CCA6C832-1B80-F154-EB77-3BF40262D923}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Truncate work.CustomerRollingMetric"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE work.CustomerRollingMetric;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Aggregate Rolling Window"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{BE9C9C58-45ED-CC80-BB9D-B08202620A4C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Aggregate Rolling Window"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="INSERT INTO work.CustomerRollingMetric&#10;    (CustomerKey, RegionCode, WindowStartDate, WindowEndDate, OrderCount, NetRevenue,&#10;     ReturnAmount, DistinctItemCount, LastOrderDate)&#10;SELECT  s.[Customer Key]&#10;,       c.[Region Code]&#10;,       DATEADD(MONTH, -?, CAST(SYSDATETIME() AS date))&#10;,       CAST(SYSDATETIME() AS date)&#10;,       COUNT(DISTINCT s.[WWI Invoice ID])&#10;,       SUM(s.[Total Excluding Tax])&#10;,       SUM(CASE WHEN s.Quantity &lt; 0 THEN ABS(s.[Total Excluding Tax]) ELSE 0 END)&#10;,       COUNT(DISTINCT s.[Stock Item Key])&#10;,       MAX(s.[Invoice Date Key])&#10;FROM    Fact.Sale AS s&#10;INNER JOIN Dimension.Customer AS c ON c.[Customer Key] = s.[Customer Key]&#10;WHERE   s.[Invoice Date Key] &gt;= DATEADD(MONTH, -?, CAST(SYSDATETIME() AS date))&#10;GROUP BY s.[Customer Key], c.[Region Code];"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::WindowMonths" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::WindowMonths" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Realign APAC Window To 445"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F0176C28-A7B6-C531-E8D2-8FFEF5133B73}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Realign APAC Window To 445"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="UPDATE m SET    m.WindowEndDate = f.PeriodEndDate, m.WindowStartDate = f.PeriodStartDate FROM   work.CustomerRollingMetric AS m INNER JOIN (SELECT TOP (1) PeriodStartDate, PeriodEndDate FROM stg.FiscalCalendar445Period             WHERE PeriodEndDate &lt;= CAST(SYSDATETIME() AS date)             ORDER BY PeriodEndDate DESC) AS f ON 1 = 1 WHERE  m.RegionCode = N'APAC';"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Derive Rolling Metrics"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{5A29DF6B-DA6E-75E5-227E-CAE6780ECA28}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Derive Rolling Metrics"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Derive Rolling Metrics\work CustomerRollingMetric" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="work CustomerRollingMetric" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">1800</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT CustomerKey, RegionCode, WindowStartDate, WindowEndDate, OrderCount, NetRevenue, ReturnAmount, DistinctItemCount, LastOrderDate FROM work.CustomerRollingMetric;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].Columns[CustomerKey]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].ExternalColumns[CustomerKey]" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].Columns[CustomerKey]" name="CustomerKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].Columns[WindowStartDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].ExternalColumns[WindowStartDate]" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].Columns[WindowStartDate]" name="WindowStartDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].Columns[WindowEndDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].ExternalColumns[WindowEndDate]" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].Columns[WindowEndDate]" name="WindowEndDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].Columns[OrderCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].ExternalColumns[OrderCount]" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].Columns[OrderCount]" name="OrderCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].Columns[NetRevenue]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].ExternalColumns[NetRevenue]" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].Columns[NetRevenue]" name="NetRevenue" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].Columns[ReturnAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].ExternalColumns[ReturnAmount]" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].Columns[ReturnAmount]" name="ReturnAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].Columns[DistinctItemCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].ExternalColumns[DistinctItemCount]" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].Columns[DistinctItemCount]" name="DistinctItemCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].Columns[LastOrderDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].ExternalColumns[LastOrderDate]" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].Columns[LastOrderDate]" name="LastOrderDate" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].ExternalColumns[WindowStartDate]" dataType="dbTimeStamp" name="WindowStartDate" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].ExternalColumns[WindowEndDate]" dataType="dbTimeStamp" name="WindowEndDate" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].ExternalColumns[OrderCount]" dataType="i4" name="OrderCount" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].ExternalColumns[NetRevenue]" dataType="numeric" precision="18" scale="2" name="NetRevenue" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].ExternalColumns[ReturnAmount]" dataType="numeric" precision="18" scale="2" name="ReturnAmount" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].ExternalColumns[DistinctItemCount]" dataType="i4" name="DistinctItemCount" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output].ExternalColumns[LastOrderDate]" dataType="dbTimeStamp" name="LastOrderDate" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[CustomerKey]" dataType="i4" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[CustomerKey]" name="CustomerKey" />
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[WindowStartDate]" dataType="dbTimeStamp" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[WindowStartDate]" name="WindowStartDate" />
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[WindowEndDate]" dataType="dbTimeStamp" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[WindowEndDate]" name="WindowEndDate" />
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[OrderCount]" dataType="i4" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[OrderCount]" name="OrderCount" />
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[NetRevenue]" dataType="numeric" precision="18" scale="2" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[NetRevenue]" name="NetRevenue" />
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[ReturnAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[ReturnAmount]" name="ReturnAmount" />
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[DistinctItemCount]" dataType="i4" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[DistinctItemCount]" name="DistinctItemCount" />
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[LastOrderDate]" dataType="dbTimeStamp" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[LastOrderDate]" name="LastOrderDate" />
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Derive Rolling Metrics\Derive Ratios" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Ratios" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Derive Rolling Metrics\Derive Ratios.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Derive Rolling Metrics\Derive Ratios.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Derive Rolling Metrics\Derive Ratios.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Derive Rolling Metrics\Derive Ratios.Outputs[Derived Column Output].Columns[AverageBasketAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Derive Rolling Metrics\Derive Ratios.Outputs[Derived Column Output].Columns[AverageBasketAmount]" name="AverageBasketAmount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">OrderCount == 0 ? (DT_NUMERIC,18,2)0 : NetRevenue / OrderCount</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">OrderCount == 0 ? (DT_NUMERIC,18,2)0 : NetRevenue / OrderCount</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Derive Rolling Metrics\Derive Ratios.Outputs[Derived Column Output].Columns[ReturnRatePercent]" dataType="numeric" precision="18" scale="2" lineageId="Package\Derive Rolling Metrics\Derive Ratios.Outputs[Derived Column Output].Columns[ReturnRatePercent]" name="ReturnRatePercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">NetRevenue == 0 ? (DT_NUMERIC,18,2)0 : ReturnAmount * 100 / NetRevenue</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">NetRevenue == 0 ? (DT_NUMERIC,18,2)0 : ReturnAmount * 100 / NetRevenue</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Derive Rolling Metrics\Derive Ratios.Outputs[Derived Column Output].Columns[DaysSinceLastOrder]" dataType="i4" lineageId="Package\Derive Rolling Metrics\Derive Ratios.Outputs[Derived Column Output].Columns[DaysSinceLastOrder]" name="DaysSinceLastOrder">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(LastOrderDate) ? 9999 : DATEDIFF("Dy", LastOrderDate, WindowEndDate)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(LastOrderDate) ? 9999 : DATEDIFF("Dy", LastOrderDate, WindowEndDate)</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Derive Rolling Metrics\Derive Activity Status" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Activity Status" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Derive Rolling Metrics\Derive Activity Status.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Derive Rolling Metrics\Derive Activity Status.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Derive Rolling Metrics\Derive Activity Status.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Derive Rolling Metrics\Derive Activity Status.Outputs[Derived Column Output].Columns[ActivityStatusCode]" dataType="wstr" length="10" lineageId="Package\Derive Rolling Metrics\Derive Activity Status.Outputs[Derived Column Output].Columns[ActivityStatusCode]" name="ActivityStatusCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">(ISNULL(LastOrderDate) ? 9999 : DATEDIFF("Dy", LastOrderDate, WindowEndDate)) &gt; @[$Package::InactiveThresholdDays] ? (DT_WSTR,10)"INACTIVE" : (OrderCount &gt;= 12 ? (DT_WSTR,10)"FREQUENT" : (DT_WSTR,10)"ACTIVE")</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(ISNULL(LastOrderDate) ? 9999 : DATEDIFF("Dy", LastOrderDate, WindowEndDate)) &gt; @[$Package::InactiveThresholdDays] ? (DT_WSTR,10)"INACTIVE" : (OrderCount &gt;= 12 ? (DT_WSTR,10)"FREQUENT" : (DT_WSTR,10)"ACTIVE")</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Derive Rolling Metrics\Derive Activity Status.Outputs[Derived Column Output].Columns[OrdersPerMonth]" dataType="numeric" precision="18" scale="2" lineageId="Package\Derive Rolling Metrics\Derive Activity Status.Outputs[Derived Column Output].Columns[OrdersPerMonth]" name="OrdersPerMonth">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">OrderCount / (DT_NUMERIC,18,2)@[$Package::WindowMonths]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">OrderCount / (DT_NUMERIC,18,2)@[$Package::WindowMonths]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Derive Rolling Metrics\Count Metric Rows" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Metric Rows" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsInserted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Derive Rolling Metrics\Count Metric Rows.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Derive Rolling Metrics\Count Metric Rows.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Derive Rolling Metrics\Count Metric Rows.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Derive Rolling Metrics\Customer360 RollingMetric" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Customer360 RollingMetric" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Customer360].[CustomerRollingMetric]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">50000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].Columns[CustomerKey]" cachedDataType="i4" cachedName="CustomerKey" externalMetadataColumnId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" name="CustomerKey" />
+                  <inputColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].Columns[WindowStartDate]" cachedDataType="dbTimeStamp" cachedName="WindowStartDate" externalMetadataColumnId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[WindowStartDate]" name="WindowStartDate" />
+                  <inputColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].Columns[WindowEndDate]" cachedDataType="dbTimeStamp" cachedName="WindowEndDate" externalMetadataColumnId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[WindowEndDate]" name="WindowEndDate" />
+                  <inputColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].Columns[OrderCount]" cachedDataType="i4" cachedName="OrderCount" externalMetadataColumnId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[OrderCount]" name="OrderCount" />
+                  <inputColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].Columns[NetRevenue]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="NetRevenue" externalMetadataColumnId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[NetRevenue]" name="NetRevenue" />
+                  <inputColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].Columns[ReturnAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ReturnAmount" externalMetadataColumnId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[ReturnAmount]" name="ReturnAmount" />
+                  <inputColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].Columns[DistinctItemCount]" cachedDataType="i4" cachedName="DistinctItemCount" externalMetadataColumnId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[DistinctItemCount]" name="DistinctItemCount" />
+                  <inputColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].Columns[LastOrderDate]" cachedDataType="dbTimeStamp" cachedName="LastOrderDate" externalMetadataColumnId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[LastOrderDate]" name="LastOrderDate" />
+                  <inputColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].Columns[AverageBasketAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AverageBasketAmount" externalMetadataColumnId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[AverageBasketAmount]" name="AverageBasketAmount" />
+                  <inputColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].Columns[ReturnRatePercent]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ReturnRatePercent" externalMetadataColumnId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[ReturnRatePercent]" name="ReturnRatePercent" />
+                  <inputColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].Columns[DaysSinceLastOrder]" cachedDataType="i4" cachedName="DaysSinceLastOrder" externalMetadataColumnId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[DaysSinceLastOrder]" name="DaysSinceLastOrder" />
+                  <inputColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].Columns[ActivityStatusCode]" cachedDataType="wstr" cachedLength="10" cachedName="ActivityStatusCode" externalMetadataColumnId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[ActivityStatusCode]" name="ActivityStatusCode" />
+                  <inputColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].Columns[OrdersPerMonth]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrdersPerMonth" externalMetadataColumnId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[OrdersPerMonth]" name="OrdersPerMonth" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[WindowStartDate]" dataType="dbTimeStamp" name="WindowStartDate" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[WindowEndDate]" dataType="dbTimeStamp" name="WindowEndDate" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[OrderCount]" dataType="i4" name="OrderCount" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[NetRevenue]" dataType="numeric" precision="18" scale="2" name="NetRevenue" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[ReturnAmount]" dataType="numeric" precision="18" scale="2" name="ReturnAmount" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[DistinctItemCount]" dataType="i4" name="DistinctItemCount" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[LastOrderDate]" dataType="dbTimeStamp" name="LastOrderDate" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[AverageBasketAmount]" dataType="numeric" precision="18" scale="2" name="AverageBasketAmount" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[ReturnRatePercent]" dataType="numeric" precision="18" scale="2" name="ReturnRatePercent" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[DaysSinceLastOrder]" dataType="i4" name="DaysSinceLastOrder" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[ActivityStatusCode]" dataType="wstr" length="10" name="ActivityStatusCode" />
+                  <externalMetadataColumn refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input].ExternalColumns[OrdersPerMonth]" dataType="numeric" precision="18" scale="2" name="OrdersPerMonth" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Derive Rolling Metrics.Paths[OLE DB Source Output]" endId="Package\Derive Rolling Metrics\Derive Ratios.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Derive Rolling Metrics\work CustomerRollingMetric.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Derive Rolling Metrics.Paths[Derived Column Output 1]" endId="Package\Derive Rolling Metrics\Derive Activity Status.Inputs[Derived Column Input]" name="Derived Column Output 1" startId="Package\Derive Rolling Metrics\Derive Ratios.Outputs[Derived Column Output]" />
+          <path refId="Package\Derive Rolling Metrics.Paths[Derived Column Output 2]" endId="Package\Derive Rolling Metrics\Count Metric Rows.Inputs[Row Count Input]" name="Derived Column Output 2" startId="Package\Derive Rolling Metrics\Derive Activity Status.Outputs[Derived Column Output]" />
+          <path refId="Package\Derive Rolling Metrics.Paths[Row Count Output 3]" endId="Package\Derive Rolling Metrics\Customer360 RollingMetric.Inputs[OLE DB Destination Input]" name="Row Count Output 3" startId="Package\Derive Rolling Metrics\Count Metric Rows.Outputs[Row Count Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Assign RFM Deciles"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{28C8615D-A4DE-B10F-93CD-32E2B8E8DA67}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Assign RFM Deciles"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="UPDATE m&#10;SET    m.[Recency Decile] = d.RecencyDecile&#10;,      m.[Frequency Decile] = d.FrequencyDecile&#10;,      m.[Monetary Decile] = d.MonetaryDecile&#10;FROM   Customer360.CustomerRollingMetric AS m&#10;INNER JOIN (SELECT [Customer Key],&#10;                   NTILE(10) OVER (PARTITION BY [Region Code]&#10;                                   ORDER BY [Days Since Last Order] DESC) AS RecencyDecile,&#10;                   NTILE(10) OVER (PARTITION BY [Region Code]&#10;                                   ORDER BY [Order Count]) AS FrequencyDecile,&#10;                   NTILE(10) OVER (PARTITION BY [Region Code]&#10;                                   ORDER BY [Net Revenue]) AS MonetaryDecile&#10;            FROM   Customer360.CustomerRollingMetric) AS d&#10;        ON d.[Customer Key] = m.[Customer Key];"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Count Inactive Customers"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F60E0DD9-AA2E-0E64-64DC-32384677B233}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Count Inactive Customers"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="SELECT COUNT(*) AS InactiveCustomers FROM Customer360.CustomerRollingMetric WHERE [Activity Status Code] = N'INACTIVE';"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::InactiveCustomerCount" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Customer360.CustomerRollingMetric', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Truncate work.CustomerRollingMetric" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Truncate work.CustomerRollingMetric"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Aggregate Rolling Window" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Aggregate Rolling Window"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Realign APAC Window To 445" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Realign APAC Window To 445"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Derive Rolling Metrics" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Derive Rolling Metrics"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Assign RFM Deciles" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Assign RFM Deciles"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:Value="2"
+      DTS:To="Package\Count Inactive Customers" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Count Inactive Customers"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{3CA64DC0-3502-B56E-A4D9-C3B6717954D5}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

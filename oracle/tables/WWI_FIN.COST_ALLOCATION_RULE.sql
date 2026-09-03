@@ -1,0 +1,68 @@
+/* =====================================================================
+ * Object       : TABLE WWI_FIN.COST_ALLOCATION_RULE
+ * Schema       : WWI_FIN (Oracle ERP - WWIGERP)
+ * Deploy order : 62
+ * Depends on   : WWI_FIN.COST_CENTER, WWI_FIN.GL_ACCOUNT
+ * Called by    : Monthly cost allocation batch, PKG_GL_POST
+ *
+ * Allocation rules driving the month-end distribution batch. The rule
+ * expression is stored as text and assembled into dynamic SQL at run time - a
+ * rule with a typo fails the whole allocation run rather than the one rule.
+ * Percentages within a rule set are not constrained to sum to 100.
+ * ===================================================================== */
+
+CREATE SEQUENCE WWI_FIN.SEQ_COST_ALLOCATION_RULE
+    START WITH 2001 INCREMENT BY 1 NOCACHE NOCYCLE
+/
+
+CREATE TABLE WWI_FIN.COST_ALLOCATION_RULE
+(
+    ALLOC_RULE_ID           NUMBER(12)      NOT NULL,
+    RULE_SET_CD             VARCHAR2(10)    NOT NULL,
+    RULE_SEQ_NBR            NUMBER(4)       NOT NULL,
+    RULE_NAME               VARCHAR2(120)   NOT NULL,
+    REGION_CD               VARCHAR2(4)     NOT NULL,
+    SOURCE_COST_CENTER_CD   VARCHAR2(10),
+    SOURCE_ACCOUNT_MASK     VARCHAR2(30),
+    TARGET_COST_CENTER_CD   VARCHAR2(10)    NOT NULL,
+    TARGET_ACCOUNT_CD       VARCHAR2(30),
+    ALLOCATION_METHOD_CD    VARCHAR2(6)     NOT NULL,
+    ALLOCATION_PCT          NUMBER(7,4),
+    DRIVER_CD               VARCHAR2(10),
+    DRIVER_SQL_TXT          VARCHAR2(2000),
+    FIXED_AMT               NUMBER(15,5),
+    FIXED_CURR_CD           VARCHAR2(3),
+    EFFECTIVE_FROM_DT       DATE            NOT NULL,
+    EFFECTIVE_TO_DT         DATE,
+    REVERSE_NEXT_PERIOD_FLG VARCHAR2(1)     DEFAULT 'N' NOT NULL,
+    ACTIVE_FLG              VARCHAR2(1)     DEFAULT 'Y' NOT NULL,
+    LAST_RUN_PERIOD_CD      VARCHAR2(7),
+    NOTES_TXT               VARCHAR2(1000),
+    SOURCE_SYS              VARCHAR2(12)    DEFAULT 'ORA_ERP' NOT NULL,
+    CREATED_BY              VARCHAR2(30)    DEFAULT USER NOT NULL,
+    CREATED_DT              DATE            DEFAULT SYSDATE NOT NULL,
+    UPDATED_BY              VARCHAR2(30),
+    UPDATED_DT              DATE,
+    CONSTRAINT PK_COST_ALLOCATION_RULE PRIMARY KEY (ALLOC_RULE_ID) USING INDEX TABLESPACE WWI_FIN_IDX,
+    CONSTRAINT UK_ALLOC_RULE_SEQ UNIQUE (RULE_SET_CD, RULE_SEQ_NBR) USING INDEX TABLESPACE WWI_FIN_IDX,
+    CONSTRAINT CK_ALLOC_METHOD CHECK (
+        ALLOCATION_METHOD_CD IN ('PCT', 'DRIVER', 'FIXED', 'EVEN', 'STEP')),
+    CONSTRAINT CK_ALLOC_PCT CHECK (ALLOCATION_PCT IS NULL OR ALLOCATION_PCT BETWEEN 0 AND 100),
+    CONSTRAINT CK_ALLOC_FLAGS CHECK (
+        ACTIVE_FLG IN ('Y', 'N') AND REVERSE_NEXT_PERIOD_FLG IN ('Y', 'N')),
+    CONSTRAINT CK_ALLOC_METHOD_INPUT CHECK (
+        (ALLOCATION_METHOD_CD = 'PCT'    AND ALLOCATION_PCT IS NOT NULL)
+     OR (ALLOCATION_METHOD_CD = 'FIXED'  AND FIXED_AMT IS NOT NULL)
+     OR (ALLOCATION_METHOD_CD = 'DRIVER' AND DRIVER_CD IS NOT NULL)
+     OR (ALLOCATION_METHOD_CD IN ('EVEN', 'STEP')))
+)
+TABLESPACE WWI_FIN_DATA
+/
+
+CREATE INDEX WWI_FIN.IX_ALLOC_RULE_TARGET
+    ON WWI_FIN.COST_ALLOCATION_RULE (TARGET_COST_CENTER_CD, ACTIVE_FLG) TABLESPACE WWI_FIN_IDX
+/
+
+COMMENT ON COLUMN WWI_FIN.COST_ALLOCATION_RULE.DRIVER_SQL_TXT IS
+    'Fragment concatenated into dynamic SQL by the allocation batch.'
+/

@@ -1,0 +1,60 @@
+/* =====================================================================
+ * Object       : TABLE WWI_MDM.MDM_MERGE_HISTORY
+ * Schema       : WWI_MDM (Oracle ERP - WWIGERP)
+ * Deploy order : 38
+ * Depends on   : WWI_MDM.CUST_MASTER, WWI_MDM.SUPP_MASTER
+ * Called by    : PKG_CUSTOMER_MASTER (merge path), C360 survivorship reporting
+ *
+ * Record of every party merge. The losing party is left in CUST_MASTER with
+ * CUST_STATUS_CD = 'MG' rather than deleted, so downstream must exclude it or
+ * double-count. UNMERGE_FLG marks the handful of merges that were reversed by
+ * hand in 2016; the reversal itself was not logged anywhere else.
+ * ===================================================================== */
+
+CREATE SEQUENCE WWI_MDM.SEQ_MDM_MERGE_HISTORY
+    START WITH 5001 INCREMENT BY 1 NOCACHE NOCYCLE
+/
+
+CREATE TABLE WWI_MDM.MDM_MERGE_HISTORY
+(
+    MERGE_ID                NUMBER(12)      NOT NULL,
+    PARTY_TYPE_CD           VARCHAR2(4)     NOT NULL,
+    SURVIVOR_PARTY_ID       NUMBER(12)      NOT NULL,
+    MERGED_PARTY_ID         NUMBER(12)      NOT NULL,
+    MERGE_REASON_CD         VARCHAR2(6)     NOT NULL,
+    MERGE_RULE_TXT          VARCHAR2(400),
+    ATTRIBUTES_MOVED_TXT    VARCHAR2(2000),
+    OPEN_TXN_COUNT          NUMBER(8),
+    MERGED_BY_CD            VARCHAR2(8)     NOT NULL,
+    MERGE_DT                DATE            DEFAULT SYSDATE NOT NULL,
+    APPROVED_BY_CD          VARCHAR2(8),
+    UNMERGE_FLG             VARCHAR2(1)     DEFAULT 'N' NOT NULL,
+    UNMERGE_DT              DATE,
+    UNMERGE_NOTES_TXT       VARCHAR2(1000),
+    SOURCE_SYS              VARCHAR2(12)    DEFAULT 'ORA_ERP' NOT NULL,
+    CREATED_BY              VARCHAR2(30)    DEFAULT USER NOT NULL,
+    CREATED_DT              DATE            DEFAULT SYSDATE NOT NULL,
+    UPDATED_BY              VARCHAR2(30),
+    UPDATED_DT              DATE,
+    CONSTRAINT PK_MDM_MERGE_HISTORY PRIMARY KEY (MERGE_ID) USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT CK_MDM_MERGE_TYPE CHECK (PARTY_TYPE_CD IN ('CUST', 'SUPP')),
+    CONSTRAINT CK_MDM_MERGE_REASON CHECK (
+        MERGE_REASON_CD IN ('DUP', 'ACQ', 'REORG', 'DATAQ', 'REQST')),
+    CONSTRAINT CK_MDM_MERGE_SELF CHECK (SURVIVOR_PARTY_ID <> MERGED_PARTY_ID),
+    CONSTRAINT CK_MDM_MERGE_UNMERGE CHECK (
+        UNMERGE_FLG IN ('Y', 'N') AND (UNMERGE_FLG = 'N' OR UNMERGE_DT IS NOT NULL))
+)
+TABLESPACE WWI_DATA
+/
+
+CREATE INDEX WWI_MDM.IX_MDM_MERGE_SURVIVOR
+    ON WWI_MDM.MDM_MERGE_HISTORY (PARTY_TYPE_CD, SURVIVOR_PARTY_ID) TABLESPACE WWI_IDX
+/
+
+CREATE INDEX WWI_MDM.IX_MDM_MERGE_MERGED
+    ON WWI_MDM.MDM_MERGE_HISTORY (PARTY_TYPE_CD, MERGED_PARTY_ID) TABLESPACE WWI_IDX
+/
+
+CREATE INDEX WWI_MDM.IX_MDM_MERGE_DT
+    ON WWI_MDM.MDM_MERGE_HISTORY (MERGE_DT) TABLESPACE WWI_IDX
+/

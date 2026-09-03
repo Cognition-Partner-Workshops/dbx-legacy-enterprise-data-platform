@@ -1,0 +1,1780 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{743866A5-ECEE-589C-435B-BC18ABABF9EA}"
+  DTS:Description="Month-end snapshot, corrections and aggregate rebuild. Applies the accounting corrections the business raised during the month, rebuilds every monthly aggregate and refreshes the customer marts on top of the corrected facts."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="Master_Month_End"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{2FAF1672-EBD3-D19B-0AC9-AD04D4C0F7E7}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{8B531643-2658-B979-3A59-965CF3F5DDCB}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch id to adopt on a restart. Zero means start a new batch."
+      DTS:DTSID="{7F6644CB-44CD-373E-574A-01E9B85930E8}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BusinessDate]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="Business date the run is loading. Defaults to the previous day at schedule time."
+      DTS:DTSID="{41E80F51-A5BD-6E0F-4B05-842EC95E8905}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BusinessDate"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">1900-01-01</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::EnvironmentCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="DEV / TEST / PROD. Drives etl.Configuration lookups and notification routing."
+      DTS:DTSID="{712067EA-4F56-721C-DA1C-27D6D2F827D1}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="EnvironmentCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">DEV</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="Passed down to every child; ignores stored watermarks and reloads all history."
+      DTS:DTSID="{56C7FDDE-9FAF-A765-6AAE-054E9BA081F3}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::MaxParallelStreams]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Upper bound on concurrent child streams inside a phase container."
+      DTS:DTSID="{C16C250A-6264-3977-56E6-809D740CE513}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="MaxParallelStreams"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">4</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::MaxExtractAttempts]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Bound on the retry loop around the failure-prone extract phases."
+      DTS:DTSID="{EC63F223-776A-0BC3-D40C-AD1900F2F909}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="MaxExtractAttempts"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">3</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::RestartFromStep]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="When set, phases before the named step are skipped so a failed batch can resume."
+      DTS:DTSID="{78E7B9F4-77C9-3898-F213-9F24B4877E19}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="RestartFromStep"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve"></DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SnapshotMonth]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="YYYY-MM month being snapshotted."
+      DTS:DTSID="{4EF59433-FDCC-C394-9D6B-98CCE1A00765}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SnapshotMonth"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">1900-01</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::RebuildAllAggregates]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="Rebuild every aggregate rather than only the ones flagged stale."
+      DTS:DTSID="{E51D964E-1D0F-794C-1969-1AF1655B25F5}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="RebuildAllAggregates"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">True</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchId]"
+      DTS:CreationName=""
+      DTS:DTSID="{1C71FC31-9508-4CB5-43A3-34D8F1223300}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ExtractAttempt]"
+      DTS:CreationName=""
+      DTS:DTSID="{936AE049-8D40-B102-6563-F96EB01041E3}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ExtractAttempt">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">1</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::FailedObjectCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{CEB1CD3E-35BF-1759-8559-E8F737084D85}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="FailedObjectCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RejectedRowCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{15700E97-968A-EAC2-AF88-1FDA475A7C14}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RejectedRowCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{DFDE5F6A-4D96-14EF-30D8-EFFA07DACFE6}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::CorrectionCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{BF6359CE-7370-2652-FC40-1B804185D00E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="CorrectionCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchStepIdFactCorrections]"
+      DTS:CreationName=""
+      DTS:DTSID="{291CD815-32C1-3910-F5EA-6433FD73AA2C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchStepIdFactCorrections">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchStepIdSalesAggregates]"
+      DTS:CreationName=""
+      DTS:DTSID="{9934C39D-35AA-74E9-B1FD-D5FCEB62EBAD}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchStepIdSalesAggregates">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchStepIdOperationsAggregates]"
+      DTS:CreationName=""
+      DTS:DTSID="{14705E66-EC18-FF23-8AFC-DC95D52F0E35}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchStepIdOperationsAggregates">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchStepIdFinanceAggregates]"
+      DTS:CreationName=""
+      DTS:DTSID="{EE0E7783-EF94-F359-F6FB-7A215B3A0672}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchStepIdFinanceAggregates">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchStepIdCustomerAggregates]"
+      DTS:CreationName=""
+      DTS:DTSID="{E9826199-7A5C-6EB4-02DA-08A554BB0633}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchStepIdCustomerAggregates">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchStepIdCustomerMartRefresh]"
+      DTS:CreationName=""
+      DTS:DTSID="{97B4FF97-31BF-A7FD-B9AE-13432D067868}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchStepIdCustomerMartRefresh">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchStepIdCustomerSegmentPublish]"
+      DTS:CreationName=""
+      DTS:DTSID="{76E62CB0-1B9B-6932-9D7D-E66C10F9507A}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchStepIdCustomerSegmentPublish">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchStepIdMonthEndHousekeeping]"
+      DTS:CreationName=""
+      DTS:DTSID="{34393CD8-8DEA-2A2E-67DF-A891F0929AA8}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchStepIdMonthEndHousekeeping">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchStepIdMonthEndEscalation]"
+      DTS:CreationName=""
+      DTS:DTSID="{18B5C730-E81D-281D-F3A2-38A77BB85FCF}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchStepIdMonthEndEscalation">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Start Batch"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{8338E990-657C-2BF4-677D-431A70C3CDAB}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Start Batch"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_StartBatch @BatchName = ?, @BatchType = N'Monthly', @BusinessDate = ?, @EnvironmentCode = ?, @AllowAdoptRunning = ?, @Notes = N'Month-end aggregate rebuild.', @BatchId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BusinessDate" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::EnvironmentCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Count Pending Corrections"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{CC37B74A-F12F-6076-9F5A-3AC45D401805}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Count Pending Corrections"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="SELECT COUNT(*) AS PendingCorrections FROM etl.RejectedRecord WHERE IsReprocessed = 0 AND RejectStage IN (N'Fact', N'Dimension');"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::CorrectionCount" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Fact Corrections"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Phase: Fact Corrections"
+      DTS:DTSID="{A2EB01D5-9EC3-DA49-5CD1-E0B3CC7A102C}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Fact Corrections">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Fact Corrections\Start Step Fact Corrections"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{A581C476-31F8-26BE-E19D-859206ECC866}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Start Step Fact Corrections"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_StartBatchStep @BatchId = ?, @StepName = N'Fact Corrections', @StepSequence = 10, @StepGroup = N'Fact', @BatchStepId = ? OUTPUT;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchStepIdFactCorrections" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Fact Corrections\Run FACT_Apply_Corrections"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{A41E0BC6-A7FA-F976-7523-C089909C4175}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run FACT_Apply_Corrections"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>FACT_Apply_Corrections.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Fact Corrections\Run FACT_Dedup_Sale"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{F9E2747E-2C8A-3377-4C5C-3C7CDBE7498B}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run FACT_Dedup_Sale"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>FACT_Dedup_Sale.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Fact Corrections\End Step Fact Corrections"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{14CAF295-1387-E697-0D72-D8E572CC0069}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="End Step Fact Corrections"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatchStep @BatchStepId = ?, @Status = N'Succeeded';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchStepIdFactCorrections" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Fact Corrections.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{DF3C9B21-6C7C-7C47-DDC6-9BF8979A449B}"
+          DTS:From="Package\Fact Corrections\Start Step Fact Corrections"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Fact Corrections\Run FACT_Apply_Corrections" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Fact Corrections.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{59F77D5A-054D-D8C1-5DD4-1FA727D057A0}"
+          DTS:From="Package\Fact Corrections\Run FACT_Apply_Corrections"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Fact Corrections\Run FACT_Dedup_Sale" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Fact Corrections.PrecedenceConstraints[Constraint 2]"
+          DTS:CreationName=""
+          DTS:DTSID="{113004CD-C40C-7DF8-ABD2-7768B875449C}"
+          DTS:From="Package\Fact Corrections\Run FACT_Dedup_Sale"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 2"
+          DTS:To="Package\Fact Corrections\End Step Fact Corrections" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Sales Aggregates"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Phase: Sales Aggregates"
+      DTS:DTSID="{8FF5F07B-9DAF-D7DB-10A1-D3210C54FC13}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Sales Aggregates">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Sales Aggregates\Start Step Sales Aggregates"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{CE8F7A53-D74C-56FB-8385-071D6E6588B8}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Start Step Sales Aggregates"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_StartBatchStep @BatchId = ?, @StepName = N'Sales Aggregates', @StepSequence = 20, @StepGroup = N'Aggregate', @BatchStepId = ? OUTPUT;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchStepIdSalesAggregates" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Sales Aggregates\Run AGG_Refresh_MonthlySalesSummary"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{0F262647-FB71-70D0-656C-9D15B9830CEF}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run AGG_Refresh_MonthlySalesSummary"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>AGG_Refresh_MonthlySalesSummary.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Sales Aggregates\Run AGG_Refresh_RegionalSalesPerformance"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{0C02D58F-EA99-52F9-14ED-48302B8C7281}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run AGG_Refresh_RegionalSalesPerformance"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>AGG_Refresh_RegionalSalesPerformance.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Sales Aggregates\Run AGG_Refresh_MonthlyMarginAnalysis"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{9B715A89-B0B7-6D1C-1132-1839DF353327}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run AGG_Refresh_MonthlyMarginAnalysis"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>AGG_Refresh_MonthlyMarginAnalysis.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Sales Aggregates\Run AGG_Refresh_PromotionEffectiveness"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{656B1FFB-3188-4B11-E181-52BADF2451A0}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run AGG_Refresh_PromotionEffectiveness"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>AGG_Refresh_PromotionEffectiveness.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Sales Aggregates\End Step Sales Aggregates"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F893DB3C-C528-E4C5-5691-31382B5149D4}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="End Step Sales Aggregates"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatchStep @BatchStepId = ?, @Status = N'Succeeded';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchStepIdSalesAggregates" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Sales Aggregates.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{1F6596A0-8029-4D44-7A49-81A10CD49AE1}"
+          DTS:From="Package\Sales Aggregates\Start Step Sales Aggregates"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Sales Aggregates\Run AGG_Refresh_MonthlySalesSummary" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Sales Aggregates.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{B7010F18-7443-BC74-8721-FA74C978EF19}"
+          DTS:From="Package\Sales Aggregates\Run AGG_Refresh_MonthlySalesSummary"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Sales Aggregates\Run AGG_Refresh_MonthlyMarginAnalysis" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Sales Aggregates.PrecedenceConstraints[Constraint 2]"
+          DTS:CreationName=""
+          DTS:DTSID="{2EB4B3E1-E1B7-45DE-2C59-A3596BB7951F}"
+          DTS:From="Package\Sales Aggregates\Run AGG_Refresh_MonthlyMarginAnalysis"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 2"
+          DTS:To="Package\Sales Aggregates\End Step Sales Aggregates" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Sales Aggregates.PrecedenceConstraints[Constraint 3]"
+          DTS:CreationName=""
+          DTS:DTSID="{F4ED5048-D74A-5E38-9F1E-D0748D657B73}"
+          DTS:From="Package\Sales Aggregates\Start Step Sales Aggregates"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 3"
+          DTS:To="Package\Sales Aggregates\Run AGG_Refresh_RegionalSalesPerformance" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Sales Aggregates.PrecedenceConstraints[Constraint 4]"
+          DTS:CreationName=""
+          DTS:DTSID="{AC0A9470-4924-AF04-49C4-323A74348474}"
+          DTS:From="Package\Sales Aggregates\Run AGG_Refresh_RegionalSalesPerformance"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 4"
+          DTS:To="Package\Sales Aggregates\Run AGG_Refresh_PromotionEffectiveness" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Sales Aggregates.PrecedenceConstraints[Constraint 5]"
+          DTS:CreationName=""
+          DTS:DTSID="{9134EECB-B08C-8D40-B083-EF3CA77DA176}"
+          DTS:From="Package\Sales Aggregates\Run AGG_Refresh_PromotionEffectiveness"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 5"
+          DTS:To="Package\Sales Aggregates\End Step Sales Aggregates" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Operations Aggregates"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Phase: Operations Aggregates"
+      DTS:DTSID="{6F35097D-733C-FF98-5895-5B16CF79EFB2}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Operations Aggregates">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Operations Aggregates\Start Step Operations Aggregates"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{90C4B7AF-024E-E7EA-A25D-0D4095957369}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Start Step Operations Aggregates"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_StartBatchStep @BatchId = ?, @StepName = N'Operations Aggregates', @StepSequence = 30, @StepGroup = N'Aggregate', @BatchStepId = ? OUTPUT;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchStepIdOperationsAggregates" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Operations Aggregates\Run AGG_Refresh_ProductPerformance"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{77EFDDA3-68D9-079D-39D8-B675BA850CC6}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run AGG_Refresh_ProductPerformance"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>AGG_Refresh_ProductPerformance.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Operations Aggregates\Run AGG_Refresh_SupplierPerformance"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{E5DA2B65-7968-2E53-C80F-DAD2449FE100}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run AGG_Refresh_SupplierPerformance"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>AGG_Refresh_SupplierPerformance.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Operations Aggregates\Run AGG_Refresh_DeliveryPerformanceSummary"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{46380F88-7D3A-5A59-F29C-FB3C96928DC2}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run AGG_Refresh_DeliveryPerformanceSummary"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>AGG_Refresh_DeliveryPerformanceSummary.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Operations Aggregates\End Step Operations Aggregates"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{E9D692D6-1660-24C9-814A-9103EBAEE70D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="End Step Operations Aggregates"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatchStep @BatchStepId = ?, @Status = N'Succeeded';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchStepIdOperationsAggregates" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Operations Aggregates.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{BDF6CB51-BD07-D131-5C79-EADD8CE82FC2}"
+          DTS:From="Package\Operations Aggregates\Start Step Operations Aggregates"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Operations Aggregates\Run AGG_Refresh_ProductPerformance" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Operations Aggregates.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{ECABFABD-6589-2FE6-6AA2-E90D5C3B32A3}"
+          DTS:From="Package\Operations Aggregates\Run AGG_Refresh_ProductPerformance"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Operations Aggregates\End Step Operations Aggregates" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Operations Aggregates.PrecedenceConstraints[Constraint 2]"
+          DTS:CreationName=""
+          DTS:DTSID="{2AF1BF11-C296-26D6-26EE-1BC976E6A7A0}"
+          DTS:From="Package\Operations Aggregates\Start Step Operations Aggregates"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 2"
+          DTS:To="Package\Operations Aggregates\Run AGG_Refresh_SupplierPerformance" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Operations Aggregates.PrecedenceConstraints[Constraint 3]"
+          DTS:CreationName=""
+          DTS:DTSID="{EA133344-C548-49B9-21E8-C6F9B3F8426D}"
+          DTS:From="Package\Operations Aggregates\Run AGG_Refresh_SupplierPerformance"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 3"
+          DTS:To="Package\Operations Aggregates\End Step Operations Aggregates" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Operations Aggregates.PrecedenceConstraints[Constraint 4]"
+          DTS:CreationName=""
+          DTS:DTSID="{7FA82FE8-9062-1EA1-8997-5CCBF6C0165D}"
+          DTS:From="Package\Operations Aggregates\Start Step Operations Aggregates"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 4"
+          DTS:To="Package\Operations Aggregates\Run AGG_Refresh_DeliveryPerformanceSummary" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Operations Aggregates.PrecedenceConstraints[Constraint 5]"
+          DTS:CreationName=""
+          DTS:DTSID="{FBFCB631-F613-A558-4F9C-C9DFA2EA787F}"
+          DTS:From="Package\Operations Aggregates\Run AGG_Refresh_DeliveryPerformanceSummary"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 5"
+          DTS:To="Package\Operations Aggregates\End Step Operations Aggregates" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Finance Aggregates"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Phase: Finance Aggregates"
+      DTS:DTSID="{7DE3E849-6C6B-B202-6A92-47DD124450A2}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Finance Aggregates">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Finance Aggregates\Start Step Finance Aggregates"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F9A559E4-4796-E65D-F14C-C9164E35F67F}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Start Step Finance Aggregates"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_StartBatchStep @BatchId = ?, @StepName = N'Finance Aggregates', @StepSequence = 40, @StepGroup = N'Aggregate', @BatchStepId = ? OUTPUT;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchStepIdFinanceAggregates" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Finance Aggregates\Run AGG_Refresh_FinanceCloseSummary"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{4BF573CB-59E0-27DC-BD95-36CDB12564DF}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run AGG_Refresh_FinanceCloseSummary"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>AGG_Refresh_FinanceCloseSummary.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Finance Aggregates\End Step Finance Aggregates"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{B098E7E4-EDA9-8E89-904D-FE80DB6F36A9}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="End Step Finance Aggregates"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatchStep @BatchStepId = ?, @Status = N'Succeeded';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchStepIdFinanceAggregates" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Finance Aggregates.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6FA0E3B2-1478-A1EB-FA9D-D7677390AED4}"
+          DTS:From="Package\Finance Aggregates\Start Step Finance Aggregates"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Finance Aggregates\Run AGG_Refresh_FinanceCloseSummary" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Finance Aggregates.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{E8C79221-92B2-F270-FA97-C53BF89ADDCD}"
+          DTS:From="Package\Finance Aggregates\Run AGG_Refresh_FinanceCloseSummary"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Finance Aggregates\End Step Finance Aggregates" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Customer Aggregates"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Phase: Customer Aggregates"
+      DTS:DTSID="{D424E79D-2E88-3A33-835A-9FCAEFBD8466}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Customer Aggregates">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Customer Aggregates\Start Step Customer Aggregates"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{7F6E70C4-F5DD-7097-4733-71ECDA921BE2}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Start Step Customer Aggregates"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_StartBatchStep @BatchId = ?, @StepName = N'Customer Aggregates', @StepSequence = 50, @StepGroup = N'Aggregate', @BatchStepId = ? OUTPUT;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchStepIdCustomerAggregates" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Customer Aggregates\Run AGG_Refresh_CustomerRolling12Month"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{9407A82D-AA65-304B-D1FE-BCA5FDF8FF8D}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run AGG_Refresh_CustomerRolling12Month"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>AGG_Refresh_CustomerRolling12Month.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Customer Aggregates\Run AGG_Refresh_Customer360"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{9BA40EC8-FCB2-7E8F-77AA-D56B1158C50C}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run AGG_Refresh_Customer360"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>AGG_Refresh_Customer360.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Customer Aggregates\End Step Customer Aggregates"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F91FA9AC-A4D6-0032-1F2A-3FD2754CABFE}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="End Step Customer Aggregates"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatchStep @BatchStepId = ?, @Status = N'Succeeded';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchStepIdCustomerAggregates" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Customer Aggregates.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{12F37BE5-340D-523C-CA89-CCB2B5CC19A2}"
+          DTS:From="Package\Customer Aggregates\Start Step Customer Aggregates"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Customer Aggregates\Run AGG_Refresh_CustomerRolling12Month" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Customer Aggregates.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{9EFAB3CD-B247-0B70-C6B6-3F7655CE223C}"
+          DTS:From="Package\Customer Aggregates\Run AGG_Refresh_CustomerRolling12Month"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Customer Aggregates\Run AGG_Refresh_Customer360" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Customer Aggregates.PrecedenceConstraints[Constraint 2]"
+          DTS:CreationName=""
+          DTS:DTSID="{DD3418CB-7E3B-07B3-9186-3137E1088092}"
+          DTS:From="Package\Customer Aggregates\Run AGG_Refresh_Customer360"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 2"
+          DTS:To="Package\Customer Aggregates\End Step Customer Aggregates" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Customer Mart Refresh"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Phase: Customer Mart Refresh"
+      DTS:DTSID="{9F5EAEFC-4E57-D08B-B263-73C261FEB575}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Customer Mart Refresh">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Customer Mart Refresh\Start Step Customer Mart Refresh"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{A6810A94-23F8-C595-1180-24049A96D494}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Start Step Customer Mart Refresh"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_StartBatchStep @BatchId = ?, @StepName = N'Customer Mart Refresh', @StepSequence = 60, @StepGroup = N'Mart', @BatchStepId = ? OUTPUT;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchStepIdCustomerMartRefresh" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Customer Mart Refresh\Run C360_Build_RollingMetrics"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{92B842C0-B177-0CC5-B165-FE862260A731}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run C360_Build_RollingMetrics"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>C360_Build_RollingMetrics.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Customer Mart Refresh\Run C360_Build_ChurnFlags"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{388CBF5C-9682-E6A5-155A-7179942E13AA}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run C360_Build_ChurnFlags"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>C360_Build_ChurnFlags.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Customer Mart Refresh\End Step Customer Mart Refresh"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{C8F5AB07-BF3C-1EC9-18FE-F5AEEEEC0C5A}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="End Step Customer Mart Refresh"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatchStep @BatchStepId = ?, @Status = N'Succeeded';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchStepIdCustomerMartRefresh" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Customer Mart Refresh.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{EAAEEC7C-1E20-7767-9EB5-1E1FF8C726D9}"
+          DTS:From="Package\Customer Mart Refresh\Start Step Customer Mart Refresh"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Customer Mart Refresh\Run C360_Build_RollingMetrics" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Customer Mart Refresh.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{5FB21EDD-8A6B-4C37-7C9E-227D28BE7247}"
+          DTS:From="Package\Customer Mart Refresh\Run C360_Build_RollingMetrics"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Customer Mart Refresh\Run C360_Build_ChurnFlags" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Customer Mart Refresh.PrecedenceConstraints[Constraint 2]"
+          DTS:CreationName=""
+          DTS:DTSID="{48C8364A-E6FF-F796-D125-4E085E4DD444}"
+          DTS:From="Package\Customer Mart Refresh\Run C360_Build_ChurnFlags"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 2"
+          DTS:To="Package\Customer Mart Refresh\End Step Customer Mart Refresh" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Customer Segment Publish"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Phase: Customer Segment Publish"
+      DTS:DTSID="{433D051C-28C4-C622-1317-33C2DF02DAFE}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Customer Segment Publish">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Customer Segment Publish\Start Step Customer Segment Publish"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{E1E85FAF-2919-6907-5315-E652A9686EF1}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Start Step Customer Segment Publish"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_StartBatchStep @BatchId = ?, @StepName = N'Customer Segment Publish', @StepSequence = 65, @StepGroup = N'Mart', @BatchStepId = ? OUTPUT;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchStepIdCustomerSegmentPublish" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Customer Segment Publish\Run C360_Publish_Segments"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{97091DE7-B39D-47C9-8AD0-20090D333A17}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run C360_Publish_Segments"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>C360_Publish_Segments.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Customer Segment Publish\End Step Customer Segment Publish"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{6C552DDF-73CB-F15F-3426-9F74C67DDAE6}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="End Step Customer Segment Publish"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatchStep @BatchStepId = ?, @Status = N'Succeeded';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchStepIdCustomerSegmentPublish" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Customer Segment Publish.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{F76E9587-D071-3BFF-BEC5-479C5B63B232}"
+          DTS:From="Package\Customer Segment Publish\Start Step Customer Segment Publish"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Customer Segment Publish\Run C360_Publish_Segments" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Customer Segment Publish.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{F67104EB-838A-E2F7-54EB-704606716B21}"
+          DTS:From="Package\Customer Segment Publish\Run C360_Publish_Segments"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Customer Segment Publish\End Step Customer Segment Publish" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Month End Housekeeping"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Phase: Month End Housekeeping"
+      DTS:DTSID="{F7749089-013D-5FC7-3175-B0B6D8F7FE84}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Month End Housekeeping">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Month End Housekeeping\Start Step Month End Housekeeping"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{E6F12296-2940-5F08-C0A3-925FE5FDA34F}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Start Step Month End Housekeeping"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_StartBatchStep @BatchId = ?, @StepName = N'Month End Housekeeping', @StepSequence = 80, @StepGroup = N'Maintenance', @BatchStepId = ? OUTPUT;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchStepIdMonthEndHousekeeping" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Month End Housekeeping\Run MNT_Update_Statistics"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{0C38F909-5B6E-7061-FE0D-9AE89719FA43}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run MNT_Update_Statistics"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>MNT_Update_Statistics.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Month End Housekeeping\Run MNT_Purge_ControlHistory"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{B4F033E5-79B4-E81F-4DFC-B99948DDC82D}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run MNT_Purge_ControlHistory"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>MNT_Purge_ControlHistory.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Month End Housekeeping\End Step Month End Housekeeping"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{956AE1A0-4DF7-90C6-DCAE-369FD1F3DE6B}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="End Step Month End Housekeeping"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatchStep @BatchStepId = ?, @Status = N'Succeeded';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchStepIdMonthEndHousekeeping" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Month End Housekeeping.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{94C3AAB4-9E02-0434-E011-C23C45646F71}"
+          DTS:From="Package\Month End Housekeeping\Start Step Month End Housekeeping"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Month End Housekeeping\Run MNT_Update_Statistics" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Month End Housekeeping.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{854D07E7-9581-DE00-7BC0-B9BC45B8C033}"
+          DTS:From="Package\Month End Housekeeping\Run MNT_Update_Statistics"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Month End Housekeeping\Run MNT_Purge_ControlHistory" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Month End Housekeeping.PrecedenceConstraints[Constraint 2]"
+          DTS:CreationName=""
+          DTS:DTSID="{190B94F2-2DF1-A828-A577-FD542302CC00}"
+          DTS:From="Package\Month End Housekeeping\Run MNT_Purge_ControlHistory"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 2"
+          DTS:To="Package\Month End Housekeeping\End Step Month End Housekeeping" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Month End Escalation"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Phase: Month End Escalation"
+      DTS:DTSID="{B090FF07-7721-560F-05B4-5825DDE7CDED}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Month End Escalation">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Month End Escalation\Start Step Month End Escalation"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{A60849A7-F35C-C67E-F7E9-01D819C8DB02}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Start Step Month End Escalation"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_StartBatchStep @BatchId = ?, @StepName = N'Month End Escalation', @StepSequence = 90, @StepGroup = N'Maintenance', @BatchStepId = ? OUTPUT;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchStepIdMonthEndEscalation" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Month End Escalation\Run ERR_Reconcile_RowCounts"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{D703959F-EA04-511F-2EA5-5204928526EB}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run ERR_Reconcile_RowCounts"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>ERR_Reconcile_RowCounts.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Month End Escalation\Run ERR_Notify_Operations"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{CA91C748-2DFC-BEE7-56E8-C4C757B08E3B}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run ERR_Notify_Operations"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>ERR_Notify_Operations.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Month End Escalation\End Step Month End Escalation"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{0C799DF0-9C94-3867-C805-B119BB0C281D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="End Step Month End Escalation"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatchStep @BatchStepId = ?, @Status = N'Succeeded';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchStepIdMonthEndEscalation" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Month End Escalation.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{9C5A3941-15E8-2299-5D97-FEB9F0718F1B}"
+          DTS:From="Package\Month End Escalation\Start Step Month End Escalation"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Month End Escalation\Run ERR_Reconcile_RowCounts" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Month End Escalation.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{17E6581B-CE86-B46B-9CB8-504D76A90EE9}"
+          DTS:From="Package\Month End Escalation\Run ERR_Reconcile_RowCounts"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Month End Escalation\Run ERR_Notify_Operations" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Month End Escalation.PrecedenceConstraints[Constraint 2]"
+          DTS:CreationName=""
+          DTS:DTSID="{28FA5CDE-F31A-8628-F4AB-4CB298874FEA}"
+          DTS:From="Package\Month End Escalation\Run ERR_Notify_Operations"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 2"
+          DTS:To="Package\Month End Escalation\End Step Month End Escalation" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Reconcile Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{DC3AA870-65F6-E5B0-9245-7810EF876191}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Reconcile Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_AssertRowCountReconciliation @BatchId = ?, @RaiseOnFailure = 1, @FailedObjectCount = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::FailedObjectCount" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\End Batch"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{D8D39397-8629-64ED-C63F-AD8D08853DDA}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="End Batch"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_EndBatch @BatchId = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Start Batch"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Count Pending Corrections" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Count Pending Corrections"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:EvalOp="2"
+      DTS:Expression="@[User::CorrectionCount] &gt; 0"
+      DTS:To="Package\Fact Corrections" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Count Pending Corrections"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:EvalOp="2"
+      DTS:Expression="@[User::CorrectionCount] == 0"
+      DTS:To="Package\Sales Aggregates" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Fact Corrections"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Sales Aggregates" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Fact Corrections"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:Value="1"
+      DTS:To="Package\Month End Escalation" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Sales Aggregates"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Operations Aggregates" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Sales Aggregates"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Finance Aggregates" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Operations Aggregates"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Customer Aggregates" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 8]"
+      DTS:CreationName=""
+      DTS:DTSID="{71A76C5F-1A20-5771-2776-7EF96FD96B90}"
+      DTS:From="Package\Finance Aggregates"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 8"
+      DTS:To="Package\Customer Aggregates" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 9]"
+      DTS:CreationName=""
+      DTS:DTSID="{11D92538-705E-DF70-FE3B-5738B6CA45B1}"
+      DTS:From="Package\Customer Aggregates"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 9"
+      DTS:To="Package\Customer Mart Refresh" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 10]"
+      DTS:CreationName=""
+      DTS:DTSID="{1B15C648-32B6-CECC-4942-4F005EB650A1}"
+      DTS:From="Package\Customer Mart Refresh"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 10"
+      DTS:To="Package\Customer Segment Publish" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 11]"
+      DTS:CreationName=""
+      DTS:DTSID="{4DBDE44E-0824-968C-691C-D986A703C959}"
+      DTS:From="Package\Customer Segment Publish"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 11"
+      DTS:Value="2"
+      DTS:To="Package\Month End Housekeeping" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 12]"
+      DTS:CreationName=""
+      DTS:DTSID="{FA586833-5603-9809-CDE9-DB911E055329}"
+      DTS:From="Package\Month End Housekeeping"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 12"
+      DTS:To="Package\Reconcile Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 13]"
+      DTS:CreationName=""
+      DTS:DTSID="{8E6F2DDB-0F9C-9EC8-E0DB-8891DBDB8ECB}"
+      DTS:From="Package\Reconcile Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 13"
+      DTS:To="Package\End Batch" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 14]"
+      DTS:CreationName=""
+      DTS:DTSID="{7A50B516-749C-C290-DD6F-A31B30BC65FB}"
+      DTS:From="Package\Month End Escalation"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 14"
+      DTS:To="Package\End Batch" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{74638988-DEFF-43D0-9848-27A4E3F1A491}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Master Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{24DAD06D-13C6-632A-F2A8-976F35F64AAA}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Master Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @BatchId = ?, @ErrorSeverity = N'Critical', @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?, @ProcedureName = N'master orchestration';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Fail Open Batch Step"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{C9D44964-CDF8-C8DF-8C3A-E413C0AAA195}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Fail Open Batch Step"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="UPDATE etl.BatchStep SET Status = N'Failed', CompletedAtUtc = SYSUTCDATETIME() WHERE BatchId = ? AND Status = N'Running';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Batch Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{A0AB7430-E95B-CE0B-1B66-57309B414CCB}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Batch Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatch @BatchId = ?, @ForceStatus = N'Failed';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Master Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Fail Open Batch Step" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{4ADAB473-CEF0-AC81-9586-7D4A595E09C8}"
+          DTS:From="Package.EventHandlers[OnError]\Fail Open Batch Step"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Batch Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

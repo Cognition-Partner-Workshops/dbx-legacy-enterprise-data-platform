@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# ---------------------------------------------------------------------------
+# Oracle stage driver for the WWIGERP schema.
+#
+# Runs everything under oracle/ in dependency order using SQL*Plus, or sqlcl
+# when SQL*Plus is not installed (the newer build agents only have sqlcl).
+#
+# Connection details come from ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE,
+# ORACLE_USER and ORACLE_PASSWORD. The password is never passed as an argument
+# - it is written to the client's stdin along with the connect string, so it
+# does not appear in the process table or in this driver's dry-run output.
+#
+# This script has not been executed against any Oracle instance.
+#
+# Usage: deployment/oracle/deploy-oracle.sh [--dry-run] [--from ORDER] [--only DIR]
+# ---------------------------------------------------------------------------
+
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+WWI_LOG_PREFIX="wwi-deploy-oracle"
+
+ONLY_DIR=""
+START_AT=1
+
+while (( $# > 0 )); do
+    case "$1" in
+        --dry-run|--what-if) DRY_RUN=1; shift ;;
+        --from) START_AT="${2:-1}"; shift 2 ;;
+        --only) ONLY_DIR="${2:-}"; shift 2 ;;
+        --help|-h) sed -n '2,20p' "${BASH_SOURCE[0]}"; exit 0 ;;
+        *) wwi_fail "unknown argument '$1'." ;;
+    esac
+done
+
+wwi_require_env ORACLE_HOST ORACLE_PORT ORACLE_SERVICE ORACLE_USER ORACLE_PASSWORD
+wwi_confirm_prod
+
+REPO_ROOT="$(wwi_repo_root)"
+ORACLE_ROOT="${REPO_ROOT}/oracle"
+[[ -d "${ORACLE_ROOT}" ]] || wwi_fail "oracle/ is not present in ${REPO_ROOT}."
+
+# Pick a client. sqlcl accepts the same connect string and the same @file
+# syntax, which is why the estate standardised on that subset years ago.
+if command -v sqlplus >/dev/null 2>&1; then
+    ORA_CLIENT="sqlplus"
+    ORA_CLIENT_ARGS=(-S -L /nolog)
+elif command -v sql >/dev/null 2>&1; then
+    ORA_CLIENT="sql"
+    ORA_CLIENT_ARGS=(-S /nolog)
+else
+    wwi_fail "neither sqlplus nor sql (sqlcl) is on PATH."
+fi
+
+# Dependency order. Types and DDL first, reference data before the packages
+# that read it, seed data last because it calls the packages.
+ORACLE_STAGE_DIRS=(
+    "ddl"
+    "tables"
+    "views"
+    "functions"
+    "procedures"
+    "packages"
+    "reference"
+    "seed"
+)
+
+run_sql_file() {
+    local file="$1"
+    local relative="${file#"${REPO_ROOT}/"}"
+
+    if wwi_is_dry_run; then
+        wwi_log "WHATIF ${ORA_CLIENT} @${relative}"
+        return 0
+    fi
+
+    wwi_log "RUN    ${relative}"
+    # WHENEVER SQLERROR EXIT makes the client return non-zero on the first
+    # error, which is the only reliable way to stop an ordered run.
+    "${ORA_CLIENT}" "${ORA_CLIENT_ARGS[@]}" <<SQLPLUS
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+WHENEVER OSERROR EXIT 9
+CONNECT ${ORACLE_USER}/${ORACLE_PASSWORD}@${ORACLE_HOST}:${ORACLE_PORT}/${ORACLE_SERVICE}
+SET DEFINE OFF
+SET ECHO OFF
+SET FEEDBACK ON
+SET SERVEROUTPUT ON SIZE UNLIMITED
+ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD HH24:MI:SS';
+ALTER SESSION SET CURRENT_SCHEMA = ${ORACLE_USER};
+@${file}
+SHOW ERRORS
+EXIT SQL.SQLCODE
+SQLPLUS
+}
+
+STAGE_INDEX=0
+FILE_COUNT=0
+
+for dir in "${ORACLE_STAGE_DIRS[@]}"; do
+    STAGE_INDEX=$(( STAGE_INDEX + 1 ))
+    [[ -n "${ONLY_DIR}" && "${ONLY_DIR}" != "${dir}" ]] && continue
+    (( STAGE_INDEX < START_AT )) && continue
+
+    stage_path="${ORACLE_ROOT}/${dir}"
+    if [[ ! -d "${stage_path}" ]]; then
+        wwi_warn "oracle/${dir} is not present; skipping stage ${STAGE_INDEX}."
+        continue
+    fi
+
+    wwi_log "--- stage ${STAGE_INDEX}: oracle/${dir} ---"
+    # Files are ordered by name; the estate's convention is a numeric prefix.
+    while IFS= read -r -d '' sql_file; do
+        run_sql_file "${sql_file}"
+        FILE_COUNT=$(( FILE_COUNT + 1 ))
+    done < <(find "${stage_path}" -maxdepth 2 -type f -name '*.sql' -print0 | sort -z)
+done
+
+# Invalid objects are expected mid-run and recompiled at the end; the estate has
+# always relied on this rather than getting the package order strictly right.
+if ! wwi_is_dry_run; then
+    wwi_log "recompiling invalid objects"
+    "${ORA_CLIENT}" "${ORA_CLIENT_ARGS[@]}" <<SQLPLUS
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+CONNECT ${ORACLE_USER}/${ORACLE_PASSWORD}@${ORACLE_HOST}:${ORACLE_PORT}/${ORACLE_SERVICE}
+SET SERVEROUTPUT ON
+EXEC DBMS_UTILITY.COMPILE_SCHEMA(schema => USER, compile_all => FALSE);
+SELECT object_type, object_name FROM user_objects WHERE status = 'INVALID' ORDER BY object_type, object_name;
+EXIT SQL.SQLCODE
+SQLPLUS
+else
+    wwi_log "WHATIF recompile invalid objects"
+fi
+
+wwi_log "oracle stage complete: ${FILE_COUNT} file(s) processed$(wwi_is_dry_run && printf ' (dry run)' || true)"

@@ -1,0 +1,62 @@
+/* =====================================================================
+ * Object       : TABLE WWI_PROC.SUPPLIER_QUOTE_LINE
+ * Schema       : WWI_PROC (Oracle ERP - WWIGERP)
+ * Deploy order : 44
+ * Depends on   : WWI_PROC.SUPPLIER_QUOTE, WWI_MDM.PRODUCT_MASTER
+ * Called by    : PKG_SUPPLIER_PERF, price benchmarking extract
+ *
+ * Quoted price per line, with volume break pricing squeezed into three
+ * BREAK_QTY/BREAK_PRICE column pairs rather than a child table. Anything with
+ * more than three breaks is recorded in ALT_PRICING_TXT as free text.
+ * ===================================================================== */
+
+CREATE SEQUENCE WWI_PROC.SEQ_SUPPLIER_QUOTE_LINE
+    START WITH 200001 INCREMENT BY 1 CACHE 100 NOCYCLE
+/
+
+CREATE TABLE WWI_PROC.SUPPLIER_QUOTE_LINE
+(
+    QUOTE_LINE_ID           NUMBER(12)      NOT NULL,
+    QUOTE_ID                NUMBER(12)      NOT NULL,
+    LINE_NBR                NUMBER(5)       NOT NULL,
+    PRODUCT_ID              NUMBER(12),
+    SUPPLIER_ITEM_CD        VARCHAR2(30),
+    ITEM_DESC_TXT           VARCHAR2(400),
+    QUOTED_QTY              NUMBER(14,4)    NOT NULL,
+    UOM_CD                  VARCHAR2(4)     NOT NULL,
+    UNIT_PRICE              NUMBER(15,5)    NOT NULL,
+    BREAK_1_QTY             NUMBER(14,4),
+    BREAK_1_PRICE           NUMBER(15,5),
+    BREAK_2_QTY             NUMBER(14,4),
+    BREAK_2_PRICE           NUMBER(15,5),
+    BREAK_3_QTY             NUMBER(14,4),
+    BREAK_3_PRICE           NUMBER(15,5),
+    ALT_PRICING_TXT         VARCHAR2(1000),
+    LINE_CURR_CD            VARCHAR2(3)     NOT NULL,
+    LEAD_TIME_DAYS          NUMBER(4),
+    MIN_ORDER_QTY           NUMBER(14,4),
+    COUNTRY_OF_ORIGIN_CD    VARCHAR2(2),
+    AWARDED_FLG             VARCHAR2(1)     DEFAULT 'N' NOT NULL,
+    AWARDED_QTY             NUMBER(14,4),
+    SOURCE_SYS              VARCHAR2(12)    DEFAULT 'ORA_ERP' NOT NULL,
+    CREATED_BY              VARCHAR2(30)    DEFAULT USER NOT NULL,
+    CREATED_DT              DATE            DEFAULT SYSDATE NOT NULL,
+    UPDATED_BY              VARCHAR2(30),
+    UPDATED_DT              DATE,
+    CONSTRAINT PK_SUPPLIER_QUOTE_LINE PRIMARY KEY (QUOTE_LINE_ID) USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT UK_SUPPLIER_QUOTE_LINE UNIQUE (QUOTE_ID, LINE_NBR) USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT CK_QUOTE_LINE_PRICE CHECK (UNIT_PRICE >= 0),
+    CONSTRAINT CK_QUOTE_LINE_QTY CHECK (QUOTED_QTY > 0),
+    CONSTRAINT CK_QUOTE_LINE_AWARD CHECK (
+        AWARDED_FLG IN ('Y', 'N') AND (AWARDED_FLG = 'N' OR AWARDED_QTY IS NOT NULL))
+)
+TABLESPACE WWI_DATA
+/
+
+ALTER TABLE WWI_PROC.SUPPLIER_QUOTE_LINE ADD CONSTRAINT FK_QUOTE_LINE_QUOTE
+    FOREIGN KEY (QUOTE_ID) REFERENCES WWI_PROC.SUPPLIER_QUOTE (QUOTE_ID)
+/
+
+CREATE INDEX WWI_PROC.IX_QUOTE_LINE_PRODUCT
+    ON WWI_PROC.SUPPLIER_QUOTE_LINE (PRODUCT_ID, UNIT_PRICE) TABLESPACE WWI_IDX
+/

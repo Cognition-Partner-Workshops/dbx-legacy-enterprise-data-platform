@@ -1,0 +1,146 @@
+# ---------------------------------------------------------------------------
+# Network, port and firewall requirements for the WWI estate.
+#
+# Descriptive only. This is the list the platform team hands to the network team
+# when an environment is built or a host is replaced; nothing here configures a
+# firewall.
+# ---------------------------------------------------------------------------
+
+zones:
+  - name: DB_ZONE
+    description: Database servers. No direct user access; reached from APP_ZONE and ADMIN_ZONE only.
+  - name: ETL_ZONE
+    description: SSIS catalogue and Agent host. The only zone allowed to open sessions into DB_ZONE and ERP_ZONE.
+  - name: ERP_ZONE
+    description: Oracle ERP. Owned by the ERP team; ingress is granted per source host, not per subnet.
+  - name: FILE_ZONE
+    description: File servers hosting the landing zone.
+  - name: APP_ZONE
+    description: Application servers and the reporting gateway.
+  - name: ADMIN_ZONE
+    description: Jump hosts and the deployment host.
+
+flows:
+
+  - name: SSIS to Oracle ERP extract
+    source: ETL_ZONE (sqlprod-etl.internal.example)
+    destination: ERP_ZONE (oracle-erp-prod.internal.example)
+    protocol: TCP
+    ports: [1521]
+    direction: outbound
+    notes: >-
+      Oracle listener. The ERP team grants this per source host. A new ETL host
+      needs a change request with two weeks' notice, which is why the deployment
+      host is not permitted to reach Oracle directly and the Oracle stage of
+      deploy-all has to be run from the ETL host.
+
+  - name: SSIS to SQL Server OLTP
+    source: ETL_ZONE
+    destination: DB_ZONE (sqlprod-oltp.internal.example)
+    protocol: TCP
+    ports: [1433]
+    direction: outbound
+
+  - name: SSIS to SQL Server warehouse and staging
+    source: ETL_ZONE
+    destination: DB_ZONE (sqlprod-dw.internal.example)
+    protocol: TCP
+    ports: [1433]
+    direction: outbound
+
+  - name: SQL Server linked server to Oracle
+    source: DB_ZONE (sqlprod-dw.internal.example)
+    destination: ERP_ZONE (oracle-erp-prod.internal.example)
+    protocol: TCP
+    ports: [1521]
+    direction: outbound
+    notes: >-
+      Only for WWIGERP_LINK, used by two reconciliation queries that were never
+      moved into SSIS. Retiring them would remove this flow entirely.
+
+  - name: SSIS to landing zone
+    source: ETL_ZONE
+    destination: FILE_ZONE (wwi-files.internal.example)
+    protocol: TCP
+    ports: [445]
+    direction: outbound
+    notes: SMB. Runs as the WWI_FileOps_Proxy account, not the ETL service account.
+
+  - name: SSIS to APAC landing zone
+    source: ETL_ZONE
+    destination: DC3 (wwi-files-apac.internal.example)
+    protocol: TCP
+    ports: [445]
+    direction: outbound
+    notes: >-
+      Crosses the WAN to Singapore. Latency here is why the APAC bank feed step
+      has a longer timeout than the other file steps and why it is the step that
+      fails most often.
+
+  - name: Reporting gateway to warehouse
+    source: APP_ZONE
+    destination: DB_ZONE (sqlprod-dw.internal.example)
+    protocol: TCP
+    ports: [1433]
+    direction: outbound
+    notes: Read-only, as WWI_ReportGateway.
+
+  - name: Application to OLTP
+    source: APP_ZONE
+    destination: DB_ZONE (sqlprod-oltp.internal.example)
+    protocol: TCP
+    ports: [1433]
+    direction: outbound
+
+  - name: Administration and deployment
+    source: ADMIN_ZONE (wwi-deploy01.internal.example)
+    destination: DB_ZONE, ETL_ZONE
+    protocol: TCP
+    ports: [1433, 445, 5985, 3389]
+    direction: outbound
+    notes: >-
+      5985 is WinRM, used by the PowerShell deployment drivers when they run
+      remotely. 3389 is still open because the .ispac fallback build has to be
+      done interactively.
+
+  - name: Log shipping to DR
+    source: DC1 (sqlprod-dw.internal.example)
+    destination: DC2
+    protocol: TCP
+    ports: [445]
+    direction: outbound
+    notes: Every 15 minutes. See infrastructure/backup-recovery.md.
+
+  - name: Database mail
+    source: ETL_ZONE
+    destination: smtp-relay.internal.example
+    protocol: TCP
+    ports: [25]
+    direction: outbound
+    notes: >-
+      Unauthenticated relay, restricted by source IP. This is how SQL Agent
+      operator notifications leave the estate; there is no other mail path.
+
+  - name: Monitoring collector
+    source: ADMIN_ZONE (monitoring collector)
+    destination: DB_ZONE, ETL_ZONE
+    protocol: TCP
+    ports: [1433]
+    direction: outbound
+    notes: >-
+      Polls the etl control views listed in infrastructure/monitoring.md as a
+      read-only login.
+
+explicitly_not_permitted:
+  - flow: any inbound connection to DB_ZONE from outside ADMIN_ZONE, APP_ZONE or ETL_ZONE
+  - flow: any connection from ERP_ZONE into DB_ZONE (the ERP never calls the estate)
+  - flow: internet egress from DB_ZONE, ETL_ZONE or FILE_ZONE
+    note: >-
+      This is the constraint that makes every deployment an internal-artifact
+      deployment: nothing can be fetched at deploy time.
+
+dns_and_naming:
+  note: >-
+    Hosts are reached by name, never by IP, because the OLTP cluster's active
+    node changes. Two packages had hard-coded IPs until 2021; both were fixed
+    after a failover took them out.

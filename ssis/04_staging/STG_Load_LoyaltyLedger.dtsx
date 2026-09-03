@@ -1,0 +1,864 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{36F74934-CE1C-F7B6-EEE3-EEDFFDB3FB39}"
+  DTS:Description="Incrementally append loyalty ledger entries, splitting the signed points delta into earned and redeemed measures, defaulting expiry by regional programme rule and aggregating to a customer/programme balance that drives the tier banding."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="STG_Load_LoyaltyLedger"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{1C57A965-3EA6-49CD-2B4F-AD435FDC913B}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{89B907E7-506D-AFA7-940A-4501CB0B7C1C}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{43F90113-B818-EAA8-DB3A-94970FAA1C90}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{33F1991F-F59D-56A0-63DE-0D3AAF8BE659}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{1BD0312C-85E5-A522-B92A-165E04F90B7B}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWI_OLTP</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{DBA60DA6-6597-45CE-01DF-D0ED4655BF2F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{DC6A5023-0ECC-3735-20FC-6EC4BDB09123}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{56CB7A89-0513-15E8-CE7F-5411E9B4509A}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{210A40DF-CDEF-EECD-435D-10ECAA729E5F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{71317BAD-64D9-1A7C-C20A-32A41B4134CA}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{74CD293E-6102-B038-5997-5211AE19BEEC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{C11A9742-C53B-2D36-06B8-B6A41A009F98}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{F1F1EB86-31F5-03F4-EFCA-B214281A3B7D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Get Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{AD8AAA26-E475-7A7A-5321-BEF0685AEC15}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Get Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_GetWatermark @SourceSystemCode = ?, @ObjectName = ?, @ReloadFullHistory = ?, @WatermarkFrom = ? OUTPUT, @WatermarkTo = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::ReloadFullHistory" SQLTask:ParameterDirection="Input" SQLTask:DataType="BYTE" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::WatermarkFrom" />
+        <SQLTask:ResultBinding SQLTask:ResultName="1" SQLTask:DtsVariableName="User::WatermarkTo" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\DFT Conform Loyalty Ledger"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{AFAD6758-0929-F895-0E7E-C18E552F6BD1}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="DFT Conform Loyalty Ledger"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="RAW SQL Loyalty Ledger" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">3600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT LoyaltyEntryID, CustomerID, EntryTypeCode, PointsDelta, ProgramCode, RegionCode,
+       EntryDate, ExpiryDate
+FROM raw.SqlLoyaltyLedger
+WHERE EntryDate &gt; CONVERT(datetime2(3), ?) AND EntryDate &lt;= CONVERT(datetime2(3), ?);</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].Columns[LoyaltyEntryID]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].ExternalColumns[LoyaltyEntryID]" lineageId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].Columns[LoyaltyEntryID]" name="LoyaltyEntryID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].Columns[CustomerID]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].ExternalColumns[CustomerID]" lineageId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].Columns[CustomerID]" name="CustomerID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].Columns[EntryTypeCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].ExternalColumns[EntryTypeCode]" lineageId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].Columns[EntryTypeCode]" name="EntryTypeCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].Columns[PointsDelta]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].ExternalColumns[PointsDelta]" lineageId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].Columns[PointsDelta]" name="PointsDelta" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].Columns[ProgramCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].ExternalColumns[ProgramCode]" lineageId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].Columns[ProgramCode]" name="ProgramCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].Columns[EntryDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].ExternalColumns[EntryDate]" lineageId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].Columns[EntryDate]" name="EntryDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].Columns[ExpiryDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].ExternalColumns[ExpiryDate]" lineageId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].Columns[ExpiryDate]" name="ExpiryDate" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].ExternalColumns[LoyaltyEntryID]" dataType="i8" name="LoyaltyEntryID" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].ExternalColumns[CustomerID]" dataType="i4" name="CustomerID" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].ExternalColumns[EntryTypeCode]" dataType="wstr" length="10" name="EntryTypeCode" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].ExternalColumns[PointsDelta]" dataType="i4" name="PointsDelta" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].ExternalColumns[ProgramCode]" dataType="wstr" length="10" name="ProgramCode" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].ExternalColumns[EntryDate]" dataType="dbTimeStamp" name="EntryDate" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output].ExternalColumns[ExpiryDate]" dataType="dbTimeStamp" name="ExpiryDate" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[LoyaltyEntryID]" dataType="i8" lineageId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[LoyaltyEntryID]" name="LoyaltyEntryID" />
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[CustomerID]" dataType="i4" lineageId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[CustomerID]" name="CustomerID" />
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[EntryTypeCode]" dataType="wstr" length="10" lineageId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[EntryTypeCode]" name="EntryTypeCode" />
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[PointsDelta]" dataType="i4" lineageId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[PointsDelta]" name="PointsDelta" />
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[ProgramCode]" dataType="wstr" length="10" lineageId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[ProgramCode]" name="ProgramCode" />
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[EntryDate]" dataType="dbTimeStamp" lineageId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[EntryDate]" name="EntryDate" />
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[ExpiryDate]" dataType="dbTimeStamp" lineageId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[ExpiryDate]" name="ExpiryDate" />
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Conform Loyalty Ledger\Count Loyalty Rows Read" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Loyalty Rows Read" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Conform Loyalty Ledger\Count Loyalty Rows Read.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Conform Loyalty Ledger\Count Loyalty Rows Read.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Conform Loyalty Ledger\Count Loyalty Rows Read.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Type Loyalty Entries" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output].Columns[LoyaltyEntryId]" dataType="i8" lineageId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output].Columns[LoyaltyEntryId]" name="LoyaltyEntryId">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">LoyaltyEntryID</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">LoyaltyEntryID</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output].Columns[CustomerId]" dataType="i4" lineageId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output].Columns[CustomerId]" name="CustomerId">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">CustomerID</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">CustomerID</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output].Columns[EntryTypeCode]" dataType="wstr" length="10" lineageId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output].Columns[EntryTypeCode]" name="EntryTypeCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(ISNULL(EntryTypeCode) ? "ADJ" : EntryTypeCode))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(ISNULL(EntryTypeCode) ? "ADJ" : EntryTypeCode))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output].Columns[ProgramCode]" dataType="wstr" length="10" lineageId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output].Columns[ProgramCode]" name="ProgramCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(ISNULL(ProgramCode) ? "BASE" : ProgramCode))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(ISNULL(ProgramCode) ? "BASE" : ProgramCode))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output].Columns[RegionCode]" name="RegionCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(ISNULL(RegionCode) ? "NA" : RegionCode))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(ISNULL(RegionCode) ? "NA" : RegionCode))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output].Columns[PointsDelta]" dataType="i4" lineageId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output].Columns[PointsDelta]" name="PointsDelta">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(PointsDelta) ? 0 : PointsDelta</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(PointsDelta) ? 0 : PointsDelta</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output].Columns[PointsEarned]" dataType="i4" lineageId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output].Columns[PointsEarned]" name="PointsEarned">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(PointsDelta) || PointsDelta &lt; 0 ? 0 : PointsDelta</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(PointsDelta) || PointsDelta &lt; 0 ? 0 : PointsDelta</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output].Columns[PointsRedeemed]" dataType="i4" lineageId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output].Columns[PointsRedeemed]" name="PointsRedeemed">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(PointsDelta) || PointsDelta &gt; 0 ? 0 : -PointsDelta</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(PointsDelta) || PointsDelta &gt; 0 ? 0 : -PointsDelta</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output].Columns[ExpiryDate]" dataType="dbTimeStamp" lineageId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output].Columns[ExpiryDate]" name="ExpiryDate">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(ExpiryDate) ? (UPPER(TRIM(ISNULL(RegionCode) ? "NA" : RegionCode)) == "EU" ? DATEADD("month", 12, EntryDate) : (UPPER(TRIM(ISNULL(RegionCode) ? "NA" : RegionCode)) == "APAC" ? DATEADD("month", 18, EntryDate) : DATEADD("month", 24, EntryDate))) : ExpiryDate</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(ExpiryDate) ? (UPPER(TRIM(ISNULL(RegionCode) ? "NA" : RegionCode)) == "EU" ? DATEADD("month", 12, EntryDate) : (UPPER(TRIM(ISNULL(RegionCode) ? "NA" : RegionCode)) == "APAC" ? DATEADD("month", 18, EntryDate) : DATEADD("month", 24, EntryDate))) : ExpiryDate</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Conform Loyalty Ledger\Aggregate Customer Points" componentClassID="Microsoft.Aggregate" description="Aggregate" name="Aggregate Customer Points" version="1">
+            <inputs>
+              <input refId="Package\DFT Conform Loyalty Ledger\Aggregate Customer Points.Inputs[Aggregate Input 1]" name="Aggregate Input 1">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\Aggregate Customer Points.Inputs[Aggregate Input 1].Columns[CustomerId]" cachedName="CustomerId" name="CustomerId">
+                    <properties>
+                      <property dataType="System.Int32" description="Group by." name="AggregationType">0</property>
+                    </properties>
+                  </inputColumn>
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\Aggregate Customer Points.Inputs[Aggregate Input 1].Columns[ProgramCode]" cachedName="ProgramCode" name="ProgramCode">
+                    <properties>
+                      <property dataType="System.Int32" description="Group by." name="AggregationType">0</property>
+                    </properties>
+                  </inputColumn>
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\Aggregate Customer Points.Inputs[Aggregate Input 1].Columns[RegionCode]" cachedName="RegionCode" name="RegionCode">
+                    <properties>
+                      <property dataType="System.Int32" description="Group by." name="AggregationType">0</property>
+                    </properties>
+                  </inputColumn>
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\Aggregate Customer Points.Inputs[Aggregate Input 1].Columns[PointsEarned]" cachedName="PointsEarned" name="PointsEarned">
+                    <properties>
+                      <property dataType="System.Int32" description="Sum" name="AggregationType">1</property>
+                      <property dataType="System.String" description="Output column." name="AggregationColumnName">TotalPointsEarned</property>
+                    </properties>
+                  </inputColumn>
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\Aggregate Customer Points.Inputs[Aggregate Input 1].Columns[PointsRedeemed]" cachedName="PointsRedeemed" name="PointsRedeemed">
+                    <properties>
+                      <property dataType="System.Int32" description="Sum" name="AggregationType">1</property>
+                      <property dataType="System.String" description="Output column." name="AggregationColumnName">TotalPointsRedeemed</property>
+                    </properties>
+                  </inputColumn>
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\Aggregate Customer Points.Inputs[Aggregate Input 1].Columns[LoyaltyEntryId]" cachedName="LoyaltyEntryId" name="LoyaltyEntryId">
+                    <properties>
+                      <property dataType="System.Int32" description="Count" name="AggregationType">1</property>
+                      <property dataType="System.String" description="Output column." name="AggregationColumnName">EntryCount</property>
+                    </properties>
+                  </inputColumn>
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Conform Loyalty Ledger\Aggregate Customer Points.Outputs[Aggregate Output 1]" name="Aggregate Output 1" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Conform Loyalty Ledger\Derive Loyalty Tier" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Loyalty Tier" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\DFT Conform Loyalty Ledger\Derive Loyalty Tier.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Conform Loyalty Ledger\Derive Loyalty Tier.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\DFT Conform Loyalty Ledger\Derive Loyalty Tier.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\Derive Loyalty Tier.Outputs[Derived Column Output].Columns[NetPointsBalance]" dataType="i4" lineageId="Package\DFT Conform Loyalty Ledger\Derive Loyalty Tier.Outputs[Derived Column Output].Columns[NetPointsBalance]" name="NetPointsBalance">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">TotalPointsEarned - TotalPointsRedeemed</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">TotalPointsEarned - TotalPointsRedeemed</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\Derive Loyalty Tier.Outputs[Derived Column Output].Columns[LoyaltyTierCode]" dataType="wstr" length="3" lineageId="Package\DFT Conform Loyalty Ledger\Derive Loyalty Tier.Outputs[Derived Column Output].Columns[LoyaltyTierCode]" name="LoyaltyTierCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">(TotalPointsEarned - TotalPointsRedeemed) &gt;= 50000 ? "PLT" : ((TotalPointsEarned - TotalPointsRedeemed) &gt;= 20000 ? "GLD" : ((TotalPointsEarned - TotalPointsRedeemed) &gt;= 5000 ? "SLV" : "BRZ"))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(TotalPointsEarned - TotalPointsRedeemed) &gt;= 50000 ? "PLT" : ((TotalPointsEarned - TotalPointsRedeemed) &gt;= 20000 ? "GLD" : ((TotalPointsEarned - TotalPointsRedeemed) &gt;= 5000 ? "SLV" : "BRZ"))</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Conform Loyalty Ledger\Lookup Loyalty Tier (Full Cache)" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Loyalty Tier (Full Cache)" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT LoyaltyTierCode, TierName, DiscountPercent FROM ref.LoyaltyTier WHERE IsActive = 1;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">0</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Conform Loyalty Ledger\Lookup Loyalty Tier (Full Cache).Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Conform Loyalty Ledger\Lookup Loyalty Tier (Full Cache).Inputs[Lookup Input]" errorRowDisposition="RedirectRow" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\Lookup Loyalty Tier (Full Cache).Inputs[Lookup Input].Columns[LoyaltyTierCode]" cachedName="LoyaltyTierCode" name="LoyaltyTierCode" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Conform Loyalty Ledger\Lookup Loyalty Tier (Full Cache).Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\DFT Conform Loyalty Ledger\Lookup Loyalty Tier (Full Cache).Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\Lookup Loyalty Tier (Full Cache).Outputs[Lookup Match Output].Columns[TierName]" dataType="wstr" length="40" lineageId="Package\DFT Conform Loyalty Ledger\Lookup Loyalty Tier (Full Cache).Outputs[Lookup Match Output].Columns[TierName]" name="TierName" />
+                  <outputColumn refId="Package\DFT Conform Loyalty Ledger\Lookup Loyalty Tier (Full Cache).Outputs[Lookup Match Output].Columns[TierDiscountPercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\DFT Conform Loyalty Ledger\Lookup Loyalty Tier (Full Cache).Outputs[Lookup Match Output].Columns[TierDiscountPercent]" name="TierDiscountPercent" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\DFT Conform Loyalty Ledger\Lookup Loyalty Tier (Full Cache).Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\DFT Conform Loyalty Ledger\Lookup Loyalty Tier (Full Cache).Inputs[Lookup Input]" />
+              <output refId="Package\DFT Conform Loyalty Ledger\Lookup Loyalty Tier (Full Cache).Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\DFT Conform Loyalty Ledger\Lookup Loyalty Tier (Full Cache).Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Conform Loyalty Ledger\Count Loyalty Rows Loaded" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Loyalty Rows Loaded" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsInserted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Conform Loyalty Ledger\Count Loyalty Rows Loaded.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Conform Loyalty Ledger\Count Loyalty Rows Loaded.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Conform Loyalty Ledger\Count Loyalty Rows Loaded.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="STG LoyaltyLedger" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[stg].[LoyaltyLedger]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">50000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[LoyaltyEntryID]" cachedDataType="i8" cachedName="LoyaltyEntryID" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyEntryID]" name="LoyaltyEntryID" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[CustomerID]" cachedDataType="i4" cachedName="CustomerID" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[CustomerID]" name="CustomerID" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[EntryTypeCode]" cachedDataType="wstr" cachedLength="10" cachedName="EntryTypeCode" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[EntryTypeCode]" name="EntryTypeCode" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[PointsDelta]" cachedDataType="i4" cachedName="PointsDelta" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[PointsDelta]" name="PointsDelta" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[ProgramCode]" cachedDataType="wstr" cachedLength="10" cachedName="ProgramCode" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[ProgramCode]" name="ProgramCode" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[EntryDate]" cachedDataType="dbTimeStamp" cachedName="EntryDate" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[EntryDate]" name="EntryDate" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[ExpiryDate]" cachedDataType="dbTimeStamp" cachedName="ExpiryDate" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[ExpiryDate]" name="ExpiryDate" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[LoyaltyEntryId]" cachedDataType="i8" cachedName="LoyaltyEntryId" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyEntryId]" name="LoyaltyEntryId" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[CustomerId]" cachedDataType="i4" cachedName="CustomerId" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[CustomerId]" name="CustomerId" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[EntryTypeCode]" cachedDataType="wstr" cachedLength="10" cachedName="EntryTypeCode" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[EntryTypeCode]" name="EntryTypeCode" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[ProgramCode]" cachedDataType="wstr" cachedLength="10" cachedName="ProgramCode" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[ProgramCode]" name="ProgramCode" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[PointsDelta]" cachedDataType="i4" cachedName="PointsDelta" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[PointsDelta]" name="PointsDelta" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[PointsEarned]" cachedDataType="i4" cachedName="PointsEarned" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[PointsEarned]" name="PointsEarned" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[PointsRedeemed]" cachedDataType="i4" cachedName="PointsRedeemed" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[PointsRedeemed]" name="PointsRedeemed" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[ExpiryDate]" cachedDataType="dbTimeStamp" cachedName="ExpiryDate" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[ExpiryDate]" name="ExpiryDate" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[NetPointsBalance]" cachedDataType="i4" cachedName="NetPointsBalance" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[NetPointsBalance]" name="NetPointsBalance" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[LoyaltyTierCode]" cachedDataType="wstr" cachedLength="3" cachedName="LoyaltyTierCode" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyTierCode]" name="LoyaltyTierCode" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[TierName]" cachedDataType="wstr" cachedLength="40" cachedName="TierName" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[TierName]" name="TierName" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].Columns[TierDiscountPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="TierDiscountPercent" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[TierDiscountPercent]" name="TierDiscountPercent" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyEntryID]" dataType="i8" name="LoyaltyEntryID" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[CustomerID]" dataType="i4" name="CustomerID" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[EntryTypeCode]" dataType="wstr" length="10" name="EntryTypeCode" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[PointsDelta]" dataType="i4" name="PointsDelta" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[ProgramCode]" dataType="wstr" length="10" name="ProgramCode" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[EntryDate]" dataType="dbTimeStamp" name="EntryDate" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[ExpiryDate]" dataType="dbTimeStamp" name="ExpiryDate" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyEntryId]" dataType="i8" name="LoyaltyEntryId" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[CustomerId]" dataType="i4" name="CustomerId" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[EntryTypeCode]" dataType="wstr" length="10" name="EntryTypeCode" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[ProgramCode]" dataType="wstr" length="10" name="ProgramCode" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[PointsDelta]" dataType="i4" name="PointsDelta" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[PointsEarned]" dataType="i4" name="PointsEarned" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[PointsRedeemed]" dataType="i4" name="PointsRedeemed" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[ExpiryDate]" dataType="dbTimeStamp" name="ExpiryDate" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[NetPointsBalance]" dataType="i4" name="NetPointsBalance" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyTierCode]" dataType="wstr" length="3" name="LoyaltyTierCode" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[TierName]" dataType="wstr" length="40" name="TierName" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input].ExternalColumns[TierDiscountPercent]" dataType="numeric" precision="9" scale="4" name="TierDiscountPercent" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="ERR Loyalty Unknown Tier" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedLookupFailure]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[LoyaltyEntryID]" cachedDataType="i8" cachedName="LoyaltyEntryID" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyEntryID]" name="LoyaltyEntryID" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[CustomerID]" cachedDataType="i4" cachedName="CustomerID" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[CustomerID]" name="CustomerID" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[EntryTypeCode]" cachedDataType="wstr" cachedLength="10" cachedName="EntryTypeCode" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[EntryTypeCode]" name="EntryTypeCode" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[PointsDelta]" cachedDataType="i4" cachedName="PointsDelta" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[PointsDelta]" name="PointsDelta" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[ProgramCode]" cachedDataType="wstr" cachedLength="10" cachedName="ProgramCode" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[ProgramCode]" name="ProgramCode" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[EntryDate]" cachedDataType="dbTimeStamp" cachedName="EntryDate" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[EntryDate]" name="EntryDate" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[ExpiryDate]" cachedDataType="dbTimeStamp" cachedName="ExpiryDate" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[ExpiryDate]" name="ExpiryDate" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[LoyaltyEntryId]" cachedDataType="i8" cachedName="LoyaltyEntryId" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyEntryId]" name="LoyaltyEntryId" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[CustomerId]" cachedDataType="i4" cachedName="CustomerId" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[CustomerId]" name="CustomerId" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[EntryTypeCode]" cachedDataType="wstr" cachedLength="10" cachedName="EntryTypeCode" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[EntryTypeCode]" name="EntryTypeCode" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[ProgramCode]" cachedDataType="wstr" cachedLength="10" cachedName="ProgramCode" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[ProgramCode]" name="ProgramCode" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[PointsDelta]" cachedDataType="i4" cachedName="PointsDelta" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[PointsDelta]" name="PointsDelta" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[PointsEarned]" cachedDataType="i4" cachedName="PointsEarned" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[PointsEarned]" name="PointsEarned" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[PointsRedeemed]" cachedDataType="i4" cachedName="PointsRedeemed" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[PointsRedeemed]" name="PointsRedeemed" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[ExpiryDate]" cachedDataType="dbTimeStamp" cachedName="ExpiryDate" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[ExpiryDate]" name="ExpiryDate" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[NetPointsBalance]" cachedDataType="i4" cachedName="NetPointsBalance" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[NetPointsBalance]" name="NetPointsBalance" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[LoyaltyTierCode]" cachedDataType="wstr" cachedLength="3" cachedName="LoyaltyTierCode" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyTierCode]" name="LoyaltyTierCode" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[TierName]" cachedDataType="wstr" cachedLength="40" cachedName="TierName" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[TierName]" name="TierName" />
+                  <inputColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].Columns[TierDiscountPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="TierDiscountPercent" externalMetadataColumnId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[TierDiscountPercent]" name="TierDiscountPercent" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyEntryID]" dataType="i8" name="LoyaltyEntryID" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[CustomerID]" dataType="i4" name="CustomerID" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[EntryTypeCode]" dataType="wstr" length="10" name="EntryTypeCode" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[PointsDelta]" dataType="i4" name="PointsDelta" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[ProgramCode]" dataType="wstr" length="10" name="ProgramCode" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[EntryDate]" dataType="dbTimeStamp" name="EntryDate" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[ExpiryDate]" dataType="dbTimeStamp" name="ExpiryDate" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyEntryId]" dataType="i8" name="LoyaltyEntryId" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[CustomerId]" dataType="i4" name="CustomerId" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[EntryTypeCode]" dataType="wstr" length="10" name="EntryTypeCode" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[ProgramCode]" dataType="wstr" length="10" name="ProgramCode" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[PointsDelta]" dataType="i4" name="PointsDelta" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[PointsEarned]" dataType="i4" name="PointsEarned" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[PointsRedeemed]" dataType="i4" name="PointsRedeemed" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[ExpiryDate]" dataType="dbTimeStamp" name="ExpiryDate" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[NetPointsBalance]" dataType="i4" name="NetPointsBalance" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyTierCode]" dataType="wstr" length="3" name="LoyaltyTierCode" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[TierName]" dataType="wstr" length="40" name="TierName" />
+                  <externalMetadataColumn refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input].ExternalColumns[TierDiscountPercent]" dataType="numeric" precision="9" scale="4" name="TierDiscountPercent" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\DFT Conform Loyalty Ledger.Paths[OLE DB Source Output]" endId="Package\DFT Conform Loyalty Ledger\Count Loyalty Rows Read.Inputs[Row Count Input]" name="OLE DB Source Output" startId="Package\DFT Conform Loyalty Ledger\RAW SQL Loyalty Ledger.Outputs[OLE DB Source Output]" />
+          <path refId="Package\DFT Conform Loyalty Ledger.Paths[Row Count Output 1]" endId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Inputs[Derived Column Input]" name="Row Count Output 1" startId="Package\DFT Conform Loyalty Ledger\Count Loyalty Rows Read.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Conform Loyalty Ledger.Paths[Derived Column Output 2]" endId="Package\DFT Conform Loyalty Ledger\Aggregate Customer Points.Inputs[Aggregate Input 1]" name="Derived Column Output 2" startId="Package\DFT Conform Loyalty Ledger\Type Loyalty Entries.Outputs[Derived Column Output]" />
+          <path refId="Package\DFT Conform Loyalty Ledger.Paths[Aggregate Output 1 3]" endId="Package\DFT Conform Loyalty Ledger\Derive Loyalty Tier.Inputs[Derived Column Input]" name="Aggregate Output 1 3" startId="Package\DFT Conform Loyalty Ledger\Aggregate Customer Points.Outputs[Aggregate Output 1]" />
+          <path refId="Package\DFT Conform Loyalty Ledger.Paths[Derived Column Output 4]" endId="Package\DFT Conform Loyalty Ledger\Lookup Loyalty Tier (Full Cache).Inputs[Lookup Input]" name="Derived Column Output 4" startId="Package\DFT Conform Loyalty Ledger\Derive Loyalty Tier.Outputs[Derived Column Output]" />
+          <path refId="Package\DFT Conform Loyalty Ledger.Paths[Lookup Match Output 5]" endId="Package\DFT Conform Loyalty Ledger\Count Loyalty Rows Loaded.Inputs[Row Count Input]" name="Lookup Match Output 5" startId="Package\DFT Conform Loyalty Ledger\Lookup Loyalty Tier (Full Cache).Outputs[Lookup Match Output]" />
+          <path refId="Package\DFT Conform Loyalty Ledger.Paths[Row Count Output 6]" endId="Package\DFT Conform Loyalty Ledger\STG LoyaltyLedger.Inputs[OLE DB Destination Input]" name="Row Count Output 6" startId="Package\DFT Conform Loyalty Ledger\Count Loyalty Rows Loaded.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Conform Loyalty Ledger.Paths[Lookup No Match Output 7]" endId="Package\DFT Conform Loyalty Ledger\ERR Loyalty Unknown Tier.Inputs[OLE DB Destination Input]" name="Lookup No Match Output 7" startId="Package\DFT Conform Loyalty Ledger\Lookup Loyalty Tier (Full Cache).Outputs[Lookup No Match Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Translate Loyalty Source Codes"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{CD5B029F-6858-226E-7343-3BBE7D51B420}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Translate Loyalty Source Codes"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC stg.usp_TranslateSourceCodes @BatchId = ?, @ObjectName = N'stg.LoyaltyLedger';"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Register Rejects - stg.LoyaltyLedger"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{DE49181D-BE29-9BAB-8DE3-C3B6C9113EE6}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Register Rejects - stg.LoyaltyLedger"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="DECLARE @RejectId BIGINT, @Key NVARCHAR(200), @Reason NVARCHAR(50);&#10;DECLARE reject_cur CURSOR LOCAL FAST_FORWARD FOR&#10;    SELECT r.RejectedRowId, r.BusinessKey, r.RejectReasonCode&#10;    FROM [err].[RejectedLookupFailure] AS r&#10;    WHERE r.BatchId = ? AND r.LoggedToControl = 0;&#10;OPEN reject_cur;&#10;FETCH NEXT FROM reject_cur INTO @RejectId, @Key, @Reason;&#10;WHILE @@FETCH_STATUS = 0&#10;BEGIN&#10;    EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @BatchId = ?, @SourceSystemCode = ?, @ObjectName = N'stg.LoyaltyLedger', @BusinessKey = @Key, @RejectReasonCode = @Reason, @RejectStage = N'Transform';&#10;    UPDATE [err].[RejectedLookupFailure] SET LoggedToControl = 1 WHERE RejectedRowId = @RejectId;&#10;    FETCH NEXT FROM reject_cur INTO @RejectId, @Key, @Reason;&#10;END&#10;CLOSE reject_cur;&#10;DEALLOCATE reject_cur;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Set Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{C8D945C7-242C-76BA-65CC-8FF45D2E5210}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Set Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_SetWatermark @SourceSystemCode = ?, @ObjectName = N'stg.LoyaltyLedger', @WatermarkTo = ?, @PackageExecutionId = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::WatermarkTo" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'stg.LoyaltyLedger', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Get Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Get Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\DFT Conform Loyalty Ledger" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\DFT Conform Loyalty Ledger"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Translate Loyalty Source Codes" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Translate Loyalty Source Codes"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Register Rejects - stg.LoyaltyLedger" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Register Rejects - stg.LoyaltyLedger"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Set Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Set Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{61623A65-5CAB-2A1F-BAC3-1D03A1D83D27}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

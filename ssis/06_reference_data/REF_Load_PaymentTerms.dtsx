@@ -1,0 +1,745 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{F362AA64-BF6E-18F7-1826-4BF6053235D8}"
+  DTS:Description="Refresh the PAYMENT_TERMS domain of ref.CodeCrosswalk and publish the conformed terms into Dimension.Payment Terms, decoding the net and discount day counts out of the conformed code and capping net days at the regional legal or customary maximum (60 in the EU, 90 in APAC)."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="REF_Load_PaymentTerms"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{9D491BCE-00CA-BE45-72DF-364915784E38}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{90891413-62AC-B565-CFF7-E4ED6BCCD94F}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{88C95C3C-F422-C140-8F5F-645965B84490}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{0ED61BA7-F6DA-0266-A804-CB52697F45D2}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{4FEB3091-7AFB-0FE1-E39E-FBCFD99A2896}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">ORA_ERP</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{E5CC9232-600B-D2F8-CE36-26645832EDEB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{F298AAF8-8A4E-B32C-78A1-2C05B2290591}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{44039345-1737-84B6-363F-A9830F61649D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{AE828A5C-A730-6749-F9FA-403FA31DF1C7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{3A649473-DB45-4535-10DF-78EF8D2015B0}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{BEAB2443-878F-D65C-D4CC-37223E59916A}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{DA507878-A4E6-D231-C2F1-C044360E4E9D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{D5B11A92-60F6-2FB2-9930-5805268FC456}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::UnmappedCodeCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{4D37331A-289E-5695-64EC-29279C93184F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="UnmappedCodeCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::VersionNumber]"
+      DTS:CreationName=""
+      DTS:DTSID="{D0327473-5009-4D1A-A7A1-18CC984976E0}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="VersionNumber">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::EffectiveFromDate]"
+      DTS:CreationName=""
+      DTS:DTSID="{43FBF17D-15FB-48CF-F005-E56EBA7B722E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="EffectiveFromDate">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Truncate [Dimension].[Payment Terms]"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{FA129146-9F11-2222-A306-F60CDC1D5FCE}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Truncate [Dimension].[Payment Terms]"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE [Dimension].[Payment Terms];"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Load Code Crosswalk - PAYMENT_TERMS"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{0CFA6A53-54FD-FA08-A422-7053006F43D9}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Load Code Crosswalk - PAYMENT_TERMS"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC ref.usp_LoadCodeCrosswalk @BatchId = ?, @PackageExecutionId = ?, @CodeDomainCode = N'PAYMENT_TERMS';"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\DFT Publish Payment Terms Dimension"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{36B55F63-A4A3-AB4C-9EA6-5848BE8A3F1A}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="DFT Publish Payment Terms Dimension"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="REF PaymentTerms Conformed" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">1800</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT x.ConformedCodeValue AS PaymentTermsCode,
+       MAX(CASE WHEN x.IsDefaultForConformed = 1 THEN x.SourceCodeDescription END) AS PaymentTermsName,
+       ISNULL(x.RegionCode, N'ALL') AS RegionCode,
+       MIN(x.EffectiveFromDate) AS EffectiveFromDate,
+       COUNT_BIG(*) AS SourceCodeCount
+FROM ref.CodeCrosswalk AS x
+WHERE x.CodeDomainCode = N'PAYMENT_TERMS'
+  AND x.EffectiveToDate IS NULL
+GROUP BY x.ConformedCodeValue, ISNULL(x.RegionCode, N'ALL');</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].Columns[PaymentTermsCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].ExternalColumns[PaymentTermsCode]" lineageId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].Columns[PaymentTermsCode]" name="PaymentTermsCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].Columns[PaymentTermsName]" dataType="wstr" length="60" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].ExternalColumns[PaymentTermsName]" lineageId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].Columns[PaymentTermsName]" name="PaymentTermsName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].Columns[EffectiveFromDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].ExternalColumns[EffectiveFromDate]" lineageId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].Columns[EffectiveFromDate]" name="EffectiveFromDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].Columns[SourceCodeCount]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].ExternalColumns[SourceCodeCount]" lineageId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].Columns[SourceCodeCount]" name="SourceCodeCount" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].ExternalColumns[PaymentTermsCode]" dataType="wstr" length="10" name="PaymentTermsCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].ExternalColumns[PaymentTermsName]" dataType="wstr" length="60" name="PaymentTermsName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].ExternalColumns[EffectiveFromDate]" dataType="dbTimeStamp" name="EffectiveFromDate" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output].ExternalColumns[SourceCodeCount]" dataType="i8" name="SourceCodeCount" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Error Output].Columns[PaymentTermsCode]" dataType="wstr" length="10" lineageId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Error Output].Columns[PaymentTermsCode]" name="PaymentTermsCode" />
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Error Output].Columns[PaymentTermsName]" dataType="wstr" length="60" lineageId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Error Output].Columns[PaymentTermsName]" name="PaymentTermsName" />
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Error Output].Columns[EffectiveFromDate]" dataType="dbTimeStamp" lineageId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Error Output].Columns[EffectiveFromDate]" name="EffectiveFromDate" />
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Error Output].Columns[SourceCodeCount]" dataType="i8" lineageId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Error Output].Columns[SourceCodeCount]" name="SourceCodeCount" />
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Payment Terms Dimension\Count Terms Read" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Terms Read" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Publish Payment Terms Dimension\Count Terms Read.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Payment Terms Dimension\Count Terms Read.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Publish Payment Terms Dimension\Count Terms Read.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Conform Payment Terms" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output].Columns[PaymentTermsCode]" dataType="wstr" length="10" lineageId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output].Columns[PaymentTermsCode]" name="PaymentTermsCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(PaymentTermsCode))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(PaymentTermsCode))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output].Columns[PaymentTermsName]" dataType="wstr" length="60" lineageId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output].Columns[PaymentTermsName]" name="PaymentTermsName">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(PaymentTermsName) ? UPPER(TRIM(PaymentTermsCode)) : TRIM(PaymentTermsName)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(PaymentTermsName) ? UPPER(TRIM(PaymentTermsCode)) : TRIM(PaymentTermsName)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output].Columns[NetDays]" dataType="i4" lineageId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output].Columns[NetDays]" name="NetDays">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(PaymentTermsCode)) == "EOM" ? 30 : (UPPER(TRIM(PaymentTermsCode)) == "DISC210" ? 30 : (DT_I4)(RIGHT(UPPER(TRIM(PaymentTermsCode)), 2)))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(PaymentTermsCode)) == "EOM" ? 30 : (UPPER(TRIM(PaymentTermsCode)) == "DISC210" ? 30 : (DT_I4)(RIGHT(UPPER(TRIM(PaymentTermsCode)), 2)))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output].Columns[DiscountDays]" dataType="i4" lineageId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output].Columns[DiscountDays]" name="DiscountDays">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(PaymentTermsCode)) == "DISC210" ? 10 : 0</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(PaymentTermsCode)) == "DISC210" ? 10 : 0</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output].Columns[DiscountPercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output].Columns[DiscountPercent]" name="DiscountPercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(PaymentTermsCode)) == "DISC210" ? (DT_NUMERIC,9,4)2 : (DT_NUMERIC,9,4)0</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(PaymentTermsCode)) == "DISC210" ? (DT_NUMERIC,9,4)2 : (DT_NUMERIC,9,4)0</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output].Columns[NetDaysCapped]" dataType="i4" lineageId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output].Columns[NetDaysCapped]" name="NetDaysCapped">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">RegionCode == "EU" &amp;&amp; NetDays &gt; 60 ? 60 : (RegionCode == "APAC" &amp;&amp; NetDays &gt; 90 ? 90 : NetDays)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">RegionCode == "EU" &amp;&amp; NetDays &gt; 60 ? 60 : (RegionCode == "APAC" &amp;&amp; NetDays &gt; 90 ? 90 : NetDays)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output].Columns[EarlySettlementFlag]" dataType="wstr" length="1" lineageId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output].Columns[EarlySettlementFlag]" name="EarlySettlementFlag">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">DiscountDays &gt; 0 &amp;&amp; DiscountPercent &gt; 0 ? "Y" : "N"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">DiscountDays &gt; 0 &amp;&amp; DiscountPercent &gt; 0 ? "Y" : "N"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output].Columns[LineageKey]" dataType="wstr" length="40" lineageId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output].Columns[LineageKey]" name="LineageKey">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_WSTR,40)"REF_Load_PaymentTerms"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_WSTR,40)"REF_Load_PaymentTerms"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output].Columns[ChangeHash]" dataType="wstr" length="200" lineageId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output].Columns[ChangeHash]" name="ChangeHash">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM((DT_WSTR,60)PaymentTermsCode)) + "|" + UPPER(TRIM((DT_WSTR,60)PaymentTermsName)) + "|" + UPPER(TRIM((DT_WSTR,60)RegionCode))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM((DT_WSTR,60)PaymentTermsCode)) + "|" + UPPER(TRIM((DT_WSTR,60)PaymentTermsName)) + "|" + UPPER(TRIM((DT_WSTR,60)RegionCode))</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Payment Terms Dimension\Screen Payment Terms" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Screen Payment Terms" version="1">
+            <inputs>
+              <input refId="Package\DFT Publish Payment Terms Dimension\Screen Payment Terms.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Payment Terms Dimension\Screen Payment Terms.Outputs[Valid Terms]" exclusionGroup="1" name="Valid Terms" synchronousInputId="Package\DFT Publish Payment Terms Dimension\Screen Payment Terms.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">NetDaysCapped &gt; 0 &amp;&amp; NetDaysCapped &lt;= 365</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">NetDaysCapped &gt; 0 &amp;&amp; NetDaysCapped &lt;= 365</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\DFT Publish Payment Terms Dimension\Screen Payment Terms.Outputs[Implausible Terms]" exclusionGroup="1" isDefaultOut="true" name="Implausible Terms" synchronousInputId="Package\DFT Publish Payment Terms Dimension\Screen Payment Terms.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Payment Terms Dimension\Count Terms Published" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Terms Published" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsInserted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Publish Payment Terms Dimension\Count Terms Published.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Payment Terms Dimension\Count Terms Published.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Publish Payment Terms Dimension\Count Terms Published.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="DW Dimension Payment Terms" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Dimension].[Payment Terms]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">5000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].Columns[PaymentTermsCode]" cachedDataType="wstr" cachedLength="10" cachedName="PaymentTermsCode" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[PaymentTermsCode]" name="PaymentTermsCode" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].Columns[PaymentTermsName]" cachedDataType="wstr" cachedLength="60" cachedName="PaymentTermsName" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[PaymentTermsName]" name="PaymentTermsName" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].Columns[EffectiveFromDate]" cachedDataType="dbTimeStamp" cachedName="EffectiveFromDate" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveFromDate]" name="EffectiveFromDate" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].Columns[SourceCodeCount]" cachedDataType="i8" cachedName="SourceCodeCount" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[SourceCodeCount]" name="SourceCodeCount" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].Columns[PaymentTermsCode]" cachedDataType="wstr" cachedLength="10" cachedName="PaymentTermsCode" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[PaymentTermsCode]" name="PaymentTermsCode" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].Columns[PaymentTermsName]" cachedDataType="wstr" cachedLength="60" cachedName="PaymentTermsName" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[PaymentTermsName]" name="PaymentTermsName" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].Columns[NetDays]" cachedDataType="i4" cachedName="NetDays" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[NetDays]" name="NetDays" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].Columns[DiscountDays]" cachedDataType="i4" cachedName="DiscountDays" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[DiscountDays]" name="DiscountDays" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].Columns[DiscountPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="DiscountPercent" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" name="DiscountPercent" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].Columns[NetDaysCapped]" cachedDataType="i4" cachedName="NetDaysCapped" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[NetDaysCapped]" name="NetDaysCapped" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].Columns[EarlySettlementFlag]" cachedDataType="wstr" cachedLength="1" cachedName="EarlySettlementFlag" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[EarlySettlementFlag]" name="EarlySettlementFlag" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="wstr" cachedLength="40" cachedName="LineageKey" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].Columns[ChangeHash]" cachedDataType="wstr" cachedLength="200" cachedName="ChangeHash" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" name="ChangeHash" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[PaymentTermsCode]" dataType="wstr" length="10" name="PaymentTermsCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[PaymentTermsName]" dataType="wstr" length="60" name="PaymentTermsName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveFromDate]" dataType="dbTimeStamp" name="EffectiveFromDate" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[SourceCodeCount]" dataType="i8" name="SourceCodeCount" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[PaymentTermsCode]" dataType="wstr" length="10" name="PaymentTermsCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[PaymentTermsName]" dataType="wstr" length="60" name="PaymentTermsName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[NetDays]" dataType="i4" name="NetDays" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[DiscountDays]" dataType="i4" name="DiscountDays" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" dataType="numeric" precision="9" scale="4" name="DiscountPercent" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[NetDaysCapped]" dataType="i4" name="NetDaysCapped" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[EarlySettlementFlag]" dataType="wstr" length="1" name="EarlySettlementFlag" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="wstr" length="40" name="LineageKey" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" dataType="wstr" length="200" name="ChangeHash" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="ERR Payment Terms Implausible" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].Columns[PaymentTermsCode]" cachedDataType="wstr" cachedLength="10" cachedName="PaymentTermsCode" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[PaymentTermsCode]" name="PaymentTermsCode" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].Columns[PaymentTermsName]" cachedDataType="wstr" cachedLength="60" cachedName="PaymentTermsName" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[PaymentTermsName]" name="PaymentTermsName" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].Columns[EffectiveFromDate]" cachedDataType="dbTimeStamp" cachedName="EffectiveFromDate" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveFromDate]" name="EffectiveFromDate" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].Columns[SourceCodeCount]" cachedDataType="i8" cachedName="SourceCodeCount" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[SourceCodeCount]" name="SourceCodeCount" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].Columns[PaymentTermsCode]" cachedDataType="wstr" cachedLength="10" cachedName="PaymentTermsCode" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[PaymentTermsCode]" name="PaymentTermsCode" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].Columns[PaymentTermsName]" cachedDataType="wstr" cachedLength="60" cachedName="PaymentTermsName" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[PaymentTermsName]" name="PaymentTermsName" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].Columns[NetDays]" cachedDataType="i4" cachedName="NetDays" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[NetDays]" name="NetDays" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].Columns[DiscountDays]" cachedDataType="i4" cachedName="DiscountDays" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[DiscountDays]" name="DiscountDays" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].Columns[DiscountPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="DiscountPercent" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" name="DiscountPercent" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].Columns[NetDaysCapped]" cachedDataType="i4" cachedName="NetDaysCapped" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[NetDaysCapped]" name="NetDaysCapped" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].Columns[EarlySettlementFlag]" cachedDataType="wstr" cachedLength="1" cachedName="EarlySettlementFlag" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[EarlySettlementFlag]" name="EarlySettlementFlag" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="wstr" cachedLength="40" cachedName="LineageKey" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                  <inputColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].Columns[ChangeHash]" cachedDataType="wstr" cachedLength="200" cachedName="ChangeHash" externalMetadataColumnId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" name="ChangeHash" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[PaymentTermsCode]" dataType="wstr" length="10" name="PaymentTermsCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[PaymentTermsName]" dataType="wstr" length="60" name="PaymentTermsName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveFromDate]" dataType="dbTimeStamp" name="EffectiveFromDate" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[SourceCodeCount]" dataType="i8" name="SourceCodeCount" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[PaymentTermsCode]" dataType="wstr" length="10" name="PaymentTermsCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[PaymentTermsName]" dataType="wstr" length="60" name="PaymentTermsName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[NetDays]" dataType="i4" name="NetDays" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[DiscountDays]" dataType="i4" name="DiscountDays" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" dataType="numeric" precision="9" scale="4" name="DiscountPercent" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[NetDaysCapped]" dataType="i4" name="NetDaysCapped" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[EarlySettlementFlag]" dataType="wstr" length="1" name="EarlySettlementFlag" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="wstr" length="40" name="LineageKey" />
+                  <externalMetadataColumn refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" dataType="wstr" length="200" name="ChangeHash" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\DFT Publish Payment Terms Dimension.Paths[OLE DB Source Output]" endId="Package\DFT Publish Payment Terms Dimension\Count Terms Read.Inputs[Row Count Input]" name="OLE DB Source Output" startId="Package\DFT Publish Payment Terms Dimension\REF PaymentTerms Conformed.Outputs[OLE DB Source Output]" />
+          <path refId="Package\DFT Publish Payment Terms Dimension.Paths[Row Count Output 1]" endId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Inputs[Derived Column Input]" name="Row Count Output 1" startId="Package\DFT Publish Payment Terms Dimension\Count Terms Read.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Publish Payment Terms Dimension.Paths[Derived Column Output 2]" endId="Package\DFT Publish Payment Terms Dimension\Screen Payment Terms.Inputs[Conditional Split Input]" name="Derived Column Output 2" startId="Package\DFT Publish Payment Terms Dimension\Conform Payment Terms.Outputs[Derived Column Output]" />
+          <path refId="Package\DFT Publish Payment Terms Dimension.Paths[Valid Terms 3]" endId="Package\DFT Publish Payment Terms Dimension\Count Terms Published.Inputs[Row Count Input]" name="Valid Terms 3" startId="Package\DFT Publish Payment Terms Dimension\Screen Payment Terms.Outputs[Valid Terms]" />
+          <path refId="Package\DFT Publish Payment Terms Dimension.Paths[Row Count Output 4]" endId="Package\DFT Publish Payment Terms Dimension\DW Dimension Payment Terms.Inputs[OLE DB Destination Input]" name="Row Count Output 4" startId="Package\DFT Publish Payment Terms Dimension\Count Terms Published.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Publish Payment Terms Dimension.Paths[Implausible Terms 5]" endId="Package\DFT Publish Payment Terms Dimension\ERR Payment Terms Implausible.Inputs[OLE DB Destination Input]" name="Implausible Terms 5" startId="Package\DFT Publish Payment Terms Dimension\Screen Payment Terms.Outputs[Implausible Terms]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Report Unmapped Codes - PAYMENT_TERMS"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{3BF5DB74-4F91-44FF-B5A7-EDFE2774DC05}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Report Unmapped Codes - PAYMENT_TERMS"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="DECLARE @Unmapped TABLE (CodeDomainCode NVARCHAR(30), SourceSystemCode NVARCHAR(20),&#10;                         SourceObjectName NVARCHAR(200), SourceColumnName NVARCHAR(100),&#10;                         SourceCodeValue NVARCHAR(50), OccurrenceCount BIGINT,&#10;                         FirstObservedAtUtc DATETIME2(3));&#10;INSERT INTO @Unmapped&#10;EXEC ref.usp_ReportUnmappedCodes @BatchId = ?, @PackageExecutionId = ?, @CodeDomainCode = N'PAYMENT_TERMS';&#10;SELECT COUNT_BIG(*) AS UnmappedCodeCount FROM @Unmapped;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::UnmappedCodeCount" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'ref.CodeCrosswalk', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Truncate [Dimension].[Payment Terms]" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Truncate [Dimension].[Payment Terms]"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Load Code Crosswalk - PAYMENT_TERMS" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Load Code Crosswalk - PAYMENT_TERMS"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\DFT Publish Payment Terms Dimension" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\DFT Publish Payment Terms Dimension"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Report Unmapped Codes - PAYMENT_TERMS" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Report Unmapped Codes - PAYMENT_TERMS"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{584C1F0C-8BB2-6D8B-5A3C-6E7EC1DED023}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

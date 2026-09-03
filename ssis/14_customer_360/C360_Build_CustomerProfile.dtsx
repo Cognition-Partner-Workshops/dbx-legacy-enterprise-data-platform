@@ -1,0 +1,869 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{E1B882D6-890A-1E78-051D-FF2837FC3B13}"
+  DTS:Description="Builds the customer 360 profile from the customer dimension, the sales history and the payment history. Identity resolution runs a match-key cascade - exact tax registration, then normalised email, then name plus standardised postal code - and the survivorship rules keep the most recently updated non-null attribute from the winning record."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="C360_Build_CustomerProfile"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{44AE5742-2BEF-42BC-EC38-9677F3EF1827}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{C8FD846E-1BC4-F772-2ADE-70B220934873}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{22481AA0-640D-20C1-EF28-BD9838E631D1}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{200A83AD-51F9-A9CB-A24A-4D5C4FC814D9}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{4032B64F-04E3-8FD7-7EA0-564E11E87CFF}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWIOLTP</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::MatchThresholdScore]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Fuzzy match score at or above which two customers are merged."
+      DTS:DTSID="{2B4DE02C-CDB1-AD1A-CC0B-C034BBB26710}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="MatchThresholdScore"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">85</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::RebuildIdentityGraph]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="Rebuilds the whole identity graph rather than the daily delta."
+      DTS:DTSID="{541A5BAA-AD11-F390-48D8-862A349BA43D}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="RebuildIdentityGraph"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{822E9A01-9845-E745-01AD-76A826AF9314}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{5EBF393A-17D2-E9C3-B083-3FF6F2C6B616}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{7301DEA1-11FD-59D7-68BD-B9B1B1B9998B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{879AF1AA-41ED-6B14-45F3-1008BD55D524}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{83E44004-0681-7D5A-C852-B01C81962F79}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{C6E4285C-B049-742C-55EF-47FA2C86A1DB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{C3130B2F-CF15-4E0F-D723-F3D3D3E2DA3D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{A901B77C-6F64-4395-DC16-FFCCCC8A8947}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ProfileCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{8EBE561B-EAEA-572D-3A98-DF4BFF7507E6}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ProfileCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::DuplicateClusterCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{28024789-C0F2-256D-D085-606CD7C1708F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="DuplicateClusterCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Truncate work.CustomerProfile"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{8B6B1585-1652-4DF3-D5C5-6ED6BA7C196F}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Truncate work.CustomerProfile"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE work.CustomerProfile;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Standardise Addresses"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{6BA46CDF-96CD-1681-B869-9062F912E2C2}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Standardise Addresses"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="UPDATE work.CustomerAddressStandardised&#10;SET    StandardPostalCode =&#10;       CASE RegionCode&#10;            WHEN N'NA'   THEN LEFT(REPLACE(REPLACE(RawPostalCode, N'-', N''), N' ', N''), 5)&#10;            WHEN N'EU'   THEN CountryCode + N'-' + UPPER(REPLACE(RawPostalCode, N' ', N''))&#10;            WHEN N'APAC' THEN UPPER(REPLACE(RawPostalCode, N' ', N''))&#10;            ELSE UPPER(RawPostalCode)&#10;       END&#10;,      StandardEmail = LOWER(LTRIM(RTRIM(RawEmail)))&#10;,      StandardisedAtUtc = SYSUTCDATETIME();"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Resolve Identity Graph"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{49508D4D-060D-E444-1E55-B8024097E728}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Resolve Identity Graph"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="MERGE work.CustomerIdentityGraph AS target&#10;USING (&#10;    SELECT  a.CustomerId&#10;    ,       MIN(b.CustomerId) AS SurvivingCustomerId&#10;    ,       MAX(CASE&#10;                WHEN a.TaxRegistrationNumber = b.TaxRegistrationNumber THEN 100&#10;                WHEN a.StandardEmail = b.StandardEmail                 THEN 95&#10;                WHEN a.CustomerNameNormalised = b.CustomerNameNormalised&#10;                     AND a.StandardPostalCode = b.StandardPostalCode   THEN 88&#10;                ELSE 0 END) AS MatchScore&#10;    FROM    work.CustomerAddressStandardised AS a&#10;    INNER JOIN work.CustomerAddressStandardised AS b&#10;            ON  b.CustomerId &lt;= a.CustomerId&#10;            AND (a.TaxRegistrationNumber = b.TaxRegistrationNumber&#10;                 OR a.StandardEmail = b.StandardEmail&#10;                 OR (a.CustomerNameNormalised = b.CustomerNameNormalised&#10;                     AND a.StandardPostalCode = b.StandardPostalCode))&#10;    GROUP BY a.CustomerId&#10;) AS source&#10;    ON  target.CustomerId = source.CustomerId&#10;WHEN MATCHED AND source.MatchScore &gt;= ? THEN&#10;    UPDATE SET target.SurvivingCustomerId = source.SurvivingCustomerId,&#10;               target.MatchScore = source.MatchScore,&#10;               target.ResolvedAtUtc = SYSUTCDATETIME()&#10;WHEN NOT MATCHED BY TARGET AND source.MatchScore &gt;= ? THEN&#10;    INSERT (CustomerId, SurvivingCustomerId, MatchScore, ResolvedAtUtc)&#10;    VALUES (source.CustomerId, source.SurvivingCustomerId, source.MatchScore,&#10;            SYSUTCDATETIME());"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::MatchThresholdScore" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::MatchThresholdScore" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Build Customer Profile"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{46A12CF7-B3D2-FF6E-2EE3-F24CF7A16361}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Build Customer Profile"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Build Customer Profile\Dimension Customer" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="Dimension Customer" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">1800</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT  c.[Customer Key]                                AS CustomerKey
+,       c.[WWI Customer ID]                             AS CustomerId
+,       c.Customer                                      AS CustomerName
+,       c.Category                                      AS CustomerCategory
+,       c.[Buying Group]                                AS BuyingGroup
+,       c.[Postal Code]                                 AS PostalCode
+,       c.[Region Code]                                 AS RegionCode
+,       c.[Country Code]                                AS CountryCode
+,       c.[Primary Contact Email]                       AS ContactEmail
+,       c.[Primary Contact Phone]                       AS ContactPhone
+,       c.[Marketing Consent Flag]                      AS MarketingConsentFlag
+,       c.[Consent Captured Date]                       AS ConsentCapturedDate
+,       s.FirstOrderDate
+,       s.LastOrderDate
+,       s.LifetimeOrderCount
+,       s.LifetimeNetAmount
+,       p.LastPaymentDate
+,       p.OpenBalanceAmount
+,       p.AveragePaymentDays
+FROM    Dimension.Customer AS c
+LEFT OUTER JOIN work.CustomerSalesSummary AS s
+        ON  s.CustomerKey = c.[Customer Key]
+LEFT OUTER JOIN work.CustomerPaymentSummary AS p
+        ON  p.CustomerKey = c.[Customer Key]
+WHERE   c.[Valid To] &gt; SYSDATETIME()
+AND     c.[WWI Customer ID] &gt; 0</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Build Customer Profile\Dimension Customer.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[CustomerKey]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[CustomerKey]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[CustomerKey]" name="CustomerKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[CustomerId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[CustomerId]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[CustomerId]" name="CustomerId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[CustomerName]" dataType="wstr" length="100" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[CustomerName]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[CustomerName]" name="CustomerName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[CustomerCategory]" dataType="wstr" length="50" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[CustomerCategory]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[CustomerCategory]" name="CustomerCategory" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[BuyingGroup]" dataType="wstr" length="50" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[BuyingGroup]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[BuyingGroup]" name="BuyingGroup" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[PostalCode]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[PostalCode]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[PostalCode]" name="PostalCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[CountryCode]" dataType="wstr" length="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[CountryCode]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[CountryCode]" name="CountryCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[ContactEmail]" dataType="wstr" length="256" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[ContactEmail]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[ContactEmail]" name="ContactEmail" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[ContactPhone]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[ContactPhone]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[ContactPhone]" name="ContactPhone" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[MarketingConsentFlag]" dataType="bool" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[MarketingConsentFlag]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[MarketingConsentFlag]" name="MarketingConsentFlag" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[ConsentCapturedDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[ConsentCapturedDate]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[ConsentCapturedDate]" name="ConsentCapturedDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[FirstOrderDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[FirstOrderDate]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[FirstOrderDate]" name="FirstOrderDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[LastOrderDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[LastOrderDate]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[LastOrderDate]" name="LastOrderDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[LifetimeOrderCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[LifetimeOrderCount]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[LifetimeOrderCount]" name="LifetimeOrderCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[LifetimeNetAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[LifetimeNetAmount]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[LifetimeNetAmount]" name="LifetimeNetAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[LastPaymentDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[LastPaymentDate]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[LastPaymentDate]" name="LastPaymentDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[OpenBalanceAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[OpenBalanceAmount]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[OpenBalanceAmount]" name="OpenBalanceAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[AveragePaymentDays]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[AveragePaymentDays]" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].Columns[AveragePaymentDays]" name="AveragePaymentDays" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[CustomerId]" dataType="i4" name="CustomerId" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[CustomerName]" dataType="wstr" length="100" name="CustomerName" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[CustomerCategory]" dataType="wstr" length="50" name="CustomerCategory" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[BuyingGroup]" dataType="wstr" length="50" name="BuyingGroup" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[PostalCode]" dataType="wstr" length="12" name="PostalCode" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[CountryCode]" dataType="wstr" length="2" name="CountryCode" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[ContactEmail]" dataType="wstr" length="256" name="ContactEmail" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[ContactPhone]" dataType="wstr" length="20" name="ContactPhone" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[MarketingConsentFlag]" dataType="bool" name="MarketingConsentFlag" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[ConsentCapturedDate]" dataType="dbTimeStamp" name="ConsentCapturedDate" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[FirstOrderDate]" dataType="dbTimeStamp" name="FirstOrderDate" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[LastOrderDate]" dataType="dbTimeStamp" name="LastOrderDate" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[LifetimeOrderCount]" dataType="i4" name="LifetimeOrderCount" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[LifetimeNetAmount]" dataType="numeric" precision="18" scale="2" name="LifetimeNetAmount" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[LastPaymentDate]" dataType="dbTimeStamp" name="LastPaymentDate" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[OpenBalanceAmount]" dataType="numeric" precision="18" scale="2" name="OpenBalanceAmount" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output].ExternalColumns[AveragePaymentDays]" dataType="numeric" precision="18" scale="2" name="AveragePaymentDays" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[CustomerKey]" dataType="i4" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[CustomerKey]" name="CustomerKey" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[CustomerId]" dataType="i4" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[CustomerId]" name="CustomerId" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[CustomerName]" dataType="wstr" length="100" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[CustomerName]" name="CustomerName" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[CustomerCategory]" dataType="wstr" length="50" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[CustomerCategory]" name="CustomerCategory" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[BuyingGroup]" dataType="wstr" length="50" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[BuyingGroup]" name="BuyingGroup" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[PostalCode]" dataType="wstr" length="12" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[PostalCode]" name="PostalCode" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[CountryCode]" dataType="wstr" length="2" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[CountryCode]" name="CountryCode" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[ContactEmail]" dataType="wstr" length="256" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[ContactEmail]" name="ContactEmail" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[ContactPhone]" dataType="wstr" length="20" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[ContactPhone]" name="ContactPhone" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[MarketingConsentFlag]" dataType="bool" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[MarketingConsentFlag]" name="MarketingConsentFlag" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[ConsentCapturedDate]" dataType="dbTimeStamp" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[ConsentCapturedDate]" name="ConsentCapturedDate" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[FirstOrderDate]" dataType="dbTimeStamp" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[FirstOrderDate]" name="FirstOrderDate" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[LastOrderDate]" dataType="dbTimeStamp" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[LastOrderDate]" name="LastOrderDate" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[LifetimeOrderCount]" dataType="i4" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[LifetimeOrderCount]" name="LifetimeOrderCount" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[LifetimeNetAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[LifetimeNetAmount]" name="LifetimeNetAmount" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[LastPaymentDate]" dataType="dbTimeStamp" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[LastPaymentDate]" name="LastPaymentDate" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[OpenBalanceAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[OpenBalanceAmount]" name="OpenBalanceAmount" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[AveragePaymentDays]" dataType="numeric" precision="18" scale="2" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[AveragePaymentDays]" name="AveragePaymentDays" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Build Customer Profile\Lookup Surviving Identity" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Surviving Identity" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT CustomerId, SurvivingCustomerId, MatchScore FROM work.CustomerIdentityGraph;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">1</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Build Customer Profile\Lookup Surviving Identity.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Build Customer Profile\Lookup Surviving Identity.Inputs[Lookup Input]" errorRowDisposition="FailComponent" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Build Customer Profile\Lookup Surviving Identity.Inputs[Lookup Input].Columns[CustomerId]" cachedName="CustomerId" name="CustomerId" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Build Customer Profile\Lookup Surviving Identity.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Build Customer Profile\Lookup Surviving Identity.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Build Customer Profile\Lookup Surviving Identity.Outputs[Lookup Match Output].Columns[SurvivingCustomerId]" dataType="i4" lineageId="Package\Build Customer Profile\Lookup Surviving Identity.Outputs[Lookup Match Output].Columns[SurvivingCustomerId]" name="SurvivingCustomerId" />
+                  <outputColumn refId="Package\Build Customer Profile\Lookup Surviving Identity.Outputs[Lookup Match Output].Columns[MatchScore]" dataType="i4" lineageId="Package\Build Customer Profile\Lookup Surviving Identity.Outputs[Lookup Match Output].Columns[MatchScore]" name="MatchScore" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Build Customer Profile\Lookup Surviving Identity.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Build Customer Profile\Lookup Surviving Identity.Inputs[Lookup Input]" />
+              <output refId="Package\Build Customer Profile\Lookup Surviving Identity.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Build Customer Profile\Lookup Surviving Identity.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Build Customer Profile\Apply Regional Consent Rules" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Apply Regional Consent Rules" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Build Customer Profile\Apply Regional Consent Rules.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Build Customer Profile\Apply Regional Consent Rules.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Build Customer Profile\Apply Regional Consent Rules.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Build Customer Profile\Apply Regional Consent Rules.Outputs[Derived Column Output].Columns[IsContactable]" dataType="bool" lineageId="Package\Build Customer Profile\Apply Regional Consent Rules.Outputs[Derived Column Output].Columns[IsContactable]" name="IsContactable">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">RegionCode == "EU" ? (ISNULL(MarketingConsentFlag) ? (DT_BOOL)0 : MarketingConsentFlag) : (RegionCode == "APAC" ? (ISNULL(ConsentCapturedDate) ? (DT_BOOL)0 : (DATEDIFF("Dy", ConsentCapturedDate, GETDATE()) &lt;= 730 ? (DT_BOOL)1 : (DT_BOOL)0)) : (DT_BOOL)1)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">RegionCode == "EU" ? (ISNULL(MarketingConsentFlag) ? (DT_BOOL)0 : MarketingConsentFlag) : (RegionCode == "APAC" ? (ISNULL(ConsentCapturedDate) ? (DT_BOOL)0 : (DATEDIFF("Dy", ConsentCapturedDate, GETDATE()) &lt;= 730 ? (DT_BOOL)1 : (DT_BOOL)0)) : (DT_BOOL)1)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Build Customer Profile\Apply Regional Consent Rules.Outputs[Derived Column Output].Columns[MaskedContactEmail]" dataType="wstr" length="256" lineageId="Package\Build Customer Profile\Apply Regional Consent Rules.Outputs[Derived Column Output].Columns[MaskedContactEmail]" name="MaskedContactEmail">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">RegionCode == "EU" &amp;&amp; (ISNULL(MarketingConsentFlag) || MarketingConsentFlag == (DT_BOOL)0) ? (DT_WSTR,256)"WITHHELD" : ContactEmail</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">RegionCode == "EU" &amp;&amp; (ISNULL(MarketingConsentFlag) || MarketingConsentFlag == (DT_BOOL)0) ? (DT_WSTR,256)"WITHHELD" : ContactEmail</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Build Customer Profile\Derive Profile Attributes" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Profile Attributes" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Build Customer Profile\Derive Profile Attributes.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Build Customer Profile\Derive Profile Attributes.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Build Customer Profile\Derive Profile Attributes.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Build Customer Profile\Derive Profile Attributes.Outputs[Derived Column Output].Columns[MasterCustomerId]" dataType="i4" lineageId="Package\Build Customer Profile\Derive Profile Attributes.Outputs[Derived Column Output].Columns[MasterCustomerId]" name="MasterCustomerId">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(SurvivingCustomerId) ? CustomerId : SurvivingCustomerId</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(SurvivingCustomerId) ? CustomerId : SurvivingCustomerId</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Build Customer Profile\Derive Profile Attributes.Outputs[Derived Column Output].Columns[TenureDays]" dataType="i4" lineageId="Package\Build Customer Profile\Derive Profile Attributes.Outputs[Derived Column Output].Columns[TenureDays]" name="TenureDays">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(FirstOrderDate) ? 0 : DATEDIFF("Dy", FirstOrderDate, GETDATE())</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(FirstOrderDate) ? 0 : DATEDIFF("Dy", FirstOrderDate, GETDATE())</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Build Customer Profile\Derive Profile Attributes.Outputs[Derived Column Output].Columns[AverageOrderValue]" dataType="numeric" precision="18" scale="2" lineageId="Package\Build Customer Profile\Derive Profile Attributes.Outputs[Derived Column Output].Columns[AverageOrderValue]" name="AverageOrderValue">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">LifetimeOrderCount == 0 ? (DT_NUMERIC,18,2)0 : LifetimeNetAmount / LifetimeOrderCount</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">LifetimeOrderCount == 0 ? (DT_NUMERIC,18,2)0 : LifetimeNetAmount / LifetimeOrderCount</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Build Customer Profile\Count Profiles" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Profiles" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsInserted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Build Customer Profile\Count Profiles.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Build Customer Profile\Count Profiles.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Build Customer Profile\Count Profiles.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Build Customer Profile\work CustomerProfile" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="work CustomerProfile" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[CustomerProfile]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">50000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Build Customer Profile\work CustomerProfile.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[CustomerKey]" cachedDataType="i4" cachedName="CustomerKey" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" name="CustomerKey" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[CustomerId]" cachedDataType="i4" cachedName="CustomerId" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[CustomerId]" name="CustomerId" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[CustomerName]" cachedDataType="wstr" cachedLength="100" cachedName="CustomerName" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[CustomerName]" name="CustomerName" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[CustomerCategory]" cachedDataType="wstr" cachedLength="50" cachedName="CustomerCategory" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[CustomerCategory]" name="CustomerCategory" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[BuyingGroup]" cachedDataType="wstr" cachedLength="50" cachedName="BuyingGroup" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[BuyingGroup]" name="BuyingGroup" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[PostalCode]" cachedDataType="wstr" cachedLength="12" cachedName="PostalCode" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[PostalCode]" name="PostalCode" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[CountryCode]" cachedDataType="wstr" cachedLength="2" cachedName="CountryCode" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[CountryCode]" name="CountryCode" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[ContactEmail]" cachedDataType="wstr" cachedLength="256" cachedName="ContactEmail" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[ContactEmail]" name="ContactEmail" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[ContactPhone]" cachedDataType="wstr" cachedLength="20" cachedName="ContactPhone" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[ContactPhone]" name="ContactPhone" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[MarketingConsentFlag]" cachedDataType="bool" cachedName="MarketingConsentFlag" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[MarketingConsentFlag]" name="MarketingConsentFlag" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[ConsentCapturedDate]" cachedDataType="dbTimeStamp" cachedName="ConsentCapturedDate" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[ConsentCapturedDate]" name="ConsentCapturedDate" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[FirstOrderDate]" cachedDataType="dbTimeStamp" cachedName="FirstOrderDate" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[FirstOrderDate]" name="FirstOrderDate" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[LastOrderDate]" cachedDataType="dbTimeStamp" cachedName="LastOrderDate" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[LastOrderDate]" name="LastOrderDate" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[LifetimeOrderCount]" cachedDataType="i4" cachedName="LifetimeOrderCount" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[LifetimeOrderCount]" name="LifetimeOrderCount" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[LifetimeNetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="LifetimeNetAmount" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[LifetimeNetAmount]" name="LifetimeNetAmount" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[LastPaymentDate]" cachedDataType="dbTimeStamp" cachedName="LastPaymentDate" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[LastPaymentDate]" name="LastPaymentDate" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[OpenBalanceAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OpenBalanceAmount" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[OpenBalanceAmount]" name="OpenBalanceAmount" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[AveragePaymentDays]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AveragePaymentDays" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[AveragePaymentDays]" name="AveragePaymentDays" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[SurvivingCustomerId]" cachedDataType="i4" cachedName="SurvivingCustomerId" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[SurvivingCustomerId]" name="SurvivingCustomerId" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[MatchScore]" cachedDataType="i4" cachedName="MatchScore" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[MatchScore]" name="MatchScore" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[IsContactable]" cachedDataType="bool" cachedName="IsContactable" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[IsContactable]" name="IsContactable" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[MaskedContactEmail]" cachedDataType="wstr" cachedLength="256" cachedName="MaskedContactEmail" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[MaskedContactEmail]" name="MaskedContactEmail" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[MasterCustomerId]" cachedDataType="i4" cachedName="MasterCustomerId" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[MasterCustomerId]" name="MasterCustomerId" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[TenureDays]" cachedDataType="i4" cachedName="TenureDays" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[TenureDays]" name="TenureDays" />
+                  <inputColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].Columns[AverageOrderValue]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AverageOrderValue" externalMetadataColumnId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[AverageOrderValue]" name="AverageOrderValue" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[CustomerId]" dataType="i4" name="CustomerId" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[CustomerName]" dataType="wstr" length="100" name="CustomerName" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[CustomerCategory]" dataType="wstr" length="50" name="CustomerCategory" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[BuyingGroup]" dataType="wstr" length="50" name="BuyingGroup" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[PostalCode]" dataType="wstr" length="12" name="PostalCode" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[CountryCode]" dataType="wstr" length="2" name="CountryCode" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[ContactEmail]" dataType="wstr" length="256" name="ContactEmail" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[ContactPhone]" dataType="wstr" length="20" name="ContactPhone" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[MarketingConsentFlag]" dataType="bool" name="MarketingConsentFlag" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[ConsentCapturedDate]" dataType="dbTimeStamp" name="ConsentCapturedDate" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[FirstOrderDate]" dataType="dbTimeStamp" name="FirstOrderDate" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[LastOrderDate]" dataType="dbTimeStamp" name="LastOrderDate" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[LifetimeOrderCount]" dataType="i4" name="LifetimeOrderCount" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[LifetimeNetAmount]" dataType="numeric" precision="18" scale="2" name="LifetimeNetAmount" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[LastPaymentDate]" dataType="dbTimeStamp" name="LastPaymentDate" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[OpenBalanceAmount]" dataType="numeric" precision="18" scale="2" name="OpenBalanceAmount" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[AveragePaymentDays]" dataType="numeric" precision="18" scale="2" name="AveragePaymentDays" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[SurvivingCustomerId]" dataType="i4" name="SurvivingCustomerId" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[MatchScore]" dataType="i4" name="MatchScore" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[IsContactable]" dataType="bool" name="IsContactable" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[MaskedContactEmail]" dataType="wstr" length="256" name="MaskedContactEmail" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[MasterCustomerId]" dataType="i4" name="MasterCustomerId" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[TenureDays]" dataType="i4" name="TenureDays" />
+                  <externalMetadataColumn refId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input].ExternalColumns[AverageOrderValue]" dataType="numeric" precision="18" scale="2" name="AverageOrderValue" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Build Customer Profile\work CustomerProfile.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Build Customer Profile.Paths[OLE DB Source Output]" endId="Package\Build Customer Profile\Lookup Surviving Identity.Inputs[Lookup Input]" name="OLE DB Source Output" startId="Package\Build Customer Profile\Dimension Customer.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Build Customer Profile.Paths[Lookup Match Output 1]" endId="Package\Build Customer Profile\Apply Regional Consent Rules.Inputs[Derived Column Input]" name="Lookup Match Output 1" startId="Package\Build Customer Profile\Lookup Surviving Identity.Outputs[Lookup Match Output]" />
+          <path refId="Package\Build Customer Profile.Paths[Derived Column Output 2]" endId="Package\Build Customer Profile\Derive Profile Attributes.Inputs[Derived Column Input]" name="Derived Column Output 2" startId="Package\Build Customer Profile\Apply Regional Consent Rules.Outputs[Derived Column Output]" />
+          <path refId="Package\Build Customer Profile.Paths[Derived Column Output 3]" endId="Package\Build Customer Profile\Count Profiles.Inputs[Row Count Input]" name="Derived Column Output 3" startId="Package\Build Customer Profile\Derive Profile Attributes.Outputs[Derived Column Output]" />
+          <path refId="Package\Build Customer Profile.Paths[Row Count Output 4]" endId="Package\Build Customer Profile\work CustomerProfile.Inputs[OLE DB Destination Input]" name="Row Count Output 4" startId="Package\Build Customer Profile\Count Profiles.Outputs[Row Count Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Assign Households"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{9A5F33FD-9C3E-0C4A-AF73-2B4677F05849}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Assign Households"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="UPDATE p&#10;SET    p.HouseholdKey = h.HouseholdKey&#10;FROM   work.CustomerProfile AS p&#10;INNER JOIN (SELECT DENSE_RANK() OVER (ORDER BY StandardPostalCode, HouseholdNameKey)&#10;                       AS HouseholdKey,&#10;                   CustomerId&#10;            FROM   work.CustomerAddressStandardised) AS h&#10;        ON h.CustomerId = p.CustomerId;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Publish Customer 360 Profile"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{C87E1902-A9BA-E1C9-1734-D1D66E416A08}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Publish Customer 360 Profile"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="EXEC Integration.usp_PublishCustomer360Profile @BatchId = ?, @RowsUpdated = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Count Duplicate Clusters"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{04602AC8-FAAB-B8B4-06FF-ED8F2D351335}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Count Duplicate Clusters"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="SELECT COUNT(*) AS DuplicateClusters FROM (    SELECT SurvivingCustomerId FROM work.CustomerIdentityGraph     GROUP BY SurvivingCustomerId HAVING COUNT(*) &gt; 1) AS d;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::DuplicateClusterCount" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Customer360.CustomerProfile', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Truncate work.CustomerProfile" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Truncate work.CustomerProfile"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Standardise Addresses" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Standardise Addresses"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Resolve Identity Graph" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Resolve Identity Graph"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Build Customer Profile" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Build Customer Profile"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Assign Households" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Assign Households"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Publish Customer 360 Profile" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Publish Customer 360 Profile"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:Value="2"
+      DTS:To="Package\Count Duplicate Clusters" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Count Duplicate Clusters"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 8]"
+      DTS:CreationName=""
+      DTS:DTSID="{71A76C5F-1A20-5771-2776-7EF96FD96B90}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 8"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{0181313A-920E-E2F5-3D1A-FDBB10AAE139}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

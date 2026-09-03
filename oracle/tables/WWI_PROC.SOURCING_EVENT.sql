@@ -1,0 +1,65 @@
+/* =====================================================================
+ * Object       : TABLE WWI_PROC.SOURCING_EVENT
+ * Schema       : WWI_PROC (Oracle ERP - WWIGERP)
+ * Deploy order : 42
+ * Depends on   : WWI_PROC.REQUISITION_HDR, WWI_MDM.SUPP_MASTER
+ * Called by    : PKG_SUPPLIER_PERF, sourcing team reporting
+ *
+ * An RFQ/RFP/auction run by the sourcing team. Events are region-scoped and
+ * the EU rows carry the public-procurement fields (notice reference, standstill
+ * date) that NA and APAC leave null. AWARD_NOTES_TXT is the only record of why
+ * a non-lowest bid won.
+ * ===================================================================== */
+
+CREATE SEQUENCE WWI_PROC.SEQ_SOURCING_EVENT
+    START WITH 8001 INCREMENT BY 1 NOCACHE NOCYCLE
+/
+
+CREATE TABLE WWI_PROC.SOURCING_EVENT
+(
+    EVENT_ID                NUMBER(12)      NOT NULL,
+    EVENT_NBR               VARCHAR2(16)    NOT NULL,
+    EVENT_TYPE_CD           VARCHAR2(4)     NOT NULL,
+    EVENT_TITLE             VARCHAR2(200)   NOT NULL,
+    REGION_CD               VARCHAR2(4)     NOT NULL,
+    CATEGORY_CD             VARCHAR2(12),
+    BUYER_CD                VARCHAR2(8)     NOT NULL,
+    OPEN_DT                 DATE            NOT NULL,
+    CLOSE_DT                DATE,
+    AWARD_DT                DATE,
+    EVENT_STATUS_CD         VARCHAR2(4)     DEFAULT 'DRFT' NOT NULL,
+    ESTIMATED_VALUE_AMT     NUMBER(15,5),
+    ESTIMATED_CURR_CD       VARCHAR2(3),
+    INVITED_SUPPLIER_CNT    NUMBER(5)       DEFAULT 0 NOT NULL,
+    RESPONDED_SUPPLIER_CNT  NUMBER(5)       DEFAULT 0 NOT NULL,
+    AWARDED_SUPP_ID         NUMBER(12),
+    AWARD_METHOD_CD         VARCHAR2(6),
+    AWARD_NOTES_TXT         VARCHAR2(2000),
+    EU_NOTICE_REF           VARCHAR2(30),
+    EU_STANDSTILL_END_DT    DATE,
+    SEALED_BID_FLG          VARCHAR2(1)     DEFAULT 'N' NOT NULL,
+    SOURCE_SYS              VARCHAR2(12)    DEFAULT 'ORA_ERP' NOT NULL,
+    CREATED_BY              VARCHAR2(30)    DEFAULT USER NOT NULL,
+    CREATED_DT              DATE            DEFAULT SYSDATE NOT NULL,
+    UPDATED_BY              VARCHAR2(30),
+    UPDATED_DT              DATE,
+    CONSTRAINT PK_SOURCING_EVENT PRIMARY KEY (EVENT_ID) USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT UK_SOURCING_EVENT_NBR UNIQUE (EVENT_NBR) USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT CK_SOURCING_TYPE CHECK (EVENT_TYPE_CD IN ('RFQ', 'RFP', 'RFI', 'AUCT')),
+    CONSTRAINT CK_SOURCING_STATUS CHECK (
+        EVENT_STATUS_CD IN ('DRFT', 'OPEN', 'EVAL', 'AWRD', 'CANC')),
+    CONSTRAINT CK_SOURCING_REGION CHECK (REGION_CD IN ('NA', 'EU', 'APAC')),
+    CONSTRAINT CK_SOURCING_EU_NOTICE CHECK (
+        REGION_CD <> 'EU' OR EVENT_TYPE_CD <> 'RFP' OR EU_NOTICE_REF IS NOT NULL),
+    CONSTRAINT CK_SOURCING_SEALED CHECK (SEALED_BID_FLG IN ('Y', 'N'))
+)
+TABLESPACE WWI_DATA
+/
+
+ALTER TABLE WWI_PROC.SOURCING_EVENT ADD CONSTRAINT FK_SOURCING_AWARD_SUPP
+    FOREIGN KEY (AWARDED_SUPP_ID) REFERENCES WWI_MDM.SUPP_MASTER (SUPP_ID)
+/
+
+CREATE INDEX WWI_PROC.IX_SOURCING_STATUS
+    ON WWI_PROC.SOURCING_EVENT (EVENT_STATUS_CD, REGION_CD, CLOSE_DT) TABLESPACE WWI_IDX
+/

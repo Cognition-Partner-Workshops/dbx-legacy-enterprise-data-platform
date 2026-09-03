@@ -1,0 +1,133 @@
+# ---------------------------------------------------------------------------
+# Database sizing and storage layout for the WWI estate.
+#
+# Descriptive only; nothing here provisions anything. Sizes are the platform
+# team's current allocations and observed growth, recorded so that a capacity
+# question does not require a call.
+# ---------------------------------------------------------------------------
+
+conventions:
+  data_drive: 'E: - data files, 64 KB allocation unit'
+  log_drive:  'L: - transaction logs, 64 KB allocation unit'
+  tempdb_drive: 'T: - local NVMe, not on the SAN'
+  backup_drive: 'B: - SAN share, then swept to tape by the backup team'
+  autogrowth: >-
+    Fixed size in MB, never percentage. A percentage autogrowth on the staging
+    log is what caused the 2018 month-end outage.
+  instant_file_initialisation: enabled on all SQL Server hosts
+
+databases:
+
+  - name: WideWorldImporters
+    server: sqlprod-oltp.internal.example
+    environment: PROD
+    recovery_model: FULL
+    data_size_gb: 420
+    log_size_gb: 64
+    annual_growth_gb: 55
+    files:
+      - { logical: WWI_Primary,  drive: 'E:', initial_gb: 8,   autogrowth_mb: 512 }
+      - { logical: WWI_UserData, drive: 'E:', initial_gb: 400, autogrowth_mb: 4096, filegroup: USERDATA }
+      - { logical: WWI_Log,      drive: 'L:', initial_gb: 64,  autogrowth_mb: 4096 }
+    notes: >-
+      Owned by the application team. The estate only reads it. Change tracking
+      retention of seven days adds roughly 12 GB.
+
+  - name: WideWorldImporters_Staging
+    server: sqlprod-dw.internal.example
+    environment: PROD
+    recovery_model: SIMPLE
+    data_size_gb: 900
+    log_size_gb: 250
+    annual_growth_gb: 40
+    files:
+      - { logical: STG_Primary, drive: 'E:', initial_gb: 8,   autogrowth_mb: 512 }
+      - { logical: STG_Raw,     drive: 'E:', initial_gb: 600, autogrowth_mb: 8192, filegroup: RAW }
+      - { logical: STG_Work,    drive: 'E:', initial_gb: 300, autogrowth_mb: 8192, filegroup: WORK }
+      - { logical: STG_Log,     drive: 'L:', initial_gb: 250, autogrowth_mb: 8192 }
+    notes: >-
+      SIMPLE recovery because staging is rebuildable, but the log is still 250 GB:
+      the monthly close rebuilds every raw table in one transaction and has
+      never been split. The RAW filegroup is truncated nightly and does not
+      shrink, which is intentional - the space is reserved.
+
+  - name: WideWorldImportersDW
+    server: sqlprod-dw.internal.example
+    environment: PROD
+    recovery_model: FULL
+    data_size_gb: 2100
+    log_size_gb: 180
+    annual_growth_gb: 260
+    files:
+      - { logical: DW_Primary,     drive: 'E:', initial_gb: 8,    autogrowth_mb: 512 }
+      - { logical: DW_Dimensions,  drive: 'E:', initial_gb: 200,  autogrowth_mb: 4096, filegroup: DIMENSIONS }
+      - { logical: DW_FactCurrent, drive: 'E:', initial_gb: 900,  autogrowth_mb: 8192, filegroup: FACT_CURRENT }
+      - { logical: DW_FactHistory, drive: 'E:', initial_gb: 1000, autogrowth_mb: 8192, filegroup: FACT_HISTORY }
+      - { logical: DW_Log,         drive: 'L:', initial_gb: 180,  autogrowth_mb: 8192 }
+    notes: >-
+      FACT_HISTORY holds everything older than the current and prior fiscal year
+      and is marked read-only between closes. The split is by fiscal year, and
+      because the three regions use different fiscal calendars the boundary is
+      the *latest* of the three year-ends - so NA data sits in the current
+      filegroup for up to three months longer than it needs to.
+
+  - name: SSISDB
+    server: sqlprod-etl.internal.example
+    environment: PROD
+    recovery_model: FULL
+    data_size_gb: 90
+    log_size_gb: 20
+    annual_growth_gb: 5
+    files:
+      - { logical: SSISDB,     drive: 'E:', initial_gb: 90, autogrowth_mb: 2048 }
+      - { logical: SSISDB_log, drive: 'L:', initial_gb: 20, autogrowth_mb: 2048 }
+    notes: >-
+      Catalogue operation retention is 90 days, well above the 365-day default's
+      space cost and below what the audit team asked for. The built-in
+      SSIS Server Maintenance Job handles the cleanup; sqlserver/agent does not
+      duplicate it.
+
+  - name: msdb
+    server: sqlprod-etl.internal.example
+    environment: PROD
+    recovery_model: SIMPLE
+    data_size_gb: 12
+    notes: >-
+      Job history is trimmed by "WWI - Control History Purge" to 90 days,
+      because the default 1000-row limit lost a week of history for the busiest
+      job.
+
+tempdb:
+  - server: sqlprod-dw.internal.example
+    files: 8
+    size_gb_each: 32
+    drive: 'T:'
+    notes: >-
+      Eight files sized equally with fixed growth. The dimension loads are
+      hash-join heavy and spill; this was sized around the 2019 close.
+  - server: sqlprod-oltp.internal.example
+    files: 8
+    size_gb_each: 16
+    drive: 'T:'
+  - server: sqlprod-etl.internal.example
+    files: 4
+    size_gb_each: 8
+    drive: 'T:'
+
+file_shares:
+  - path: \\wwi-files\landing
+    quota_gb: 4096
+    typical_use_gb: 1400
+    growth_note: >-
+      Archive dominates. At 400-day retention the archive tree is about 1.1 TB
+      and grows with feed volume rather than with the warehouse.
+  - path: \\wwi-files-apac\landing\inbound\bank
+    quota_gb: 256
+    typical_use_gb: 4
+  - path: 'E:\WWI\Logs\Agent'
+    quota_gb: 64
+    retention_days: 30
+    notes: >-
+      SQL Agent job step output files. Trimmed by the weekly maintenance job. At
+      30 days this is roughly 20 GB, mostly from the health check running every
+      30 minutes.

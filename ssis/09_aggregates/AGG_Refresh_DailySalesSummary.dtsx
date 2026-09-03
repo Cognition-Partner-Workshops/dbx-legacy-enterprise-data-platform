@@ -1,0 +1,903 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{2E542E66-F288-3434-2CC9-8A612636D787}"
+  DTS:Description="Rebuilds Aggregate.Daily Sales Summary for the requested date window at date/region/channel grain. Only the window is deleted and rebuilt, so a late correction to a prior day can be republished without touching the rest of the table."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="AGG_Refresh_DailySalesSummary"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{D5264013-ABFB-9745-E1E6-DE6D96EB2A99}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{57A99200-9C3F-04EA-D88D-C1DFD022C7FB}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{6CAAA41A-FC68-2196-E68C-0223E2B908EE}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{413AF104-8998-1CE0-89A3-C6E578159FAA}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{1A473A7F-56D6-3DBF-9A5B-026163820C80}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWIDW</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::RefreshFromDate]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="First date of the refresh window."
+      DTS:DTSID="{098F0042-D385-37A1-6B5F-25BBF831A05D}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="RefreshFromDate"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">1900-01-01</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::RefreshToDate]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="Last date of the refresh window, inclusive."
+      DTS:DTSID="{4FA8CF15-31A6-7FDB-705A-6437C84FC180}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="RefreshToDate"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">1900-01-01</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{A387D046-50C5-04E5-969B-426C3E6448AA}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{4DC6F316-935F-3A42-FFE2-7D0462B1529F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{B52C5078-61DC-D8E0-F9C9-34437F411B80}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{5AACB2BF-2A16-148C-1A0D-5A49C203B1E9}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{FDB88D99-B2B6-D2D1-9D40-03DF58EE6EF7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{27EA4D4D-B1DB-6B47-698C-3836FEE2D416}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{7089F413-0B08-88E1-8238-25CF28D17DB6}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B690A8F-5FDA-C51D-A635-4824CCA12766}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsAggregated]"
+      DTS:CreationName=""
+      DTS:DTSID="{B279152D-2CB1-E53E-8081-C9E36176BDEB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsAggregated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsDeletedForWindow]"
+      DTS:CreationName=""
+      DTS:DTSID="{75B2CE64-0D98-5D12-73D5-681E54B285C3}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsDeletedForWindow">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ReconciliationVariance]"
+      DTS:CreationName=""
+      DTS:DTSID="{32F79C9E-CDD8-D2AF-6BDA-1CF59CF5359B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ReconciliationVariance">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsSuppressed]"
+      DTS:CreationName=""
+      DTS:DTSID="{424416BB-5FB5-1A3C-8916-52A744B383BF}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsSuppressed">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Refresh Window"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{ACC990AF-AD4F-0CDE-099B-43F3D1E8F593}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Refresh Window"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::WatermarkFrom] = (DT_DBTIMESTAMP)@[$Package::RefreshFromDate]" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Delete Refresh Window"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{43A283D9-ADCF-5ED8-6739-AF978B26D705}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Delete Refresh Window"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="DELETE a FROM [Aggregate].[Daily Sales Summary] AS a INNER JOIN Dimension.Date AS d ON d.[Date Key] = a.[Invoice Date Key] WHERE d.[Date] &gt;= CAST(? AS date) AND d.[Date] &lt;= CAST(? AS date);"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::RefreshFromDate" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::RefreshToDate" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Rebuild Daily Sales Summary"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{05F3FAB8-1760-E2AA-BFC7-90E7C36A5940}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Rebuild Daily Sales Summary"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Rebuild Daily Sales Summary\Fact Sale Window" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="Fact Sale Window" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">3600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT f.[Invoice Date Key] AS InvoiceDateKey, c.[Region Code] AS RegionCode, ISNULL(f.[Sales Channel Code], N'DIRECT') AS SalesChannelCode, COUNT(DISTINCT f.[Customer Key]) AS CustomerCount, COUNT_BIG(*) AS InvoiceLineCount, SUM(f.[Gross Amount]) AS GrossAmount, SUM(f.[Discount Amount]) AS DiscountAmount, SUM(f.[Net Amount]) AS NetAmount, SUM(f.[Tax Amount]) AS TaxAmount, SUM(f.[Margin Amount]) AS MarginAmount FROM [Fact].[Sale] AS f INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Invoice Date Key] INNER JOIN Dimension.Customer AS c ON c.[Customer Key] = f.[Customer Key] WHERE d.[Date] &gt;= CAST(? AS date) AND d.[Date] &lt;= CAST(? AS date) AND f.[Is Reversal] = 0 GROUP BY f.[Invoice Date Key], c.[Region Code], ISNULL(f.[Sales Channel Code], N'DIRECT');</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[InvoiceDateKey]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[InvoiceDateKey]" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[InvoiceDateKey]" name="InvoiceDateKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="6" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[SalesChannelCode]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[SalesChannelCode]" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[SalesChannelCode]" name="SalesChannelCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[CustomerCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[CustomerCount]" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[CustomerCount]" name="CustomerCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[InvoiceLineCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[InvoiceLineCount]" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[InvoiceLineCount]" name="InvoiceLineCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[GrossAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[GrossAmount]" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[GrossAmount]" name="GrossAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[DiscountAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[DiscountAmount]" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[DiscountAmount]" name="DiscountAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[NetAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[NetAmount]" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[NetAmount]" name="NetAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[TaxAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[TaxAmount]" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[TaxAmount]" name="TaxAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[MarginAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[MarginAmount]" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].Columns[MarginAmount]" name="MarginAmount" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[InvoiceDateKey]" dataType="i4" name="InvoiceDateKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[SalesChannelCode]" dataType="wstr" length="12" name="SalesChannelCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[CustomerCount]" dataType="i4" name="CustomerCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[InvoiceLineCount]" dataType="i4" name="InvoiceLineCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[GrossAmount]" dataType="numeric" precision="18" scale="2" name="GrossAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[DiscountAmount]" dataType="numeric" precision="18" scale="2" name="DiscountAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[NetAmount]" dataType="numeric" precision="18" scale="2" name="NetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[TaxAmount]" dataType="numeric" precision="18" scale="2" name="TaxAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output].ExternalColumns[MarginAmount]" dataType="numeric" precision="18" scale="2" name="MarginAmount" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[InvoiceDateKey]" dataType="i4" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[InvoiceDateKey]" name="InvoiceDateKey" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="6" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[SalesChannelCode]" dataType="wstr" length="12" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[SalesChannelCode]" name="SalesChannelCode" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[CustomerCount]" dataType="i4" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[CustomerCount]" name="CustomerCount" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[InvoiceLineCount]" dataType="i4" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[InvoiceLineCount]" name="InvoiceLineCount" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[GrossAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[GrossAmount]" name="GrossAmount" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[DiscountAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[DiscountAmount]" name="DiscountAmount" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[NetAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[NetAmount]" name="NetAmount" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[TaxAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[TaxAmount]" name="TaxAmount" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[MarginAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[MarginAmount]" name="MarginAmount" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Daily Sales Summary\Derive Summary Ratios" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Summary Ratios" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Rebuild Daily Sales Summary\Derive Summary Ratios.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Daily Sales Summary\Derive Summary Ratios.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Rebuild Daily Sales Summary\Derive Summary Ratios.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Derive Summary Ratios.Outputs[Derived Column Output].Columns[MarginPercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\Rebuild Daily Sales Summary\Derive Summary Ratios.Outputs[Derived Column Output].Columns[MarginPercent]" name="MarginPercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">NetAmount == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)MarginAmount / (DT_NUMERIC,9,4)NetAmount) * 100</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">NetAmount == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)MarginAmount / (DT_NUMERIC,9,4)NetAmount) * 100</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Derive Summary Ratios.Outputs[Derived Column Output].Columns[AverageLineValue]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Daily Sales Summary\Derive Summary Ratios.Outputs[Derived Column Output].Columns[AverageLineValue]" name="AverageLineValue">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">InvoiceLineCount == 0 ? (DT_NUMERIC,18,2)0 : ((DT_NUMERIC,18,2)NetAmount / (DT_NUMERIC,18,2)InvoiceLineCount)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">InvoiceLineCount == 0 ? (DT_NUMERIC,18,2)0 : ((DT_NUMERIC,18,2)NetAmount / (DT_NUMERIC,18,2)InvoiceLineCount)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Derive Summary Ratios.Outputs[Derived Column Output].Columns[TaxRegimeCode]" dataType="wstr" length="10" lineageId="Package\Rebuild Daily Sales Summary\Derive Summary Ratios.Outputs[Derived Column Output].Columns[TaxRegimeCode]" name="TaxRegimeCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">RegionCode == "NA" ? "SALESTAX" : RegionCode == "EU" ? "VAT" : "GST"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">RegionCode == "NA" ? "SALESTAX" : RegionCode == "EU" ? "VAT" : "GST"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Daily Sales Summary\Derive Summary Ratios.Outputs[Derived Column Output].Columns[RefreshedByLineageKey]" dataType="i8" lineageId="Package\Rebuild Daily Sales Summary\Derive Summary Ratios.Outputs[Derived Column Output].Columns[RefreshedByLineageKey]" name="RefreshedByLineageKey">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Daily Sales Summary\Route Summary Rows" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Route Summary Rows" version="1">
+            <inputs>
+              <input refId="Package\Rebuild Daily Sales Summary\Route Summary Rows.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Daily Sales Summary\Route Summary Rows.Outputs[Suppressed Small Cells]" exclusionGroup="1" name="Suppressed Small Cells" synchronousInputId="Package\Rebuild Daily Sales Summary\Route Summary Rows.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">CustomerCount &lt; 3</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">CustomerCount &lt; 3</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Rebuild Daily Sales Summary\Route Summary Rows.Outputs[Loss Making Days]" exclusionGroup="1" name="Loss Making Days" synchronousInputId="Package\Rebuild Daily Sales Summary\Route Summary Rows.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">MarginAmount &lt; 0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">MarginAmount &lt; 0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Rebuild Daily Sales Summary\Route Summary Rows.Outputs[Publishable Rows]" exclusionGroup="1" isDefaultOut="true" name="Publishable Rows" synchronousInputId="Package\Rebuild Daily Sales Summary\Route Summary Rows.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert Publishable Rows" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Aggregate].[Daily Sales Summary]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].Columns[InvoiceDateKey]" cachedDataType="i4" cachedName="InvoiceDateKey" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceDateKey]" name="InvoiceDateKey" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="RegionCode" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].Columns[SalesChannelCode]" cachedDataType="wstr" cachedLength="12" cachedName="SalesChannelCode" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[SalesChannelCode]" name="SalesChannelCode" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].Columns[CustomerCount]" cachedDataType="i4" cachedName="CustomerCount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[CustomerCount]" name="CustomerCount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].Columns[InvoiceLineCount]" cachedDataType="i4" cachedName="InvoiceLineCount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceLineCount]" name="InvoiceLineCount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].Columns[GrossAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="GrossAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[GrossAmount]" name="GrossAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].Columns[DiscountAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DiscountAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" name="DiscountAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].Columns[NetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="NetAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" name="NetAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].Columns[TaxAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="TaxAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[TaxAmount]" name="TaxAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].Columns[MarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MarginAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" name="MarginAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].Columns[MarginPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="MarginPercent" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[MarginPercent]" name="MarginPercent" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].Columns[AverageLineValue]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AverageLineValue" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[AverageLineValue]" name="AverageLineValue" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].Columns[TaxRegimeCode]" cachedDataType="wstr" cachedLength="10" cachedName="TaxRegimeCode" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[TaxRegimeCode]" name="TaxRegimeCode" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceDateKey]" dataType="i4" name="InvoiceDateKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[SalesChannelCode]" dataType="wstr" length="12" name="SalesChannelCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[CustomerCount]" dataType="i4" name="CustomerCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceLineCount]" dataType="i4" name="InvoiceLineCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[GrossAmount]" dataType="numeric" precision="18" scale="2" name="GrossAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" dataType="numeric" precision="18" scale="2" name="DiscountAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" dataType="numeric" precision="18" scale="2" name="NetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[TaxAmount]" dataType="numeric" precision="18" scale="2" name="TaxAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" dataType="numeric" precision="18" scale="2" name="MarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[MarginPercent]" dataType="numeric" precision="9" scale="4" name="MarginPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[AverageLineValue]" dataType="numeric" precision="18" scale="2" name="AverageLineValue" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[TaxRegimeCode]" dataType="wstr" length="10" name="TaxRegimeCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert Loss Making Days" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Aggregate].[Daily Sales Summary]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].Columns[InvoiceDateKey]" cachedDataType="i4" cachedName="InvoiceDateKey" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceDateKey]" name="InvoiceDateKey" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="RegionCode" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].Columns[SalesChannelCode]" cachedDataType="wstr" cachedLength="12" cachedName="SalesChannelCode" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[SalesChannelCode]" name="SalesChannelCode" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].Columns[CustomerCount]" cachedDataType="i4" cachedName="CustomerCount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[CustomerCount]" name="CustomerCount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].Columns[InvoiceLineCount]" cachedDataType="i4" cachedName="InvoiceLineCount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceLineCount]" name="InvoiceLineCount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].Columns[GrossAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="GrossAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[GrossAmount]" name="GrossAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].Columns[DiscountAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DiscountAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" name="DiscountAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].Columns[NetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="NetAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" name="NetAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].Columns[TaxAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="TaxAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[TaxAmount]" name="TaxAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].Columns[MarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MarginAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" name="MarginAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].Columns[MarginPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="MarginPercent" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[MarginPercent]" name="MarginPercent" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].Columns[AverageLineValue]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AverageLineValue" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[AverageLineValue]" name="AverageLineValue" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].Columns[TaxRegimeCode]" cachedDataType="wstr" cachedLength="10" cachedName="TaxRegimeCode" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[TaxRegimeCode]" name="TaxRegimeCode" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceDateKey]" dataType="i4" name="InvoiceDateKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[SalesChannelCode]" dataType="wstr" length="12" name="SalesChannelCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[CustomerCount]" dataType="i4" name="CustomerCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceLineCount]" dataType="i4" name="InvoiceLineCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[GrossAmount]" dataType="numeric" precision="18" scale="2" name="GrossAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" dataType="numeric" precision="18" scale="2" name="DiscountAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" dataType="numeric" precision="18" scale="2" name="NetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[TaxAmount]" dataType="numeric" precision="18" scale="2" name="TaxAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" dataType="numeric" precision="18" scale="2" name="MarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[MarginPercent]" dataType="numeric" precision="9" scale="4" name="MarginPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[AverageLineValue]" dataType="numeric" precision="18" scale="2" name="AverageLineValue" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[TaxRegimeCode]" dataType="wstr" length="10" name="TaxRegimeCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Suppressed Cells" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].Columns[InvoiceDateKey]" cachedDataType="i4" cachedName="InvoiceDateKey" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceDateKey]" name="InvoiceDateKey" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="RegionCode" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].Columns[SalesChannelCode]" cachedDataType="wstr" cachedLength="12" cachedName="SalesChannelCode" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[SalesChannelCode]" name="SalesChannelCode" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].Columns[CustomerCount]" cachedDataType="i4" cachedName="CustomerCount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[CustomerCount]" name="CustomerCount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].Columns[InvoiceLineCount]" cachedDataType="i4" cachedName="InvoiceLineCount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceLineCount]" name="InvoiceLineCount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].Columns[GrossAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="GrossAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[GrossAmount]" name="GrossAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].Columns[DiscountAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DiscountAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" name="DiscountAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].Columns[NetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="NetAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" name="NetAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].Columns[TaxAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="TaxAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[TaxAmount]" name="TaxAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].Columns[MarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MarginAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" name="MarginAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].Columns[MarginPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="MarginPercent" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[MarginPercent]" name="MarginPercent" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].Columns[AverageLineValue]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AverageLineValue" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[AverageLineValue]" name="AverageLineValue" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].Columns[TaxRegimeCode]" cachedDataType="wstr" cachedLength="10" cachedName="TaxRegimeCode" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[TaxRegimeCode]" name="TaxRegimeCode" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceDateKey]" dataType="i4" name="InvoiceDateKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[SalesChannelCode]" dataType="wstr" length="12" name="SalesChannelCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[CustomerCount]" dataType="i4" name="CustomerCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceLineCount]" dataType="i4" name="InvoiceLineCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[GrossAmount]" dataType="numeric" precision="18" scale="2" name="GrossAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" dataType="numeric" precision="18" scale="2" name="DiscountAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" dataType="numeric" precision="18" scale="2" name="NetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[TaxAmount]" dataType="numeric" precision="18" scale="2" name="TaxAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" dataType="numeric" precision="18" scale="2" name="MarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[MarginPercent]" dataType="numeric" precision="9" scale="4" name="MarginPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[AverageLineValue]" dataType="numeric" precision="18" scale="2" name="AverageLineValue" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[TaxRegimeCode]" dataType="wstr" length="10" name="TaxRegimeCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Daily Sales Summary\Reject Source Errors" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Source Errors" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[InvoiceDateKey]" cachedDataType="i4" cachedName="InvoiceDateKey" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceDateKey]" name="InvoiceDateKey" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="RegionCode" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[SalesChannelCode]" cachedDataType="wstr" cachedLength="12" cachedName="SalesChannelCode" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SalesChannelCode]" name="SalesChannelCode" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CustomerCount]" cachedDataType="i4" cachedName="CustomerCount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerCount]" name="CustomerCount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[InvoiceLineCount]" cachedDataType="i4" cachedName="InvoiceLineCount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceLineCount]" name="InvoiceLineCount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[GrossAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="GrossAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[GrossAmount]" name="GrossAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[DiscountAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DiscountAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" name="DiscountAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[NetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="NetAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" name="NetAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[TaxAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="TaxAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[TaxAmount]" name="TaxAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[MarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MarginAmount" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" name="MarginAmount" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[MarginPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="MarginPercent" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[MarginPercent]" name="MarginPercent" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[AverageLineValue]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AverageLineValue" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AverageLineValue]" name="AverageLineValue" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[TaxRegimeCode]" cachedDataType="wstr" cachedLength="10" cachedName="TaxRegimeCode" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[TaxRegimeCode]" name="TaxRegimeCode" />
+                  <inputColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceDateKey]" dataType="i4" name="InvoiceDateKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SalesChannelCode]" dataType="wstr" length="12" name="SalesChannelCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerCount]" dataType="i4" name="CustomerCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceLineCount]" dataType="i4" name="InvoiceLineCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[GrossAmount]" dataType="numeric" precision="18" scale="2" name="GrossAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" dataType="numeric" precision="18" scale="2" name="DiscountAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" dataType="numeric" precision="18" scale="2" name="NetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[TaxAmount]" dataType="numeric" precision="18" scale="2" name="TaxAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" dataType="numeric" precision="18" scale="2" name="MarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[MarginPercent]" dataType="numeric" precision="9" scale="4" name="MarginPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AverageLineValue]" dataType="numeric" precision="18" scale="2" name="AverageLineValue" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[TaxRegimeCode]" dataType="wstr" length="10" name="TaxRegimeCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Rebuild Daily Sales Summary.Paths[OLE DB Source Output]" endId="Package\Rebuild Daily Sales Summary\Derive Summary Ratios.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Rebuild Daily Sales Summary.Paths[Derived Column Output 1]" endId="Package\Rebuild Daily Sales Summary\Route Summary Rows.Inputs[Conditional Split Input]" name="Derived Column Output 1" startId="Package\Rebuild Daily Sales Summary\Derive Summary Ratios.Outputs[Derived Column Output]" />
+          <path refId="Package\Rebuild Daily Sales Summary.Paths[Publishable Rows 2]" endId="Package\Rebuild Daily Sales Summary\Insert Publishable Rows.Inputs[OLE DB Destination Input]" name="Publishable Rows 2" startId="Package\Rebuild Daily Sales Summary\Route Summary Rows.Outputs[Publishable Rows]" />
+          <path refId="Package\Rebuild Daily Sales Summary.Paths[Loss Making Days 3]" endId="Package\Rebuild Daily Sales Summary\Insert Loss Making Days.Inputs[OLE DB Destination Input]" name="Loss Making Days 3" startId="Package\Rebuild Daily Sales Summary\Route Summary Rows.Outputs[Loss Making Days]" />
+          <path refId="Package\Rebuild Daily Sales Summary.Paths[Suppressed Small Cells 4]" endId="Package\Rebuild Daily Sales Summary\Reject Suppressed Cells.Inputs[OLE DB Destination Input]" name="Suppressed Small Cells 4" startId="Package\Rebuild Daily Sales Summary\Route Summary Rows.Outputs[Suppressed Small Cells]" />
+          <path refId="Package\Rebuild Daily Sales Summary.Paths[OLE DB Source Error Output 5]" endId="Package\Rebuild Daily Sales Summary\Reject Source Errors.Inputs[OLE DB Destination Input]" name="OLE DB Source Error Output 5" startId="Package\Rebuild Daily Sales Summary\Fact Sale Window.Outputs[OLE DB Source Error Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Refresh Derived Sales Measures"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{9CA11FD5-AA31-40D9-0575-9743A75F2825}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Refresh Derived Sales Measures"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="EXEC Integration.RefreshAggregateDailySales @RefreshFromDate = ?, @RefreshToDate = ?, @LineageKey = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::RefreshFromDate" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::RefreshToDate" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Assert Reconciliation"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{939B1D95-86D0-C868-493E-496DC475519B}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Assert Reconciliation"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_AssertRowCountReconciliation @PackageExecutionId = ?, @ObjectName = N'Aggregate.Daily Sales Summary', @ExpectedRowCount = ?, @ActualRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Rejected Records"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F451B37A-2258-F381-3E92-62232E0A51C1}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Rejected Records"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @ObjectName = N'Aggregate.Daily Sales Summary', @RejectReason = N'Aggregate row failed the summary quality gate', @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Aggregate.Daily Sales Summary', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Refresh Window"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Delete Refresh Window" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Delete Refresh Window"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Rebuild Daily Sales Summary" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Rebuild Daily Sales Summary"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Refresh Derived Sales Measures" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Refresh Derived Sales Measures"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Assert Reconciliation" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Assert Reconciliation"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Rejected Records" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Log Rejected Records"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{E8D73BCB-E667-880C-08FA-7974328C0C36}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

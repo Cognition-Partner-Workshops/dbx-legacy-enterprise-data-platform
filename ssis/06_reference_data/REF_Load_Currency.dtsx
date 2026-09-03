@@ -1,0 +1,849 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{29EE4813-7BE3-F194-69FD-5CF135A27499}"
+  DTS:Description="Conform the currency master and the daily FX rates into ref.Currency and ref.FxRateDaily through the reference load procedures, then publish the active currencies into Dimension.Currency with their latest corporate rate to USD. Currencies whose rate is more than thirty days old are still published but are reported to the control framework."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="REF_Load_Currency"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{50DFAD66-651B-6CE4-3CE0-A8F7DB3E05B2}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{070145D5-EB73-E22E-91D9-33C1FAB2F6D8}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{DD69F3C4-95D7-AE46-7DE0-18DD9CD5085D}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{E68685EC-E832-3FEF-0D05-78A55F5ACF26}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{4C74A182-592C-8732-B943-1C406F39245B}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">ORA_ERP</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{37EC4797-2E95-A6B3-487E-A715C1CFA8AC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{815E67B5-30E5-E695-6C98-CF85D1CCEB76}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{6A9D4266-DDD7-14DF-06B2-B3710D0BBD78}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{CFC640D8-2527-5300-5FEF-E95F14A64A72}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{EAA6E63C-BE3C-0095-1F41-2BA8ABBC9AC5}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{6187352F-9E36-D425-5BEB-758E4851DCCD}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{E178D1DC-3C95-E273-3442-A3240C77A0B1}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{13E0BB38-AA9A-E71A-12CF-1D13A7A37A54}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::UnmappedCodeCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{9A74E01B-0FF9-4C7D-27D2-8800DF935DD0}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="UnmappedCodeCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::VersionNumber]"
+      DTS:CreationName=""
+      DTS:DTSID="{42A327BB-E582-EFA8-0AB7-437BEF1A4530}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="VersionNumber">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::EffectiveFromDate]"
+      DTS:CreationName=""
+      DTS:DTSID="{25EFE184-9934-0205-445B-F7C5AE6B5038}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="EffectiveFromDate">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Truncate [Dimension].[Currency]"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{07F3F336-D59D-DA2A-E54C-70BAB59B7349}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Truncate [Dimension].[Currency]"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE [Dimension].[Currency];"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Load Currency Reference"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{B2D9DA46-C640-C62E-32C9-663B0FA42D8F}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Load Currency Reference"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC ref.usp_LoadCurrency @BatchId = ?, @PackageExecutionId = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Load Daily FX Rates"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{014B6626-D436-3E0B-8283-0306F17EB345}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Load Daily FX Rates"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC ref.usp_LoadFxRateDaily @BatchId = ?, @PackageExecutionId = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\DFT Publish Currency Dimension"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{FA80F110-D568-2B42-37F6-FB8F1932E687}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="DFT Publish Currency Dimension"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\DFT Publish Currency Dimension\REF Currency Conformed" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="REF Currency Conformed" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">1800</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT c.CurrencyCode, c.CurrencyName, c.CurrencySymbol, c.MinorUnitDigits,
+       c.RoundingRuleCode, c.IsReportingCurrency, c.IsEuroLegacy, c.RetiredDate,
+       f.ConversionRate AS LatestRateToUsd, f.RateDate AS LatestRateDate
+FROM ref.Currency AS c
+     OUTER APPLY (SELECT TOP (1) r.ConversionRate, r.RateDate
+                  FROM ref.FxRateDaily AS r
+                  WHERE r.FromCurrencyCode = c.CurrencyCode
+                    AND r.ToCurrencyCode = N'USD'
+                    AND r.RateTypeCode = N'CORPORATE'
+                  ORDER BY r.RateDate DESC) AS f
+WHERE c.IsActive = 1;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[CurrencyCode]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[CurrencyCode]" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[CurrencyCode]" name="CurrencyCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[CurrencyName]" dataType="wstr" length="60" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[CurrencyName]" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[CurrencyName]" name="CurrencyName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[CurrencySymbol]" dataType="wstr" length="5" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[CurrencySymbol]" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[CurrencySymbol]" name="CurrencySymbol" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[MinorUnitDigits]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[MinorUnitDigits]" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[MinorUnitDigits]" name="MinorUnitDigits" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[RoundingRuleCode]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[RoundingRuleCode]" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[RoundingRuleCode]" name="RoundingRuleCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[IsReportingCurrency]" dataType="bool" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[IsReportingCurrency]" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[IsReportingCurrency]" name="IsReportingCurrency" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[IsEuroLegacy]" dataType="bool" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[IsEuroLegacy]" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[IsEuroLegacy]" name="IsEuroLegacy" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[RetiredDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[RetiredDate]" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[RetiredDate]" name="RetiredDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[LatestRateToUsd]" dataType="numeric" precision="18" scale="6" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[LatestRateToUsd]" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[LatestRateToUsd]" name="LatestRateToUsd" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[LatestRateDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[LatestRateDate]" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].Columns[LatestRateDate]" name="LatestRateDate" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[CurrencyCode]" dataType="wstr" length="3" name="CurrencyCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[CurrencyName]" dataType="wstr" length="60" name="CurrencyName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[CurrencySymbol]" dataType="wstr" length="5" name="CurrencySymbol" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[MinorUnitDigits]" dataType="i4" name="MinorUnitDigits" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[RoundingRuleCode]" dataType="wstr" length="20" name="RoundingRuleCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[IsReportingCurrency]" dataType="bool" name="IsReportingCurrency" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[IsEuroLegacy]" dataType="bool" name="IsEuroLegacy" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[RetiredDate]" dataType="dbTimeStamp" name="RetiredDate" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[LatestRateToUsd]" dataType="numeric" precision="18" scale="6" name="LatestRateToUsd" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output].ExternalColumns[LatestRateDate]" dataType="dbTimeStamp" name="LatestRateDate" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[CurrencyCode]" dataType="wstr" length="3" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[CurrencyCode]" name="CurrencyCode" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[CurrencyName]" dataType="wstr" length="60" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[CurrencyName]" name="CurrencyName" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[CurrencySymbol]" dataType="wstr" length="5" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[CurrencySymbol]" name="CurrencySymbol" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[MinorUnitDigits]" dataType="i4" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[MinorUnitDigits]" name="MinorUnitDigits" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[RoundingRuleCode]" dataType="wstr" length="20" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[RoundingRuleCode]" name="RoundingRuleCode" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[IsReportingCurrency]" dataType="bool" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[IsReportingCurrency]" name="IsReportingCurrency" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[IsEuroLegacy]" dataType="bool" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[IsEuroLegacy]" name="IsEuroLegacy" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[RetiredDate]" dataType="dbTimeStamp" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[RetiredDate]" name="RetiredDate" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[LatestRateToUsd]" dataType="numeric" precision="18" scale="6" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[LatestRateToUsd]" name="LatestRateToUsd" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[LatestRateDate]" dataType="dbTimeStamp" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[LatestRateDate]" name="LatestRateDate" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Currency Dimension\Count Currencies Read" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Currencies Read" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Publish Currency Dimension\Count Currencies Read.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Currency Dimension\Count Currencies Read.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Publish Currency Dimension\Count Currencies Read.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Currency Dimension\Shape Currency Dimension" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Shape Currency Dimension" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\DFT Publish Currency Dimension\Shape Currency Dimension.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Currency Dimension\Shape Currency Dimension.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\DFT Publish Currency Dimension\Shape Currency Dimension.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\Shape Currency Dimension.Outputs[Derived Column Output].Columns[CurrencyCode]" dataType="wstr" length="3" lineageId="Package\DFT Publish Currency Dimension\Shape Currency Dimension.Outputs[Derived Column Output].Columns[CurrencyCode]" name="CurrencyCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(CurrencyCode))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(CurrencyCode))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\Shape Currency Dimension.Outputs[Derived Column Output].Columns[CurrencyName]" dataType="wstr" length="60" lineageId="Package\DFT Publish Currency Dimension\Shape Currency Dimension.Outputs[Derived Column Output].Columns[CurrencyName]" name="CurrencyName">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">TRIM(CurrencyName)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">TRIM(CurrencyName)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\Shape Currency Dimension.Outputs[Derived Column Output].Columns[CurrencyStatusCode]" dataType="wstr" length="10" lineageId="Package\DFT Publish Currency Dimension\Shape Currency Dimension.Outputs[Derived Column Output].Columns[CurrencyStatusCode]" name="CurrencyStatusCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">IsEuroLegacy == TRUE ? "LEGACY" : (ISNULL(RetiredDate) ? "ACTIVE" : "RETIRED")</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">IsEuroLegacy == TRUE ? "LEGACY" : (ISNULL(RetiredDate) ? "ACTIVE" : "RETIRED")</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\Shape Currency Dimension.Outputs[Derived Column Output].Columns[RateStalenessDays]" dataType="i4" lineageId="Package\DFT Publish Currency Dimension\Shape Currency Dimension.Outputs[Derived Column Output].Columns[RateStalenessDays]" name="RateStalenessDays">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(LatestRateDate) ? 9999 : DATEDIFF("Dd", LatestRateDate, GETDATE())</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(LatestRateDate) ? 9999 : DATEDIFF("Dd", LatestRateDate, GETDATE())</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\Shape Currency Dimension.Outputs[Derived Column Output].Columns[LineageKey]" dataType="wstr" length="40" lineageId="Package\DFT Publish Currency Dimension\Shape Currency Dimension.Outputs[Derived Column Output].Columns[LineageKey]" name="LineageKey">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_WSTR,40)"REF_Load_Currency"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_WSTR,40)"REF_Load_Currency"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Publish Currency Dimension\Shape Currency Dimension.Outputs[Derived Column Output].Columns[ChangeHash]" dataType="wstr" length="200" lineageId="Package\DFT Publish Currency Dimension\Shape Currency Dimension.Outputs[Derived Column Output].Columns[ChangeHash]" name="ChangeHash">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM((DT_WSTR,60)CurrencyCode)) + "|" + UPPER(TRIM((DT_WSTR,60)CurrencyName)) + "|" + UPPER(TRIM((DT_WSTR,60)MinorUnitDigits))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM((DT_WSTR,60)CurrencyCode)) + "|" + UPPER(TRIM((DT_WSTR,60)CurrencyName)) + "|" + UPPER(TRIM((DT_WSTR,60)MinorUnitDigits))</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Currency Dimension\Screen Currency" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Screen Currency" version="1">
+            <inputs>
+              <input refId="Package\DFT Publish Currency Dimension\Screen Currency.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Currency Dimension\Screen Currency.Outputs[Rated Currency]" exclusionGroup="1" name="Rated Currency" synchronousInputId="Package\DFT Publish Currency Dimension\Screen Currency.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">RateStalenessDays &lt;= 30</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">RateStalenessDays &lt;= 30</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\DFT Publish Currency Dimension\Screen Currency.Outputs[Stale Rate]" exclusionGroup="1" name="Stale Rate" synchronousInputId="Package\DFT Publish Currency Dimension\Screen Currency.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">RateStalenessDays &gt; 30 &amp;&amp; RateStalenessDays &lt; 9999</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">RateStalenessDays &gt; 30 &amp;&amp; RateStalenessDays &lt; 9999</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\DFT Publish Currency Dimension\Screen Currency.Outputs[Unrated Currency]" exclusionGroup="1" isDefaultOut="true" name="Unrated Currency" synchronousInputId="Package\DFT Publish Currency Dimension\Screen Currency.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Currency Dimension\Count Currencies Published" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Currencies Published" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsInserted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Publish Currency Dimension\Count Currencies Published.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Currency Dimension\Count Currencies Published.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Publish Currency Dimension\Count Currencies Published.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Currency Dimension\DW Dimension Currency" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="DW Dimension Currency" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Dimension].[Currency]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">5000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].Columns[CurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="CurrencyCode" externalMetadataColumnId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" name="CurrencyCode" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].Columns[CurrencyName]" cachedDataType="wstr" cachedLength="60" cachedName="CurrencyName" externalMetadataColumnId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyName]" name="CurrencyName" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].Columns[CurrencySymbol]" cachedDataType="wstr" cachedLength="5" cachedName="CurrencySymbol" externalMetadataColumnId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[CurrencySymbol]" name="CurrencySymbol" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].Columns[MinorUnitDigits]" cachedDataType="i4" cachedName="MinorUnitDigits" externalMetadataColumnId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[MinorUnitDigits]" name="MinorUnitDigits" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].Columns[RoundingRuleCode]" cachedDataType="wstr" cachedLength="20" cachedName="RoundingRuleCode" externalMetadataColumnId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[RoundingRuleCode]" name="RoundingRuleCode" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].Columns[IsReportingCurrency]" cachedDataType="bool" cachedName="IsReportingCurrency" externalMetadataColumnId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[IsReportingCurrency]" name="IsReportingCurrency" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].Columns[IsEuroLegacy]" cachedDataType="bool" cachedName="IsEuroLegacy" externalMetadataColumnId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[IsEuroLegacy]" name="IsEuroLegacy" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].Columns[RetiredDate]" cachedDataType="dbTimeStamp" cachedName="RetiredDate" externalMetadataColumnId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[RetiredDate]" name="RetiredDate" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].Columns[LatestRateToUsd]" cachedDataType="numeric" cachedPrecision="18" cachedScale="6" cachedName="LatestRateToUsd" externalMetadataColumnId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[LatestRateToUsd]" name="LatestRateToUsd" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].Columns[LatestRateDate]" cachedDataType="dbTimeStamp" cachedName="LatestRateDate" externalMetadataColumnId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[LatestRateDate]" name="LatestRateDate" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].Columns[CurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="CurrencyCode" externalMetadataColumnId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" name="CurrencyCode" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].Columns[CurrencyName]" cachedDataType="wstr" cachedLength="60" cachedName="CurrencyName" externalMetadataColumnId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyName]" name="CurrencyName" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].Columns[CurrencyStatusCode]" cachedDataType="wstr" cachedLength="10" cachedName="CurrencyStatusCode" externalMetadataColumnId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyStatusCode]" name="CurrencyStatusCode" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].Columns[RateStalenessDays]" cachedDataType="i4" cachedName="RateStalenessDays" externalMetadataColumnId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[RateStalenessDays]" name="RateStalenessDays" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="wstr" cachedLength="40" cachedName="LineageKey" externalMetadataColumnId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].Columns[ChangeHash]" cachedDataType="wstr" cachedLength="200" cachedName="ChangeHash" externalMetadataColumnId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" name="ChangeHash" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" dataType="wstr" length="3" name="CurrencyCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyName]" dataType="wstr" length="60" name="CurrencyName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[CurrencySymbol]" dataType="wstr" length="5" name="CurrencySymbol" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[MinorUnitDigits]" dataType="i4" name="MinorUnitDigits" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[RoundingRuleCode]" dataType="wstr" length="20" name="RoundingRuleCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[IsReportingCurrency]" dataType="bool" name="IsReportingCurrency" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[IsEuroLegacy]" dataType="bool" name="IsEuroLegacy" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[RetiredDate]" dataType="dbTimeStamp" name="RetiredDate" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[LatestRateToUsd]" dataType="numeric" precision="18" scale="6" name="LatestRateToUsd" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[LatestRateDate]" dataType="dbTimeStamp" name="LatestRateDate" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" dataType="wstr" length="3" name="CurrencyCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyName]" dataType="wstr" length="60" name="CurrencyName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyStatusCode]" dataType="wstr" length="10" name="CurrencyStatusCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[RateStalenessDays]" dataType="i4" name="RateStalenessDays" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="wstr" length="40" name="LineageKey" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" dataType="wstr" length="200" name="ChangeHash" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="ERR Currency Rate Stale" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedLookupFailure]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].Columns[CurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="CurrencyCode" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" name="CurrencyCode" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].Columns[CurrencyName]" cachedDataType="wstr" cachedLength="60" cachedName="CurrencyName" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyName]" name="CurrencyName" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].Columns[CurrencySymbol]" cachedDataType="wstr" cachedLength="5" cachedName="CurrencySymbol" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[CurrencySymbol]" name="CurrencySymbol" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].Columns[MinorUnitDigits]" cachedDataType="i4" cachedName="MinorUnitDigits" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[MinorUnitDigits]" name="MinorUnitDigits" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].Columns[RoundingRuleCode]" cachedDataType="wstr" cachedLength="20" cachedName="RoundingRuleCode" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[RoundingRuleCode]" name="RoundingRuleCode" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].Columns[IsReportingCurrency]" cachedDataType="bool" cachedName="IsReportingCurrency" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[IsReportingCurrency]" name="IsReportingCurrency" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].Columns[IsEuroLegacy]" cachedDataType="bool" cachedName="IsEuroLegacy" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[IsEuroLegacy]" name="IsEuroLegacy" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].Columns[RetiredDate]" cachedDataType="dbTimeStamp" cachedName="RetiredDate" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[RetiredDate]" name="RetiredDate" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].Columns[LatestRateToUsd]" cachedDataType="numeric" cachedPrecision="18" cachedScale="6" cachedName="LatestRateToUsd" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[LatestRateToUsd]" name="LatestRateToUsd" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].Columns[LatestRateDate]" cachedDataType="dbTimeStamp" cachedName="LatestRateDate" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[LatestRateDate]" name="LatestRateDate" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].Columns[CurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="CurrencyCode" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" name="CurrencyCode" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].Columns[CurrencyName]" cachedDataType="wstr" cachedLength="60" cachedName="CurrencyName" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyName]" name="CurrencyName" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].Columns[CurrencyStatusCode]" cachedDataType="wstr" cachedLength="10" cachedName="CurrencyStatusCode" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyStatusCode]" name="CurrencyStatusCode" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].Columns[RateStalenessDays]" cachedDataType="i4" cachedName="RateStalenessDays" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[RateStalenessDays]" name="RateStalenessDays" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="wstr" cachedLength="40" cachedName="LineageKey" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].Columns[ChangeHash]" cachedDataType="wstr" cachedLength="200" cachedName="ChangeHash" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" name="ChangeHash" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" dataType="wstr" length="3" name="CurrencyCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyName]" dataType="wstr" length="60" name="CurrencyName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[CurrencySymbol]" dataType="wstr" length="5" name="CurrencySymbol" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[MinorUnitDigits]" dataType="i4" name="MinorUnitDigits" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[RoundingRuleCode]" dataType="wstr" length="20" name="RoundingRuleCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[IsReportingCurrency]" dataType="bool" name="IsReportingCurrency" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[IsEuroLegacy]" dataType="bool" name="IsEuroLegacy" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[RetiredDate]" dataType="dbTimeStamp" name="RetiredDate" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[LatestRateToUsd]" dataType="numeric" precision="18" scale="6" name="LatestRateToUsd" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[LatestRateDate]" dataType="dbTimeStamp" name="LatestRateDate" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" dataType="wstr" length="3" name="CurrencyCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyName]" dataType="wstr" length="60" name="CurrencyName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyStatusCode]" dataType="wstr" length="10" name="CurrencyStatusCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[RateStalenessDays]" dataType="i4" name="RateStalenessDays" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="wstr" length="40" name="LineageKey" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" dataType="wstr" length="200" name="ChangeHash" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="ERR Currency Unrated" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedLookupFailure]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].Columns[CurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="CurrencyCode" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" name="CurrencyCode" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].Columns[CurrencyName]" cachedDataType="wstr" cachedLength="60" cachedName="CurrencyName" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyName]" name="CurrencyName" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].Columns[CurrencySymbol]" cachedDataType="wstr" cachedLength="5" cachedName="CurrencySymbol" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[CurrencySymbol]" name="CurrencySymbol" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].Columns[MinorUnitDigits]" cachedDataType="i4" cachedName="MinorUnitDigits" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[MinorUnitDigits]" name="MinorUnitDigits" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].Columns[RoundingRuleCode]" cachedDataType="wstr" cachedLength="20" cachedName="RoundingRuleCode" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[RoundingRuleCode]" name="RoundingRuleCode" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].Columns[IsReportingCurrency]" cachedDataType="bool" cachedName="IsReportingCurrency" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[IsReportingCurrency]" name="IsReportingCurrency" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].Columns[IsEuroLegacy]" cachedDataType="bool" cachedName="IsEuroLegacy" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[IsEuroLegacy]" name="IsEuroLegacy" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].Columns[RetiredDate]" cachedDataType="dbTimeStamp" cachedName="RetiredDate" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[RetiredDate]" name="RetiredDate" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].Columns[LatestRateToUsd]" cachedDataType="numeric" cachedPrecision="18" cachedScale="6" cachedName="LatestRateToUsd" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[LatestRateToUsd]" name="LatestRateToUsd" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].Columns[LatestRateDate]" cachedDataType="dbTimeStamp" cachedName="LatestRateDate" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[LatestRateDate]" name="LatestRateDate" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].Columns[CurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="CurrencyCode" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" name="CurrencyCode" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].Columns[CurrencyName]" cachedDataType="wstr" cachedLength="60" cachedName="CurrencyName" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyName]" name="CurrencyName" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].Columns[CurrencyStatusCode]" cachedDataType="wstr" cachedLength="10" cachedName="CurrencyStatusCode" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyStatusCode]" name="CurrencyStatusCode" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].Columns[RateStalenessDays]" cachedDataType="i4" cachedName="RateStalenessDays" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[RateStalenessDays]" name="RateStalenessDays" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="wstr" cachedLength="40" cachedName="LineageKey" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                  <inputColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].Columns[ChangeHash]" cachedDataType="wstr" cachedLength="200" cachedName="ChangeHash" externalMetadataColumnId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" name="ChangeHash" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" dataType="wstr" length="3" name="CurrencyCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyName]" dataType="wstr" length="60" name="CurrencyName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[CurrencySymbol]" dataType="wstr" length="5" name="CurrencySymbol" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[MinorUnitDigits]" dataType="i4" name="MinorUnitDigits" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[RoundingRuleCode]" dataType="wstr" length="20" name="RoundingRuleCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[IsReportingCurrency]" dataType="bool" name="IsReportingCurrency" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[IsEuroLegacy]" dataType="bool" name="IsEuroLegacy" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[RetiredDate]" dataType="dbTimeStamp" name="RetiredDate" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[LatestRateToUsd]" dataType="numeric" precision="18" scale="6" name="LatestRateToUsd" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[LatestRateDate]" dataType="dbTimeStamp" name="LatestRateDate" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" dataType="wstr" length="3" name="CurrencyCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyName]" dataType="wstr" length="60" name="CurrencyName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyStatusCode]" dataType="wstr" length="10" name="CurrencyStatusCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[RateStalenessDays]" dataType="i4" name="RateStalenessDays" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="wstr" length="40" name="LineageKey" />
+                  <externalMetadataColumn refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" dataType="wstr" length="200" name="ChangeHash" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\DFT Publish Currency Dimension.Paths[OLE DB Source Output]" endId="Package\DFT Publish Currency Dimension\Count Currencies Read.Inputs[Row Count Input]" name="OLE DB Source Output" startId="Package\DFT Publish Currency Dimension\REF Currency Conformed.Outputs[OLE DB Source Output]" />
+          <path refId="Package\DFT Publish Currency Dimension.Paths[Row Count Output 1]" endId="Package\DFT Publish Currency Dimension\Shape Currency Dimension.Inputs[Derived Column Input]" name="Row Count Output 1" startId="Package\DFT Publish Currency Dimension\Count Currencies Read.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Publish Currency Dimension.Paths[Derived Column Output 2]" endId="Package\DFT Publish Currency Dimension\Screen Currency.Inputs[Conditional Split Input]" name="Derived Column Output 2" startId="Package\DFT Publish Currency Dimension\Shape Currency Dimension.Outputs[Derived Column Output]" />
+          <path refId="Package\DFT Publish Currency Dimension.Paths[Rated Currency 3]" endId="Package\DFT Publish Currency Dimension\Count Currencies Published.Inputs[Row Count Input]" name="Rated Currency 3" startId="Package\DFT Publish Currency Dimension\Screen Currency.Outputs[Rated Currency]" />
+          <path refId="Package\DFT Publish Currency Dimension.Paths[Row Count Output 4]" endId="Package\DFT Publish Currency Dimension\DW Dimension Currency.Inputs[OLE DB Destination Input]" name="Row Count Output 4" startId="Package\DFT Publish Currency Dimension\Count Currencies Published.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Publish Currency Dimension.Paths[Stale Rate 5]" endId="Package\DFT Publish Currency Dimension\ERR Currency Rate Stale.Inputs[OLE DB Destination Input]" name="Stale Rate 5" startId="Package\DFT Publish Currency Dimension\Screen Currency.Outputs[Stale Rate]" />
+          <path refId="Package\DFT Publish Currency Dimension.Paths[Unrated Currency 6]" endId="Package\DFT Publish Currency Dimension\ERR Currency Unrated.Inputs[OLE DB Destination Input]" name="Unrated Currency 6" startId="Package\DFT Publish Currency Dimension\Screen Currency.Outputs[Unrated Currency]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Report Unmapped Codes - CURRENCY"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{31EF82A5-E081-A2BE-10BA-7474D8258F9F}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Report Unmapped Codes - CURRENCY"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="DECLARE @Unmapped TABLE (CodeDomainCode NVARCHAR(30), SourceSystemCode NVARCHAR(20),&#10;                         SourceObjectName NVARCHAR(200), SourceColumnName NVARCHAR(100),&#10;                         SourceCodeValue NVARCHAR(50), OccurrenceCount BIGINT,&#10;                         FirstObservedAtUtc DATETIME2(3));&#10;INSERT INTO @Unmapped&#10;EXEC ref.usp_ReportUnmappedCodes @BatchId = ?, @PackageExecutionId = ?, @CodeDomainCode = N'CURRENCY';&#10;SELECT COUNT_BIG(*) AS UnmappedCodeCount FROM @Unmapped;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::UnmappedCodeCount" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'ref.Currency', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Truncate [Dimension].[Currency]" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Truncate [Dimension].[Currency]"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Load Currency Reference" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Load Currency Reference"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Load Daily FX Rates" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Load Daily FX Rates"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\DFT Publish Currency Dimension" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\DFT Publish Currency Dimension"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Report Unmapped Codes - CURRENCY" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Report Unmapped Codes - CURRENCY"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{5CB9AF8B-5B26-A117-8767-5FD520DFADD0}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

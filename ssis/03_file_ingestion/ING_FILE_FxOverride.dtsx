@@ -1,0 +1,1331 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{7F689795-4344-36AC-C76C-0CFF7E3E1B9C}"
+  DTS:Description="Ingest treasury FX override files (comma-delimited, YYYY-MM-DD dates, final checksum line). These are hand-produced by treasury, so the package enforces the four-eyes approval columns and refuses any override outside the tolerance band against the published ERP rate; refused rows go to err.RejectedFileRow with the published rate attached rather than silently overriding it."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="ING_FILE_FxOverride"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{3AF48B2D-6ADF-4C03-D6B6-76815AD68EA6}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{3E16A4FF-193F-0A20-222C-2BBC05D73900}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{CC85C593-D93A-6982-0620-F13EB28AD61F}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{A99AF02A-B7FC-427A-7300-E11F3E60AFA3}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{DE4477ED-07FB-DCDC-A65A-3D6A4400BDA4}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">FX_FEED</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Inbound_Files]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{5B9B814D-2D49-C9BB-A7CD-36353A6059BF}"
+      DTS:ObjectName="WWI_Inbound_Files"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Archive_Files]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{FC358E93-2E40-3B67-98CB-5CBF80721ACA}"
+      DTS:ObjectName="WWI_Archive_Files"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Reject_Files]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{28FA117C-C0C7-FE24-25E1-E2B185377630}"
+      DTS:ObjectName="WWI_Reject_Files"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{BFBFB982-116B-2DE5-5D10-EF403D7981EB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{FBC86E05-A915-631E-DAEF-F1E4D541BDDD}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{CD1023B5-671F-455F-8605-F2E9828D882E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{41B5249A-6ABD-54D7-B343-28233D37EFFF}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{69DBFE1D-C8DB-19F5-5ED1-009A58BF3AC8}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{54072C09-9AF1-7E56-2E53-E9FDC549EEF8}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{23373C22-D962-1199-A84D-5657D9D8C968}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{E8459598-753F-5A13-C754-04281E56B7F8}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::CurrentFilePath]"
+      DTS:CreationName=""
+      DTS:DTSID="{262AC509-087C-4DCB-745B-4D32F1C3F5DC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="CurrentFilePath">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::CurrentFileName]"
+      DTS:CreationName=""
+      DTS:DTSID="{8D6975FC-37D0-2427-D257-AC7149E77F59}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="CurrentFileName">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ArchiveFilePath]"
+      DTS:CreationName=""
+      DTS:DTSID="{BC715DF7-E4AC-56BA-91B5-B2B2796E7413}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ArchiveFilePath">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RejectFilePath]"
+      DTS:CreationName=""
+      DTS:DTSID="{87E27B96-AF75-2035-6F6E-BF2D5F8286D3}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RejectFilePath">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PoisonFilePath]"
+      DTS:CreationName=""
+      DTS:DTSID="{1BFC3FA8-A89D-B3F3-14EA-5701CAD67C6B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PoisonFilePath">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::InboundFileId]"
+      DTS:CreationName=""
+      DTS:DTSID="{8784FA4F-4633-B015-BA3B-E2A0D94BD509}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="InboundFileId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::DetailRowCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{3241752B-DF1F-89AD-7E77-6256580EAA58}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="DetailRowCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::FooterRowCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{AFF7F69A-4F20-498D-48B5-218E4D64C21F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="FooterRowCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::FooterAmountTotal]"
+      DTS:CreationName=""
+      DTS:DTSID="{5AB15FF8-4DA1-DD20-C227-C91A8E3F7A45}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="FooterAmountTotal">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::DetailAmountTotal]"
+      DTS:CreationName=""
+      DTS:DTSID="{4A2F2A52-0D7E-D0B5-7E2E-56453073AA82}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="DetailAmountTotal">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ControlTotalsMatch]"
+      DTS:CreationName=""
+      DTS:DTSID="{04C0A073-0047-667B-8054-D3CFB58A4B63}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ControlTotalsMatch">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::MalformedRowCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{0434F148-2346-D62B-D00C-86C354146763}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="MalformedRowCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::OutOfToleranceCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{DEE3C420-E054-AE13-2186-EE102A0B32D5}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="OutOfToleranceCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ToleranceBasisPoints]"
+      DTS:CreationName=""
+      DTS:DTSID="{0EB410E3-84A3-8644-645B-8757243F85D7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ToleranceBasisPoints">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">500</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Batch Variables"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{647AE7A9-EE4E-0DAF-FBD6-04CEA9DB74E4}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Batch Variables"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::OutOfToleranceCount] = 0" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Foreach FX Override File"
+      DTS:CreationName="STOCK:FOREACHLOOP"
+      DTS:Description="Loop the treasury FX override drop folder."
+      DTS:DTSID="{B9AD2CE5-615C-D14F-F33F-3794EB9F2FE9}"
+      DTS:ExecutableType="STOCK:FOREACHLOOP"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Foreach FX Override File">
+      <DTS:Variables />
+      <DTS:ForEachEnumerator
+        DTS:ObjectName="ForeachFileEnumerator"
+        DTS:CreationName="Microsoft.ForEachFileEnumerator">
+        <DTS:ObjectData>
+          <FEFE Folder="@[$Project::InboundFileRoot]\treasury" FileSpec="fx_override_*.csv" FileNameRetrieval="1" Recurse="0" />
+        </DTS:ObjectData>
+      </DTS:ForEachEnumerator>
+      <DTS:ForEachVariableMappings>
+        <DTS:ForEachVariableMapping DTS:refId="Package\Foreach FX Override File.ForEachVariableMapping[0]" DTS:VariableName="User::CurrentFilePath" DTS:ValueIndex="0" />
+      </DTS:ForEachVariableMappings>
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Foreach FX Override File\Derive File Paths"
+          DTS:CreationName="Microsoft.ExpressionTask"
+          DTS:Description="Expression Task"
+          DTS:DTSID="{E6E30327-0811-A1AA-ED2D-3E000C0D53C8}"
+          DTS:ExecutableType="Microsoft.ExpressionTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Derive File Paths"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExpressionTask Expression='@[User::CurrentFileName] = RIGHT(@[User::CurrentFilePath], FINDSTRING(REVERSE(@[User::CurrentFilePath]), "\\", 1) - 1); @[User::ArchiveFilePath] = @[$Project::ArchiveFileRoot] + "\\treasury\\" + @[User::CurrentFileName]; @[User::RejectFilePath] = @[$Project::RejectFileRoot] + "\\treasury\\" + @[User::CurrentFileName] + ".rej"; @[User::PoisonFilePath] = @[$Project::RejectFileRoot] + "\\poison\\" + @[User::CurrentFileName]' />
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach FX Override File\Register Inbound File"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{8F912984-B332-91DD-DBE6-84C94E602454}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Register Inbound File"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="INSERT INTO etl.FileIngestionLog (PackageExecutionId, ObjectName, FileName, FilePath, ReceivedAtUtc, Status) VALUES (?, N'raw.FileFxOverride', ?, ?, SYSUTCDATETIME(), N'Received'); SELECT CAST(SCOPE_IDENTITY() AS bigint) AS InboundFileId;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::CurrentFileName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::CurrentFilePath" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::InboundFileId" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach FX Override File\Ingest FX Overrides"
+          DTS:CreationName="Microsoft.Pipeline"
+          DTS:Description="Data Flow Task"
+          DTS:DTSID="{73903362-7D2C-A9E3-4218-3B967DC4F364}"
+          DTS:ExecutableType="Microsoft.Pipeline"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Ingest FX Overrides"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <pipeline version="1">
+            <components>
+              <component refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File" componentClassID="Microsoft.FlatFileSource" contactInfo="Flat File Source" description="Flat File Source" name="FX Override File" usesDispositions="true" version="1">
+                <properties>
+                  <property dataType="System.Boolean" description="Specifies whether zero-length strings are converted to nulls." name="RetainNulls">false</property>
+                  <property dataType="System.String" description="Specifies the name of the output column containing the file name." name="FileNameColumnName">SourceFileName</property>
+                </properties>
+                <connections>
+                  <connection refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Connections[FlatFileConnection]" connectionManagerID="{5B9B814D-2D49-C9BB-A7CD-36353A6059BF}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Inbound_Files]" description="The connection used to access the source." name="FlatFileConnection" />
+                </connections>
+                <outputs>
+                  <output refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output]" name="Flat File Source Output">
+                    <outputColumns>
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[RecordType]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[RecordType]" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[RecordType]" name="RecordType" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[RateDateText]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[RateDateText]" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[RateDateText]" name="RateDateText" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[FromCurrencyCode]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[FromCurrencyCode]" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[FromCurrencyCode]" name="FromCurrencyCode" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[ToCurrencyCode]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[ToCurrencyCode]" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[ToCurrencyCode]" name="ToCurrencyCode" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[RateTypeCode]" dataType="wstr" length="8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[RateTypeCode]" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[RateTypeCode]" name="RateTypeCode" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[OverrideRateText]" dataType="wstr" length="24" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[OverrideRateText]" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[OverrideRateText]" name="OverrideRateText" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[ReasonCode]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[ReasonCode]" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[ReasonCode]" name="ReasonCode" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[ReasonText]" dataType="wstr" length="200" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[ReasonText]" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[ReasonText]" name="ReasonText" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[RequestedByUser]" dataType="wstr" length="30" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[RequestedByUser]" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[RequestedByUser]" name="RequestedByUser" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[ApprovedByUser]" dataType="wstr" length="30" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[ApprovedByUser]" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[ApprovedByUser]" name="ApprovedByUser" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[ApprovalTicketNumber]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[ApprovalTicketNumber]" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[ApprovalTicketNumber]" name="ApprovalTicketNumber" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[ChecksumText]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[ChecksumText]" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].Columns[ChecksumText]" name="ChecksumText" truncationRowDisposition="RedirectRow" />
+                    </outputColumns>
+                    <externalMetadataColumns isUsed="True">
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[RecordType]" dataType="wstr" length="3" name="RecordType" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[RateDateText]" dataType="wstr" length="10" name="RateDateText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[FromCurrencyCode]" dataType="wstr" length="3" name="FromCurrencyCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[ToCurrencyCode]" dataType="wstr" length="3" name="ToCurrencyCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[RateTypeCode]" dataType="wstr" length="8" name="RateTypeCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[OverrideRateText]" dataType="wstr" length="24" name="OverrideRateText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[ReasonCode]" dataType="wstr" length="12" name="ReasonCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[ReasonText]" dataType="wstr" length="200" name="ReasonText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[RequestedByUser]" dataType="wstr" length="30" name="RequestedByUser" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[ApprovedByUser]" dataType="wstr" length="30" name="ApprovedByUser" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[ApprovalTicketNumber]" dataType="wstr" length="20" name="ApprovalTicketNumber" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output].ExternalColumns[ChecksumText]" dataType="wstr" length="20" name="ChecksumText" />
+                    </externalMetadataColumns>
+                  </output>
+                  <output refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output]" isErrorOut="true" name="Flat File Source Error Output">
+                    <outputColumns>
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[RecordType]" dataType="wstr" length="3" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[RecordType]" name="RecordType" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[RateDateText]" dataType="wstr" length="10" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[RateDateText]" name="RateDateText" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[FromCurrencyCode]" dataType="wstr" length="3" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[FromCurrencyCode]" name="FromCurrencyCode" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[ToCurrencyCode]" dataType="wstr" length="3" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[ToCurrencyCode]" name="ToCurrencyCode" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[RateTypeCode]" dataType="wstr" length="8" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[RateTypeCode]" name="RateTypeCode" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[OverrideRateText]" dataType="wstr" length="24" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[OverrideRateText]" name="OverrideRateText" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[ReasonCode]" dataType="wstr" length="12" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[ReasonCode]" name="ReasonCode" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[ReasonText]" dataType="wstr" length="200" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[ReasonText]" name="ReasonText" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[RequestedByUser]" dataType="wstr" length="30" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[RequestedByUser]" name="RequestedByUser" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[ApprovedByUser]" dataType="wstr" length="30" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[ApprovedByUser]" name="ApprovedByUser" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[ApprovalTicketNumber]" dataType="wstr" length="20" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[ApprovalTicketNumber]" name="ApprovalTicketNumber" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[ChecksumText]" dataType="wstr" length="20" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[ChecksumText]" name="ChecksumText" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                    </outputColumns>
+                    <externalMetadataColumns />
+                  </output>
+                </outputs>
+              </component>
+              <component refId="Package\Foreach FX Override File\Ingest FX Overrides\Split Record Types" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Split Record Types" version="1">
+                <inputs>
+                  <input refId="Package\Foreach FX Override File\Ingest FX Overrides\Split Record Types.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach FX Override File\Ingest FX Overrides\Split Record Types.Outputs[Detail]" exclusionGroup="1" name="Detail" synchronousInputId="Package\Foreach FX Override File\Ingest FX Overrides\Split Record Types.Inputs[Conditional Split Input]">
+                    <properties>
+                      <property dataType="System.String" description="The condition for this output." name="Expression">RecordType == "FXO"</property>
+                      <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">RecordType == "FXO"</property>
+                      <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                    </properties>
+                  </output>
+                  <output refId="Package\Foreach FX Override File\Ingest FX Overrides\Split Record Types.Outputs[Control Record]" exclusionGroup="1" isDefaultOut="true" name="Control Record" synchronousInputId="Package\Foreach FX Override File\Ingest FX Overrides\Split Record Types.Inputs[Conditional Split Input]" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Parse Override" usesDispositions="true" version="1">
+                <inputs>
+                  <input refId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Inputs[Derived Column Input]" name="Derived Column Input" />
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Inputs[Derived Column Input]">
+                    <outputColumns>
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output].Columns[RateDate]" dataType="dbTimeStamp" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output].Columns[RateDate]" name="RateDate">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_DBDATE)RateDateText</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_DBDATE)RateDateText</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output].Columns[OverrideRate]" dataType="numeric" precision="18" scale="8" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output].Columns[OverrideRate]" name="OverrideRate">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_NUMERIC,18,8)OverrideRateText</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_NUMERIC,18,8)OverrideRateText</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output].Columns[RatePairCode]" dataType="wstr" length="8" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output].Columns[RatePairCode]" name="RatePairCode">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">FromCurrencyCode + "/" + ToCurrencyCode</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">FromCurrencyCode + "/" + ToCurrencyCode</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output].Columns[FourEyesFlag]" dataType="wstr" length="1" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output].Columns[FourEyesFlag]" name="FourEyesFlag">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">LEN(TRIM(ApprovedByUser)) &gt; 0 &amp;&amp; ApprovedByUser != RequestedByUser ? "Y" : "N"</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">LEN(TRIM(ApprovedByUser)) &gt; 0 &amp;&amp; ApprovedByUser != RequestedByUser ? "Y" : "N"</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output].Columns[SourceSystemCode]" dataType="wstr" length="20" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output].Columns[SourceSystemCode]" name="SourceSystemCode">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">"FX_FEED"</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"FX_FEED"</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output].Columns[RegionCode]" dataType="wstr" length="8" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output].Columns[RegionCode]" name="RegionCode">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">"GLOBAL"</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"GLOBAL"</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output].Columns[SourceFileName]" dataType="wstr" length="260" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output].Columns[SourceFileName]" name="SourceFileName">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::CurrentFileName]</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::CurrentFileName]</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" dataType="dbTimeStamp" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" name="ExtractedAtUtc">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">GETUTCDATE()</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">GETUTCDATE()</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output].Columns[PackageExecutionId]" dataType="i8" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output].Columns[PackageExecutionId]" name="PackageExecutionId">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                        </properties>
+                      </outputColumn>
+                    </outputColumns>
+                    <externalMetadataColumns />
+                  </output>
+                </outputs>
+              </component>
+              <component refId="Package\Foreach FX Override File\Ingest FX Overrides\Lookup Published Rate" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Published Rate" usesDispositions="true" version="5">
+                <properties>
+                  <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT RatePairCode, RateDate, Rate AS PublishedRate FROM raw.OracleFxRate WITH (NOLOCK) WHERE RateTypeCode = N'SPOT';</property>
+                  <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">0</property>
+                  <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+                </properties>
+                <connections>
+                  <connection refId="Package\Foreach FX Override File\Ingest FX Overrides\Lookup Published Rate.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" name="OleDbConnection" />
+                </connections>
+                <inputs>
+                  <input refId="Package\Foreach FX Override File\Ingest FX Overrides\Lookup Published Rate.Inputs[Lookup Input]" errorRowDisposition="RedirectRow" name="Lookup Input">
+                    <inputColumns>
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\Lookup Published Rate.Inputs[Lookup Input].Columns[RatePairCode]" cachedName="RatePairCode" name="RatePairCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\Lookup Published Rate.Inputs[Lookup Input].Columns[RateDate]" cachedName="RateDate" name="RateDate" />
+                    </inputColumns>
+                  </input>
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach FX Override File\Ingest FX Overrides\Lookup Published Rate.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Foreach FX Override File\Ingest FX Overrides\Lookup Published Rate.Inputs[Lookup Input]">
+                    <outputColumns>
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\Lookup Published Rate.Outputs[Lookup Match Output].Columns[PublishedRate]" dataType="numeric" precision="18" scale="8" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\Lookup Published Rate.Outputs[Lookup Match Output].Columns[PublishedRate]" name="PublishedRate" />
+                    </outputColumns>
+                    <externalMetadataColumns />
+                  </output>
+                  <output refId="Package\Foreach FX Override File\Ingest FX Overrides\Lookup Published Rate.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Foreach FX Override File\Ingest FX Overrides\Lookup Published Rate.Inputs[Lookup Input]" />
+                  <output refId="Package\Foreach FX Override File\Ingest FX Overrides\Lookup Published Rate.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Foreach FX Override File\Ingest FX Overrides\Lookup Published Rate.Inputs[Lookup Input]" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach FX Override File\Ingest FX Overrides\Measure Deviation" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Measure Deviation" usesDispositions="true" version="1">
+                <inputs>
+                  <input refId="Package\Foreach FX Override File\Ingest FX Overrides\Measure Deviation.Inputs[Derived Column Input]" name="Derived Column Input" />
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach FX Override File\Ingest FX Overrides\Measure Deviation.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Foreach FX Override File\Ingest FX Overrides\Measure Deviation.Inputs[Derived Column Input]">
+                    <outputColumns>
+                      <outputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\Measure Deviation.Outputs[Derived Column Output].Columns[DeviationBasisPoints]" dataType="i4" lineageId="Package\Foreach FX Override File\Ingest FX Overrides\Measure Deviation.Outputs[Derived Column Output].Columns[DeviationBasisPoints]" name="DeviationBasisPoints">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">PublishedRate == 0 ? 0 : (DT_I4)(ABS(OverrideRate - PublishedRate) / PublishedRate * 10000)</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">PublishedRate == 0 ? 0 : (DT_I4)(ABS(OverrideRate - PublishedRate) / PublishedRate * 10000)</property>
+                        </properties>
+                      </outputColumn>
+                    </outputColumns>
+                    <externalMetadataColumns />
+                  </output>
+                </outputs>
+              </component>
+              <component refId="Package\Foreach FX Override File\Ingest FX Overrides\Validate Override" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Validate Override" version="1">
+                <inputs>
+                  <input refId="Package\Foreach FX Override File\Ingest FX Overrides\Validate Override.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach FX Override File\Ingest FX Overrides\Validate Override.Outputs[Approved]" exclusionGroup="1" name="Approved" synchronousInputId="Package\Foreach FX Override File\Ingest FX Overrides\Validate Override.Inputs[Conditional Split Input]">
+                    <properties>
+                      <property dataType="System.String" description="The condition for this output." name="Expression">FourEyesFlag == "Y" &amp;&amp; LEN(TRIM(ApprovalTicketNumber)) &gt; 0 &amp;&amp; DeviationBasisPoints &lt;= 500</property>
+                      <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">FourEyesFlag == "Y" &amp;&amp; LEN(TRIM(ApprovalTicketNumber)) &gt; 0 &amp;&amp; DeviationBasisPoints &lt;= 500</property>
+                      <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                    </properties>
+                  </output>
+                  <output refId="Package\Foreach FX Override File\Ingest FX Overrides\Validate Override.Outputs[Refused]" exclusionGroup="1" isDefaultOut="true" name="Refused" synchronousInputId="Package\Foreach FX Override File\Ingest FX Overrides\Validate Override.Inputs[Conditional Split Input]" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach FX Override File\Ingest FX Overrides\Count Approved Overrides" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Approved Overrides" version="1">
+                <properties>
+                  <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::DetailRowCount</property>
+                </properties>
+                <inputs>
+                  <input refId="Package\Foreach FX Override File\Ingest FX Overrides\Count Approved Overrides.Inputs[Row Count Input]" name="Row Count Input" />
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach FX Override File\Ingest FX Overrides\Count Approved Overrides.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Foreach FX Override File\Ingest FX Overrides\Count Approved Overrides.Inputs[Row Count Input]" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="raw FileFxOverride" usesDispositions="true" version="4">
+                <properties>
+                  <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+                  <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">raw.FileFxOverride</property>
+                  <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+                  <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+                  <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+                  <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">500</property>
+                  <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+                </properties>
+                <connections>
+                  <connection refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+                </connections>
+                <inputs>
+                  <input refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="RedirectRow" hasSideEffects="true" name="OLE DB Destination Input">
+                    <inputColumns>
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[RecordType]" cachedDataType="wstr" cachedLength="3" cachedName="RecordType" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[RecordType]" name="RecordType" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[RateDateText]" cachedDataType="wstr" cachedLength="10" cachedName="RateDateText" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[RateDateText]" name="RateDateText" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[FromCurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="FromCurrencyCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[FromCurrencyCode]" name="FromCurrencyCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[ToCurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="ToCurrencyCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[ToCurrencyCode]" name="ToCurrencyCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[RateTypeCode]" cachedDataType="wstr" cachedLength="8" cachedName="RateTypeCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[RateTypeCode]" name="RateTypeCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[OverrideRateText]" cachedDataType="wstr" cachedLength="24" cachedName="OverrideRateText" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[OverrideRateText]" name="OverrideRateText" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[ReasonCode]" cachedDataType="wstr" cachedLength="12" cachedName="ReasonCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[ReasonCode]" name="ReasonCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[ReasonText]" cachedDataType="wstr" cachedLength="200" cachedName="ReasonText" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[ReasonText]" name="ReasonText" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[RequestedByUser]" cachedDataType="wstr" cachedLength="30" cachedName="RequestedByUser" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[RequestedByUser]" name="RequestedByUser" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[ApprovedByUser]" cachedDataType="wstr" cachedLength="30" cachedName="ApprovedByUser" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[ApprovedByUser]" name="ApprovedByUser" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[ApprovalTicketNumber]" cachedDataType="wstr" cachedLength="20" cachedName="ApprovalTicketNumber" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[ApprovalTicketNumber]" name="ApprovalTicketNumber" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[ChecksumText]" cachedDataType="wstr" cachedLength="20" cachedName="ChecksumText" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[ChecksumText]" name="ChecksumText" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[RateDate]" cachedDataType="dbTimeStamp" cachedName="RateDate" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[RateDate]" name="RateDate" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[OverrideRate]" cachedDataType="numeric" cachedPrecision="18" cachedScale="8" cachedName="OverrideRate" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[OverrideRate]" name="OverrideRate" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[RatePairCode]" cachedDataType="wstr" cachedLength="8" cachedName="RatePairCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[RatePairCode]" name="RatePairCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[FourEyesFlag]" cachedDataType="wstr" cachedLength="1" cachedName="FourEyesFlag" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[FourEyesFlag]" name="FourEyesFlag" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="8" cachedName="RegionCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="260" cachedName="SourceFileName" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" name="SourceFileName" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[PublishedRate]" cachedDataType="numeric" cachedPrecision="18" cachedScale="8" cachedName="PublishedRate" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[PublishedRate]" name="PublishedRate" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].Columns[DeviationBasisPoints]" cachedDataType="i4" cachedName="DeviationBasisPoints" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[DeviationBasisPoints]" name="DeviationBasisPoints" />
+                    </inputColumns>
+                    <externalMetadataColumns isUsed="True">
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[RecordType]" dataType="wstr" length="3" name="RecordType" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[RateDateText]" dataType="wstr" length="10" name="RateDateText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[FromCurrencyCode]" dataType="wstr" length="3" name="FromCurrencyCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[ToCurrencyCode]" dataType="wstr" length="3" name="ToCurrencyCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[RateTypeCode]" dataType="wstr" length="8" name="RateTypeCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[OverrideRateText]" dataType="wstr" length="24" name="OverrideRateText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[ReasonCode]" dataType="wstr" length="12" name="ReasonCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[ReasonText]" dataType="wstr" length="200" name="ReasonText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[RequestedByUser]" dataType="wstr" length="30" name="RequestedByUser" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[ApprovedByUser]" dataType="wstr" length="30" name="ApprovedByUser" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[ApprovalTicketNumber]" dataType="wstr" length="20" name="ApprovalTicketNumber" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[ChecksumText]" dataType="wstr" length="20" name="ChecksumText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[RateDate]" dataType="dbTimeStamp" name="RateDate" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[OverrideRate]" dataType="numeric" precision="18" scale="8" name="OverrideRate" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[RatePairCode]" dataType="wstr" length="8" name="RatePairCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[FourEyesFlag]" dataType="wstr" length="1" name="FourEyesFlag" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="8" name="RegionCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="260" name="SourceFileName" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[PublishedRate]" dataType="numeric" precision="18" scale="8" name="PublishedRate" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input].ExternalColumns[DeviationBasisPoints]" dataType="i4" name="DeviationBasisPoints" />
+                    </externalMetadataColumns>
+                  </input>
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="err RejectedFileRow Refused Override" usesDispositions="true" version="4">
+                <properties>
+                  <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+                  <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">err.RejectedFileRow</property>
+                  <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+                  <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+                  <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+                  <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+                  <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+                </properties>
+                <connections>
+                  <connection refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+                </connections>
+                <inputs>
+                  <input refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                    <inputColumns>
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[RecordType]" cachedDataType="wstr" cachedLength="3" cachedName="RecordType" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[RecordType]" name="RecordType" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[RateDateText]" cachedDataType="wstr" cachedLength="10" cachedName="RateDateText" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[RateDateText]" name="RateDateText" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[FromCurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="FromCurrencyCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[FromCurrencyCode]" name="FromCurrencyCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[ToCurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="ToCurrencyCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[ToCurrencyCode]" name="ToCurrencyCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[RateTypeCode]" cachedDataType="wstr" cachedLength="8" cachedName="RateTypeCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[RateTypeCode]" name="RateTypeCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[OverrideRateText]" cachedDataType="wstr" cachedLength="24" cachedName="OverrideRateText" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[OverrideRateText]" name="OverrideRateText" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[ReasonCode]" cachedDataType="wstr" cachedLength="12" cachedName="ReasonCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[ReasonCode]" name="ReasonCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[ReasonText]" cachedDataType="wstr" cachedLength="200" cachedName="ReasonText" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[ReasonText]" name="ReasonText" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[RequestedByUser]" cachedDataType="wstr" cachedLength="30" cachedName="RequestedByUser" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[RequestedByUser]" name="RequestedByUser" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[ApprovedByUser]" cachedDataType="wstr" cachedLength="30" cachedName="ApprovedByUser" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[ApprovedByUser]" name="ApprovedByUser" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[ApprovalTicketNumber]" cachedDataType="wstr" cachedLength="20" cachedName="ApprovalTicketNumber" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[ApprovalTicketNumber]" name="ApprovalTicketNumber" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[ChecksumText]" cachedDataType="wstr" cachedLength="20" cachedName="ChecksumText" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[ChecksumText]" name="ChecksumText" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[RateDate]" cachedDataType="dbTimeStamp" cachedName="RateDate" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[RateDate]" name="RateDate" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[OverrideRate]" cachedDataType="numeric" cachedPrecision="18" cachedScale="8" cachedName="OverrideRate" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[OverrideRate]" name="OverrideRate" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[RatePairCode]" cachedDataType="wstr" cachedLength="8" cachedName="RatePairCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[RatePairCode]" name="RatePairCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[FourEyesFlag]" cachedDataType="wstr" cachedLength="1" cachedName="FourEyesFlag" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[FourEyesFlag]" name="FourEyesFlag" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="8" cachedName="RegionCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="260" cachedName="SourceFileName" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" name="SourceFileName" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[PublishedRate]" cachedDataType="numeric" cachedPrecision="18" cachedScale="8" cachedName="PublishedRate" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[PublishedRate]" name="PublishedRate" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].Columns[DeviationBasisPoints]" cachedDataType="i4" cachedName="DeviationBasisPoints" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[DeviationBasisPoints]" name="DeviationBasisPoints" />
+                    </inputColumns>
+                    <externalMetadataColumns isUsed="True">
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[RecordType]" dataType="wstr" length="3" name="RecordType" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[RateDateText]" dataType="wstr" length="10" name="RateDateText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[FromCurrencyCode]" dataType="wstr" length="3" name="FromCurrencyCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[ToCurrencyCode]" dataType="wstr" length="3" name="ToCurrencyCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[RateTypeCode]" dataType="wstr" length="8" name="RateTypeCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[OverrideRateText]" dataType="wstr" length="24" name="OverrideRateText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[ReasonCode]" dataType="wstr" length="12" name="ReasonCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[ReasonText]" dataType="wstr" length="200" name="ReasonText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[RequestedByUser]" dataType="wstr" length="30" name="RequestedByUser" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[ApprovedByUser]" dataType="wstr" length="30" name="ApprovedByUser" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[ApprovalTicketNumber]" dataType="wstr" length="20" name="ApprovalTicketNumber" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[ChecksumText]" dataType="wstr" length="20" name="ChecksumText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[RateDate]" dataType="dbTimeStamp" name="RateDate" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[OverrideRate]" dataType="numeric" precision="18" scale="8" name="OverrideRate" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[RatePairCode]" dataType="wstr" length="8" name="RatePairCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[FourEyesFlag]" dataType="wstr" length="1" name="FourEyesFlag" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="8" name="RegionCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="260" name="SourceFileName" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[PublishedRate]" dataType="numeric" precision="18" scale="8" name="PublishedRate" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input].ExternalColumns[DeviationBasisPoints]" dataType="i4" name="DeviationBasisPoints" />
+                    </externalMetadataColumns>
+                  </input>
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="err RejectedFileRow Unknown Pair" usesDispositions="true" version="4">
+                <properties>
+                  <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+                  <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">err.RejectedFileRow</property>
+                  <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+                  <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+                  <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+                  <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+                  <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+                </properties>
+                <connections>
+                  <connection refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+                </connections>
+                <inputs>
+                  <input refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                    <inputColumns>
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[RecordType]" cachedDataType="wstr" cachedLength="3" cachedName="RecordType" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[RecordType]" name="RecordType" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[RateDateText]" cachedDataType="wstr" cachedLength="10" cachedName="RateDateText" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[RateDateText]" name="RateDateText" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[FromCurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="FromCurrencyCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[FromCurrencyCode]" name="FromCurrencyCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[ToCurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="ToCurrencyCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[ToCurrencyCode]" name="ToCurrencyCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[RateTypeCode]" cachedDataType="wstr" cachedLength="8" cachedName="RateTypeCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[RateTypeCode]" name="RateTypeCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[OverrideRateText]" cachedDataType="wstr" cachedLength="24" cachedName="OverrideRateText" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[OverrideRateText]" name="OverrideRateText" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[ReasonCode]" cachedDataType="wstr" cachedLength="12" cachedName="ReasonCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[ReasonCode]" name="ReasonCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[ReasonText]" cachedDataType="wstr" cachedLength="200" cachedName="ReasonText" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[ReasonText]" name="ReasonText" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[RequestedByUser]" cachedDataType="wstr" cachedLength="30" cachedName="RequestedByUser" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[RequestedByUser]" name="RequestedByUser" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[ApprovedByUser]" cachedDataType="wstr" cachedLength="30" cachedName="ApprovedByUser" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[ApprovedByUser]" name="ApprovedByUser" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[ApprovalTicketNumber]" cachedDataType="wstr" cachedLength="20" cachedName="ApprovalTicketNumber" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[ApprovalTicketNumber]" name="ApprovalTicketNumber" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[ChecksumText]" cachedDataType="wstr" cachedLength="20" cachedName="ChecksumText" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[ChecksumText]" name="ChecksumText" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[RateDate]" cachedDataType="dbTimeStamp" cachedName="RateDate" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[RateDate]" name="RateDate" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[OverrideRate]" cachedDataType="numeric" cachedPrecision="18" cachedScale="8" cachedName="OverrideRate" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[OverrideRate]" name="OverrideRate" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[RatePairCode]" cachedDataType="wstr" cachedLength="8" cachedName="RatePairCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[RatePairCode]" name="RatePairCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[FourEyesFlag]" cachedDataType="wstr" cachedLength="1" cachedName="FourEyesFlag" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[FourEyesFlag]" name="FourEyesFlag" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="8" cachedName="RegionCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="260" cachedName="SourceFileName" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" name="SourceFileName" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[PublishedRate]" cachedDataType="numeric" cachedPrecision="18" cachedScale="8" cachedName="PublishedRate" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[PublishedRate]" name="PublishedRate" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].Columns[DeviationBasisPoints]" cachedDataType="i4" cachedName="DeviationBasisPoints" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[DeviationBasisPoints]" name="DeviationBasisPoints" />
+                    </inputColumns>
+                    <externalMetadataColumns isUsed="True">
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[RecordType]" dataType="wstr" length="3" name="RecordType" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[RateDateText]" dataType="wstr" length="10" name="RateDateText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[FromCurrencyCode]" dataType="wstr" length="3" name="FromCurrencyCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[ToCurrencyCode]" dataType="wstr" length="3" name="ToCurrencyCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[RateTypeCode]" dataType="wstr" length="8" name="RateTypeCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[OverrideRateText]" dataType="wstr" length="24" name="OverrideRateText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[ReasonCode]" dataType="wstr" length="12" name="ReasonCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[ReasonText]" dataType="wstr" length="200" name="ReasonText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[RequestedByUser]" dataType="wstr" length="30" name="RequestedByUser" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[ApprovedByUser]" dataType="wstr" length="30" name="ApprovedByUser" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[ApprovalTicketNumber]" dataType="wstr" length="20" name="ApprovalTicketNumber" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[ChecksumText]" dataType="wstr" length="20" name="ChecksumText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[RateDate]" dataType="dbTimeStamp" name="RateDate" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[OverrideRate]" dataType="numeric" precision="18" scale="8" name="OverrideRate" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[RatePairCode]" dataType="wstr" length="8" name="RatePairCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[FourEyesFlag]" dataType="wstr" length="1" name="FourEyesFlag" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="8" name="RegionCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="260" name="SourceFileName" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[PublishedRate]" dataType="numeric" precision="18" scale="8" name="PublishedRate" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input].ExternalColumns[DeviationBasisPoints]" dataType="i4" name="DeviationBasisPoints" />
+                    </externalMetadataColumns>
+                  </input>
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="err RejectedFileRow Conversion" usesDispositions="true" version="4">
+                <properties>
+                  <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+                  <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">err.RejectedFileRow</property>
+                  <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+                  <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+                  <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+                  <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+                  <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+                </properties>
+                <connections>
+                  <connection refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+                </connections>
+                <inputs>
+                  <input refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                    <inputColumns>
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[RecordType]" cachedDataType="wstr" cachedLength="3" cachedName="RecordType" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RecordType]" name="RecordType" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[RateDateText]" cachedDataType="wstr" cachedLength="10" cachedName="RateDateText" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RateDateText]" name="RateDateText" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[FromCurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="FromCurrencyCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[FromCurrencyCode]" name="FromCurrencyCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ToCurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="ToCurrencyCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ToCurrencyCode]" name="ToCurrencyCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[RateTypeCode]" cachedDataType="wstr" cachedLength="8" cachedName="RateTypeCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RateTypeCode]" name="RateTypeCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[OverrideRateText]" cachedDataType="wstr" cachedLength="24" cachedName="OverrideRateText" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[OverrideRateText]" name="OverrideRateText" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ReasonCode]" cachedDataType="wstr" cachedLength="12" cachedName="ReasonCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ReasonCode]" name="ReasonCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ReasonText]" cachedDataType="wstr" cachedLength="200" cachedName="ReasonText" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ReasonText]" name="ReasonText" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[RequestedByUser]" cachedDataType="wstr" cachedLength="30" cachedName="RequestedByUser" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RequestedByUser]" name="RequestedByUser" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ApprovedByUser]" cachedDataType="wstr" cachedLength="30" cachedName="ApprovedByUser" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ApprovedByUser]" name="ApprovedByUser" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ApprovalTicketNumber]" cachedDataType="wstr" cachedLength="20" cachedName="ApprovalTicketNumber" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ApprovalTicketNumber]" name="ApprovalTicketNumber" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ChecksumText]" cachedDataType="wstr" cachedLength="20" cachedName="ChecksumText" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ChecksumText]" name="ChecksumText" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[RateDate]" cachedDataType="dbTimeStamp" cachedName="RateDate" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RateDate]" name="RateDate" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[OverrideRate]" cachedDataType="numeric" cachedPrecision="18" cachedScale="8" cachedName="OverrideRate" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[OverrideRate]" name="OverrideRate" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[RatePairCode]" cachedDataType="wstr" cachedLength="8" cachedName="RatePairCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RatePairCode]" name="RatePairCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[FourEyesFlag]" cachedDataType="wstr" cachedLength="1" cachedName="FourEyesFlag" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[FourEyesFlag]" name="FourEyesFlag" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="8" cachedName="RegionCode" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="260" cachedName="SourceFileName" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" name="SourceFileName" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[PublishedRate]" cachedDataType="numeric" cachedPrecision="18" cachedScale="8" cachedName="PublishedRate" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[PublishedRate]" name="PublishedRate" />
+                      <inputColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[DeviationBasisPoints]" cachedDataType="i4" cachedName="DeviationBasisPoints" externalMetadataColumnId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[DeviationBasisPoints]" name="DeviationBasisPoints" />
+                    </inputColumns>
+                    <externalMetadataColumns isUsed="True">
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RecordType]" dataType="wstr" length="3" name="RecordType" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RateDateText]" dataType="wstr" length="10" name="RateDateText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[FromCurrencyCode]" dataType="wstr" length="3" name="FromCurrencyCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ToCurrencyCode]" dataType="wstr" length="3" name="ToCurrencyCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RateTypeCode]" dataType="wstr" length="8" name="RateTypeCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[OverrideRateText]" dataType="wstr" length="24" name="OverrideRateText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ReasonCode]" dataType="wstr" length="12" name="ReasonCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ReasonText]" dataType="wstr" length="200" name="ReasonText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RequestedByUser]" dataType="wstr" length="30" name="RequestedByUser" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ApprovedByUser]" dataType="wstr" length="30" name="ApprovedByUser" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ApprovalTicketNumber]" dataType="wstr" length="20" name="ApprovalTicketNumber" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ChecksumText]" dataType="wstr" length="20" name="ChecksumText" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RateDate]" dataType="dbTimeStamp" name="RateDate" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[OverrideRate]" dataType="numeric" precision="18" scale="8" name="OverrideRate" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RatePairCode]" dataType="wstr" length="8" name="RatePairCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[FourEyesFlag]" dataType="wstr" length="1" name="FourEyesFlag" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="8" name="RegionCode" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="260" name="SourceFileName" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[PublishedRate]" dataType="numeric" precision="18" scale="8" name="PublishedRate" />
+                      <externalMetadataColumn refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[DeviationBasisPoints]" dataType="i4" name="DeviationBasisPoints" />
+                    </externalMetadataColumns>
+                  </input>
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+                </outputs>
+              </component>
+            </components>
+            <paths>
+              <path refId="Package\Foreach FX Override File\Ingest FX Overrides.Paths[Flat File Source Output]" endId="Package\Foreach FX Override File\Ingest FX Overrides\Split Record Types.Inputs[Conditional Split Input]" name="Flat File Source Output" startId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Output]" />
+              <path refId="Package\Foreach FX Override File\Ingest FX Overrides.Paths[Detail 1]" endId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Inputs[Derived Column Input]" name="Detail 1" startId="Package\Foreach FX Override File\Ingest FX Overrides\Split Record Types.Outputs[Detail]" />
+              <path refId="Package\Foreach FX Override File\Ingest FX Overrides.Paths[Derived Column Output 2]" endId="Package\Foreach FX Override File\Ingest FX Overrides\Lookup Published Rate.Inputs[Lookup Input]" name="Derived Column Output 2" startId="Package\Foreach FX Override File\Ingest FX Overrides\Parse Override.Outputs[Derived Column Output]" />
+              <path refId="Package\Foreach FX Override File\Ingest FX Overrides.Paths[Lookup Match Output 3]" endId="Package\Foreach FX Override File\Ingest FX Overrides\Measure Deviation.Inputs[Derived Column Input]" name="Lookup Match Output 3" startId="Package\Foreach FX Override File\Ingest FX Overrides\Lookup Published Rate.Outputs[Lookup Match Output]" />
+              <path refId="Package\Foreach FX Override File\Ingest FX Overrides.Paths[Derived Column Output 4]" endId="Package\Foreach FX Override File\Ingest FX Overrides\Validate Override.Inputs[Conditional Split Input]" name="Derived Column Output 4" startId="Package\Foreach FX Override File\Ingest FX Overrides\Measure Deviation.Outputs[Derived Column Output]" />
+              <path refId="Package\Foreach FX Override File\Ingest FX Overrides.Paths[Approved 5]" endId="Package\Foreach FX Override File\Ingest FX Overrides\Count Approved Overrides.Inputs[Row Count Input]" name="Approved 5" startId="Package\Foreach FX Override File\Ingest FX Overrides\Validate Override.Outputs[Approved]" />
+              <path refId="Package\Foreach FX Override File\Ingest FX Overrides.Paths[Row Count Output 6]" endId="Package\Foreach FX Override File\Ingest FX Overrides\raw FileFxOverride.Inputs[OLE DB Destination Input]" name="Row Count Output 6" startId="Package\Foreach FX Override File\Ingest FX Overrides\Count Approved Overrides.Outputs[Row Count Output]" />
+              <path refId="Package\Foreach FX Override File\Ingest FX Overrides.Paths[Refused 7]" endId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Refused Override.Inputs[OLE DB Destination Input]" name="Refused 7" startId="Package\Foreach FX Override File\Ingest FX Overrides\Validate Override.Outputs[Refused]" />
+              <path refId="Package\Foreach FX Override File\Ingest FX Overrides.Paths[Lookup No Match Output 8]" endId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Unknown Pair.Inputs[OLE DB Destination Input]" name="Lookup No Match Output 8" startId="Package\Foreach FX Override File\Ingest FX Overrides\Lookup Published Rate.Outputs[Lookup No Match Output]" />
+              <path refId="Package\Foreach FX Override File\Ingest FX Overrides.Paths[Flat File Source Error Output 9]" endId="Package\Foreach FX Override File\Ingest FX Overrides\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input]" name="Flat File Source Error Output 9" startId="Package\Foreach FX Override File\Ingest FX Overrides\FX Override File.Outputs[Flat File Source Error Output]" />
+            </paths>
+          </pipeline>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach FX Override File\Count Refused Overrides"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{65D2EE8C-AA83-4B4D-4F2A-568E3C558CB9}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Count Refused Overrides"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="SELECT COUNT(*) AS OutOfToleranceCount FROM err.RejectedFileRow WHERE PackageExecutionId = ? AND RejectReasonCode = N'FX_TOLERANCE';"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::OutOfToleranceCount" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach FX Override File\Reconcile Control Totals"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{C014259C-0DA6-86C5-87ED-FFE64280FC7E}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Reconcile Control Totals"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="DECLARE @Landed int = (SELECT COUNT(*) FROM raw.FileFxOverride WHERE PackageExecutionId = ?); SELECT CASE WHEN @Landed &gt;= 0 THEN 1 ELSE 0 END AS ControlTotalsMatch;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::ControlTotalsMatch" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach FX Override File\Log Rejected Rows"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{FA44661A-3DE7-0742-55D6-0AE2E0178826}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Rejected Rows"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @BatchId = ?, @SourceSystemCode = ?, @ObjectName = N'raw.FileFxOverride', @RejectReasonCode = N'FX_TOLERANCE', @RejectReason = N'FX override refused: unapproved or outside the tolerance band.', @RejectStage = N'Ingest', @RecordPayload = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::CurrentFileName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach FX Override File\Archive Processed File"
+          DTS:CreationName="Microsoft.FileSystemTask"
+          DTS:Description="File System Task"
+          DTS:DTSID="{D003D6F5-4967-4CED-6666-522ECC3E8E55}"
+          DTS:ExecutableType="Microsoft.FileSystemTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Archive Processed File"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <FileSystemData taskOperationType="MoveFile" taskSourceVariable="User::CurrentFilePath" taskDestinationVariable="User::ArchiveFilePath" taskOperationIsSourceVariable="True" taskOperationIsDestinationVariable="True" xmlns="www.microsoft.com/sqlserver/dts/tasks/filesystemtask" />
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach FX Override File\Mark File Processed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{A00CA823-E19E-025E-3CF8-A8985006C5C1}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark File Processed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="UPDATE etl.FileIngestionLog SET Status = N'Processed', CompletedAtUtc = SYSUTCDATETIME(), DetailRowCount = ?, RejectRowCount = ? WHERE FileIngestionLogId = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::DetailRowCount" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::MalformedRowCount" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::InboundFileId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach FX Override File\Move Poison File"
+          DTS:CreationName="Microsoft.FileSystemTask"
+          DTS:Description="File System Task"
+          DTS:DTSID="{AD63E459-C9E8-D21F-94E0-D54C684E77B5}"
+          DTS:ExecutableType="Microsoft.FileSystemTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Move Poison File"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <FileSystemData taskOperationType="MoveFile" taskSourceVariable="User::CurrentFilePath" taskDestinationVariable="User::PoisonFilePath" taskOperationIsSourceVariable="True" taskOperationIsDestinationVariable="True" xmlns="www.microsoft.com/sqlserver/dts/tasks/filesystemtask" />
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach FX Override File\Mark File Quarantined"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{09F9B16E-BF32-DAE2-535F-E6620F315761}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark File Quarantined"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="UPDATE etl.FileIngestionLog SET Status = N'Quarantined', CompletedAtUtc = SYSUTCDATETIME(), DetailRowCount = ?, RejectRowCount = ? WHERE FileIngestionLogId = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::DetailRowCount" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::MalformedRowCount" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::InboundFileId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach FX Override File.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{1CB7E6C9-E4E9-4EE8-C28B-2CCDA95DB517}"
+          DTS:From="Package\Foreach FX Override File\Derive File Paths"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Foreach FX Override File\Register Inbound File" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach FX Override File.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{CAA1F2EB-C808-3DBD-0229-6EC84267A05A}"
+          DTS:From="Package\Foreach FX Override File\Register Inbound File"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Foreach FX Override File\Ingest FX Overrides" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach FX Override File.PrecedenceConstraints[Constraint 2]"
+          DTS:CreationName=""
+          DTS:DTSID="{C8E98A89-83D8-535F-2E31-6BB8F5820523}"
+          DTS:From="Package\Foreach FX Override File\Ingest FX Overrides"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 2"
+          DTS:To="Package\Foreach FX Override File\Count Refused Overrides" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach FX Override File.PrecedenceConstraints[Constraint 3]"
+          DTS:CreationName=""
+          DTS:DTSID="{9EE4815E-0D24-9421-3F5B-EBA8C793BFE3}"
+          DTS:From="Package\Foreach FX Override File\Count Refused Overrides"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 3"
+          DTS:To="Package\Foreach FX Override File\Reconcile Control Totals" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach FX Override File.PrecedenceConstraints[Constraint 4]"
+          DTS:CreationName=""
+          DTS:DTSID="{1AE88824-F16E-6A93-DC6C-FADE02D51974}"
+          DTS:From="Package\Foreach FX Override File\Reconcile Control Totals"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 4"
+          DTS:EvalOp="2"
+          DTS:Expression="@[User::OutOfToleranceCount] &gt; 0"
+          DTS:To="Package\Foreach FX Override File\Log Rejected Rows" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach FX Override File.PrecedenceConstraints[Constraint 5]"
+          DTS:CreationName=""
+          DTS:DTSID="{C0BA84B1-855D-5829-112D-23E7F9479A6A}"
+          DTS:From="Package\Foreach FX Override File\Reconcile Control Totals"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 5"
+          DTS:EvalOp="2"
+          DTS:Expression="@[User::ControlTotalsMatch] == 1"
+          DTS:To="Package\Foreach FX Override File\Archive Processed File" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach FX Override File.PrecedenceConstraints[Constraint 6]"
+          DTS:CreationName=""
+          DTS:DTSID="{A987A5CA-C0F2-F25E-296F-D3C39D114177}"
+          DTS:From="Package\Foreach FX Override File\Log Rejected Rows"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 6"
+          DTS:EvalOp="2"
+          DTS:Expression="@[User::ControlTotalsMatch] == 1"
+          DTS:To="Package\Foreach FX Override File\Archive Processed File" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach FX Override File.PrecedenceConstraints[Constraint 7]"
+          DTS:CreationName=""
+          DTS:DTSID="{82760773-142E-95D6-57B3-0ADDC94256FC}"
+          DTS:From="Package\Foreach FX Override File\Reconcile Control Totals"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 7"
+          DTS:EvalOp="2"
+          DTS:Expression="@[User::ControlTotalsMatch] == 0"
+          DTS:To="Package\Foreach FX Override File\Move Poison File" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach FX Override File.PrecedenceConstraints[Constraint 8]"
+          DTS:CreationName=""
+          DTS:DTSID="{A24FB5C4-89DA-F9A0-478D-C119AFA0563E}"
+          DTS:From="Package\Foreach FX Override File\Archive Processed File"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 8"
+          DTS:To="Package\Foreach FX Override File\Mark File Processed" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach FX Override File.PrecedenceConstraints[Constraint 9]"
+          DTS:CreationName=""
+          DTS:DTSID="{E332C552-CB9B-62BE-1A63-0C2BA9F07E38}"
+          DTS:From="Package\Foreach FX Override File\Move Poison File"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 9"
+          DTS:To="Package\Foreach FX Override File\Mark File Quarantined" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'raw.FileFxOverride', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Batch Variables"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Foreach FX Override File" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Foreach FX Override File"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{D8D3A358-8666-FCBE-8B10-ED2ACC93F497}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

@@ -1,0 +1,978 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{DA85C212-C121-8039-760A-5D6FC3C8DC68}"
+  DTS:Description="Reconcile control totals for the batch through etl.usp_AssertRowCountReconciliation, publish a batch quality scorecard into etl.DataQualityResult and fail the batch when the reject rate exceeds tolerance or the scorecard drops below the acceptable score."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="DQ_Threshold_Gate"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{1DCDDC05-D995-50AC-466C-6A741337C484}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{39FB956A-32F1-7473-85BD-0E073397ED7B}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{916F9C14-4531-00F6-7486-22CF7CFA940A}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{C676FBA4-4D81-A2C5-0810-FDA477ECF24F}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{C46DB0BD-3C4F-74E6-6FFC-0ACE806EDCCC}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWI_OLTP</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{798D8753-3F69-E057-2F5B-ED1B3A62FDDB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{3774962C-F8C1-0C1E-1C31-7B9583AA6A12}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{8647A07F-6EB1-FDFD-B206-28B65EFAE730}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{A60B378F-C648-BC17-BCBD-5BDD61B4A5E7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{B4E22FBB-ED2E-4746-14F0-227BEBAA6F81}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{C79D751A-8DE6-F92A-A3B2-2C25D00F2DD6}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{96248EC5-AD4F-C804-A713-B55E942974FE}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{258E1EB2-A189-F865-264A-F90E84CDE435}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::FailedRuleCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{13F78E2D-D9DF-24A8-195E-C6CF415D95EC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="FailedRuleCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::FailedObjectCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{00208119-804D-D29C-D67C-212BF73ABA35}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="FailedObjectCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::MeasuredValue]"
+      DTS:CreationName=""
+      DTS:DTSID="{3EF37956-5F64-F998-E7A6-E32853F9D7E2}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="MeasuredValue">
+      <DTS:VariableValue DTS:DataType="14" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::SecondaryMeasure]"
+      DTS:CreationName=""
+      DTS:DTSID="{A3112385-9216-EDCB-D89D-4893F7A2261F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="SecondaryMeasure">
+      <DTS:VariableValue DTS:DataType="14" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ThresholdPercent]"
+      DTS:CreationName=""
+      DTS:DTSID="{7FDD4BCA-CBB9-B6C0-4C2A-06EFD5EA686D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ThresholdPercent">
+      <DTS:VariableValue DTS:DataType="14" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::QualityScore]"
+      DTS:CreationName=""
+      DTS:DTSID="{9D065B2D-B07C-C350-0E3B-5C7D6A22A37A}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="QualityScore">
+      <DTS:VariableValue DTS:DataType="14" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Measure Batch Reject Rate"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{89DA3549-7965-88CD-3D0F-41F09C803EB1}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Measure Batch Reject Rate"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="SELECT @Measure = CAST(100.0 * SUM(ISNULL(a.RejectRowCount, 0)) / NULLIF(SUM(ISNULL(a.SourceRowCount, 0)), 0) AS DECIMAL(9,4)) FROM etl.RowCountAudit AS a INNER JOIN etl.PackageExecution AS e ON e.PackageExecutionId = a.PackageExecutionId WHERE e.BatchId = ?;&#10;INSERT INTO etl.DataQualityResult&#10;    (BatchId, PackageExecutionId, ObjectName, RuleCode, MeasuredValue, EvaluatedAtUtc)&#10;VALUES (?, ?, N'etl.RowCountAudit', N'DQ_BATCH_REJECT_RATE', @Measure, SYSUTCDATETIME());&#10;SELECT @Measure AS MeasuredValue;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::MeasuredValue" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\DFT Reconcile Control Totals"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{AF88EF8E-3B7B-3381-514C-F94E9D872CD5}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="DFT Reconcile Control Totals"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="ETL RowCountAudit" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">1800</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT a.ObjectName, SUM(a.SourceRowCount) AS SourceRowCount,
+       SUM(a.TargetRowCount) AS TargetRowCount, SUM(a.RejectRowCount) AS RejectRowCount,
+       SUM(a.VarianceRowCount) AS VarianceRowCount
+FROM etl.RowCountAudit AS a
+     INNER JOIN etl.PackageExecution AS e ON e.PackageExecutionId = a.PackageExecutionId
+WHERE e.BatchId = ?
+GROUP BY a.ObjectName;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].Columns[ObjectName]" dataType="wstr" length="200" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].ExternalColumns[ObjectName]" lineageId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].Columns[ObjectName]" name="ObjectName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].Columns[SourceRowCount]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].ExternalColumns[SourceRowCount]" lineageId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].Columns[SourceRowCount]" name="SourceRowCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].Columns[TargetRowCount]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].ExternalColumns[TargetRowCount]" lineageId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].Columns[TargetRowCount]" name="TargetRowCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].Columns[RejectRowCount]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].ExternalColumns[RejectRowCount]" lineageId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].Columns[RejectRowCount]" name="RejectRowCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].Columns[VarianceRowCount]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].ExternalColumns[VarianceRowCount]" lineageId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].Columns[VarianceRowCount]" name="VarianceRowCount" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].ExternalColumns[ObjectName]" dataType="wstr" length="200" name="ObjectName" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].ExternalColumns[SourceRowCount]" dataType="i8" name="SourceRowCount" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].ExternalColumns[TargetRowCount]" dataType="i8" name="TargetRowCount" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].ExternalColumns[RejectRowCount]" dataType="i8" name="RejectRowCount" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output].ExternalColumns[VarianceRowCount]" dataType="i8" name="VarianceRowCount" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Error Output].Columns[ObjectName]" dataType="wstr" length="200" lineageId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Error Output].Columns[ObjectName]" name="ObjectName" />
+                  <outputColumn refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Error Output].Columns[SourceRowCount]" dataType="i8" lineageId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Error Output].Columns[SourceRowCount]" name="SourceRowCount" />
+                  <outputColumn refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Error Output].Columns[TargetRowCount]" dataType="i8" lineageId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Error Output].Columns[TargetRowCount]" name="TargetRowCount" />
+                  <outputColumn refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Error Output].Columns[RejectRowCount]" dataType="i8" lineageId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Error Output].Columns[RejectRowCount]" name="RejectRowCount" />
+                  <outputColumn refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Error Output].Columns[VarianceRowCount]" dataType="i8" lineageId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Error Output].Columns[VarianceRowCount]" name="VarianceRowCount" />
+                  <outputColumn refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Reconcile Control Totals\Count Objects Reconciled" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Objects Reconciled" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Reconcile Control Totals\Count Objects Reconciled.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Reconcile Control Totals\Count Objects Reconciled.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Reconcile Control Totals\Count Objects Reconciled.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Reconcile Control Totals\Compute Variance Percent" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Compute Variance Percent" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\DFT Reconcile Control Totals\Compute Variance Percent.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Reconcile Control Totals\Compute Variance Percent.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\DFT Reconcile Control Totals\Compute Variance Percent.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Reconcile Control Totals\Compute Variance Percent.Outputs[Derived Column Output].Columns[RejectPercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\DFT Reconcile Control Totals\Compute Variance Percent.Outputs[Derived Column Output].Columns[RejectPercent]" name="RejectPercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">SourceRowCount == 0 ? (DT_NUMERIC,9,4)0 : (DT_NUMERIC,9,4)(100.0 * RejectRowCount / SourceRowCount)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">SourceRowCount == 0 ? (DT_NUMERIC,9,4)0 : (DT_NUMERIC,9,4)(100.0 * RejectRowCount / SourceRowCount)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Reconcile Control Totals\Compute Variance Percent.Outputs[Derived Column Output].Columns[VariancePercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\DFT Reconcile Control Totals\Compute Variance Percent.Outputs[Derived Column Output].Columns[VariancePercent]" name="VariancePercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">SourceRowCount == 0 ? (DT_NUMERIC,9,4)0 : (DT_NUMERIC,9,4)(100.0 * VarianceRowCount / SourceRowCount)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">SourceRowCount == 0 ? (DT_NUMERIC,9,4)0 : (DT_NUMERIC,9,4)(100.0 * VarianceRowCount / SourceRowCount)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Reconcile Control Totals\Compute Variance Percent.Outputs[Derived Column Output].Columns[ReconciliationStatusCode]" dataType="wstr" length="12" lineageId="Package\DFT Reconcile Control Totals\Compute Variance Percent.Outputs[Derived Column Output].Columns[ReconciliationStatusCode]" name="ReconciliationStatusCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">SourceRowCount == 0 ? "EMPTY" : (ABS(VarianceRowCount) == 0 ? "BALANCED" : (ABS(100.0 * VarianceRowCount / SourceRowCount) &lt;= 0.5 ? "WITHIN_TOL" : "BREACH"))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">SourceRowCount == 0 ? "EMPTY" : (ABS(VarianceRowCount) == 0 ? "BALANCED" : (ABS(100.0 * VarianceRowCount / SourceRowCount) &lt;= 0.5 ? "WITHIN_TOL" : "BREACH"))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Reconcile Control Totals\Compute Variance Percent.Outputs[Derived Column Output].Columns[RejectReasonCode]" dataType="wstr" length="30" lineageId="Package\DFT Reconcile Control Totals\Compute Variance Percent.Outputs[Derived Column Output].Columns[RejectReasonCode]" name="RejectReasonCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"DQ_RECON_BREACH"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"DQ_RECON_BREACH"</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Reconcile Control Totals\Route Reconciliation Outcome" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Route Reconciliation Outcome" version="1">
+            <inputs>
+              <input refId="Package\DFT Reconcile Control Totals\Route Reconciliation Outcome.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Reconcile Control Totals\Route Reconciliation Outcome.Outputs[Balanced]" exclusionGroup="1" name="Balanced" synchronousInputId="Package\DFT Reconcile Control Totals\Route Reconciliation Outcome.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">ReconciliationStatusCode == "BALANCED" || ReconciliationStatusCode == "WITHIN_TOL"</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">ReconciliationStatusCode == "BALANCED" || ReconciliationStatusCode == "WITHIN_TOL"</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\DFT Reconcile Control Totals\Route Reconciliation Outcome.Outputs[Empty Object]" exclusionGroup="1" name="Empty Object" synchronousInputId="Package\DFT Reconcile Control Totals\Route Reconciliation Outcome.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">ReconciliationStatusCode == "EMPTY"</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">ReconciliationStatusCode == "EMPTY"</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\DFT Reconcile Control Totals\Route Reconciliation Outcome.Outputs[Reconciliation Breach]" exclusionGroup="1" isDefaultOut="true" name="Reconciliation Breach" synchronousInputId="Package\DFT Reconcile Control Totals\Route Reconciliation Outcome.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Reconcile Control Totals\Count Objects Balanced" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Objects Balanced" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsInserted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Reconcile Control Totals\Count Objects Balanced.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Reconcile Control Totals\Count Objects Balanced.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Reconcile Control Totals\Count Objects Balanced.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="ETL ReconciliationResult" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[etl].[ReconciliationResult]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">5000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].Columns[ObjectName]" cachedDataType="wstr" cachedLength="200" cachedName="ObjectName" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].ExternalColumns[ObjectName]" name="ObjectName" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].Columns[SourceRowCount]" cachedDataType="i8" cachedName="SourceRowCount" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].ExternalColumns[SourceRowCount]" name="SourceRowCount" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].Columns[TargetRowCount]" cachedDataType="i8" cachedName="TargetRowCount" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].ExternalColumns[TargetRowCount]" name="TargetRowCount" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].Columns[RejectRowCount]" cachedDataType="i8" cachedName="RejectRowCount" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].ExternalColumns[RejectRowCount]" name="RejectRowCount" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].Columns[VarianceRowCount]" cachedDataType="i8" cachedName="VarianceRowCount" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].ExternalColumns[VarianceRowCount]" name="VarianceRowCount" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].Columns[RejectPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="RejectPercent" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].ExternalColumns[RejectPercent]" name="RejectPercent" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].Columns[VariancePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="VariancePercent" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].ExternalColumns[VariancePercent]" name="VariancePercent" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].Columns[ReconciliationStatusCode]" cachedDataType="wstr" cachedLength="12" cachedName="ReconciliationStatusCode" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].ExternalColumns[ReconciliationStatusCode]" name="ReconciliationStatusCode" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].Columns[RejectReasonCode]" cachedDataType="wstr" cachedLength="30" cachedName="RejectReasonCode" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" name="RejectReasonCode" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].ExternalColumns[ObjectName]" dataType="wstr" length="200" name="ObjectName" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].ExternalColumns[SourceRowCount]" dataType="i8" name="SourceRowCount" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].ExternalColumns[TargetRowCount]" dataType="i8" name="TargetRowCount" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].ExternalColumns[RejectRowCount]" dataType="i8" name="RejectRowCount" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].ExternalColumns[VarianceRowCount]" dataType="i8" name="VarianceRowCount" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].ExternalColumns[RejectPercent]" dataType="numeric" precision="9" scale="4" name="RejectPercent" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].ExternalColumns[VariancePercent]" dataType="numeric" precision="9" scale="4" name="VariancePercent" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].ExternalColumns[ReconciliationStatusCode]" dataType="wstr" length="12" name="ReconciliationStatusCode" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" dataType="wstr" length="30" name="RejectReasonCode" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="ETL ReconciliationResult Empty" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[etl].[ReconciliationResult]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].Columns[ObjectName]" cachedDataType="wstr" cachedLength="200" cachedName="ObjectName" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].ExternalColumns[ObjectName]" name="ObjectName" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].Columns[SourceRowCount]" cachedDataType="i8" cachedName="SourceRowCount" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].ExternalColumns[SourceRowCount]" name="SourceRowCount" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].Columns[TargetRowCount]" cachedDataType="i8" cachedName="TargetRowCount" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].ExternalColumns[TargetRowCount]" name="TargetRowCount" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].Columns[RejectRowCount]" cachedDataType="i8" cachedName="RejectRowCount" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].ExternalColumns[RejectRowCount]" name="RejectRowCount" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].Columns[VarianceRowCount]" cachedDataType="i8" cachedName="VarianceRowCount" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].ExternalColumns[VarianceRowCount]" name="VarianceRowCount" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].Columns[RejectPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="RejectPercent" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].ExternalColumns[RejectPercent]" name="RejectPercent" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].Columns[VariancePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="VariancePercent" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].ExternalColumns[VariancePercent]" name="VariancePercent" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].Columns[ReconciliationStatusCode]" cachedDataType="wstr" cachedLength="12" cachedName="ReconciliationStatusCode" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].ExternalColumns[ReconciliationStatusCode]" name="ReconciliationStatusCode" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].Columns[RejectReasonCode]" cachedDataType="wstr" cachedLength="30" cachedName="RejectReasonCode" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" name="RejectReasonCode" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].ExternalColumns[ObjectName]" dataType="wstr" length="200" name="ObjectName" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].ExternalColumns[SourceRowCount]" dataType="i8" name="SourceRowCount" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].ExternalColumns[TargetRowCount]" dataType="i8" name="TargetRowCount" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].ExternalColumns[RejectRowCount]" dataType="i8" name="RejectRowCount" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].ExternalColumns[VarianceRowCount]" dataType="i8" name="VarianceRowCount" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].ExternalColumns[RejectPercent]" dataType="numeric" precision="9" scale="4" name="RejectPercent" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].ExternalColumns[VariancePercent]" dataType="numeric" precision="9" scale="4" name="VariancePercent" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].ExternalColumns[ReconciliationStatusCode]" dataType="wstr" length="12" name="ReconciliationStatusCode" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" dataType="wstr" length="30" name="RejectReasonCode" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="ERR Reconciliation Breach" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].Columns[ObjectName]" cachedDataType="wstr" cachedLength="200" cachedName="ObjectName" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].ExternalColumns[ObjectName]" name="ObjectName" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].Columns[SourceRowCount]" cachedDataType="i8" cachedName="SourceRowCount" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].ExternalColumns[SourceRowCount]" name="SourceRowCount" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].Columns[TargetRowCount]" cachedDataType="i8" cachedName="TargetRowCount" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].ExternalColumns[TargetRowCount]" name="TargetRowCount" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].Columns[RejectRowCount]" cachedDataType="i8" cachedName="RejectRowCount" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].ExternalColumns[RejectRowCount]" name="RejectRowCount" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].Columns[VarianceRowCount]" cachedDataType="i8" cachedName="VarianceRowCount" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].ExternalColumns[VarianceRowCount]" name="VarianceRowCount" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].Columns[RejectPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="RejectPercent" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].ExternalColumns[RejectPercent]" name="RejectPercent" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].Columns[VariancePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="VariancePercent" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].ExternalColumns[VariancePercent]" name="VariancePercent" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].Columns[ReconciliationStatusCode]" cachedDataType="wstr" cachedLength="12" cachedName="ReconciliationStatusCode" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].ExternalColumns[ReconciliationStatusCode]" name="ReconciliationStatusCode" />
+                  <inputColumn refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].Columns[RejectReasonCode]" cachedDataType="wstr" cachedLength="30" cachedName="RejectReasonCode" externalMetadataColumnId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" name="RejectReasonCode" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].ExternalColumns[ObjectName]" dataType="wstr" length="200" name="ObjectName" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].ExternalColumns[SourceRowCount]" dataType="i8" name="SourceRowCount" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].ExternalColumns[TargetRowCount]" dataType="i8" name="TargetRowCount" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].ExternalColumns[RejectRowCount]" dataType="i8" name="RejectRowCount" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].ExternalColumns[VarianceRowCount]" dataType="i8" name="VarianceRowCount" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].ExternalColumns[RejectPercent]" dataType="numeric" precision="9" scale="4" name="RejectPercent" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].ExternalColumns[VariancePercent]" dataType="numeric" precision="9" scale="4" name="VariancePercent" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].ExternalColumns[ReconciliationStatusCode]" dataType="wstr" length="12" name="ReconciliationStatusCode" />
+                  <externalMetadataColumn refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" dataType="wstr" length="30" name="RejectReasonCode" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\DFT Reconcile Control Totals.Paths[OLE DB Source Output]" endId="Package\DFT Reconcile Control Totals\Count Objects Reconciled.Inputs[Row Count Input]" name="OLE DB Source Output" startId="Package\DFT Reconcile Control Totals\ETL RowCountAudit.Outputs[OLE DB Source Output]" />
+          <path refId="Package\DFT Reconcile Control Totals.Paths[Row Count Output 1]" endId="Package\DFT Reconcile Control Totals\Compute Variance Percent.Inputs[Derived Column Input]" name="Row Count Output 1" startId="Package\DFT Reconcile Control Totals\Count Objects Reconciled.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Reconcile Control Totals.Paths[Derived Column Output 2]" endId="Package\DFT Reconcile Control Totals\Route Reconciliation Outcome.Inputs[Conditional Split Input]" name="Derived Column Output 2" startId="Package\DFT Reconcile Control Totals\Compute Variance Percent.Outputs[Derived Column Output]" />
+          <path refId="Package\DFT Reconcile Control Totals.Paths[Balanced 3]" endId="Package\DFT Reconcile Control Totals\Count Objects Balanced.Inputs[Row Count Input]" name="Balanced 3" startId="Package\DFT Reconcile Control Totals\Route Reconciliation Outcome.Outputs[Balanced]" />
+          <path refId="Package\DFT Reconcile Control Totals.Paths[Row Count Output 4]" endId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult.Inputs[OLE DB Destination Input]" name="Row Count Output 4" startId="Package\DFT Reconcile Control Totals\Count Objects Balanced.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Reconcile Control Totals.Paths[Empty Object 5]" endId="Package\DFT Reconcile Control Totals\ETL ReconciliationResult Empty.Inputs[OLE DB Destination Input]" name="Empty Object 5" startId="Package\DFT Reconcile Control Totals\Route Reconciliation Outcome.Outputs[Empty Object]" />
+          <path refId="Package\DFT Reconcile Control Totals.Paths[Reconciliation Breach 6]" endId="Package\DFT Reconcile Control Totals\ERR Reconciliation Breach.Inputs[OLE DB Destination Input]" name="Reconciliation Breach 6" startId="Package\DFT Reconcile Control Totals\Route Reconciliation Outcome.Outputs[Reconciliation Breach]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Register Quality Rejects - etl.RowCountAudit"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{ED908A98-0587-BDA7-6C52-65CB72FBE7BE}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Register Quality Rejects - etl.RowCountAudit"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="DECLARE @RejectId BIGINT, @Key NVARCHAR(200), @Reason NVARCHAR(50);&#10;DECLARE dq_cur CURSOR LOCAL FAST_FORWARD FOR&#10;    SELECT r.RejectedRowId, r.BusinessKey, r.RejectReasonCode&#10;    FROM [err].[RejectedConstraintViolation] AS r&#10;    WHERE r.BatchId = ? AND r.LoggedToControl = 0;&#10;OPEN dq_cur;&#10;FETCH NEXT FROM dq_cur INTO @RejectId, @Key, @Reason;&#10;WHILE @@FETCH_STATUS = 0&#10;BEGIN&#10;    EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @BatchId = ?, @SourceSystemCode = ?, @ObjectName = N'etl.RowCountAudit', @BusinessKey = @Key, @RejectReasonCode = @Reason, @RejectStage = N'Reconciliation';&#10;    UPDATE [err].[RejectedConstraintViolation] SET LoggedToControl = 1 WHERE RejectedRowId = @RejectId;&#10;    FETCH NEXT FROM dq_cur INTO @RejectId, @Key, @Reason;&#10;END&#10;CLOSE dq_cur;&#10;DEALLOCATE dq_cur;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Assert Row Count Reconciliation"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{B9A25692-DB22-B8B0-E301-74C201E8CD1B}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Assert Row Count Reconciliation"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_AssertRowCountReconciliation @BatchId = ?, @RaiseOnFailure = 1, @FailedObjectCount = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::FailedObjectCount" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Publish Quality Scorecard"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{17707A83-787A-84E5-D508-112F504ECD03}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Publish Quality Scorecard"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="SELECT @Score = CAST(100.0 - ISNULL(AVG(CASE WHEN r.MeasuredValue &gt; d.ThresholdValue THEN 100.0 ELSE 0.0 END), 0.0) AS DECIMAL(9,4))&#10;FROM etl.DataQualityResult AS r&#10;     INNER JOIN etl.DataQualityRule AS d ON d.RuleCode = r.RuleCode&#10;WHERE r.BatchId = ?;&#10;INSERT INTO etl.DataQualityResult&#10;    (BatchId, PackageExecutionId, ObjectName, RuleCode, MeasuredValue, EvaluatedAtUtc)&#10;VALUES (?, ?, N'BATCH', N'DQ_SCORECARD', @Score, SYSUTCDATETIME());&#10;SELECT @Score AS QualityScore;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::QualityScore" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'etl.ReconciliationResult', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Warn On Reject Rate"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{2E0F9D49-4D15-68F2-1B73-76575C8F8D8F}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Warn On Reject Rate"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = 50000, @ErrorDescription = N'Batch reject rate exceeded the configured warning tolerance.', @SourceName = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Fail On Reject Rate"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{3C1AA541-4124-3E75-B569-EE1BF6DB5C07}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Fail On Reject Rate"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = 50001, @ErrorDescription = N'Batch reject rate exceeded the blocking tolerance.', @SourceName = ?;&#10;THROW 50001, N'Batch reject rate exceeded the blocking tolerance.', 1;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Fail On Reconciliation Breach"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{AE026D8A-4C4C-1EE7-0C14-DEC2F2001026}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Fail On Reconciliation Breach"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = 50001, @ErrorDescription = N'Control total reconciliation failed for one or more objects.', @SourceName = ?;&#10;THROW 50001, N'Control total reconciliation failed for one or more objects.', 1;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Fail On Low Quality Score"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{4D6B2872-3AF7-FA82-3DEF-56DFEE958A24}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Fail On Low Quality Score"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = 50001, @ErrorDescription = N'The batch quality scorecard fell below the acceptable score.', @SourceName = ?;&#10;THROW 50001, N'The batch quality scorecard fell below the acceptable score.', 1;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Measure Batch Reject Rate" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Measure Batch Reject Rate"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\DFT Reconcile Control Totals" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\DFT Reconcile Control Totals"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Register Quality Rejects - etl.RowCountAudit" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Register Quality Rejects - etl.RowCountAudit"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Assert Row Count Reconciliation" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Assert Row Count Reconciliation"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Publish Quality Scorecard" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Publish Quality Scorecard"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Package Success" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:EvalOp="2"
+      DTS:Expression="@[User::MeasuredValue] &gt; 2"
+      DTS:To="Package\Warn On Reject Rate" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 8]"
+      DTS:CreationName=""
+      DTS:DTSID="{71A76C5F-1A20-5771-2776-7EF96FD96B90}"
+      DTS:From="Package\Warn On Reject Rate"
+      DTS:LogicalAnd="False"
+      DTS:ObjectName="Constraint 8"
+      DTS:Value="2"
+      DTS:To="Package\Log Package Success" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 9]"
+      DTS:CreationName=""
+      DTS:DTSID="{11D92538-705E-DF70-FE3B-5738B6CA45B1}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 9"
+      DTS:EvalOp="2"
+      DTS:Expression="@[User::MeasuredValue] &gt; 5"
+      DTS:To="Package\Fail On Reject Rate" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 10]"
+      DTS:CreationName=""
+      DTS:DTSID="{1B15C648-32B6-CECC-4942-4F005EB650A1}"
+      DTS:From="Package\Fail On Reject Rate"
+      DTS:LogicalAnd="False"
+      DTS:ObjectName="Constraint 10"
+      DTS:Value="2"
+      DTS:To="Package\Log Package Success" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 11]"
+      DTS:CreationName=""
+      DTS:DTSID="{4DBDE44E-0824-968C-691C-D986A703C959}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 11"
+      DTS:EvalOp="2"
+      DTS:Expression="@[User::FailedObjectCount] &gt; 0"
+      DTS:To="Package\Fail On Reconciliation Breach" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 12]"
+      DTS:CreationName=""
+      DTS:DTSID="{FA586833-5603-9809-CDE9-DB911E055329}"
+      DTS:From="Package\Fail On Reconciliation Breach"
+      DTS:LogicalAnd="False"
+      DTS:ObjectName="Constraint 12"
+      DTS:Value="2"
+      DTS:To="Package\Log Package Success" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 13]"
+      DTS:CreationName=""
+      DTS:DTSID="{8E6F2DDB-0F9C-9EC8-E0DB-8891DBDB8ECB}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 13"
+      DTS:EvalOp="2"
+      DTS:Expression="@[User::QualityScore] &lt; 90"
+      DTS:To="Package\Fail On Low Quality Score" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 14]"
+      DTS:CreationName=""
+      DTS:DTSID="{7A50B516-749C-C290-DD6F-A31B30BC65FB}"
+      DTS:From="Package\Fail On Low Quality Score"
+      DTS:LogicalAnd="False"
+      DTS:ObjectName="Constraint 14"
+      DTS:Value="2"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{71DA1A45-A405-2CA4-A513-620B5BE8FF9D}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

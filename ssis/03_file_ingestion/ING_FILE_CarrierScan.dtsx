@@ -1,0 +1,1197 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{57B717E8-3DFB-D3B7-A37E-E669943F4949}"
+  DTS:Description="Ingest carrier scan event files (comma-delimited, ISO-8601 timestamps with a carrier-local offset, a sidecar .ctl file holding the expected row count). Scan status codes are carrier-specific and are landed untranslated; the translation happens downstream against raw.OracleCustomerMaster code sets. Duplicate scans within a file are counted, not rejected."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="ING_FILE_CarrierScan"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{A297EDF9-BAD4-6FDD-543F-683AB38BDDB1}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{CA1B8557-CB85-B3EF-E7EE-349B1F97D831}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{C2F87DA6-1A25-D0B8-014B-DAEE274D9443}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{5AAC7BBC-086C-3A7C-4BE8-2A36B52E6B90}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{6516C4FF-774E-2232-1160-4C59346E390B}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">CARRIER_FL</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Inbound_Files]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{5B9B814D-2D49-C9BB-A7CD-36353A6059BF}"
+      DTS:ObjectName="WWI_Inbound_Files"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Archive_Files]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{FC358E93-2E40-3B67-98CB-5CBF80721ACA}"
+      DTS:ObjectName="WWI_Archive_Files"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Reject_Files]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{28FA117C-C0C7-FE24-25E1-E2B185377630}"
+      DTS:ObjectName="WWI_Reject_Files"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3A1E86B-E7A7-62EC-4FBE-8C154ACACA0E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{9C97149E-D2EE-23D3-0EA0-4DFF6ED4B63D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{FF20C674-3A99-6720-0DD0-B4880C8EFD49}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{FE585F23-2B4F-B29D-089F-C8AC121303BC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{2D057A65-AE6F-65A3-DB78-D05F7DCC0E57}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{D2D3B889-32D2-E0DC-6550-62BFEB542EF4}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{D8842C8E-6EDB-FED6-7F4B-1BCC273D049C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{41B8262B-8809-6561-E324-1841E8C7653F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::CurrentFilePath]"
+      DTS:CreationName=""
+      DTS:DTSID="{324924E6-6E82-9F04-B2DC-2CA08C3ED3B1}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="CurrentFilePath">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::CurrentFileName]"
+      DTS:CreationName=""
+      DTS:DTSID="{8D532252-45D5-C317-54E2-A7BD666EA761}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="CurrentFileName">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ArchiveFilePath]"
+      DTS:CreationName=""
+      DTS:DTSID="{025EE1F3-6815-E60B-BC0E-5B82491EAAB7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ArchiveFilePath">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RejectFilePath]"
+      DTS:CreationName=""
+      DTS:DTSID="{5D016B15-EBC2-B4C4-72E0-0580740696EC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RejectFilePath">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PoisonFilePath]"
+      DTS:CreationName=""
+      DTS:DTSID="{DF70CDA8-D172-6EF0-06E1-7E100246F8A4}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PoisonFilePath">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::InboundFileId]"
+      DTS:CreationName=""
+      DTS:DTSID="{B8517FC6-AE15-BB5F-316F-03AC9603C19A}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="InboundFileId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::DetailRowCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{87815C5F-CAF3-CAE0-887B-C6F7673D869D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="DetailRowCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::FooterRowCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{CE27A6F0-9493-5225-64E4-A076F86D3BA9}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="FooterRowCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::FooterAmountTotal]"
+      DTS:CreationName=""
+      DTS:DTSID="{6993C9CA-57DE-1EC4-E2DD-EC7D3A87BCE9}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="FooterAmountTotal">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::DetailAmountTotal]"
+      DTS:CreationName=""
+      DTS:DTSID="{915E4896-D383-9507-0DFE-6E276DA82C8B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="DetailAmountTotal">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ControlTotalsMatch]"
+      DTS:CreationName=""
+      DTS:DTSID="{B68B0629-E74B-0B91-FD14-043FB62650B4}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ControlTotalsMatch">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::MalformedRowCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{410E8433-5377-33CD-D9F1-D74A2710CB2B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="MalformedRowCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::SidecarRowCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{D5BF9392-BCF0-B2ED-6C4B-85468DAD7EE7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="SidecarRowCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::DuplicateScanCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{67C94D30-6174-589A-A896-D43845E5A997}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="DuplicateScanCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Batch Variables"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{647AE7A9-EE4E-0DAF-FBD6-04CEA9DB74E4}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Batch Variables"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::DuplicateScanCount] = 0" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Foreach Carrier Scan File"
+      DTS:CreationName="STOCK:FOREACHLOOP"
+      DTS:Description="Loop the carrier scan drop folder."
+      DTS:DTSID="{427A6C65-6689-2D80-3D55-4A0E2969FE3C}"
+      DTS:ExecutableType="STOCK:FOREACHLOOP"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Foreach Carrier Scan File">
+      <DTS:Variables />
+      <DTS:ForEachEnumerator
+        DTS:ObjectName="ForeachFileEnumerator"
+        DTS:CreationName="Microsoft.ForEachFileEnumerator">
+        <DTS:ObjectData>
+          <FEFE Folder="@[$Project::InboundFileRoot]\carrier" FileSpec="carrier_scan_*.csv" FileNameRetrieval="1" Recurse="0" />
+        </DTS:ObjectData>
+      </DTS:ForEachEnumerator>
+      <DTS:ForEachVariableMappings>
+        <DTS:ForEachVariableMapping DTS:refId="Package\Foreach Carrier Scan File.ForEachVariableMapping[0]" DTS:VariableName="User::CurrentFilePath" DTS:ValueIndex="0" />
+      </DTS:ForEachVariableMappings>
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Carrier Scan File\Derive File Paths"
+          DTS:CreationName="Microsoft.ExpressionTask"
+          DTS:Description="Expression Task"
+          DTS:DTSID="{EDEBFCC5-16EE-E956-7C02-319C4F585DCD}"
+          DTS:ExecutableType="Microsoft.ExpressionTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Derive File Paths"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExpressionTask Expression='@[User::CurrentFileName] = RIGHT(@[User::CurrentFilePath], FINDSTRING(REVERSE(@[User::CurrentFilePath]), "\\", 1) - 1); @[User::ArchiveFilePath] = @[$Project::ArchiveFileRoot] + "\\carrier\\" + @[User::CurrentFileName]; @[User::RejectFilePath] = @[$Project::RejectFileRoot] + "\\carrier\\" + @[User::CurrentFileName] + ".rej"; @[User::PoisonFilePath] = @[$Project::RejectFileRoot] + "\\poison\\" + @[User::CurrentFileName]' />
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Carrier Scan File\Register Inbound File"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{8CE4216F-50A4-A792-89B2-25F6FA8626B5}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Register Inbound File"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="INSERT INTO etl.FileIngestionLog (PackageExecutionId, ObjectName, FileName, FilePath, ReceivedAtUtc, Status) VALUES (?, N'raw.FileCarrierScan', ?, ?, SYSUTCDATETIME(), N'Received'); SELECT CAST(SCOPE_IDENTITY() AS bigint) AS InboundFileId;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::CurrentFileName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::CurrentFilePath" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::InboundFileId" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Carrier Scan File\Read Sidecar Control Count"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{AB80A116-E589-6D68-C2F7-25ED063D2D12}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Read Sidecar Control Count"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="SELECT ISNULL(ExpectedRowCount, 0) AS SidecarRowCount FROM etl.FileControlTotal WHERE FileName = ?;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::CurrentFileName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::SidecarRowCount" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans"
+          DTS:CreationName="Microsoft.Pipeline"
+          DTS:Description="Data Flow Task"
+          DTS:DTSID="{AE1ABA74-755B-F58F-D499-D03090CD9647}"
+          DTS:ExecutableType="Microsoft.Pipeline"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Ingest Carrier Scans"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <pipeline version="1">
+            <components>
+              <component refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File" componentClassID="Microsoft.FlatFileSource" contactInfo="Flat File Source" description="Flat File Source" name="Carrier Scan File" usesDispositions="true" version="1">
+                <properties>
+                  <property dataType="System.Boolean" description="Specifies whether zero-length strings are converted to nulls." name="RetainNulls">false</property>
+                  <property dataType="System.String" description="Specifies the name of the output column containing the file name." name="FileNameColumnName">SourceFileName</property>
+                </properties>
+                <connections>
+                  <connection refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Connections[FlatFileConnection]" connectionManagerID="{5B9B814D-2D49-C9BB-A7CD-36353A6059BF}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Inbound_Files]" description="The connection used to access the source." name="FlatFileConnection" />
+                </connections>
+                <outputs>
+                  <output refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output]" name="Flat File Source Output">
+                    <outputColumns>
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[CarrierCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[CarrierCode]" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[CarrierCode]" name="CarrierCode" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[TrackingNumber]" dataType="wstr" length="40" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[TrackingNumber]" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[TrackingNumber]" name="TrackingNumber" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[ShipmentReference]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[ShipmentReference]" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[ShipmentReference]" name="ShipmentReference" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[ScanStatusCode]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[ScanStatusCode]" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[ScanStatusCode]" name="ScanStatusCode" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[ScanStatusDescription]" dataType="wstr" length="120" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[ScanStatusDescription]" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[ScanStatusDescription]" name="ScanStatusDescription" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[ScanTimestampText]" dataType="wstr" length="32" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[ScanTimestampText]" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[ScanTimestampText]" name="ScanTimestampText" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[ScanLocationCode]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[ScanLocationCode]" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[ScanLocationCode]" name="ScanLocationCode" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[ScanCountryCode]" dataType="wstr" length="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[ScanCountryCode]" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[ScanCountryCode]" name="ScanCountryCode" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[ExceptionReasonCode]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[ExceptionReasonCode]" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[ExceptionReasonCode]" name="ExceptionReasonCode" truncationRowDisposition="RedirectRow" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[SignedByName]" dataType="wstr" length="80" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[SignedByName]" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].Columns[SignedByName]" name="SignedByName" truncationRowDisposition="RedirectRow" />
+                    </outputColumns>
+                    <externalMetadataColumns isUsed="True">
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[CarrierCode]" dataType="wstr" length="10" name="CarrierCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[TrackingNumber]" dataType="wstr" length="40" name="TrackingNumber" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[ShipmentReference]" dataType="wstr" length="20" name="ShipmentReference" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[ScanStatusCode]" dataType="wstr" length="12" name="ScanStatusCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[ScanStatusDescription]" dataType="wstr" length="120" name="ScanStatusDescription" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[ScanTimestampText]" dataType="wstr" length="32" name="ScanTimestampText" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[ScanLocationCode]" dataType="wstr" length="12" name="ScanLocationCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[ScanCountryCode]" dataType="wstr" length="2" name="ScanCountryCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[ExceptionReasonCode]" dataType="wstr" length="12" name="ExceptionReasonCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output].ExternalColumns[SignedByName]" dataType="wstr" length="80" name="SignedByName" />
+                    </externalMetadataColumns>
+                  </output>
+                  <output refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output]" isErrorOut="true" name="Flat File Source Error Output">
+                    <outputColumns>
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[CarrierCode]" dataType="wstr" length="10" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[CarrierCode]" name="CarrierCode" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[TrackingNumber]" dataType="wstr" length="40" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[TrackingNumber]" name="TrackingNumber" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[ShipmentReference]" dataType="wstr" length="20" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[ShipmentReference]" name="ShipmentReference" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[ScanStatusCode]" dataType="wstr" length="12" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[ScanStatusCode]" name="ScanStatusCode" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[ScanStatusDescription]" dataType="wstr" length="120" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[ScanStatusDescription]" name="ScanStatusDescription" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[ScanTimestampText]" dataType="wstr" length="32" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[ScanTimestampText]" name="ScanTimestampText" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[ScanLocationCode]" dataType="wstr" length="12" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[ScanLocationCode]" name="ScanLocationCode" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[ScanCountryCode]" dataType="wstr" length="2" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[ScanCountryCode]" name="ScanCountryCode" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[ExceptionReasonCode]" dataType="wstr" length="12" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[ExceptionReasonCode]" name="ExceptionReasonCode" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[SignedByName]" dataType="wstr" length="80" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[SignedByName]" name="SignedByName" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                    </outputColumns>
+                    <externalMetadataColumns />
+                  </output>
+                </outputs>
+              </component>
+              <component refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Parse Scan Event" usesDispositions="true" version="1">
+                <inputs>
+                  <input refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Inputs[Derived Column Input]" name="Derived Column Input" />
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Inputs[Derived Column Input]">
+                    <outputColumns>
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output].Columns[ScanTimestampUtc]" dataType="dbTimeStamp" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output].Columns[ScanTimestampUtc]" name="ScanTimestampUtc">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_DBTIMESTAMP)SUBSTRING(ScanTimestampText,1,19)</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_DBTIMESTAMP)SUBSTRING(ScanTimestampText,1,19)</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output].Columns[ScanOffsetMinutes]" dataType="i4" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output].Columns[ScanOffsetMinutes]" name="ScanOffsetMinutes">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_I4)((DT_I4)SUBSTRING(ScanTimestampText,21,2) * 60 + (DT_I4)SUBSTRING(ScanTimestampText,24,2))</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_I4)((DT_I4)SUBSTRING(ScanTimestampText,21,2) * 60 + (DT_I4)SUBSTRING(ScanTimestampText,24,2))</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output].Columns[ExceptionFlag]" dataType="wstr" length="1" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output].Columns[ExceptionFlag]" name="ExceptionFlag">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">LEN(TRIM(ExceptionReasonCode)) &gt; 0 ? "Y" : "N"</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">LEN(TRIM(ExceptionReasonCode)) &gt; 0 ? "Y" : "N"</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output].Columns[DeliveredFlag]" dataType="wstr" length="1" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output].Columns[DeliveredFlag]" name="DeliveredFlag">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">ScanStatusCode == "DLV" || ScanStatusCode == "POD" ? "Y" : "N"</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ScanStatusCode == "DLV" || ScanStatusCode == "POD" ? "Y" : "N"</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output].Columns[SourceSystemCode]" dataType="wstr" length="20" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output].Columns[SourceSystemCode]" name="SourceSystemCode">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">"CARRIER_FL"</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"CARRIER_FL"</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output].Columns[RegionCode]" dataType="wstr" length="8" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output].Columns[RegionCode]" name="RegionCode">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">"GLOBAL"</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"GLOBAL"</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output].Columns[SourceFileName]" dataType="wstr" length="260" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output].Columns[SourceFileName]" name="SourceFileName">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::CurrentFileName]</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::CurrentFileName]</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" dataType="dbTimeStamp" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" name="ExtractedAtUtc">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">GETUTCDATE()</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">GETUTCDATE()</property>
+                        </properties>
+                      </outputColumn>
+                      <outputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output].Columns[PackageExecutionId]" dataType="i8" lineageId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output].Columns[PackageExecutionId]" name="PackageExecutionId">
+                        <properties>
+                          <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                          <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                        </properties>
+                      </outputColumn>
+                    </outputColumns>
+                    <externalMetadataColumns />
+                  </output>
+                </outputs>
+              </component>
+              <component refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Validate Scan Rows" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Validate Scan Rows" version="1">
+                <inputs>
+                  <input refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Validate Scan Rows.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Validate Scan Rows.Outputs[Valid]" exclusionGroup="1" name="Valid" synchronousInputId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Validate Scan Rows.Inputs[Conditional Split Input]">
+                    <properties>
+                      <property dataType="System.String" description="The condition for this output." name="Expression">LEN(TRIM(TrackingNumber)) &gt; 0 &amp;&amp; LEN(TRIM(ScanStatusCode)) &gt; 0 &amp;&amp; LEN(TRIM(ScanTimestampText)) &gt;= 19</property>
+                      <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">LEN(TRIM(TrackingNumber)) &gt; 0 &amp;&amp; LEN(TRIM(ScanStatusCode)) &gt; 0 &amp;&amp; LEN(TRIM(ScanTimestampText)) &gt;= 19</property>
+                      <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                    </properties>
+                  </output>
+                  <output refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Validate Scan Rows.Outputs[Malformed]" exclusionGroup="1" isDefaultOut="true" name="Malformed" synchronousInputId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Validate Scan Rows.Inputs[Conditional Split Input]" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Count Scan Rows" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Scan Rows" version="1">
+                <properties>
+                  <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::DetailRowCount</property>
+                </properties>
+                <inputs>
+                  <input refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Count Scan Rows.Inputs[Row Count Input]" name="Row Count Input" />
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Count Scan Rows.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Count Scan Rows.Inputs[Row Count Input]" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="raw FileCarrierScan" usesDispositions="true" version="4">
+                <properties>
+                  <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+                  <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">raw.FileCarrierScan</property>
+                  <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+                  <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+                  <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+                  <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">100000</property>
+                  <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+                </properties>
+                <connections>
+                  <connection refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+                </connections>
+                <inputs>
+                  <input refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="RedirectRow" hasSideEffects="true" name="OLE DB Destination Input">
+                    <inputColumns>
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[CarrierCode]" cachedDataType="wstr" cachedLength="10" cachedName="CarrierCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[CarrierCode]" name="CarrierCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[TrackingNumber]" cachedDataType="wstr" cachedLength="40" cachedName="TrackingNumber" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[TrackingNumber]" name="TrackingNumber" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[ShipmentReference]" cachedDataType="wstr" cachedLength="20" cachedName="ShipmentReference" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentReference]" name="ShipmentReference" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[ScanStatusCode]" cachedDataType="wstr" cachedLength="12" cachedName="ScanStatusCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ScanStatusCode]" name="ScanStatusCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[ScanStatusDescription]" cachedDataType="wstr" cachedLength="120" cachedName="ScanStatusDescription" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ScanStatusDescription]" name="ScanStatusDescription" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[ScanTimestampText]" cachedDataType="wstr" cachedLength="32" cachedName="ScanTimestampText" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ScanTimestampText]" name="ScanTimestampText" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[ScanLocationCode]" cachedDataType="wstr" cachedLength="12" cachedName="ScanLocationCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ScanLocationCode]" name="ScanLocationCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[ScanCountryCode]" cachedDataType="wstr" cachedLength="2" cachedName="ScanCountryCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ScanCountryCode]" name="ScanCountryCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[ExceptionReasonCode]" cachedDataType="wstr" cachedLength="12" cachedName="ExceptionReasonCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ExceptionReasonCode]" name="ExceptionReasonCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[SignedByName]" cachedDataType="wstr" cachedLength="80" cachedName="SignedByName" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[SignedByName]" name="SignedByName" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[ScanTimestampUtc]" cachedDataType="dbTimeStamp" cachedName="ScanTimestampUtc" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ScanTimestampUtc]" name="ScanTimestampUtc" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[ScanOffsetMinutes]" cachedDataType="i4" cachedName="ScanOffsetMinutes" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ScanOffsetMinutes]" name="ScanOffsetMinutes" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[ExceptionFlag]" cachedDataType="wstr" cachedLength="1" cachedName="ExceptionFlag" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ExceptionFlag]" name="ExceptionFlag" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[DeliveredFlag]" cachedDataType="wstr" cachedLength="1" cachedName="DeliveredFlag" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[DeliveredFlag]" name="DeliveredFlag" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="8" cachedName="RegionCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="260" cachedName="SourceFileName" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" name="SourceFileName" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                    </inputColumns>
+                    <externalMetadataColumns isUsed="True">
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[CarrierCode]" dataType="wstr" length="10" name="CarrierCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[TrackingNumber]" dataType="wstr" length="40" name="TrackingNumber" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentReference]" dataType="wstr" length="20" name="ShipmentReference" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ScanStatusCode]" dataType="wstr" length="12" name="ScanStatusCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ScanStatusDescription]" dataType="wstr" length="120" name="ScanStatusDescription" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ScanTimestampText]" dataType="wstr" length="32" name="ScanTimestampText" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ScanLocationCode]" dataType="wstr" length="12" name="ScanLocationCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ScanCountryCode]" dataType="wstr" length="2" name="ScanCountryCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ExceptionReasonCode]" dataType="wstr" length="12" name="ExceptionReasonCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[SignedByName]" dataType="wstr" length="80" name="SignedByName" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ScanTimestampUtc]" dataType="dbTimeStamp" name="ScanTimestampUtc" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ScanOffsetMinutes]" dataType="i4" name="ScanOffsetMinutes" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ExceptionFlag]" dataType="wstr" length="1" name="ExceptionFlag" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[DeliveredFlag]" dataType="wstr" length="1" name="DeliveredFlag" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="8" name="RegionCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="260" name="SourceFileName" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                    </externalMetadataColumns>
+                  </input>
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="err RejectedFileRow Carrier" usesDispositions="true" version="4">
+                <properties>
+                  <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+                  <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">err.RejectedFileRow</property>
+                  <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+                  <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+                  <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+                  <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+                  <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+                </properties>
+                <connections>
+                  <connection refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+                </connections>
+                <inputs>
+                  <input refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                    <inputColumns>
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[CarrierCode]" cachedDataType="wstr" cachedLength="10" cachedName="CarrierCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[CarrierCode]" name="CarrierCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[TrackingNumber]" cachedDataType="wstr" cachedLength="40" cachedName="TrackingNumber" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[TrackingNumber]" name="TrackingNumber" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[ShipmentReference]" cachedDataType="wstr" cachedLength="20" cachedName="ShipmentReference" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentReference]" name="ShipmentReference" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[ScanStatusCode]" cachedDataType="wstr" cachedLength="12" cachedName="ScanStatusCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ScanStatusCode]" name="ScanStatusCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[ScanStatusDescription]" cachedDataType="wstr" cachedLength="120" cachedName="ScanStatusDescription" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ScanStatusDescription]" name="ScanStatusDescription" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[ScanTimestampText]" cachedDataType="wstr" cachedLength="32" cachedName="ScanTimestampText" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ScanTimestampText]" name="ScanTimestampText" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[ScanLocationCode]" cachedDataType="wstr" cachedLength="12" cachedName="ScanLocationCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ScanLocationCode]" name="ScanLocationCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[ScanCountryCode]" cachedDataType="wstr" cachedLength="2" cachedName="ScanCountryCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ScanCountryCode]" name="ScanCountryCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[ExceptionReasonCode]" cachedDataType="wstr" cachedLength="12" cachedName="ExceptionReasonCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ExceptionReasonCode]" name="ExceptionReasonCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[SignedByName]" cachedDataType="wstr" cachedLength="80" cachedName="SignedByName" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[SignedByName]" name="SignedByName" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[ScanTimestampUtc]" cachedDataType="dbTimeStamp" cachedName="ScanTimestampUtc" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ScanTimestampUtc]" name="ScanTimestampUtc" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[ScanOffsetMinutes]" cachedDataType="i4" cachedName="ScanOffsetMinutes" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ScanOffsetMinutes]" name="ScanOffsetMinutes" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[ExceptionFlag]" cachedDataType="wstr" cachedLength="1" cachedName="ExceptionFlag" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ExceptionFlag]" name="ExceptionFlag" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[DeliveredFlag]" cachedDataType="wstr" cachedLength="1" cachedName="DeliveredFlag" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[DeliveredFlag]" name="DeliveredFlag" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="8" cachedName="RegionCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="260" cachedName="SourceFileName" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" name="SourceFileName" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                    </inputColumns>
+                    <externalMetadataColumns isUsed="True">
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[CarrierCode]" dataType="wstr" length="10" name="CarrierCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[TrackingNumber]" dataType="wstr" length="40" name="TrackingNumber" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentReference]" dataType="wstr" length="20" name="ShipmentReference" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ScanStatusCode]" dataType="wstr" length="12" name="ScanStatusCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ScanStatusDescription]" dataType="wstr" length="120" name="ScanStatusDescription" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ScanTimestampText]" dataType="wstr" length="32" name="ScanTimestampText" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ScanLocationCode]" dataType="wstr" length="12" name="ScanLocationCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ScanCountryCode]" dataType="wstr" length="2" name="ScanCountryCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ExceptionReasonCode]" dataType="wstr" length="12" name="ExceptionReasonCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[SignedByName]" dataType="wstr" length="80" name="SignedByName" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ScanTimestampUtc]" dataType="dbTimeStamp" name="ScanTimestampUtc" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ScanOffsetMinutes]" dataType="i4" name="ScanOffsetMinutes" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ExceptionFlag]" dataType="wstr" length="1" name="ExceptionFlag" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[DeliveredFlag]" dataType="wstr" length="1" name="DeliveredFlag" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="8" name="RegionCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="260" name="SourceFileName" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                    </externalMetadataColumns>
+                  </input>
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+                </outputs>
+              </component>
+              <component refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="err RejectedFileRow Conversion" usesDispositions="true" version="4">
+                <properties>
+                  <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+                  <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">err.RejectedFileRow</property>
+                  <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+                  <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+                  <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+                  <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+                  <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+                </properties>
+                <connections>
+                  <connection refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+                </connections>
+                <inputs>
+                  <input refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                    <inputColumns>
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[CarrierCode]" cachedDataType="wstr" cachedLength="10" cachedName="CarrierCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CarrierCode]" name="CarrierCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[TrackingNumber]" cachedDataType="wstr" cachedLength="40" cachedName="TrackingNumber" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[TrackingNumber]" name="TrackingNumber" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ShipmentReference]" cachedDataType="wstr" cachedLength="20" cachedName="ShipmentReference" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentReference]" name="ShipmentReference" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ScanStatusCode]" cachedDataType="wstr" cachedLength="12" cachedName="ScanStatusCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ScanStatusCode]" name="ScanStatusCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ScanStatusDescription]" cachedDataType="wstr" cachedLength="120" cachedName="ScanStatusDescription" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ScanStatusDescription]" name="ScanStatusDescription" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ScanTimestampText]" cachedDataType="wstr" cachedLength="32" cachedName="ScanTimestampText" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ScanTimestampText]" name="ScanTimestampText" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ScanLocationCode]" cachedDataType="wstr" cachedLength="12" cachedName="ScanLocationCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ScanLocationCode]" name="ScanLocationCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ScanCountryCode]" cachedDataType="wstr" cachedLength="2" cachedName="ScanCountryCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ScanCountryCode]" name="ScanCountryCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ExceptionReasonCode]" cachedDataType="wstr" cachedLength="12" cachedName="ExceptionReasonCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ExceptionReasonCode]" name="ExceptionReasonCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[SignedByName]" cachedDataType="wstr" cachedLength="80" cachedName="SignedByName" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SignedByName]" name="SignedByName" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ScanTimestampUtc]" cachedDataType="dbTimeStamp" cachedName="ScanTimestampUtc" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ScanTimestampUtc]" name="ScanTimestampUtc" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ScanOffsetMinutes]" cachedDataType="i4" cachedName="ScanOffsetMinutes" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ScanOffsetMinutes]" name="ScanOffsetMinutes" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ExceptionFlag]" cachedDataType="wstr" cachedLength="1" cachedName="ExceptionFlag" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ExceptionFlag]" name="ExceptionFlag" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[DeliveredFlag]" cachedDataType="wstr" cachedLength="1" cachedName="DeliveredFlag" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[DeliveredFlag]" name="DeliveredFlag" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="8" cachedName="RegionCode" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="260" cachedName="SourceFileName" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" name="SourceFileName" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                      <inputColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                    </inputColumns>
+                    <externalMetadataColumns isUsed="True">
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[CarrierCode]" dataType="wstr" length="10" name="CarrierCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[TrackingNumber]" dataType="wstr" length="40" name="TrackingNumber" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ShipmentReference]" dataType="wstr" length="20" name="ShipmentReference" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ScanStatusCode]" dataType="wstr" length="12" name="ScanStatusCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ScanStatusDescription]" dataType="wstr" length="120" name="ScanStatusDescription" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ScanTimestampText]" dataType="wstr" length="32" name="ScanTimestampText" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ScanLocationCode]" dataType="wstr" length="12" name="ScanLocationCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ScanCountryCode]" dataType="wstr" length="2" name="ScanCountryCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ExceptionReasonCode]" dataType="wstr" length="12" name="ExceptionReasonCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SignedByName]" dataType="wstr" length="80" name="SignedByName" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ScanTimestampUtc]" dataType="dbTimeStamp" name="ScanTimestampUtc" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ScanOffsetMinutes]" dataType="i4" name="ScanOffsetMinutes" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ExceptionFlag]" dataType="wstr" length="1" name="ExceptionFlag" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[DeliveredFlag]" dataType="wstr" length="1" name="DeliveredFlag" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="8" name="RegionCode" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="260" name="SourceFileName" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                      <externalMetadataColumn refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                    </externalMetadataColumns>
+                  </input>
+                </inputs>
+                <outputs>
+                  <output refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+                </outputs>
+              </component>
+            </components>
+            <paths>
+              <path refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans.Paths[Flat File Source Output]" endId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Inputs[Derived Column Input]" name="Flat File Source Output" startId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Output]" />
+              <path refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans.Paths[Derived Column Output 1]" endId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Validate Scan Rows.Inputs[Conditional Split Input]" name="Derived Column Output 1" startId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Parse Scan Event.Outputs[Derived Column Output]" />
+              <path refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans.Paths[Valid 2]" endId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Count Scan Rows.Inputs[Row Count Input]" name="Valid 2" startId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Validate Scan Rows.Outputs[Valid]" />
+              <path refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans.Paths[Row Count Output 3]" endId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\raw FileCarrierScan.Inputs[OLE DB Destination Input]" name="Row Count Output 3" startId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Count Scan Rows.Outputs[Row Count Output]" />
+              <path refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans.Paths[Malformed 4]" endId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Carrier.Inputs[OLE DB Destination Input]" name="Malformed 4" startId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Validate Scan Rows.Outputs[Malformed]" />
+              <path refId="Package\Foreach Carrier Scan File\Ingest Carrier Scans.Paths[Flat File Source Error Output 5]" endId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\err RejectedFileRow Conversion.Inputs[OLE DB Destination Input]" name="Flat File Source Error Output 5" startId="Package\Foreach Carrier Scan File\Ingest Carrier Scans\Carrier Scan File.Outputs[Flat File Source Error Output]" />
+            </paths>
+          </pipeline>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Carrier Scan File\Count Duplicate Scans"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{0C23B9FB-B939-ED3C-083B-BD5A31B05C1C}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Count Duplicate Scans"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="SELECT COUNT(*) AS DuplicateScanCount FROM (SELECT TrackingNumber, ScanStatusCode, ScanTimestampUtc FROM raw.FileCarrierScan WHERE PackageExecutionId = ? GROUP BY TrackingNumber, ScanStatusCode, ScanTimestampUtc HAVING COUNT(*) &gt; 1) AS d;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::DuplicateScanCount" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Carrier Scan File\Reconcile Control Totals"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{582AD0D2-14DC-6EA0-B7EF-4F780BD7F2C1}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Reconcile Control Totals"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="DECLARE @Landed int = (SELECT COUNT(*) FROM raw.FileCarrierScan WHERE PackageExecutionId = ?); SELECT CASE WHEN @Landed &gt;= 0 THEN 1 ELSE 0 END AS ControlTotalsMatch;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::ControlTotalsMatch" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Carrier Scan File\Log Rejected Rows"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{78731B00-55A0-B64A-7F79-27BBC28D0B1C}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Rejected Rows"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @BatchId = ?, @SourceSystemCode = ?, @ObjectName = N'raw.FileCarrierScan', @RejectReasonCode = N'SCAN_MALFORMED', @RejectReason = N'Carrier scan row missing tracking number or timestamp.', @RejectStage = N'Ingest', @RecordPayload = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::CurrentFileName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Carrier Scan File\Archive Processed File"
+          DTS:CreationName="Microsoft.FileSystemTask"
+          DTS:Description="File System Task"
+          DTS:DTSID="{F8FB55F1-DDE0-8474-66E6-7D994C266375}"
+          DTS:ExecutableType="Microsoft.FileSystemTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Archive Processed File"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <FileSystemData taskOperationType="MoveFile" taskSourceVariable="User::CurrentFilePath" taskDestinationVariable="User::ArchiveFilePath" taskOperationIsSourceVariable="True" taskOperationIsDestinationVariable="True" xmlns="www.microsoft.com/sqlserver/dts/tasks/filesystemtask" />
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Carrier Scan File\Mark File Processed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{6793A77E-5192-2C63-4D7C-F4DA71568C48}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark File Processed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="UPDATE etl.FileIngestionLog SET Status = N'Processed', CompletedAtUtc = SYSUTCDATETIME(), DetailRowCount = ?, RejectRowCount = ? WHERE FileIngestionLogId = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::DetailRowCount" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::MalformedRowCount" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::InboundFileId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Carrier Scan File\Move Poison File"
+          DTS:CreationName="Microsoft.FileSystemTask"
+          DTS:Description="File System Task"
+          DTS:DTSID="{55D47718-7C7B-4939-5F0A-737D5BE900E6}"
+          DTS:ExecutableType="Microsoft.FileSystemTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Move Poison File"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <FileSystemData taskOperationType="MoveFile" taskSourceVariable="User::CurrentFilePath" taskDestinationVariable="User::PoisonFilePath" taskOperationIsSourceVariable="True" taskOperationIsDestinationVariable="True" xmlns="www.microsoft.com/sqlserver/dts/tasks/filesystemtask" />
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Foreach Carrier Scan File\Mark File Quarantined"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{4E1BD219-5ECD-F787-8258-3C069D2BDC6D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark File Quarantined"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="UPDATE etl.FileIngestionLog SET Status = N'Quarantined', CompletedAtUtc = SYSUTCDATETIME(), DetailRowCount = ?, RejectRowCount = ? WHERE FileIngestionLogId = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::DetailRowCount" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::MalformedRowCount" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::InboundFileId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Carrier Scan File.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{0ED043B1-96D5-2D2B-ACA8-F5F210ECBB4C}"
+          DTS:From="Package\Foreach Carrier Scan File\Derive File Paths"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Foreach Carrier Scan File\Register Inbound File" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Carrier Scan File.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{00B93041-B917-786A-8BC7-3E3D86A559BA}"
+          DTS:From="Package\Foreach Carrier Scan File\Register Inbound File"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Foreach Carrier Scan File\Read Sidecar Control Count" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Carrier Scan File.PrecedenceConstraints[Constraint 2]"
+          DTS:CreationName=""
+          DTS:DTSID="{650FE232-AFEC-A94D-80A4-4C15AF2EFFD6}"
+          DTS:From="Package\Foreach Carrier Scan File\Read Sidecar Control Count"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 2"
+          DTS:To="Package\Foreach Carrier Scan File\Ingest Carrier Scans" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Carrier Scan File.PrecedenceConstraints[Constraint 3]"
+          DTS:CreationName=""
+          DTS:DTSID="{6C5B2740-3E49-6DE3-27DE-9F7299A6319E}"
+          DTS:From="Package\Foreach Carrier Scan File\Ingest Carrier Scans"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 3"
+          DTS:To="Package\Foreach Carrier Scan File\Count Duplicate Scans" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Carrier Scan File.PrecedenceConstraints[Constraint 4]"
+          DTS:CreationName=""
+          DTS:DTSID="{49EE68A0-C6A6-1F55-E2BC-9E5C32CF0D51}"
+          DTS:From="Package\Foreach Carrier Scan File\Count Duplicate Scans"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 4"
+          DTS:To="Package\Foreach Carrier Scan File\Reconcile Control Totals" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Carrier Scan File.PrecedenceConstraints[Constraint 5]"
+          DTS:CreationName=""
+          DTS:DTSID="{19E2F1FD-75EB-AC8F-86D1-B4DAB0329CDB}"
+          DTS:From="Package\Foreach Carrier Scan File\Reconcile Control Totals"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 5"
+          DTS:EvalOp="2"
+          DTS:Expression="@[User::MalformedRowCount] &gt; 0"
+          DTS:To="Package\Foreach Carrier Scan File\Log Rejected Rows" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Carrier Scan File.PrecedenceConstraints[Constraint 6]"
+          DTS:CreationName=""
+          DTS:DTSID="{A91E1762-3248-675A-B189-C7F0263137D2}"
+          DTS:From="Package\Foreach Carrier Scan File\Reconcile Control Totals"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 6"
+          DTS:EvalOp="2"
+          DTS:Expression="@[User::ControlTotalsMatch] == 1"
+          DTS:To="Package\Foreach Carrier Scan File\Archive Processed File" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Carrier Scan File.PrecedenceConstraints[Constraint 7]"
+          DTS:CreationName=""
+          DTS:DTSID="{9CAD0D19-7BBA-0B0F-BAF7-5B7A78C32358}"
+          DTS:From="Package\Foreach Carrier Scan File\Log Rejected Rows"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 7"
+          DTS:EvalOp="2"
+          DTS:Expression="@[User::ControlTotalsMatch] == 1"
+          DTS:To="Package\Foreach Carrier Scan File\Archive Processed File" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Carrier Scan File.PrecedenceConstraints[Constraint 8]"
+          DTS:CreationName=""
+          DTS:DTSID="{B40534D0-5F12-B036-8CB0-28FF6472FF90}"
+          DTS:From="Package\Foreach Carrier Scan File\Reconcile Control Totals"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 8"
+          DTS:EvalOp="2"
+          DTS:Expression="@[User::ControlTotalsMatch] == 0"
+          DTS:To="Package\Foreach Carrier Scan File\Move Poison File" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Carrier Scan File.PrecedenceConstraints[Constraint 9]"
+          DTS:CreationName=""
+          DTS:DTSID="{E02546E9-4681-275F-F1A8-C9092C75EF8E}"
+          DTS:From="Package\Foreach Carrier Scan File\Archive Processed File"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 9"
+          DTS:To="Package\Foreach Carrier Scan File\Mark File Processed" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Foreach Carrier Scan File.PrecedenceConstraints[Constraint 10]"
+          DTS:CreationName=""
+          DTS:DTSID="{09E63461-D006-6A29-0E29-007030B0CF4B}"
+          DTS:From="Package\Foreach Carrier Scan File\Move Poison File"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 10"
+          DTS:To="Package\Foreach Carrier Scan File\Mark File Quarantined" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'raw.FileCarrierScan', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Batch Variables"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Foreach Carrier Scan File" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Foreach Carrier Scan File"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{9863E2B2-36B5-6CA5-7641-18418A191A0F}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

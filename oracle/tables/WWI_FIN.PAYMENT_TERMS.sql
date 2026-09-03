@@ -1,0 +1,66 @@
+/* =====================================================================
+ * Object       : TABLE WWI_FIN.PAYMENT_TERMS
+ * Schema       : WWI_FIN (Oracle ERP - WWIGERP)
+ * Deploy order : 63
+ * Depends on   : oracle/ddl/02_create_schemas.sql
+ * Called by    : PKG_AP_INVOICE (due-date derivation), PKG_PURCHASE_ORDER
+ *
+ * Payment terms. Discounts are modelled as up to two tiers in columns; the
+ * end-of-month and fixed-day-of-month variants used across EU are expressed
+ * with DUE_DAY_OF_MONTH_NBR plus MONTHS_FORWARD_NBR rather than a day count,
+ * so due-date derivation branches on TERM_BASIS_CD in three different places
+ * in the codebase.
+ * ===================================================================== */
+
+CREATE SEQUENCE WWI_FIN.SEQ_PAYMENT_TERMS
+    START WITH 501 INCREMENT BY 1 NOCACHE NOCYCLE
+/
+
+CREATE TABLE WWI_FIN.PAYMENT_TERMS
+(
+    PAYMENT_TERMS_ID        NUMBER(12)      NOT NULL,
+    PAYMENT_TERMS_CD        VARCHAR2(8)     NOT NULL,
+    TERMS_DESC              VARCHAR2(120)   NOT NULL,
+    REGION_CD               VARCHAR2(4),
+    TERM_BASIS_CD           VARCHAR2(6)     DEFAULT 'NETDAY' NOT NULL,
+    NET_DAYS                NUMBER(4),
+    DUE_DAY_OF_MONTH_NBR    NUMBER(2),
+    MONTHS_FORWARD_NBR      NUMBER(2),
+    DISCOUNT_1_PCT          NUMBER(5,3),
+    DISCOUNT_1_DAYS         NUMBER(4),
+    DISCOUNT_2_PCT          NUMBER(5,3),
+    DISCOUNT_2_DAYS         NUMBER(4),
+    DISCOUNT_BASIS_CD       VARCHAR2(6)     DEFAULT 'INVDT' NOT NULL,
+    LATE_FEE_PCT            NUMBER(5,3),
+    LATE_FEE_BASIS_CD       VARCHAR2(6),
+    PROMPT_PAY_FLG          VARCHAR2(1)     DEFAULT 'N' NOT NULL,
+    EU_LATE_PAYMENT_DIR_FLG VARCHAR2(1)     DEFAULT 'N' NOT NULL,
+    ACTIVE_FLG              VARCHAR2(1)     DEFAULT 'Y' NOT NULL,
+    EFFECTIVE_FROM_DT       DATE            DEFAULT SYSDATE NOT NULL,
+    EFFECTIVE_TO_DT         DATE,
+    LEGACY_TERMS_CD         VARCHAR2(6),
+    SOURCE_SYS              VARCHAR2(12)    DEFAULT 'ORA_ERP' NOT NULL,
+    CREATED_BY              VARCHAR2(30)    DEFAULT USER NOT NULL,
+    CREATED_DT              DATE            DEFAULT SYSDATE NOT NULL,
+    UPDATED_BY              VARCHAR2(30),
+    UPDATED_DT              DATE,
+    CONSTRAINT PK_PAYMENT_TERMS PRIMARY KEY (PAYMENT_TERMS_ID) USING INDEX TABLESPACE WWI_FIN_IDX,
+    CONSTRAINT UK_PAYMENT_TERMS_CD UNIQUE (PAYMENT_TERMS_CD) USING INDEX TABLESPACE WWI_FIN_IDX,
+    CONSTRAINT CK_PAY_TERMS_BASIS CHECK (
+        TERM_BASIS_CD IN ('NETDAY', 'EOM', 'DOM', 'IMMED', 'PREPAY')),
+    CONSTRAINT CK_PAY_TERMS_DISCBASIS CHECK (DISCOUNT_BASIS_CD IN ('INVDT', 'RCVDT', 'EOM')),
+    CONSTRAINT CK_PAY_TERMS_NETDAYS CHECK (
+        TERM_BASIS_CD <> 'NETDAY' OR NET_DAYS IS NOT NULL),
+    CONSTRAINT CK_PAY_TERMS_DOM CHECK (
+        TERM_BASIS_CD <> 'DOM' OR DUE_DAY_OF_MONTH_NBR BETWEEN 1 AND 31),
+    CONSTRAINT CK_PAY_TERMS_REGION CHECK (REGION_CD IS NULL OR REGION_CD IN ('NA', 'EU', 'APAC')),
+    CONSTRAINT CK_PAY_TERMS_FLAGS CHECK (
+        ACTIVE_FLG IN ('Y', 'N') AND PROMPT_PAY_FLG IN ('Y', 'N')
+        AND EU_LATE_PAYMENT_DIR_FLG IN ('Y', 'N'))
+)
+TABLESPACE WWI_FIN_DATA
+/
+
+CREATE INDEX WWI_FIN.IX_PAYMENT_TERMS_ACTIVE
+    ON WWI_FIN.PAYMENT_TERMS (ACTIVE_FLG, REGION_CD) TABLESPACE WWI_FIN_IDX
+/

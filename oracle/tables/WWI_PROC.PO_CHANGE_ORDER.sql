@@ -1,0 +1,64 @@
+/* =====================================================================
+ * Object       : TABLE WWI_PROC.PO_CHANGE_ORDER
+ * Schema       : WWI_PROC (Oracle ERP - WWIGERP)
+ * Deploy order : 47
+ * Depends on   : WWI_PROC.PURCHASE_ORDER_HDR, WWI_PROC.PURCHASE_ORDER_LINE
+ * Called by    : PKG_PURCHASE_ORDER (change control), procurement audit reporting
+ *
+ * Every approved change to a PO after release. The before/after values are
+ * kept as text because the same table records quantity, price, date and
+ * supplier-site changes; consumers parse OLD_VALUE_TXT according to
+ * CHANGE_TYPE_CD.
+ * ===================================================================== */
+
+CREATE SEQUENCE WWI_PROC.SEQ_PO_CHANGE_ORDER
+    START WITH 60001 INCREMENT BY 1 CACHE 20 NOCYCLE
+/
+
+CREATE TABLE WWI_PROC.PO_CHANGE_ORDER
+(
+    CHANGE_ID               NUMBER(12)      NOT NULL,
+    PO_ID                   NUMBER(12)      NOT NULL,
+    PO_LINE_ID              NUMBER(12),
+    CHANGE_SEQ_NBR          NUMBER(4)       NOT NULL,
+    CHANGE_TYPE_CD          VARCHAR2(6)     NOT NULL,
+    CHANGE_REASON_CD        VARCHAR2(4)     NOT NULL,
+    OLD_VALUE_TXT           VARCHAR2(400),
+    NEW_VALUE_TXT           VARCHAR2(400),
+    AMOUNT_DELTA            NUMBER(15,5),
+    QTY_DELTA               NUMBER(14,4),
+    DATE_DELTA_DAYS         NUMBER(6),
+    REQUESTED_BY_CD         VARCHAR2(8)     NOT NULL,
+    REQUESTED_DT            DATE            DEFAULT SYSDATE NOT NULL,
+    APPROVED_BY_CD          VARCHAR2(8),
+    APPROVED_DT             DATE,
+    SUPPLIER_ACK_FLG        VARCHAR2(1)     DEFAULT 'N' NOT NULL,
+    SUPPLIER_ACK_DT         DATE,
+    CHANGE_STATUS_CD        VARCHAR2(4)     DEFAULT 'PEND' NOT NULL,
+    NOTES_TXT               VARCHAR2(1000),
+    SOURCE_SYS              VARCHAR2(12)    DEFAULT 'ORA_ERP' NOT NULL,
+    CREATED_BY              VARCHAR2(30)    DEFAULT USER NOT NULL,
+    CREATED_DT              DATE            DEFAULT SYSDATE NOT NULL,
+    UPDATED_BY              VARCHAR2(30),
+    UPDATED_DT              DATE,
+    CONSTRAINT PK_PO_CHANGE_ORDER PRIMARY KEY (CHANGE_ID) USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT UK_PO_CHANGE_SEQ UNIQUE (PO_ID, CHANGE_SEQ_NBR) USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT CK_PO_CHANGE_TYPE CHECK (
+        CHANGE_TYPE_CD IN ('QTY', 'PRICE', 'DATE', 'SITE', 'CANCEL', 'TERMS')),
+    CONSTRAINT CK_PO_CHANGE_STATUS CHECK (CHANGE_STATUS_CD IN ('PEND', 'APPR', 'REJT', 'APLD')),
+    CONSTRAINT CK_PO_CHANGE_ACK CHECK (SUPPLIER_ACK_FLG IN ('Y', 'N'))
+)
+TABLESPACE WWI_DATA
+/
+
+ALTER TABLE WWI_PROC.PO_CHANGE_ORDER ADD CONSTRAINT FK_PO_CHANGE_HDR
+    FOREIGN KEY (PO_ID) REFERENCES WWI_PROC.PURCHASE_ORDER_HDR (PO_ID)
+/
+
+CREATE INDEX WWI_PROC.IX_PO_CHANGE_LINE
+    ON WWI_PROC.PO_CHANGE_ORDER (PO_LINE_ID, CHANGE_TYPE_CD) TABLESPACE WWI_IDX
+/
+
+CREATE INDEX WWI_PROC.IX_PO_CHANGE_DT
+    ON WWI_PROC.PO_CHANGE_ORDER (REQUESTED_DT, CHANGE_STATUS_CD) TABLESPACE WWI_IDX
+/

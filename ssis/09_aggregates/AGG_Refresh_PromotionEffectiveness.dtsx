@@ -1,0 +1,958 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{5292DD15-5281-B7B2-FC79-D6916819A486}"
+  DTS:Description="Rebuilds Aggregate.Promotion Effectiveness per promotion and period: incremental volume against the pre-promotion baseline, discount cost, margin dilution and redemption rate, with the regional discount tax treatment carried through."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="AGG_Refresh_PromotionEffectiveness"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{8C7D8B7D-B82A-BF09-63E3-7AC03FFFFAB3}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{DB5A53EF-0B3A-FF10-1E2B-128604F7E418}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{114F7798-596E-AE7D-C743-F0C96CBAB0CF}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{876F7035-244D-19F8-4789-694E28F4A68E}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{DB96EFD6-941A-9BB6-B618-802AAD09541A}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWIDW</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::AccountingPeriodCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="Accounting period (yyyy-MM) to rebuild."
+      DTS:DTSID="{7B7640C0-42CD-3486-BBE3-FCA4E430DE4F}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="AccountingPeriodCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">1900-01</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::RebuildPriorPeriods]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Additional closed periods to rebuild behind the current one."
+      DTS:DTSID="{2D2D6F0C-E27A-53DD-F73D-7F122E8C584F}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="RebuildPriorPeriods"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BaselineWeeks]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Weeks of pre-promotion trading used as the baseline."
+      DTS:DTSID="{8B556CED-6660-C222-263D-CD053F20E8F6}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BaselineWeeks"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">8</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{96AAA236-E5B5-AF5D-29A2-A529852F42E0}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{113AB1A5-3302-56EC-FC98-63DD3B04ECBD}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{0C5B719E-A619-D3F7-1659-562F06FB8CE5}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{C2506CAB-01E0-BD6D-6CED-F85F9C3961D6}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{F415061B-9681-9DFF-5F8A-895AC32CC787}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{16F5046E-0C79-B58E-6443-D069FD88247D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{976A5234-182C-1C25-7867-ECEA612723E7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{0387014F-1CD6-AC56-91E5-CBD169C6417F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsAggregated]"
+      DTS:CreationName=""
+      DTS:DTSID="{2BF679E2-EDD2-1DFA-3A81-1338229A15DB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsAggregated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsDeletedForWindow]"
+      DTS:CreationName=""
+      DTS:DTSID="{88363937-58D0-6504-46FC-534C317EF172}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsDeletedForWindow">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ReconciliationVariance]"
+      DTS:CreationName=""
+      DTS:DTSID="{CB9727F1-D40A-7FCD-B52E-A39E99E0EF73}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ReconciliationVariance">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PromotionsScored]"
+      DTS:CreationName=""
+      DTS:DTSID="{AB11BC67-CF49-36FE-70DD-8CE0E7915BC0}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PromotionsScored">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Refresh Period"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{CEDE3108-A491-846A-837A-212A109B618C}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Refresh Period"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression='@[User::WatermarkFrom] = (DT_DBTIMESTAMP)(@[$Package::AccountingPeriodCode] + "-01")' />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Delete Period Rows"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{60DDFD9C-8211-98A4-513C-4FAE965C0620}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Delete Period Rows"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="DELETE FROM [Aggregate].[Promotion Effectiveness] WHERE [Accounting Period Code] &gt;= FORMAT(DATEADD(MONTH, -1 * ?, CAST(? + '-01' AS date)), 'yyyy-MM') AND [Accounting Period Code] &lt;= ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::RebuildPriorPeriods" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::AccountingPeriodCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::AccountingPeriodCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Rebuild Promotion Effectiveness"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{5897D4F8-C25C-0AD7-BEA4-2ABB171890F0}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Rebuild Promotion Effectiveness"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Rebuild Promotion Effectiveness\Promotion Source" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="Promotion Source" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">3600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT f.[Promotion Key] AS PromotionKey, d.[Accounting Period Code] AS AccountingPeriodCode, c.[Region Code] AS RegionCode, SUM(f.[Quantity]) AS PromotedQuantity, SUM(f.[Net Amount]) AS PromotedNetAmount, SUM(f.[Discount Amount]) AS DiscountAmount, SUM(f.[Margin Amount]) AS PromotedMarginAmount, ISNULL(MAX(b.[Baseline Weekly Quantity]), 0) AS BaselineWeeklyQuantity, COUNT(DISTINCT f.[Invoice Number]) AS RedemptionCount, ISNULL(MAX(e.[Eligible Customer Count]), 0) AS EligibleCustomerCount FROM [Fact].[Sale] AS f INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Invoice Date Key] INNER JOIN Dimension.Customer AS c ON c.[Customer Key] = f.[Customer Key] LEFT JOIN [Aggregate].[Promotion Baseline] AS b ON b.[Promotion Key] = f.[Promotion Key] LEFT JOIN [Aggregate].[Promotion Eligibility] AS e ON e.[Promotion Key] = f.[Promotion Key] WHERE d.[Accounting Period Code] = ? AND f.[Promotion Key] IS NOT NULL AND f.[Promotion Key] &lt;&gt; 0 GROUP BY f.[Promotion Key], d.[Accounting Period Code], c.[Region Code];</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[PromotionKey]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[PromotionKey]" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[PromotionKey]" name="PromotionKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[AccountingPeriodCode]" dataType="wstr" length="7" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[AccountingPeriodCode]" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[AccountingPeriodCode]" name="AccountingPeriodCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="6" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[PromotedQuantity]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[PromotedQuantity]" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[PromotedQuantity]" name="PromotedQuantity" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[PromotedNetAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[PromotedNetAmount]" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[PromotedNetAmount]" name="PromotedNetAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[DiscountAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[DiscountAmount]" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[DiscountAmount]" name="DiscountAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[PromotedMarginAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[PromotedMarginAmount]" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[PromotedMarginAmount]" name="PromotedMarginAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[BaselineWeeklyQuantity]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[BaselineWeeklyQuantity]" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[BaselineWeeklyQuantity]" name="BaselineWeeklyQuantity" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[RedemptionCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[RedemptionCount]" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[RedemptionCount]" name="RedemptionCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[EligibleCustomerCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[EligibleCustomerCount]" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].Columns[EligibleCustomerCount]" name="EligibleCustomerCount" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[PromotionKey]" dataType="i4" name="PromotionKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[PromotedQuantity]" dataType="i4" name="PromotedQuantity" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[PromotedNetAmount]" dataType="numeric" precision="18" scale="2" name="PromotedNetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[DiscountAmount]" dataType="numeric" precision="18" scale="2" name="DiscountAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[PromotedMarginAmount]" dataType="numeric" precision="18" scale="2" name="PromotedMarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[BaselineWeeklyQuantity]" dataType="numeric" precision="18" scale="2" name="BaselineWeeklyQuantity" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[RedemptionCount]" dataType="i4" name="RedemptionCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output].ExternalColumns[EligibleCustomerCount]" dataType="i4" name="EligibleCustomerCount" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[PromotionKey]" dataType="i4" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[PromotionKey]" name="PromotionKey" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[AccountingPeriodCode]" dataType="wstr" length="7" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="6" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[PromotedQuantity]" dataType="i4" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[PromotedQuantity]" name="PromotedQuantity" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[PromotedNetAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[PromotedNetAmount]" name="PromotedNetAmount" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[DiscountAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[DiscountAmount]" name="DiscountAmount" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[PromotedMarginAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[PromotedMarginAmount]" name="PromotedMarginAmount" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[BaselineWeeklyQuantity]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[BaselineWeeklyQuantity]" name="BaselineWeeklyQuantity" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[RedemptionCount]" dataType="i4" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[RedemptionCount]" name="RedemptionCount" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[EligibleCustomerCount]" dataType="i4" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[EligibleCustomerCount]" name="EligibleCustomerCount" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Uplift Measures" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Outputs[Derived Column Output].Columns[BaselineQuantity]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Outputs[Derived Column Output].Columns[BaselineQuantity]" name="BaselineQuantity">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">BaselineWeeklyQuantity * (DT_NUMERIC,18,2)4.33</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">BaselineWeeklyQuantity * (DT_NUMERIC,18,2)4.33</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Outputs[Derived Column Output].Columns[IncrementalQuantity]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Outputs[Derived Column Output].Columns[IncrementalQuantity]" name="IncrementalQuantity">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_NUMERIC,18,2)PromotedQuantity - (BaselineWeeklyQuantity * (DT_NUMERIC,18,2)4.33)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_NUMERIC,18,2)PromotedQuantity - (BaselineWeeklyQuantity * (DT_NUMERIC,18,2)4.33)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Outputs[Derived Column Output].Columns[UpliftPercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Outputs[Derived Column Output].Columns[UpliftPercent]" name="UpliftPercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">BaselineWeeklyQuantity == 0 ? (DT_NUMERIC,9,4)0 : (((DT_NUMERIC,9,4)PromotedQuantity - ((DT_NUMERIC,9,4)BaselineWeeklyQuantity * 4.33)) / ((DT_NUMERIC,9,4)BaselineWeeklyQuantity * 4.33)) * 100</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">BaselineWeeklyQuantity == 0 ? (DT_NUMERIC,9,4)0 : (((DT_NUMERIC,9,4)PromotedQuantity - ((DT_NUMERIC,9,4)BaselineWeeklyQuantity * 4.33)) / ((DT_NUMERIC,9,4)BaselineWeeklyQuantity * 4.33)) * 100</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Outputs[Derived Column Output].Columns[RedemptionRatePercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Outputs[Derived Column Output].Columns[RedemptionRatePercent]" name="RedemptionRatePercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">EligibleCustomerCount == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)RedemptionCount / (DT_NUMERIC,9,4)EligibleCustomerCount) * 100</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">EligibleCustomerCount == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)RedemptionCount / (DT_NUMERIC,9,4)EligibleCustomerCount) * 100</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Outputs[Derived Column Output].Columns[MarginDilutionPercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Outputs[Derived Column Output].Columns[MarginDilutionPercent]" name="MarginDilutionPercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">PromotedNetAmount == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)DiscountAmount / (DT_NUMERIC,9,4)PromotedNetAmount) * 100</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">PromotedNetAmount == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)DiscountAmount / (DT_NUMERIC,9,4)PromotedNetAmount) * 100</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Outputs[Derived Column Output].Columns[DiscountTaxBasisCode]" dataType="wstr" length="8" lineageId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Outputs[Derived Column Output].Columns[DiscountTaxBasisCode]" name="DiscountTaxBasisCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">RegionCode == "APAC" ? "GROSS" : "NET"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">RegionCode == "APAC" ? "GROSS" : "NET"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Outputs[Derived Column Output].Columns[RefreshedByLineageKey]" dataType="i8" lineageId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Outputs[Derived Column Output].Columns[RefreshedByLineageKey]" name="RefreshedByLineageKey">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Promotion Effectiveness\Route Promotion Rows" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Route Promotion Rows" version="1">
+            <inputs>
+              <input refId="Package\Rebuild Promotion Effectiveness\Route Promotion Rows.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Promotion Effectiveness\Route Promotion Rows.Outputs[No Baseline]" exclusionGroup="1" name="No Baseline" synchronousInputId="Package\Rebuild Promotion Effectiveness\Route Promotion Rows.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">BaselineWeeklyQuantity == 0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">BaselineWeeklyQuantity == 0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Rebuild Promotion Effectiveness\Route Promotion Rows.Outputs[Value Destroying]" exclusionGroup="1" name="Value Destroying" synchronousInputId="Package\Rebuild Promotion Effectiveness\Route Promotion Rows.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">PromotedMarginAmount &lt; 0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">PromotedMarginAmount &lt; 0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Rebuild Promotion Effectiveness\Route Promotion Rows.Outputs[Standard Rows]" exclusionGroup="1" isDefaultOut="true" name="Standard Rows" synchronousInputId="Package\Rebuild Promotion Effectiveness\Route Promotion Rows.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert Standard Rows" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Aggregate].[Promotion Effectiveness]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[PromotionKey]" cachedDataType="i4" cachedName="PromotionKey" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[PromotionKey]" name="PromotionKey" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="RegionCode" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[PromotedQuantity]" cachedDataType="i4" cachedName="PromotedQuantity" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[PromotedQuantity]" name="PromotedQuantity" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[PromotedNetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PromotedNetAmount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[PromotedNetAmount]" name="PromotedNetAmount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[DiscountAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DiscountAmount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" name="DiscountAmount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[PromotedMarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PromotedMarginAmount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[PromotedMarginAmount]" name="PromotedMarginAmount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[BaselineWeeklyQuantity]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="BaselineWeeklyQuantity" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[BaselineWeeklyQuantity]" name="BaselineWeeklyQuantity" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[RedemptionCount]" cachedDataType="i4" cachedName="RedemptionCount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionCount]" name="RedemptionCount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[EligibleCustomerCount]" cachedDataType="i4" cachedName="EligibleCustomerCount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[EligibleCustomerCount]" name="EligibleCustomerCount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[BaselineQuantity]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="BaselineQuantity" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[BaselineQuantity]" name="BaselineQuantity" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[IncrementalQuantity]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="IncrementalQuantity" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[IncrementalQuantity]" name="IncrementalQuantity" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[UpliftPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="UpliftPercent" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[UpliftPercent]" name="UpliftPercent" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[RedemptionRatePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="RedemptionRatePercent" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionRatePercent]" name="RedemptionRatePercent" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[MarginDilutionPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="MarginDilutionPercent" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[MarginDilutionPercent]" name="MarginDilutionPercent" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[DiscountTaxBasisCode]" cachedDataType="wstr" cachedLength="8" cachedName="DiscountTaxBasisCode" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[DiscountTaxBasisCode]" name="DiscountTaxBasisCode" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[PromotionKey]" dataType="i4" name="PromotionKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[PromotedQuantity]" dataType="i4" name="PromotedQuantity" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[PromotedNetAmount]" dataType="numeric" precision="18" scale="2" name="PromotedNetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" dataType="numeric" precision="18" scale="2" name="DiscountAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[PromotedMarginAmount]" dataType="numeric" precision="18" scale="2" name="PromotedMarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[BaselineWeeklyQuantity]" dataType="numeric" precision="18" scale="2" name="BaselineWeeklyQuantity" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionCount]" dataType="i4" name="RedemptionCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[EligibleCustomerCount]" dataType="i4" name="EligibleCustomerCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[BaselineQuantity]" dataType="numeric" precision="18" scale="2" name="BaselineQuantity" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[IncrementalQuantity]" dataType="numeric" precision="18" scale="2" name="IncrementalQuantity" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[UpliftPercent]" dataType="numeric" precision="9" scale="4" name="UpliftPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionRatePercent]" dataType="numeric" precision="9" scale="4" name="RedemptionRatePercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[MarginDilutionPercent]" dataType="numeric" precision="9" scale="4" name="MarginDilutionPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[DiscountTaxBasisCode]" dataType="wstr" length="8" name="DiscountTaxBasisCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert Value Destroying" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Aggregate].[Promotion Effectiveness]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].Columns[PromotionKey]" cachedDataType="i4" cachedName="PromotionKey" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[PromotionKey]" name="PromotionKey" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="RegionCode" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].Columns[PromotedQuantity]" cachedDataType="i4" cachedName="PromotedQuantity" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[PromotedQuantity]" name="PromotedQuantity" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].Columns[PromotedNetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PromotedNetAmount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[PromotedNetAmount]" name="PromotedNetAmount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].Columns[DiscountAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DiscountAmount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" name="DiscountAmount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].Columns[PromotedMarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PromotedMarginAmount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[PromotedMarginAmount]" name="PromotedMarginAmount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].Columns[BaselineWeeklyQuantity]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="BaselineWeeklyQuantity" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[BaselineWeeklyQuantity]" name="BaselineWeeklyQuantity" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].Columns[RedemptionCount]" cachedDataType="i4" cachedName="RedemptionCount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionCount]" name="RedemptionCount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].Columns[EligibleCustomerCount]" cachedDataType="i4" cachedName="EligibleCustomerCount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[EligibleCustomerCount]" name="EligibleCustomerCount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].Columns[BaselineQuantity]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="BaselineQuantity" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[BaselineQuantity]" name="BaselineQuantity" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].Columns[IncrementalQuantity]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="IncrementalQuantity" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[IncrementalQuantity]" name="IncrementalQuantity" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].Columns[UpliftPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="UpliftPercent" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[UpliftPercent]" name="UpliftPercent" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].Columns[RedemptionRatePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="RedemptionRatePercent" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionRatePercent]" name="RedemptionRatePercent" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].Columns[MarginDilutionPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="MarginDilutionPercent" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[MarginDilutionPercent]" name="MarginDilutionPercent" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].Columns[DiscountTaxBasisCode]" cachedDataType="wstr" cachedLength="8" cachedName="DiscountTaxBasisCode" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[DiscountTaxBasisCode]" name="DiscountTaxBasisCode" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[PromotionKey]" dataType="i4" name="PromotionKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[PromotedQuantity]" dataType="i4" name="PromotedQuantity" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[PromotedNetAmount]" dataType="numeric" precision="18" scale="2" name="PromotedNetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" dataType="numeric" precision="18" scale="2" name="DiscountAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[PromotedMarginAmount]" dataType="numeric" precision="18" scale="2" name="PromotedMarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[BaselineWeeklyQuantity]" dataType="numeric" precision="18" scale="2" name="BaselineWeeklyQuantity" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionCount]" dataType="i4" name="RedemptionCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[EligibleCustomerCount]" dataType="i4" name="EligibleCustomerCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[BaselineQuantity]" dataType="numeric" precision="18" scale="2" name="BaselineQuantity" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[IncrementalQuantity]" dataType="numeric" precision="18" scale="2" name="IncrementalQuantity" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[UpliftPercent]" dataType="numeric" precision="9" scale="4" name="UpliftPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionRatePercent]" dataType="numeric" precision="9" scale="4" name="RedemptionRatePercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[MarginDilutionPercent]" dataType="numeric" precision="9" scale="4" name="MarginDilutionPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[DiscountTaxBasisCode]" dataType="wstr" length="8" name="DiscountTaxBasisCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject No Baseline" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].Columns[PromotionKey]" cachedDataType="i4" cachedName="PromotionKey" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[PromotionKey]" name="PromotionKey" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="RegionCode" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].Columns[PromotedQuantity]" cachedDataType="i4" cachedName="PromotedQuantity" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[PromotedQuantity]" name="PromotedQuantity" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].Columns[PromotedNetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PromotedNetAmount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[PromotedNetAmount]" name="PromotedNetAmount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].Columns[DiscountAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DiscountAmount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" name="DiscountAmount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].Columns[PromotedMarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PromotedMarginAmount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[PromotedMarginAmount]" name="PromotedMarginAmount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].Columns[BaselineWeeklyQuantity]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="BaselineWeeklyQuantity" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[BaselineWeeklyQuantity]" name="BaselineWeeklyQuantity" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].Columns[RedemptionCount]" cachedDataType="i4" cachedName="RedemptionCount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionCount]" name="RedemptionCount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].Columns[EligibleCustomerCount]" cachedDataType="i4" cachedName="EligibleCustomerCount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[EligibleCustomerCount]" name="EligibleCustomerCount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].Columns[BaselineQuantity]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="BaselineQuantity" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[BaselineQuantity]" name="BaselineQuantity" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].Columns[IncrementalQuantity]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="IncrementalQuantity" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[IncrementalQuantity]" name="IncrementalQuantity" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].Columns[UpliftPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="UpliftPercent" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[UpliftPercent]" name="UpliftPercent" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].Columns[RedemptionRatePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="RedemptionRatePercent" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionRatePercent]" name="RedemptionRatePercent" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].Columns[MarginDilutionPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="MarginDilutionPercent" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[MarginDilutionPercent]" name="MarginDilutionPercent" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].Columns[DiscountTaxBasisCode]" cachedDataType="wstr" cachedLength="8" cachedName="DiscountTaxBasisCode" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[DiscountTaxBasisCode]" name="DiscountTaxBasisCode" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[PromotionKey]" dataType="i4" name="PromotionKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[PromotedQuantity]" dataType="i4" name="PromotedQuantity" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[PromotedNetAmount]" dataType="numeric" precision="18" scale="2" name="PromotedNetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" dataType="numeric" precision="18" scale="2" name="DiscountAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[PromotedMarginAmount]" dataType="numeric" precision="18" scale="2" name="PromotedMarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[BaselineWeeklyQuantity]" dataType="numeric" precision="18" scale="2" name="BaselineWeeklyQuantity" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionCount]" dataType="i4" name="RedemptionCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[EligibleCustomerCount]" dataType="i4" name="EligibleCustomerCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[BaselineQuantity]" dataType="numeric" precision="18" scale="2" name="BaselineQuantity" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[IncrementalQuantity]" dataType="numeric" precision="18" scale="2" name="IncrementalQuantity" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[UpliftPercent]" dataType="numeric" precision="9" scale="4" name="UpliftPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionRatePercent]" dataType="numeric" precision="9" scale="4" name="RedemptionRatePercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[MarginDilutionPercent]" dataType="numeric" precision="9" scale="4" name="MarginDilutionPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[DiscountTaxBasisCode]" dataType="wstr" length="8" name="DiscountTaxBasisCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Source Errors" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedInvoiceLine]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PromotionKey]" cachedDataType="i4" cachedName="PromotionKey" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PromotionKey]" name="PromotionKey" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="RegionCode" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PromotedQuantity]" cachedDataType="i4" cachedName="PromotedQuantity" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PromotedQuantity]" name="PromotedQuantity" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PromotedNetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PromotedNetAmount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PromotedNetAmount]" name="PromotedNetAmount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[DiscountAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DiscountAmount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" name="DiscountAmount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PromotedMarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PromotedMarginAmount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PromotedMarginAmount]" name="PromotedMarginAmount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[BaselineWeeklyQuantity]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="BaselineWeeklyQuantity" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[BaselineWeeklyQuantity]" name="BaselineWeeklyQuantity" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[RedemptionCount]" cachedDataType="i4" cachedName="RedemptionCount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionCount]" name="RedemptionCount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[EligibleCustomerCount]" cachedDataType="i4" cachedName="EligibleCustomerCount" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[EligibleCustomerCount]" name="EligibleCustomerCount" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[BaselineQuantity]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="BaselineQuantity" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[BaselineQuantity]" name="BaselineQuantity" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[IncrementalQuantity]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="IncrementalQuantity" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[IncrementalQuantity]" name="IncrementalQuantity" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[UpliftPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="UpliftPercent" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[UpliftPercent]" name="UpliftPercent" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[RedemptionRatePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="RedemptionRatePercent" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionRatePercent]" name="RedemptionRatePercent" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[MarginDilutionPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="MarginDilutionPercent" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[MarginDilutionPercent]" name="MarginDilutionPercent" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[DiscountTaxBasisCode]" cachedDataType="wstr" cachedLength="8" cachedName="DiscountTaxBasisCode" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[DiscountTaxBasisCode]" name="DiscountTaxBasisCode" />
+                  <inputColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PromotionKey]" dataType="i4" name="PromotionKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PromotedQuantity]" dataType="i4" name="PromotedQuantity" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PromotedNetAmount]" dataType="numeric" precision="18" scale="2" name="PromotedNetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" dataType="numeric" precision="18" scale="2" name="DiscountAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PromotedMarginAmount]" dataType="numeric" precision="18" scale="2" name="PromotedMarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[BaselineWeeklyQuantity]" dataType="numeric" precision="18" scale="2" name="BaselineWeeklyQuantity" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionCount]" dataType="i4" name="RedemptionCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[EligibleCustomerCount]" dataType="i4" name="EligibleCustomerCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[BaselineQuantity]" dataType="numeric" precision="18" scale="2" name="BaselineQuantity" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[IncrementalQuantity]" dataType="numeric" precision="18" scale="2" name="IncrementalQuantity" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[UpliftPercent]" dataType="numeric" precision="9" scale="4" name="UpliftPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RedemptionRatePercent]" dataType="numeric" precision="9" scale="4" name="RedemptionRatePercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[MarginDilutionPercent]" dataType="numeric" precision="9" scale="4" name="MarginDilutionPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[DiscountTaxBasisCode]" dataType="wstr" length="8" name="DiscountTaxBasisCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Rebuild Promotion Effectiveness.Paths[OLE DB Source Output]" endId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Rebuild Promotion Effectiveness.Paths[Derived Column Output 1]" endId="Package\Rebuild Promotion Effectiveness\Route Promotion Rows.Inputs[Conditional Split Input]" name="Derived Column Output 1" startId="Package\Rebuild Promotion Effectiveness\Derive Uplift Measures.Outputs[Derived Column Output]" />
+          <path refId="Package\Rebuild Promotion Effectiveness.Paths[Standard Rows 2]" endId="Package\Rebuild Promotion Effectiveness\Insert Standard Rows.Inputs[OLE DB Destination Input]" name="Standard Rows 2" startId="Package\Rebuild Promotion Effectiveness\Route Promotion Rows.Outputs[Standard Rows]" />
+          <path refId="Package\Rebuild Promotion Effectiveness.Paths[Value Destroying 3]" endId="Package\Rebuild Promotion Effectiveness\Insert Value Destroying.Inputs[OLE DB Destination Input]" name="Value Destroying 3" startId="Package\Rebuild Promotion Effectiveness\Route Promotion Rows.Outputs[Value Destroying]" />
+          <path refId="Package\Rebuild Promotion Effectiveness.Paths[No Baseline 4]" endId="Package\Rebuild Promotion Effectiveness\Reject No Baseline.Inputs[OLE DB Destination Input]" name="No Baseline 4" startId="Package\Rebuild Promotion Effectiveness\Route Promotion Rows.Outputs[No Baseline]" />
+          <path refId="Package\Rebuild Promotion Effectiveness.Paths[OLE DB Source Error Output 5]" endId="Package\Rebuild Promotion Effectiveness\Reject Source Errors.Inputs[OLE DB Destination Input]" name="OLE DB Source Error Output 5" startId="Package\Rebuild Promotion Effectiveness\Promotion Source.Outputs[OLE DB Source Error Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Refresh Promotion Scores"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{B6B4B2D6-2CC2-B2C3-979B-A7E70A6C84D9}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Refresh Promotion Scores"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="EXEC Integration.RefreshAggregatePromotionEffectiveness @AccountingPeriodCode = ?, @BaselineWeeks = ?, @LineageKey = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::AccountingPeriodCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BaselineWeeks" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Assert Reconciliation"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{939B1D95-86D0-C868-493E-496DC475519B}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Assert Reconciliation"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_AssertRowCountReconciliation @PackageExecutionId = ?, @ObjectName = N'Aggregate.Promotion Effectiveness', @ExpectedRowCount = ?, @ActualRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Rejected Records"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F451B37A-2258-F381-3E92-62232E0A51C1}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Rejected Records"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @ObjectName = N'Aggregate.Promotion Effectiveness', @RejectReason = N'Aggregate row failed the summary quality gate', @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Aggregate.Promotion Effectiveness', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Refresh Period"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Delete Period Rows" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Delete Period Rows"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Rebuild Promotion Effectiveness" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Rebuild Promotion Effectiveness"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Refresh Promotion Scores" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Refresh Promotion Scores"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Assert Reconciliation" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Assert Reconciliation"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Rejected Records" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Log Rejected Records"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{38B6B896-B35E-278C-5324-3CC22434C7E3}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

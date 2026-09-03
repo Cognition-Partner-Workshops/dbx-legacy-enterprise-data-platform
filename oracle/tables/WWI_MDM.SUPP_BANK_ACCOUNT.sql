@@ -1,0 +1,78 @@
+/* =====================================================================
+ * Object       : TABLE WWI_MDM.SUPP_BANK_ACCOUNT
+ * Schema       : WWI_MDM (Oracle ERP - WWIGERP)
+ * Deploy order : 30
+ * Depends on   : WWI_MDM.SUPP_MASTER, WWI_REF.CURRENCY_CODE
+ * Called by    : PKG_AP_PAYMENT (payment file build), V_SUPPLIER_BANK_MASKED
+ *
+ * Supplier remittance accounts. Restricted: only WWI_FIN_SENSITIVE_ROLE may
+ * read the base table, downstream reads the masked view. Account identification
+ * differs by region and all three variants live in the same table - NA uses
+ * ROUTING_NBR plus ACCOUNT_NBR, EU uses IBAN plus BIC, APAC uses BANK_CODE plus
+ * BRANCH_CODE plus ACCOUNT_NBR. ACCOUNT_NBR_LAST4 is stored redundantly so the
+ * remittance advice can print it without unmasking the full number.
+ * ===================================================================== */
+
+CREATE SEQUENCE WWI_MDM.SEQ_SUPP_BANK_ACCOUNT
+    START WITH 970001 INCREMENT BY 1 NOCACHE NOCYCLE
+/
+
+CREATE TABLE WWI_MDM.SUPP_BANK_ACCOUNT
+(
+    SUPP_BANK_ID            NUMBER(12)      NOT NULL,
+    SUPP_ID                 NUMBER(12)      NOT NULL,
+    SUPP_ADDR_ID            NUMBER(12),
+    BANK_ACCT_SEQ_NBR       NUMBER(3)       DEFAULT 1 NOT NULL,
+    REGION_CD               VARCHAR2(4)     NOT NULL,
+    BANK_NAME               VARCHAR2(120),
+    BANK_COUNTRY_CD         VARCHAR2(2)     NOT NULL,
+    ROUTING_NBR             VARCHAR2(12),
+    IBAN_TXT                VARCHAR2(34),
+    BIC_CD                  VARCHAR2(11),
+    BANK_CODE_TXT           VARCHAR2(12),
+    BRANCH_CODE_TXT         VARCHAR2(12),
+    ACCOUNT_NBR_ENC         VARCHAR2(200),
+    ACCOUNT_NBR_LAST4       VARCHAR2(4),
+    ACCOUNT_CURR_CD         VARCHAR2(3)     NOT NULL,
+    ACCOUNT_HOLDER_NAME     VARCHAR2(120),
+    PAYMENT_METHOD_CD       VARCHAR2(6)     DEFAULT 'EFT' NOT NULL,
+    VALIDATED_FLG           VARCHAR2(1)     DEFAULT 'N' NOT NULL,
+    VALIDATED_DT            DATE,
+    VALIDATION_METHOD_CD    VARCHAR2(6),
+    PRIMARY_FLG             VARCHAR2(1)     DEFAULT 'N' NOT NULL,
+    ACTIVE_FLG              VARCHAR2(1)     DEFAULT 'Y' NOT NULL,
+    INACTIVATED_DT          DATE,
+    SOURCE_SYS              VARCHAR2(12)    DEFAULT 'ORA_ERP' NOT NULL,
+    CREATED_BY              VARCHAR2(30)    DEFAULT USER NOT NULL,
+    CREATED_DT              DATE            DEFAULT SYSDATE NOT NULL,
+    UPDATED_BY              VARCHAR2(30),
+    UPDATED_DT              DATE,
+    CONSTRAINT PK_SUPP_BANK_ACCOUNT PRIMARY KEY (SUPP_BANK_ID) USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT UK_SUPP_BANK_SEQ UNIQUE (SUPP_ID, BANK_ACCT_SEQ_NBR) USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT CK_SUPP_BANK_REGION CHECK (REGION_CD IN ('NA', 'EU', 'APAC')),
+    CONSTRAINT CK_SUPP_BANK_FLAGS CHECK (
+        VALIDATED_FLG IN ('Y', 'N') AND PRIMARY_FLG IN ('Y', 'N') AND ACTIVE_FLG IN ('Y', 'N')),
+    CONSTRAINT CK_SUPP_BANK_IDENT CHECK (
+        (REGION_CD = 'NA'   AND ROUTING_NBR IS NOT NULL)
+     OR (REGION_CD = 'EU'   AND IBAN_TXT IS NOT NULL AND BIC_CD IS NOT NULL)
+     OR (REGION_CD = 'APAC' AND BANK_CODE_TXT IS NOT NULL))
+)
+TABLESPACE WWI_DATA
+PCTFREE 5
+/
+
+ALTER TABLE WWI_MDM.SUPP_BANK_ACCOUNT ADD CONSTRAINT FK_SUPP_BANK_SUPP
+    FOREIGN KEY (SUPP_ID) REFERENCES WWI_MDM.SUPP_MASTER (SUPP_ID)
+/
+
+ALTER TABLE WWI_MDM.SUPP_BANK_ACCOUNT ADD CONSTRAINT FK_SUPP_BANK_ADDR
+    FOREIGN KEY (SUPP_ADDR_ID) REFERENCES WWI_MDM.SUPP_ADDRESS (SUPP_ADDR_ID)
+/
+
+CREATE INDEX WWI_MDM.IX_SUPP_BANK_ACTIVE
+    ON WWI_MDM.SUPP_BANK_ACCOUNT (SUPP_ID, ACTIVE_FLG, PRIMARY_FLG) TABLESPACE WWI_IDX
+/
+
+COMMENT ON COLUMN WWI_MDM.SUPP_BANK_ACCOUNT.ACCOUNT_NBR_ENC IS
+    'Account number held in the ERP''s own reversible obfuscation, not a modern cipher.'
+/

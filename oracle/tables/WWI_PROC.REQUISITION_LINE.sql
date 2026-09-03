@@ -1,0 +1,64 @@
+/* =====================================================================
+ * Object       : TABLE WWI_PROC.REQUISITION_LINE
+ * Schema       : WWI_PROC (Oracle ERP - WWIGERP)
+ * Deploy order : 41
+ * Depends on   : WWI_PROC.REQUISITION_HDR, WWI_MDM.PRODUCT_MASTER
+ * Called by    : PKG_PURCHASE_ORDER (requisition-to-PO conversion)
+ *
+ * Requisition lines. A line may be catalogue (PRODUCT_ID set) or free text
+ * (ITEM_DESC_TXT only) - the free-text path is how roughly a third of indirect
+ * spend enters the system and it is the reason the spend-analysis extract has
+ * to fuzzy-match descriptions.
+ * ===================================================================== */
+
+CREATE SEQUENCE WWI_PROC.SEQ_REQUISITION_LINE
+    START WITH 3000001 INCREMENT BY 1 CACHE 100 NOCYCLE
+/
+
+CREATE TABLE WWI_PROC.REQUISITION_LINE
+(
+    REQ_LINE_ID             NUMBER(12)      NOT NULL,
+    REQ_ID                  NUMBER(12)      NOT NULL,
+    LINE_NBR                NUMBER(5)       NOT NULL,
+    PRODUCT_ID              NUMBER(12),
+    ITEM_DESC_TXT           VARCHAR2(400),
+    CATEGORY_CD             VARCHAR2(12),
+    REQ_QTY                 NUMBER(14,4)    NOT NULL,
+    UOM_CD                  VARCHAR2(4)     NOT NULL,
+    ESTIMATED_UNIT_PRICE    NUMBER(15,5),
+    ESTIMATED_LINE_AMT      NUMBER(15,5),
+    LINE_CURR_CD            VARCHAR2(3)     NOT NULL,
+    SUGGESTED_SUPP_ID       NUMBER(12),
+    SUGGESTED_SUPP_TXT      VARCHAR2(120),
+    CONTRACT_NBR            VARCHAR2(20),
+    NEED_BY_DT              DATE,
+    DELIVER_TO_TXT          VARCHAR2(200),
+    GL_ACCOUNT_CD           VARCHAR2(20),
+    LINE_STATUS_CD          VARCHAR2(4)     DEFAULT 'OPEN' NOT NULL,
+    CONVERTED_PO_ID         NUMBER(12),
+    CONVERTED_DT            DATE,
+    SOURCE_SYS              VARCHAR2(12)    DEFAULT 'ORA_ERP' NOT NULL,
+    CREATED_BY              VARCHAR2(30)    DEFAULT USER NOT NULL,
+    CREATED_DT              DATE            DEFAULT SYSDATE NOT NULL,
+    UPDATED_BY              VARCHAR2(30),
+    UPDATED_DT              DATE,
+    CONSTRAINT PK_REQUISITION_LINE PRIMARY KEY (REQ_LINE_ID) USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT UK_REQUISITION_LINE UNIQUE (REQ_ID, LINE_NBR) USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT CK_REQ_LINE_QTY CHECK (REQ_QTY > 0),
+    CONSTRAINT CK_REQ_LINE_STATUS CHECK (LINE_STATUS_CD IN ('OPEN', 'CONV', 'CANC', 'HOLD')),
+    CONSTRAINT CK_REQ_LINE_ITEM CHECK (PRODUCT_ID IS NOT NULL OR ITEM_DESC_TXT IS NOT NULL)
+)
+TABLESPACE WWI_DATA
+/
+
+ALTER TABLE WWI_PROC.REQUISITION_LINE ADD CONSTRAINT FK_REQ_LINE_HDR
+    FOREIGN KEY (REQ_ID) REFERENCES WWI_PROC.REQUISITION_HDR (REQ_ID)
+/
+
+CREATE INDEX WWI_PROC.IX_REQ_LINE_PRODUCT
+    ON WWI_PROC.REQUISITION_LINE (PRODUCT_ID, LINE_STATUS_CD) TABLESPACE WWI_IDX
+/
+
+CREATE INDEX WWI_PROC.IX_REQ_LINE_CONVERTED
+    ON WWI_PROC.REQUISITION_LINE (CONVERTED_PO_ID) TABLESPACE WWI_IDX
+/
