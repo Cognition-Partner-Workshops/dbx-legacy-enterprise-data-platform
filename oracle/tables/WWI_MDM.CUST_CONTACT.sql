@@ -1,0 +1,74 @@
+/* =====================================================================
+ * Object       : TABLE WWI_MDM.CUST_CONTACT
+ * Schema       : WWI_MDM (Oracle ERP - WWIGERP)
+ * Deploy order : 22
+ * Depends on   : WWI_MDM.CUST_MASTER, WWI_REF.LANGUAGE_REF
+ * Called by    : PKG_CUSTOMER_MASTER, SSIS EXT_ORA_CustomerContact, DQ_Screen_Customer
+ *
+ * Contact people at a customer. Consent is per contact and per channel because
+ * the EU rules required it in 2018; the NA rows were back-filled with 'Y' from
+ * an assumption that is documented nowhere else, and the APAC rows were left
+ * null. PREFERRED_CONTACT_TIME is free text ('after 3pm JST', 'not Fridays').
+ * ===================================================================== */
+
+CREATE SEQUENCE WWI_MDM.SEQ_CUST_CONTACT
+    START WITH 700001 INCREMENT BY 1 CACHE 50 NOCYCLE
+/
+
+CREATE TABLE WWI_MDM.CUST_CONTACT
+(
+    CUST_CONTACT_ID         NUMBER(12)      NOT NULL,
+    CUST_ID                 NUMBER(12)      NOT NULL,
+    CONTACT_ROLE_CD         VARCHAR2(6)     NOT NULL,
+    SALUTATION_TXT          VARCHAR2(12),
+    GIVEN_NAME              VARCHAR2(60),
+    FAMILY_NAME             VARCHAR2(60)    NOT NULL,
+    FULL_NAME_NORM          VARCHAR2(120),
+    JOB_TITLE_TXT           VARCHAR2(80),
+    EMAIL_ADDR              VARCHAR2(120),
+    EMAIL_VALID_FLG         VARCHAR2(1)     DEFAULT 'U' NOT NULL,
+    PHONE_NBR               VARCHAR2(30),
+    PHONE_EXT               VARCHAR2(8),
+    MOBILE_NBR              VARCHAR2(30),
+    FAX_NBR                 VARCHAR2(30),
+    LANGUAGE_CD             VARCHAR2(3)     DEFAULT 'ENG' NOT NULL,
+    PREFERRED_CONTACT_TIME  VARCHAR2(200),
+    CONSENT_EMAIL_FLG       VARCHAR2(1),
+    CONSENT_PHONE_FLG       VARCHAR2(1),
+    CONSENT_UPDATED_DT      DATE,
+    DO_NOT_CONTACT_FLG      VARCHAR2(1)     DEFAULT 'N' NOT NULL,
+    PRIMARY_FLG             VARCHAR2(1)     DEFAULT 'N' NOT NULL,
+    ACTIVE_FLG              VARCHAR2(1)     DEFAULT 'Y' NOT NULL,
+    LAST_CONTACT_DT         DATE,
+    SOURCE_SYS              VARCHAR2(12)    DEFAULT 'ORA_ERP' NOT NULL,
+    CREATED_BY              VARCHAR2(30)    DEFAULT USER NOT NULL,
+    CREATED_DT              DATE            DEFAULT SYSDATE NOT NULL,
+    UPDATED_BY              VARCHAR2(30),
+    UPDATED_DT              DATE,
+    CONSTRAINT PK_CUST_CONTACT PRIMARY KEY (CUST_CONTACT_ID) USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT CK_CUST_CONTACT_ROLE CHECK (
+        CONTACT_ROLE_CD IN ('AP', 'BUYER', 'EXEC', 'LOGIS', 'TECH', 'LEGAL')),
+    CONSTRAINT CK_CUST_CONTACT_EMAILV CHECK (EMAIL_VALID_FLG IN ('Y', 'N', 'U')),
+    CONSTRAINT CK_CUST_CONTACT_FLAGS CHECK (
+        DO_NOT_CONTACT_FLG IN ('Y', 'N') AND PRIMARY_FLG IN ('Y', 'N') AND ACTIVE_FLG IN ('Y', 'N')
+        AND (CONSENT_EMAIL_FLG IS NULL OR CONSENT_EMAIL_FLG IN ('Y', 'N'))
+        AND (CONSENT_PHONE_FLG IS NULL OR CONSENT_PHONE_FLG IN ('Y', 'N')))
+)
+TABLESPACE WWI_DATA
+/
+
+ALTER TABLE WWI_MDM.CUST_CONTACT ADD CONSTRAINT FK_CUST_CONTACT_CUST
+    FOREIGN KEY (CUST_ID) REFERENCES WWI_MDM.CUST_MASTER (CUST_ID)
+/
+
+CREATE INDEX WWI_MDM.IX_CUST_CONTACT_CUST
+    ON WWI_MDM.CUST_CONTACT (CUST_ID, CONTACT_ROLE_CD) TABLESPACE WWI_IDX
+/
+
+CREATE INDEX WWI_MDM.IX_CUST_CONTACT_EMAIL
+    ON WWI_MDM.CUST_CONTACT (LOWER(EMAIL_ADDR)) TABLESPACE WWI_IDX
+/
+
+COMMENT ON COLUMN WWI_MDM.CUST_CONTACT.EMAIL_VALID_FLG IS
+    'Y/N/U where U = never screened. Most pre-2012 rows are U.'
+/

@@ -1,0 +1,63 @@
+/* =====================================================================
+ * Object       : TABLE WWI_MDM.CUST_HIERARCHY
+ * Schema       : WWI_MDM (Oracle ERP - WWIGERP)
+ * Deploy order : 25
+ * Depends on   : WWI_MDM.CUST_MASTER
+ * Called by    : PKG_CUSTOMER_MASTER, C360 consolidation packages
+ *
+ * Parent/child customer relationships. Two hierarchy types are live: LEGAL
+ * (ownership, used by credit) and PAY (invoice consolidation, used by AP).
+ * HIER_PATH_TXT is a denormalised slash-delimited path maintained by trigger
+ * logic in PKG_CUSTOMER_MASTER; it goes stale whenever a parent is re-pointed
+ * outside that package.
+ * ===================================================================== */
+
+CREATE SEQUENCE WWI_MDM.SEQ_CUST_HIERARCHY
+    START WITH 400001 INCREMENT BY 1 CACHE 10 NOCYCLE
+/
+
+CREATE TABLE WWI_MDM.CUST_HIERARCHY
+(
+    CUST_HIER_ID            NUMBER(12)      NOT NULL,
+    HIER_TYPE_CD            VARCHAR2(5)     NOT NULL,
+    PARENT_CUST_ID          NUMBER(12)      NOT NULL,
+    CHILD_CUST_ID           NUMBER(12)      NOT NULL,
+    HIER_LEVEL_NBR          NUMBER(2)       DEFAULT 1 NOT NULL,
+    HIER_PATH_TXT           VARCHAR2(1000),
+    OWNERSHIP_PCT           NUMBER(5,2),
+    CONSOLIDATE_INVOICE_FLG VARCHAR2(1)     DEFAULT 'N' NOT NULL,
+    ROLLUP_CREDIT_FLG       VARCHAR2(1)     DEFAULT 'N' NOT NULL,
+    EFFECTIVE_DT            DATE            DEFAULT SYSDATE NOT NULL,
+    END_DT                  DATE,
+    SOURCE_SYS              VARCHAR2(12)    DEFAULT 'ORA_ERP' NOT NULL,
+    CREATED_BY              VARCHAR2(30)    DEFAULT USER NOT NULL,
+    CREATED_DT              DATE            DEFAULT SYSDATE NOT NULL,
+    UPDATED_BY              VARCHAR2(30),
+    UPDATED_DT              DATE,
+    CONSTRAINT PK_CUST_HIERARCHY PRIMARY KEY (CUST_HIER_ID) USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT UK_CUST_HIER UNIQUE (HIER_TYPE_CD, CHILD_CUST_ID, EFFECTIVE_DT)
+        USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT CK_CUST_HIER_TYPE CHECK (HIER_TYPE_CD IN ('LEGAL', 'PAY', 'SALES')),
+    CONSTRAINT CK_CUST_HIER_SELF CHECK (PARENT_CUST_ID <> CHILD_CUST_ID),
+    CONSTRAINT CK_CUST_HIER_PCT CHECK (OWNERSHIP_PCT IS NULL OR OWNERSHIP_PCT BETWEEN 0 AND 100),
+    CONSTRAINT CK_CUST_HIER_FLAGS CHECK (
+        CONSOLIDATE_INVOICE_FLG IN ('Y', 'N') AND ROLLUP_CREDIT_FLG IN ('Y', 'N'))
+)
+TABLESPACE WWI_DATA
+/
+
+ALTER TABLE WWI_MDM.CUST_HIERARCHY ADD CONSTRAINT FK_CUST_HIER_PARENT
+    FOREIGN KEY (PARENT_CUST_ID) REFERENCES WWI_MDM.CUST_MASTER (CUST_ID)
+/
+
+ALTER TABLE WWI_MDM.CUST_HIERARCHY ADD CONSTRAINT FK_CUST_HIER_CHILD
+    FOREIGN KEY (CHILD_CUST_ID) REFERENCES WWI_MDM.CUST_MASTER (CUST_ID)
+/
+
+CREATE INDEX WWI_MDM.IX_CUST_HIER_PARENT
+    ON WWI_MDM.CUST_HIERARCHY (PARENT_CUST_ID, HIER_TYPE_CD) TABLESPACE WWI_IDX
+/
+
+COMMENT ON COLUMN WWI_MDM.CUST_HIERARCHY.HIER_PATH_TXT IS
+    'Denormalised path, slash delimited. Rebuilt nightly; may be stale intraday.'
+/

@@ -1,0 +1,74 @@
+/* =====================================================================
+ * Object       : TABLE WWI_PROC.SUPPLIER_SCORECARD
+ * Schema       : WWI_PROC (Oracle ERP - WWIGERP)
+ * Deploy order : 54
+ * Depends on   : WWI_MDM.SUPP_MASTER, WWI_PROC.PO_RECEIPT_LINE, WWI_PROC.GOODS_RETURN_LINE
+ * Called by    : PKG_SUPPLIER_PERF, V_SUPPLIER_SCORECARD_CURRENT
+ *
+ * Periodic supplier performance snapshot, one row per supplier per scoring
+ * period. The weighting is baked into the stored procedure that populates it,
+ * not held here, so the historical rows cannot be re-derived after a weighting
+ * change. OTIF is computed differently in APAC (delivery date measured at
+ * customs clearance rather than at the dock) and the difference is not flagged
+ * on the row.
+ * ===================================================================== */
+
+CREATE SEQUENCE WWI_PROC.SEQ_SUPPLIER_SCORECARD
+    START WITH 70001 INCREMENT BY 1 CACHE 20 NOCYCLE
+/
+
+CREATE TABLE WWI_PROC.SUPPLIER_SCORECARD
+(
+    SCORECARD_ID            NUMBER(12)      NOT NULL,
+    SUPP_ID                 NUMBER(12)      NOT NULL,
+    SCORE_PERIOD_CD         VARCHAR2(7)     NOT NULL,
+    PERIOD_START_DT         DATE            NOT NULL,
+    PERIOD_END_DT           DATE            NOT NULL,
+    REGION_CD               VARCHAR2(4)     NOT NULL,
+    PO_LINE_CNT             NUMBER(9)       DEFAULT 0 NOT NULL,
+    RECEIPT_LINE_CNT        NUMBER(9)       DEFAULT 0 NOT NULL,
+    ON_TIME_LINE_CNT        NUMBER(9)       DEFAULT 0 NOT NULL,
+    IN_FULL_LINE_CNT        NUMBER(9)       DEFAULT 0 NOT NULL,
+    OTIF_PCT                NUMBER(5,2),
+    QUALITY_REJECT_PCT      NUMBER(5,2),
+    RETURN_LINE_CNT         NUMBER(9)       DEFAULT 0 NOT NULL,
+    AVG_LEAD_TIME_DAYS      NUMBER(6,2),
+    LEAD_TIME_VARIANCE_DAYS NUMBER(6,2),
+    PRICE_VARIANCE_PCT      NUMBER(7,3),
+    INVOICE_ACCURACY_PCT    NUMBER(5,2),
+    DISPUTE_CNT             NUMBER(6)       DEFAULT 0 NOT NULL,
+    OVERALL_SCORE           NUMBER(5,2),
+    SCORE_BAND_CD           VARCHAR2(2),
+    PREVIOUS_SCORE          NUMBER(5,2),
+    TREND_CD                VARCHAR2(4),
+    ACTION_REQUIRED_FLG     VARCHAR2(1)     DEFAULT 'N' NOT NULL,
+    REVIEW_NOTES_TXT        VARCHAR2(2000),
+    CALCULATED_DT           DATE            DEFAULT SYSDATE NOT NULL,
+    SOURCE_SYS              VARCHAR2(12)    DEFAULT 'ORA_ERP' NOT NULL,
+    CREATED_BY              VARCHAR2(30)    DEFAULT USER NOT NULL,
+    CREATED_DT              DATE            DEFAULT SYSDATE NOT NULL,
+    UPDATED_BY              VARCHAR2(30),
+    UPDATED_DT              DATE,
+    CONSTRAINT PK_SUPPLIER_SCORECARD PRIMARY KEY (SCORECARD_ID) USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT UK_SUPPLIER_SCORECARD UNIQUE (SUPP_ID, SCORE_PERIOD_CD)
+        USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT CK_SCORECARD_REGION CHECK (REGION_CD IN ('NA', 'EU', 'APAC')),
+    CONSTRAINT CK_SCORECARD_BAND CHECK (SCORE_BAND_CD IS NULL OR SCORE_BAND_CD IN ('A', 'B', 'C', 'D')),
+    CONSTRAINT CK_SCORECARD_TREND CHECK (TREND_CD IS NULL OR TREND_CD IN ('UP', 'DOWN', 'FLAT')),
+    CONSTRAINT CK_SCORECARD_ACTION CHECK (ACTION_REQUIRED_FLG IN ('Y', 'N')),
+    CONSTRAINT CK_SCORECARD_PERIOD CHECK (PERIOD_END_DT >= PERIOD_START_DT)
+)
+TABLESPACE WWI_DATA
+/
+
+ALTER TABLE WWI_PROC.SUPPLIER_SCORECARD ADD CONSTRAINT FK_SCORECARD_SUPP
+    FOREIGN KEY (SUPP_ID) REFERENCES WWI_MDM.SUPP_MASTER (SUPP_ID)
+/
+
+CREATE INDEX WWI_PROC.IX_SCORECARD_PERIOD
+    ON WWI_PROC.SUPPLIER_SCORECARD (SCORE_PERIOD_CD, OVERALL_SCORE DESC) TABLESPACE WWI_IDX
+/
+
+COMMENT ON COLUMN WWI_PROC.SUPPLIER_SCORECARD.SCORE_PERIOD_CD IS
+    'YYYY-QN in NA and EU, YYYY-MM in APAC. The format difference is undocumented elsewhere.'
+/

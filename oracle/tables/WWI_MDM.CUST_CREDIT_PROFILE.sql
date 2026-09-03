@@ -1,0 +1,73 @@
+/* =====================================================================
+ * Object       : TABLE WWI_MDM.CUST_CREDIT_PROFILE
+ * Schema       : WWI_MDM (Oracle ERP - WWIGERP)
+ * Deploy order : 24
+ * Depends on   : WWI_MDM.CUST_MASTER, WWI_REF.CURRENCY_CODE
+ * Called by    : PKG_CUSTOMER_MASTER, finance credit review, SSIS EXT_ORA_CustomerCredit
+ *
+ * One current credit profile per customer, plus history rows kept by setting
+ * REVIEW_STATUS_CD = 'SUP' (superseded) rather than deleting. Limits are held
+ * in the customer's own currency, so a global limit report has to convert; the
+ * 2009 EU insurance requirement added the INSURED_AMT block that NA never uses.
+ * ===================================================================== */
+
+CREATE SEQUENCE WWI_MDM.SEQ_CUST_CREDIT_PROFILE
+    START WITH 200001 INCREMENT BY 1 NOCACHE NOCYCLE
+/
+
+CREATE TABLE WWI_MDM.CUST_CREDIT_PROFILE
+(
+    CREDIT_PROFILE_ID       NUMBER(12)      NOT NULL,
+    CUST_ID                 NUMBER(12)      NOT NULL,
+    CREDIT_LIMIT_AMT        NUMBER(15,5)    DEFAULT 0 NOT NULL,
+    CREDIT_LIMIT_CURR_CD    VARCHAR2(3)     NOT NULL,
+    TEMP_LIMIT_AMT          NUMBER(15,5),
+    TEMP_LIMIT_EXPIRY_DT    DATE,
+    EXPOSURE_AMT            NUMBER(15,5)    DEFAULT 0 NOT NULL,
+    INSURED_AMT             NUMBER(15,5),
+    INSURER_CD              VARCHAR2(8),
+    INSURANCE_POLICY_NBR    VARCHAR2(30),
+    RISK_CLASS_CD           VARCHAR2(2)     DEFAULT 'B' NOT NULL,
+    RISK_SCORE_NBR          NUMBER(5),
+    BUREAU_CD               VARCHAR2(8),
+    BUREAU_REF_NBR          VARCHAR2(30),
+    BUREAU_SCORE_DT         DATE,
+    DSO_DAYS                NUMBER(5,1),
+    AVG_DAYS_LATE           NUMBER(5,1),
+    LAST_REVIEW_DT          DATE,
+    NEXT_REVIEW_DT          DATE,
+    REVIEW_STATUS_CD        VARCHAR2(3)     DEFAULT 'CUR' NOT NULL,
+    REVIEWED_BY_CD          VARCHAR2(8),
+    HOLD_REASON_CD          VARCHAR2(4),
+    HOLD_NOTES_TXT          VARCHAR2(1000),
+    SOURCE_SYS              VARCHAR2(12)    DEFAULT 'ORA_ERP' NOT NULL,
+    CREATED_BY              VARCHAR2(30)    DEFAULT USER NOT NULL,
+    CREATED_DT              DATE            DEFAULT SYSDATE NOT NULL,
+    UPDATED_BY              VARCHAR2(30),
+    UPDATED_DT              DATE,
+    CONSTRAINT PK_CUST_CREDIT_PROFILE PRIMARY KEY (CREDIT_PROFILE_ID) USING INDEX TABLESPACE WWI_IDX,
+    CONSTRAINT CK_CUST_CREDIT_RISK CHECK (RISK_CLASS_CD IN ('A', 'B', 'C', 'D', 'X')),
+    CONSTRAINT CK_CUST_CREDIT_REVIEW CHECK (REVIEW_STATUS_CD IN ('CUR', 'SUP', 'PND')),
+    CONSTRAINT CK_CUST_CREDIT_LIMIT CHECK (CREDIT_LIMIT_AMT >= 0),
+    CONSTRAINT CK_CUST_CREDIT_TEMP CHECK (
+        TEMP_LIMIT_AMT IS NULL OR TEMP_LIMIT_EXPIRY_DT IS NOT NULL)
+)
+TABLESPACE WWI_DATA
+/
+
+ALTER TABLE WWI_MDM.CUST_CREDIT_PROFILE ADD CONSTRAINT FK_CUST_CREDIT_CUST
+    FOREIGN KEY (CUST_ID) REFERENCES WWI_MDM.CUST_MASTER (CUST_ID)
+/
+
+CREATE UNIQUE INDEX WWI_MDM.UX_CUST_CREDIT_CURRENT
+    ON WWI_MDM.CUST_CREDIT_PROFILE (CASE WHEN REVIEW_STATUS_CD = 'CUR' THEN CUST_ID END)
+    TABLESPACE WWI_IDX
+/
+
+CREATE INDEX WWI_MDM.IX_CUST_CREDIT_REVIEW_DUE
+    ON WWI_MDM.CUST_CREDIT_PROFILE (NEXT_REVIEW_DT, RISK_CLASS_CD) TABLESPACE WWI_IDX
+/
+
+COMMENT ON COLUMN WWI_MDM.CUST_CREDIT_PROFILE.EXPOSURE_AMT IS
+    'Maintained by the nightly AR job, not by the ERP transaction path.'
+/
