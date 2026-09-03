@@ -85,6 +85,9 @@ $sqlcmdVariables = [ordered]@{
 function Get-SqlcmdVariableArguments {
     $args = @()
     foreach ($key in $sqlcmdVariables.Keys) {
+        # sqlcmd rejects "-v Name=" outright, so a variable with no value has to
+        # be left out; a script that needs it fails on the reference instead.
+        if ([string]::IsNullOrWhiteSpace($sqlcmdVariables[$key])) { continue }
         $args += '-v'
         $args += ("{0}={1}" -f $key, $sqlcmdVariables[$key])
     }
