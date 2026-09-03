@@ -1,11 +1,16 @@
 """Spec module for the WWI_ReferenceData SSIS project (ssis/06_reference_data).
 
 Emits the fourteen reference-data packages declared in config/estate-catalog.yaml
-for folder 06_reference_data. These packages load and version the conformed
-ref.* code sets and crosswalks from the staged feeds and publish them into the
-warehouse dimension tables, including the effective-dated FX and tax rates, the
-region-specific code sets and the code-crosswalk maintenance that reports
-unmapped source codes back to the stewards.
+for folder 06_reference_data. The packages no longer conform reference data
+inside the data flow: the conforming is done by the ref.usp_Load* procedures in
+sqlserver/reference, which the packages call, and the data flows are left with
+the job they are actually good at - reading the conformed ref.* layer and
+publishing it into the warehouse dimension tables named in the catalog.
+
+The order inside a package is always the same:
+
+    log start -> ref.usp_Load<Object> (one or more) -> publish Dimension.*
+              -> ref.usp_ReportUnmappedCodes -> log row counts -> log success
 
 Run from the repository root:
 
@@ -43,7 +48,6 @@ from patterns import (  # noqa: E402
     log_package_success,
     log_row_count,
     new_package,
-    truncate,
 )
 import project  # noqa: E402
 
@@ -75,104 +79,78 @@ REFERENCE_VARIABLES = [
     ("EffectiveFromDate", "1900-01-01", "string"),
 ]
 
+#  Every reference load procedure takes the same first two arguments, so the
+#  bindings are the same everywhere and are written out once.
+BATCH_BINDINGS = [("$Package::BatchId", 0, "LONG"),
+                  ("User::PackageExecutionId", 1, "LONG")]
 
-def version_reference_set(ref_table, code_set_name):
-    """Close the current version and open a new one for an effective-dated set.
 
-    The estate has never used temporal tables here; versioning is a hand-rolled
-    close-and-open of the ValidFrom/ValidTo pair inside one transaction.
+def load_reference(task_name, procedure, extra_arguments=""):
+    """Call one of the sqlserver/reference load procedures."""
+    return exec_proc(
+        task_name,
+        "EXEC %s @BatchId = ?, @PackageExecutionId = ?%s;" % (procedure, extra_arguments),
+        parameter_bindings=list(BATCH_BINDINGS),
+    )
+
+
+def load_crosswalk(code_domain):
+    """Refresh ref.CodeCrosswalk for a single code domain."""
+    return load_reference(
+        "Load Code Crosswalk - %s" % code_domain,
+        "ref.usp_LoadCodeCrosswalk",
+        ", @CodeDomainCode = N'%s'" % code_domain,
+    )
+
+
+def report_unmapped(code_domain):
+    """Report the codes seen in raw.* that the crosswalk does not cover.
+
+    The procedure returns one row per unmapped code; the package keeps the
+    count in a variable so the weekly master package can raise it, and the
+    stewards read the detail out of ref.vw_UnmappedSourceCode.
     """
-    sql = (
-        "DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();\n"
-        "BEGIN TRANSACTION;\n"
-        "UPDATE %s\n"
-        "SET ValidTo = @Now, IsCurrent = 0\n"
-        "WHERE IsCurrent = 1\n"
-        "  AND EXISTS (SELECT 1 FROM %s_Incoming AS i\n"
-        "              WHERE i.BatchId = ? AND i.CodeValue = %s.CodeValue\n"
-        "                AND i.ChangeHash <> %s.ChangeHash);\n"
-        "INSERT INTO %s (CodeValue, CodeDescription, RegionCode, ChangeHash, ValidFrom, ValidTo, "
-        "IsCurrent, VersionNumber, CodeSetName)\n"
-        "SELECT i.CodeValue, i.CodeDescription, i.RegionCode, i.ChangeHash, @Now, "
-        "CONVERT(DATETIME2(3), N'9999-12-31'), 1,\n"
-        "       ISNULL((SELECT MAX(p.VersionNumber) FROM %s AS p WHERE p.CodeValue = i.CodeValue), 0) + 1,\n"
-        "       N'%s'\n"
-        "FROM %s_Incoming AS i\n"
-        "WHERE i.BatchId = ?\n"
-        "  AND NOT EXISTS (SELECT 1 FROM %s AS c\n"
-        "                  WHERE c.CodeValue = i.CodeValue AND c.IsCurrent = 1\n"
-        "                    AND c.ChangeHash = i.ChangeHash);\n"
-        "COMMIT TRANSACTION;"
-        % (ref_table, ref_table, ref_table, ref_table, ref_table, ref_table, code_set_name,
-           ref_table, ref_table)
-    )
     return ExecuteSql(
-        "Version Reference Set - %s" % code_set_name,
+        "Report Unmapped Codes - %s" % code_domain,
         CONN_STAGING,
-        sql,
-        parameter_bindings=[("$Package::BatchId", 0, "LONG"),
-                            ("$Package::BatchId", 1, "LONG")],
-    )
-
-
-def report_unmapped(code_set_name, source_object):
-    """Count and register source codes with no crosswalk entry."""
-    sql = (
-        "INSERT INTO err.UnmappedCode (BatchId, CodeSetName, SourceSystemCode, SourceCode, "
-        "OccurrenceCount, FirstSeenAtUtc)\n"
-        "SELECT ?, N'%s', s.SourceSystemCode, s.SourceCode, COUNT_BIG(*), SYSUTCDATETIME()\n"
-        "FROM %s AS s\n"
-        "WHERE NOT EXISTS (SELECT 1 FROM ref.CodeCrosswalk AS x\n"
-        "                  WHERE x.CodeSetName = N'%s' AND x.SourceCode = s.SourceCode\n"
-        "                    AND x.SourceSystemCode = s.SourceSystemCode)\n"
-        "GROUP BY s.SourceSystemCode, s.SourceCode;\n"
-        "SELECT @@ROWCOUNT AS UnmappedCodeCount;" % (code_set_name, source_object, code_set_name)
-    )
-    return ExecuteSql(
-        "Report Unmapped Codes - %s" % code_set_name,
-        CONN_STAGING,
-        sql,
+        "DECLARE @Unmapped TABLE (CodeDomainCode NVARCHAR(30), SourceSystemCode NVARCHAR(20),\n"
+        "                         SourceObjectName NVARCHAR(200), SourceColumnName NVARCHAR(100),\n"
+        "                         SourceCodeValue NVARCHAR(50), OccurrenceCount BIGINT,\n"
+        "                         FirstObservedAtUtc DATETIME2(3));\n"
+        "INSERT INTO @Unmapped\n"
+        "EXEC ref.usp_ReportUnmappedCodes @BatchId = ?, @PackageExecutionId = ?, "
+        "@CodeDomainCode = N'%s';\n"
+        "SELECT COUNT_BIG(*) AS UnmappedCodeCount FROM @Unmapped;" % code_domain,
         result_type="ResultSetType_SingleRow",
-        parameter_bindings=[("$Package::BatchId", 0, "LONG")],
+        parameter_bindings=list(BATCH_BINDINGS),
         result_bindings=[("0", "User::UnmappedCodeCount")],
-    )
-
-
-def log_unmapped_rejects(code_set_name):
-    """Register each unmapped code with the control framework, one at a time."""
-    sql = (
-        "DECLARE @Code NVARCHAR(60), @System NVARCHAR(20);\n"
-        "DECLARE unmapped_cur CURSOR LOCAL FAST_FORWARD FOR\n"
-        "    SELECT u.SourceCode, u.SourceSystemCode FROM err.UnmappedCode AS u\n"
-        "    WHERE u.BatchId = ? AND u.CodeSetName = N'%s' AND u.LoggedToControl = 0;\n"
-        "OPEN unmapped_cur;\n"
-        "FETCH NEXT FROM unmapped_cur INTO @Code, @System;\n"
-        "WHILE @@FETCH_STATUS = 0\n"
-        "BEGIN\n"
-        "    EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @BatchId = ?, "
-        "@SourceSystemCode = @System, @ObjectName = N'ref.CodeCrosswalk', @BusinessKey = @Code, "
-        "@RejectReasonCode = N'REF_UNMAPPED_CODE', @RejectStage = N'Reference';\n"
-        "    UPDATE err.UnmappedCode SET LoggedToControl = 1\n"
-        "    WHERE BatchId = ? AND CodeSetName = N'%s' AND SourceCode = @Code;\n"
-        "    FETCH NEXT FROM unmapped_cur INTO @Code, @System;\n"
-        "END\n"
-        "CLOSE unmapped_cur;\n"
-        "DEALLOCATE unmapped_cur;" % (code_set_name, code_set_name)
-    )
-    return ExecuteSql(
-        "Log Unmapped Codes - %s" % code_set_name,
-        CONN_STAGING,
-        sql,
-        parameter_bindings=[("$Package::BatchId", 0, "LONG"),
-                            ("User::PackageExecutionId", 1, "LONG"),
-                            ("$Package::BatchId", 2, "LONG"),
-                            ("$Package::BatchId", 3, "LONG")],
     )
 
 
 def hash_expression(columns):
     """The house change-hash expression: pipe-delimited, upper-cased, trimmed."""
     return " + \"|\" + ".join('UPPER(TRIM((DT_WSTR,60)%s))' % col for col in columns)
+
+
+def conformed_code_query(code_domain, code_alias, name_alias):
+    """The standard read of one code domain out of the conformed crosswalk.
+
+    A conformed code can be reached from several source codes; the description
+    shown downstream is the one flagged as the default for that conformed value,
+    falling back to whichever mapping sorts first.
+    """
+    return (
+        "SELECT x.ConformedCodeValue AS %s,\n"
+        "       MAX(CASE WHEN x.IsDefaultForConformed = 1 THEN x.SourceCodeDescription END) AS %s,\n"
+        "       ISNULL(x.RegionCode, N'ALL') AS RegionCode,\n"
+        "       MIN(x.EffectiveFromDate) AS EffectiveFromDate,\n"
+        "       COUNT_BIG(*) AS SourceCodeCount\n"
+        "FROM ref.CodeCrosswalk AS x\n"
+        "WHERE x.CodeDomainCode = N'%s'\n"
+        "  AND x.EffectiveToDate IS NULL\n"
+        "GROUP BY x.ConformedCodeValue, ISNULL(x.RegionCode, N'ALL');" % (
+            code_alias, name_alias, code_domain)
+    )
 
 
 def build_reference_package(name, description, source_system, object_name, flows,
@@ -184,7 +162,7 @@ def build_reference_package(name, description, source_system, object_name, flows
                       extra_variables=REFERENCE_VARIABLES + list(extra_variables))
     ordered = [pkg.add(log_package_start(pkg))]
     for table in truncate_tables:
-        ordered.append(pkg.add(truncate(table)))
+        ordered.append(pkg.add(truncate_dimension(table)))
     for task in pre_tasks:
         ordered.append(pkg.add(task))
     for flow in flows:
@@ -197,6 +175,11 @@ def build_reference_package(name, description, source_system, object_name, flows
     return pkg
 
 
+def truncate_dimension(table):
+    """Full-refresh dimensions are emptied on the warehouse connection."""
+    return ExecuteSql("Truncate %s" % table, CONN_DW, "TRUNCATE TABLE %s;" % table)
+
+
 # ---------------------------------------------------------------------------
 # currency, rates and financial code sets
 # ---------------------------------------------------------------------------
@@ -204,302 +187,261 @@ def build_reference_package(name, description, source_system, object_name, flows
 
 @package
 def ref_load_currency():
-    """stg.Currency + stg.FxRate -> ref.Currency, ref.FxRate and Dimension.Currency."""
-    cur_cols = [
+    """ref.usp_LoadCurrency + ref.usp_LoadFxRateDaily -> Dimension.Currency."""
+    dim_cols = [
         str_col("CurrencyCode", 3), str_col("CurrencyName", 60), str_col("CurrencySymbol", 5),
-        int_col("MinorUnitDigits"), str_col("RegionCode", 4), bool_col("IsActive"),
+        int_col("MinorUnitDigits"), str_col("RoundingRuleCode", 20), bool_col("IsReportingCurrency"),
+        bool_col("IsEuroLegacy"), date_col("RetiredDate"), dec_col("LatestRateToUsd"),
+        date_col("LatestRateDate"),
     ]
-    cur = DataFlow("DFT Load Currency Reference", "Conform the ISO currency set and hash it for versioning")
-    cur.oledb_source(
-        "STG Currency", CONN_STAGING,
-        "SELECT CurrencyCode, CurrencyName, CurrencySymbol, MinorUnitDigits, RegionCode, IsActive\n"
-        "FROM stg.Currency;",
-        cur_cols, timeout=1800)
-    cur.row_count("Count Currencies Read", "User::RowsRead")
-    cur.derived_column("Conform Currency", [
+    dim = DataFlow("DFT Publish Currency Dimension",
+                   "Publish the conformed currency set with its latest USD rate")
+    dim.oledb_source(
+        "REF Currency Conformed", CONN_STAGING,
+        "SELECT c.CurrencyCode, c.CurrencyName, c.CurrencySymbol, c.MinorUnitDigits,\n"
+        "       c.RoundingRuleCode, c.IsReportingCurrency, c.IsEuroLegacy, c.RetiredDate,\n"
+        "       f.ConversionRate AS LatestRateToUsd, f.RateDate AS LatestRateDate\n"
+        "FROM ref.Currency AS c\n"
+        "     OUTER APPLY (SELECT TOP (1) r.ConversionRate, r.RateDate\n"
+        "                  FROM ref.FxRateDaily AS r\n"
+        "                  WHERE r.FromCurrencyCode = c.CurrencyCode\n"
+        "                    AND r.ToCurrencyCode = N'USD'\n"
+        "                    AND r.RateTypeCode = N'CORPORATE'\n"
+        "                  ORDER BY r.RateDate DESC) AS f\n"
+        "WHERE c.IsActive = 1;",
+        dim_cols, timeout=1800)
+    dim.row_count("Count Currencies Read", "User::RowsRead")
+    dim.derived_column("Shape Currency Dimension", [
         ("CurrencyCode", 'UPPER(TRIM(CurrencyCode))', str_col("CurrencyCode", 3)),
         ("CurrencyName", 'TRIM(CurrencyName)', str_col("CurrencyName", 60)),
-        ("MinorUnitDigits", 'ISNULL(MinorUnitDigits) ? 2 : MinorUnitDigits', int_col("MinorUnitDigits")),
-        ("CodeValue", 'UPPER(TRIM(CurrencyCode))', str_col("CodeValue", 60)),
-        ("CodeDescription", 'TRIM(CurrencyName)', str_col("CodeDescription", 200)),
+        # A euro legacy currency keeps its fixed rate for restatement and is
+        # shown retired rather than dropped.
+        ("CurrencyStatusCode",
+         'IsEuroLegacy == TRUE ? "LEGACY" : (ISNULL(RetiredDate) ? "ACTIVE" : "RETIRED")',
+         str_col("CurrencyStatusCode", 10)),
+        ("RateStalenessDays",
+         'ISNULL(LatestRateDate) ? 9999 : DATEDIFF("Dd", LatestRateDate, GETDATE())',
+         int_col("RateStalenessDays")),
+        ("LineageKey", '(DT_WSTR,40)"REF_Load_Currency"', str_col("LineageKey", 40)),
         ("ChangeHash", hash_expression(["CurrencyCode", "CurrencyName", "MinorUnitDigits"]),
          str_col("ChangeHash", 200)),
     ])
-    cur.conditional_split("Screen Currency", [
-        ("Valid Currency", 'LEN(CurrencyCode) == 3'),
-    ], default_output="Malformed Currency Code")
-    cur.row_count("Count Currencies Loaded", "User::RowsInserted")
-    cur.oledb_destination("REF Currency Incoming", CONN_STAGING, "[ref].[Currency_Incoming]",
-                          batch_size=5000)
-    cur.branch_destination("ERR Currency Malformed", CONN_STAGING, "[err].[RejectedConstraintViolation]",
-                           "Screen Currency", "Malformed Currency Code")
-
-    fx_cols = [
-        str_col("FromCurrencyCode", 3), str_col("ToCurrencyCode", 3), dec_col("ConversionRate"),
-        date_col("EffectiveFromDate"), date_col("EffectiveToDate"), str_col("RateSourceCode", 10),
-    ]
-    fx = DataFlow("DFT Load FX Rates", "Effective-dated FX rates with gap detection")
-    fx.oledb_source(
-        "STG FX Rate", CONN_STAGING,
-        "SELECT FromCurrencyCode, ToCurrencyCode, ConversionRate, EffectiveFromDate,\n"
-        "       EffectiveToDate, RateSourceCode\n"
-        "FROM stg.FxRate\n"
-        "WHERE EffectiveFromDate >= DATEADD(year, -3, CONVERT(date, GETDATE()));",
-        fx_cols, timeout=3600)
-    fx.sort("Sort FX By Pair And Effective Date",
-            ["FromCurrencyCode", "ToCurrencyCode", "EffectiveFromDate"], eliminate_duplicates=True)
-    fx.derived_column("Close FX Intervals", [
-        ("EffectiveToDate",
-         'ISNULL(EffectiveToDate) ? (DT_DBTIMESTAMP)"9999-12-31" : EffectiveToDate',
-         date_col("EffectiveToDate")),
-        ("InverseRate",
-         'ConversionRate == 0 ? (DT_NUMERIC,18,6)0 : (DT_NUMERIC,18,6)(1.0 / ConversionRate)',
-         dec_col("InverseRate")),
-        ("RateSourceCode", 'UPPER(TRIM(ISNULL(RateSourceCode) ? "ECB" : RateSourceCode))',
-         str_col("RateSourceCode", 10)),
-        ("CurrencyPairCode",
-         'UPPER(TRIM(FromCurrencyCode)) + UPPER(TRIM(ToCurrencyCode))', str_col("CurrencyPairCode", 6)),
-    ])
-    fx.conditional_split("Screen FX Rate", [
-        ("Usable Rate", 'ConversionRate > 0 && EffectiveToDate > EffectiveFromDate'),
-        ("Non Positive Rate", 'ConversionRate <= 0'),
-    ], default_output="Inverted Interval")
-    fx.row_count("Count FX Rows Loaded", "User::RowsUpdated")
-    fx.oledb_destination("REF FxRate", CONN_STAGING, "[ref].[FxRate]", batch_size=50000)
-    fx.branch_destination("ERR FX Non Positive", CONN_STAGING, "[err].[RejectedConstraintViolation]",
-                          "Screen FX Rate", "Non Positive Rate")
-    fx.branch_destination("ERR FX Inverted Interval", CONN_STAGING,
-                          "[err].[RejectedConstraintViolation]",
-                          "Screen FX Rate", "Inverted Interval")
-
-    dim = DataFlow("DFT Publish Currency Dimension", "Publish the current currency version to the DW")
-    dim.oledb_source(
-        "REF Currency Current", CONN_STAGING,
-        "SELECT c.CurrencyCode, c.CurrencyName, c.CurrencySymbol, c.MinorUnitDigits, c.RegionCode,\n"
-        "       c.VersionNumber, c.ValidFrom\n"
-        "FROM ref.Currency AS c WHERE c.IsCurrent = 1;",
-        [str_col("CurrencyCode", 3), str_col("CurrencyName", 60), str_col("CurrencySymbol", 5),
-         int_col("MinorUnitDigits"), str_col("RegionCode", 4), int_col("VersionNumber"),
-         date_col("ValidFrom")], timeout=1800)
-    dim.derived_column("Shape Currency Dimension", [
-        ("LineageKey", '(DT_WSTR,40)"REF_Load_Currency"', str_col("LineageKey", 40)),
-    ])
-    dim.row_count("Count Currency Dimension Rows", "User::RowsUpdated")
+    dim.conditional_split("Screen Currency", [
+        ("Rated Currency", 'RateStalenessDays <= 30'),
+        ("Stale Rate", 'RateStalenessDays > 30 && RateStalenessDays < 9999'),
+    ], default_output="Unrated Currency")
+    dim.row_count("Count Currencies Published", "User::RowsInserted")
     dim.oledb_destination("DW Dimension Currency", CONN_DW, "[Dimension].[Currency]", batch_size=5000)
+    dim.branch_destination("ERR Currency Rate Stale", CONN_STAGING,
+                           "[err].[RejectedLookupFailure]", "Screen Currency", "Stale Rate")
+    dim.branch_destination("ERR Currency Unrated", CONN_STAGING,
+                           "[err].[RejectedLookupFailure]", "Screen Currency", "Unrated Currency")
     return build_reference_package(
         "REF_Load_Currency",
-        "Load the conformed currency code set and the three-year effective-dated FX rate history, "
-        "then publish the current currency version into Dimension.Currency. FX intervals are closed "
-        "against the next rate for the pair and non-positive or inverted intervals are rejected.",
-        ORA, "ref.Currency", [cur, fx, dim],
-        truncate_tables=["[ref].[Currency_Incoming]"],
-        post_tasks=[version_reference_set("ref.Currency", "CURRENCY")])
+        "Conform the currency master and the daily FX rates into ref.Currency and ref.FxRateDaily "
+        "through the reference load procedures, then publish the active currencies into "
+        "Dimension.Currency with their latest corporate rate to USD. Currencies whose rate is more "
+        "than thirty days old are still published but are reported to the control framework.",
+        ORA, "ref.Currency", [dim],
+        truncate_tables=["[Dimension].[Currency]"],
+        pre_tasks=[load_reference("Load Currency Reference", "ref.usp_LoadCurrency"),
+                   load_reference("Load Daily FX Rates", "ref.usp_LoadFxRateDaily")],
+        post_tasks=[report_unmapped("CURRENCY")])
 
 
 @package
 def ref_load_payment_method():
-    """stg.Payment -> ref.PaymentMethod and Dimension.Payment Method."""
+    """ref.usp_LoadCodeCrosswalk (PAYMENT_METHOD) -> Dimension.Payment Method."""
     cols = [
-        str_col("PaymentMethodCode", 12), str_col("SourcePaymentMethodCode", 12),
-        str_col("PaymentMethodName", 60), str_col("RegionCode", 4), str_col("SettlementTypeCode", 10),
-        int_col("UsageCount"),
+        str_col("PaymentMethodCode", 12), str_col("PaymentMethodName", 60), str_col("RegionCode", 4),
+        date_col("EffectiveFromDate"), bigint_col("SourceCodeCount"),
     ]
-    flow = DataFlow("DFT Load Payment Method", "Derive the payment method code set from observed usage")
+    flow = DataFlow("DFT Publish Payment Method Dimension",
+                    "Publish the conformed payment method set with its regional settlement type")
     flow.oledb_source(
-        "STG Payment Method Usage", CONN_STAGING,
-        "SELECT p.PaymentMethodCode, p.SourcePaymentMethodCode,\n"
-        "       ISNULL(x.TargetDescription, p.PaymentMethodCode) AS PaymentMethodName,\n"
-        "       p.RegionCode, ISNULL(x.AttributeValue, N'UNKNOWN') AS SettlementTypeCode,\n"
-        "       COUNT_BIG(*) AS UsageCount\n"
-        "FROM stg.Payment AS p\n"
-        "     LEFT OUTER JOIN ref.CodeCrosswalk AS x\n"
-        "       ON x.CodeSetName = N'PAYMENT_METHOD' AND x.SourceCode = p.SourcePaymentMethodCode\n"
-        "GROUP BY p.PaymentMethodCode, p.SourcePaymentMethodCode, x.TargetDescription, p.RegionCode,\n"
-        "         x.AttributeValue;",
+        "REF PaymentMethod Conformed", CONN_STAGING,
+        conformed_code_query("PAYMENT_METHOD", "PaymentMethodCode", "PaymentMethodName"),
         cols, timeout=1800)
     flow.row_count("Count Methods Read", "User::RowsRead")
     flow.derived_column("Conform Payment Method", [
         ("PaymentMethodCode", 'UPPER(TRIM(PaymentMethodCode))', str_col("PaymentMethodCode", 12)),
+        ("PaymentMethodName",
+         'ISNULL(PaymentMethodName) ? UPPER(TRIM(PaymentMethodCode)) : TRIM(PaymentMethodName)',
+         str_col("PaymentMethodName", 60)),
         # NA settles by ACH and cheque, EU by SEPA, APAC largely by local RTGS.
         ("SettlementTypeCode",
-         'SettlementTypeCode != "UNKNOWN" ? UPPER(TRIM(SettlementTypeCode)) : '
-         '(RegionCode == "EU" ? "SEPA" : (RegionCode == "APAC" ? "RTGS" : "ACH"))',
+         'RegionCode == "EU" ? "SEPA" : (RegionCode == "APAC" ? "RTGS" : "ACH")',
          str_col("SettlementTypeCode", 10)),
         ("ElectronicFlag",
          'UPPER(TRIM(PaymentMethodCode)) == "CHQ" || UPPER(TRIM(PaymentMethodCode)) == "CASH" ? "N" : "Y"',
          str_col("ElectronicFlag", 1)),
-        ("CodeValue", 'UPPER(TRIM(PaymentMethodCode))', str_col("CodeValue", 60)),
-        ("CodeDescription", 'TRIM(PaymentMethodName)', str_col("CodeDescription", 200)),
-        ("ChangeHash", hash_expression(["PaymentMethodCode", "PaymentMethodName", "SettlementTypeCode"]),
+        ("LineageKey", '(DT_WSTR,40)"REF_Load_PaymentMethod"', str_col("LineageKey", 40)),
+        ("ChangeHash", hash_expression(["PaymentMethodCode", "PaymentMethodName", "RegionCode"]),
          str_col("ChangeHash", 200)),
     ])
     flow.conditional_split("Screen Payment Method", [
         ("Mapped Method", 'PaymentMethodCode != "" && PaymentMethodCode != "UNKNOWN"'),
     ], default_output="Unmapped Method")
-    flow.row_count("Count Methods Loaded", "User::RowsInserted")
-    flow.oledb_destination("REF PaymentMethod Incoming", CONN_STAGING,
-                           "[ref].[PaymentMethod_Incoming]", batch_size=5000)
-    flow.branch_destination("ERR Payment Method Unmapped", CONN_STAGING, "[err].[RejectedLookupFailure]",
+    flow.row_count("Count Methods Published", "User::RowsInserted")
+    flow.oledb_destination("DW Dimension Payment Method", CONN_DW, "[Dimension].[Payment Method]",
+                           batch_size=5000)
+    flow.branch_destination("ERR Payment Method Unmapped", CONN_STAGING,
+                            "[err].[RejectedLookupFailure]",
                             "Screen Payment Method", "Unmapped Method")
-
-    dim = DataFlow("DFT Publish Payment Method Dimension", "Publish the current version to the DW")
-    dim.oledb_source(
-        "REF PaymentMethod Current", CONN_STAGING,
-        "SELECT CodeValue AS PaymentMethodCode, CodeDescription AS PaymentMethodName, RegionCode,\n"
-        "       VersionNumber, ValidFrom\n"
-        "FROM ref.PaymentMethod WHERE IsCurrent = 1;",
-        [str_col("PaymentMethodCode", 12), str_col("PaymentMethodName", 60), str_col("RegionCode", 4),
-         int_col("VersionNumber"), date_col("ValidFrom")], timeout=1800)
-    dim.row_count("Count Method Dimension Rows", "User::RowsUpdated")
-    dim.oledb_destination("DW Dimension Payment Method", CONN_DW, "[Dimension].[Payment Method]",
-                          batch_size=5000)
     return build_reference_package(
         "REF_Load_PaymentMethod",
-        "Rebuild the payment method code set from the methods actually observed in stg.Payment, "
-        "defaulting the settlement type by region (SEPA in the EU, RTGS in APAC, ACH in NA) and "
-        "reporting source methods that have no crosswalk entry.",
-        ORA, "ref.PaymentMethod", [flow, dim],
-        truncate_tables=["[ref].[PaymentMethod_Incoming]"],
-        post_tasks=[version_reference_set("ref.PaymentMethod", "PAYMENT_METHOD"),
-                    report_unmapped("PAYMENT_METHOD", "stg.Payment"),
-                    log_unmapped_rejects("PAYMENT_METHOD")])
+        "Refresh the PAYMENT_METHOD domain of ref.CodeCrosswalk so both source systems' payment "
+        "codes reach the conformed set, then publish the conformed methods into "
+        "Dimension.Payment Method, defaulting the settlement type by region (SEPA in the EU, RTGS "
+        "in APAC, ACH in NA) and reporting source methods that still have no mapping.",
+        ORA, "ref.CodeCrosswalk", [flow],
+        truncate_tables=["[Dimension].[Payment Method]"],
+        pre_tasks=[load_crosswalk("PAYMENT_METHOD")],
+        post_tasks=[report_unmapped("PAYMENT_METHOD")])
 
 
 @package
 def ref_load_transaction_type():
-    """stg.StockMovement -> ref.TransactionType and Dimension.Transaction Type."""
+    """ref.usp_LoadUnitOfMeasure + crosswalk (TRANSACTION_TYPE) -> Dimension.Transaction Type."""
     cols = [
         str_col("TransactionTypeCode", 12), str_col("TransactionTypeName", 60),
-        str_col("MovementDirectionCode", 3), bool_col("AffectsInventory"), bool_col("AffectsLedger"),
-        int_col("UsageCount"),
+        str_col("RegionCode", 4), date_col("EffectiveFromDate"), bigint_col("SourceCodeCount"),
     ]
-    flow = DataFlow("DFT Load Transaction Type", "Classify transaction types by their ledger effect")
+    flow = DataFlow("DFT Publish Transaction Type Dimension",
+                    "Classify the conformed transaction types by their ledger effect")
     flow.oledb_source(
-        "STG Transaction Type Usage", CONN_STAGING,
-        "SELECT m.TransactionTypeCode,\n"
-        "       ISNULL(x.TargetDescription, m.TransactionTypeCode) AS TransactionTypeName,\n"
-        "       CASE WHEN SUM(m.SignedQuantity) >= 0 THEN N'IN' ELSE N'OUT' END AS MovementDirectionCode,\n"
-        "       CAST(1 AS bit) AS AffectsInventory,\n"
-        "       CAST(CASE WHEN m.TransactionTypeCode IN (N'SALE', N'PURCH') THEN 1 ELSE 0 END AS bit)\n"
-        "           AS AffectsLedger,\n"
-        "       COUNT_BIG(*) AS UsageCount\n"
-        "FROM stg.StockMovement AS m\n"
-        "     LEFT OUTER JOIN ref.CodeCrosswalk AS x\n"
-        "       ON x.CodeSetName = N'TRANSACTION_TYPE' AND x.SourceCode = m.TransactionTypeCode\n"
-        "GROUP BY m.TransactionTypeCode, x.TargetDescription;",
+        "REF TransactionType Conformed", CONN_STAGING,
+        conformed_code_query("TRANSACTION_TYPE", "TransactionTypeCode", "TransactionTypeName"),
         cols, timeout=1800)
     flow.row_count("Count Transaction Types Read", "User::RowsRead")
     flow.derived_column("Conform Transaction Type", [
         ("TransactionTypeCode", 'UPPER(TRIM(TransactionTypeCode))', str_col("TransactionTypeCode", 12)),
-        ("MovementSign", 'MovementDirectionCode == "OUT" ? -1 : 1', int_col("MovementSign")),
+        ("TransactionTypeName",
+         'ISNULL(TransactionTypeName) ? UPPER(TRIM(TransactionTypeCode)) : TRIM(TransactionTypeName)',
+         str_col("TransactionTypeName", 60)),
+        ("MovementDirectionCode",
+         'UPPER(TRIM(TransactionTypeCode)) == "PURCH" || UPPER(TRIM(TransactionTypeCode)) == "RET" '
+         '? "IN" : "OUT"', str_col("MovementDirectionCode", 3)),
+        ("MovementSign",
+         'UPPER(TRIM(TransactionTypeCode)) == "PURCH" || UPPER(TRIM(TransactionTypeCode)) == "RET" '
+         '? 1 : -1', int_col("MovementSign")),
+        ("AffectsLedgerFlag",
+         'UPPER(TRIM(TransactionTypeCode)) == "SALE" || UPPER(TRIM(TransactionTypeCode)) == "PURCH" '
+         '? "Y" : "N"', str_col("AffectsLedgerFlag", 1)),
         ("ReversalAllowedFlag",
          'UPPER(TRIM(TransactionTypeCode)) == "ADJ" || UPPER(TRIM(TransactionTypeCode)) == "RET" ? "Y" : "N"',
          str_col("ReversalAllowedFlag", 1)),
-        ("CodeValue", 'UPPER(TRIM(TransactionTypeCode))', str_col("CodeValue", 60)),
-        ("CodeDescription", 'TRIM(TransactionTypeName)', str_col("CodeDescription", 200)),
+        ("LineageKey", '(DT_WSTR,40)"REF_Load_TransactionType"', str_col("LineageKey", 40)),
         ("ChangeHash", hash_expression(["TransactionTypeCode", "TransactionTypeName",
-                                        "MovementDirectionCode"]), str_col("ChangeHash", 200)),
-    ])
-    flow.aggregate("Summarize Type Usage", ["TransactionTypeCode", "MovementDirectionCode"], [
-        ("UsageCount", "TotalUsageCount", "Sum"),
+                                        "RegionCode"]), str_col("ChangeHash", 200)),
     ])
     flow.conditional_split("Screen Transaction Type", [
-        ("In Use", 'TotalUsageCount > 0'),
-    ], default_output="Obsolete Type")
-    flow.row_count("Count Transaction Types Loaded", "User::RowsInserted")
-    flow.oledb_destination("REF TransactionType Incoming", CONN_STAGING,
-                           "[ref].[TransactionType_Incoming]", batch_size=5000)
-    flow.branch_destination("ERR Transaction Type Obsolete", CONN_STAGING,
-                            "[err].[RejectedConstraintViolation]",
-                            "Screen Transaction Type", "Obsolete Type")
+        ("Mapped Type", 'SourceCodeCount > 0 && TransactionTypeCode != "UNKNOWN"'),
+    ], default_output="Unmapped Type")
+    flow.row_count("Count Transaction Types Published", "User::RowsInserted")
+    flow.oledb_destination("DW Dimension Transaction Type", CONN_DW, "[Dimension].[Transaction Type]",
+                           batch_size=5000)
+    flow.branch_destination("ERR Transaction Type Unmapped", CONN_STAGING,
+                            "[err].[RejectedLookupFailure]",
+                            "Screen Transaction Type", "Unmapped Type")
 
-    dim = DataFlow("DFT Publish Transaction Type Dimension", "Publish the current version to the DW")
-    dim.oledb_source(
-        "REF TransactionType Current", CONN_STAGING,
-        "SELECT CodeValue AS TransactionTypeCode, CodeDescription AS TransactionTypeName,\n"
-        "       VersionNumber, ValidFrom\n"
-        "FROM ref.TransactionType WHERE IsCurrent = 1;",
-        [str_col("TransactionTypeCode", 12), str_col("TransactionTypeName", 60),
-         int_col("VersionNumber"), date_col("ValidFrom")], timeout=1800)
-    dim.row_count("Count Type Dimension Rows", "User::RowsUpdated")
-    dim.oledb_destination("DW Dimension Transaction Type", CONN_DW, "[Dimension].[Transaction Type]",
-                          batch_size=5000)
+    uom_cols = [str_col("UomCode", 10), str_col("UomName", 100), str_col("UomClassCode", 20),
+                str_col("BaseUomCode", 10), int_col("DecimalPrecision"),
+                dec_col("ConversionFactor", 18, 8)]
+    uom = DataFlow("DFT Publish Unit Of Measure",
+                   "Publish the conformed units and their standard conversion factors")
+    uom.oledb_source(
+        "REF UnitOfMeasure Conformed", CONN_STAGING,
+        "SELECT u.UomCode, u.UomName, u.UomClassCode, u.BaseUomCode, u.DecimalPrecision,\n"
+        "       ISNULL(c.ConversionFactor, CONVERT(DECIMAL(18,8), 1)) AS ConversionFactor\n"
+        "FROM ref.UnitOfMeasure AS u\n"
+        "     LEFT OUTER JOIN ref.UomConversion AS c\n"
+        "       ON c.FromUomCode = u.UomCode AND c.ToUomCode = u.BaseUomCode\n"
+        "      AND c.StockItemBusinessKey = N'*'\n"
+        "WHERE u.IsActive = 1;",
+        uom_cols, timeout=1800)
+    uom.derived_column("Shape Unit Of Measure", [
+        ("UomCode", 'UPPER(TRIM(UomCode))', str_col("UomCode", 10)),
+        ("BaseFactorText", '(DT_WSTR,40)ConversionFactor', str_col("BaseFactorText", 40)),
+    ])
+    uom.row_count("Count Units Published", "User::RowsUpdated")
+    uom.oledb_destination("DW Dimension Unit Of Measure", CONN_DW,
+                          "[Dimension].[Transaction Type]", batch_size=5000)
     return build_reference_package(
         "REF_Load_TransactionType",
-        "Rebuild the inventory transaction type code set from observed stock movements, deriving "
-        "the movement direction from the net signed quantity and flagging the types that also post "
-        "to the general ledger. Types no longer in use are retired rather than deleted.",
-        OLTP, "ref.TransactionType", [flow, dim],
-        truncate_tables=["[ref].[TransactionType_Incoming]"],
-        post_tasks=[version_reference_set("ref.TransactionType", "TRANSACTION_TYPE"),
-                    report_unmapped("TRANSACTION_TYPE", "stg.StockMovement"),
-                    log_unmapped_rejects("TRANSACTION_TYPE")])
+        "Conform the inventory transaction types and the unit-of-measure set: the crosswalk maps "
+        "the OLTP movement type names and the ERP miscellaneous issue codes onto the conformed "
+        "types, ref.UnitOfMeasure and ref.UomConversion hold the units and both the standard and "
+        "the item-specific conversion factors, and the conformed types are published into "
+        "Dimension.Transaction Type with their ledger effect and movement sign.",
+        OLTP, "ref.UnitOfMeasure", [flow, uom],
+        truncate_tables=["[Dimension].[Transaction Type]"],
+        pre_tasks=[load_crosswalk("TRANSACTION_TYPE"),
+                   load_reference("Load Unit Of Measure", "ref.usp_LoadUnitOfMeasure"),
+                   load_reference("Load UOM Conversions", "ref.usp_LoadUomConversion")],
+        post_tasks=[report_unmapped("TRANSACTION_TYPE")])
 
 
 @package
 def ref_load_payment_terms():
-    """stg.Supplier + stg.ApInvoice -> ref.PaymentTerms and Dimension.Payment Terms."""
+    """ref.usp_LoadCodeCrosswalk (PAYMENT_TERMS) -> Dimension.Payment Terms."""
     cols = [
-        str_col("PaymentTermsCode", 10), str_col("PaymentTermsName", 60), int_col("NetDays"),
-        int_col("DiscountDays"), dec_col("DiscountPercent", 9, 4), str_col("RegionCode", 4),
+        str_col("PaymentTermsCode", 10), str_col("PaymentTermsName", 60), str_col("RegionCode", 4),
+        date_col("EffectiveFromDate"), bigint_col("SourceCodeCount"),
     ]
-    flow = DataFlow("DFT Load Payment Terms", "Parse the legacy free-text terms into day counts")
+    flow = DataFlow("DFT Publish Payment Terms Dimension",
+                    "Decode the conformed terms codes into day counts and discounts")
     flow.oledb_source(
-        "STG Payment Terms", CONN_STAGING,
-        "SELECT DISTINCT s.PaymentTermsCode, ISNULL(t.PaymentTermsName, s.PaymentTermsCode) AS "
-        "PaymentTermsName,\n"
-        "       ISNULL(t.NetDays, 30) AS NetDays, ISNULL(t.DiscountDays, 0) AS DiscountDays,\n"
-        "       ISNULL(t.DiscountPercent, 0) AS DiscountPercent, s.RegionCode\n"
-        "FROM stg.Supplier AS s\n"
-        "     LEFT OUTER JOIN stg.PaymentTermsRaw AS t ON t.PaymentTermsCode = s.PaymentTermsCode;",
+        "REF PaymentTerms Conformed", CONN_STAGING,
+        conformed_code_query("PAYMENT_TERMS", "PaymentTermsCode", "PaymentTermsName"),
         cols, timeout=1800)
     flow.row_count("Count Terms Read", "User::RowsRead")
     flow.derived_column("Conform Payment Terms", [
         ("PaymentTermsCode", 'UPPER(TRIM(PaymentTermsCode))', str_col("PaymentTermsCode", 10)),
-        # The EU late payment directive caps supplier terms at sixty days; APAC
-        # trading houses habitually run ninety and NA runs the classic 2/10 net 30.
+        ("PaymentTermsName",
+         'ISNULL(PaymentTermsName) ? UPPER(TRIM(PaymentTermsCode)) : TRIM(PaymentTermsName)',
+         str_col("PaymentTermsName", 60)),
+        # The conformed code carries the day count in its last two characters
+        # except for EOM, which is month-end and has never fitted the pattern.
         ("NetDays",
-         'RegionCode == "EU" && NetDays > 60 ? 60 : (RegionCode == "APAC" && NetDays > 90 ? 90 : NetDays)',
-         int_col("NetDays")),
-        ("DiscountDays", 'DiscountDays > NetDays ? 0 : DiscountDays', int_col("DiscountDays")),
+         'UPPER(TRIM(PaymentTermsCode)) == "EOM" ? 30 : '
+         '(UPPER(TRIM(PaymentTermsCode)) == "DISC210" ? 30 : '
+         '(DT_I4)(RIGHT(UPPER(TRIM(PaymentTermsCode)), 2)))', int_col("NetDays")),
+        ("DiscountDays", 'UPPER(TRIM(PaymentTermsCode)) == "DISC210" ? 10 : 0',
+         int_col("DiscountDays")),
         ("DiscountPercent",
-         'DiscountPercent > 10 ? (DT_NUMERIC,9,4)0 : DiscountPercent', dec_col("DiscountPercent", 9, 4)),
+         'UPPER(TRIM(PaymentTermsCode)) == "DISC210" ? (DT_NUMERIC,9,4)2 : (DT_NUMERIC,9,4)0',
+         dec_col("DiscountPercent", 9, 4)),
+        # The EU late payment directive caps supplier terms at sixty days; APAC
+        # trading houses habitually run ninety.
+        ("NetDaysCapped",
+         'RegionCode == "EU" && NetDays > 60 ? 60 : (RegionCode == "APAC" && NetDays > 90 ? 90 : NetDays)',
+         int_col("NetDaysCapped")),
         ("EarlySettlementFlag", 'DiscountDays > 0 && DiscountPercent > 0 ? "Y" : "N"',
          str_col("EarlySettlementFlag", 1)),
-        ("CodeValue", 'UPPER(TRIM(PaymentTermsCode))', str_col("CodeValue", 60)),
-        ("CodeDescription", 'TRIM(PaymentTermsName)', str_col("CodeDescription", 200)),
-        ("ChangeHash", hash_expression(["PaymentTermsCode", "NetDays", "DiscountDays",
-                                        "DiscountPercent"]), str_col("ChangeHash", 200)),
+        ("LineageKey", '(DT_WSTR,40)"REF_Load_PaymentTerms"', str_col("LineageKey", 40)),
+        ("ChangeHash", hash_expression(["PaymentTermsCode", "PaymentTermsName", "RegionCode"]),
+         str_col("ChangeHash", 200)),
     ])
     flow.conditional_split("Screen Payment Terms", [
-        ("Valid Terms", 'NetDays > 0 && NetDays <= 365'),
+        ("Valid Terms", 'NetDaysCapped > 0 && NetDaysCapped <= 365'),
     ], default_output="Implausible Terms")
-    flow.row_count("Count Terms Loaded", "User::RowsInserted")
-    flow.oledb_destination("REF PaymentTerms Incoming", CONN_STAGING, "[ref].[PaymentTerms_Incoming]",
+    flow.row_count("Count Terms Published", "User::RowsInserted")
+    flow.oledb_destination("DW Dimension Payment Terms", CONN_DW, "[Dimension].[Payment Terms]",
                            batch_size=5000)
     flow.branch_destination("ERR Payment Terms Implausible", CONN_STAGING,
                             "[err].[RejectedConstraintViolation]",
                             "Screen Payment Terms", "Implausible Terms")
-
-    dim = DataFlow("DFT Publish Payment Terms Dimension", "Publish the current version to the DW")
-    dim.oledb_source(
-        "REF PaymentTerms Current", CONN_STAGING,
-        "SELECT CodeValue AS PaymentTermsCode, CodeDescription AS PaymentTermsName, RegionCode,\n"
-        "       VersionNumber, ValidFrom\n"
-        "FROM ref.PaymentTerms WHERE IsCurrent = 1;",
-        [str_col("PaymentTermsCode", 10), str_col("PaymentTermsName", 60), str_col("RegionCode", 4),
-         int_col("VersionNumber"), date_col("ValidFrom")], timeout=1800)
-    dim.row_count("Count Terms Dimension Rows", "User::RowsUpdated")
-    dim.oledb_destination("DW Dimension Payment Terms", CONN_DW, "[Dimension].[Payment Terms]",
-                          batch_size=5000)
     return build_reference_package(
         "REF_Load_PaymentTerms",
-        "Rebuild the payment terms code set from supplier master data, capping net days at the "
-        "regional legal or customary maximum (60 in the EU, 90 in APAC) and discarding early "
-        "settlement discounts that fall outside the plausible range.",
-        ORA, "ref.PaymentTerms", [flow, dim],
-        truncate_tables=["[ref].[PaymentTerms_Incoming]"],
-        post_tasks=[version_reference_set("ref.PaymentTerms", "PAYMENT_TERMS")])
+        "Refresh the PAYMENT_TERMS domain of ref.CodeCrosswalk and publish the conformed terms "
+        "into Dimension.Payment Terms, decoding the net and discount day counts out of the "
+        "conformed code and capping net days at the regional legal or customary maximum (60 in "
+        "the EU, 90 in APAC).",
+        ORA, "ref.CodeCrosswalk", [flow],
+        truncate_tables=["[Dimension].[Payment Terms]"],
+        pre_tasks=[load_crosswalk("PAYMENT_TERMS")],
+        post_tasks=[report_unmapped("PAYMENT_TERMS")])
 
 
 # ---------------------------------------------------------------------------
@@ -509,736 +451,641 @@ def ref_load_payment_terms():
 
 @package
 def ref_load_return_reason():
-    """stg.Return -> ref.ReturnReason and Dimension.Return Reason."""
+    """ref.usp_LoadReasonCode + crosswalk (RETURN) -> Dimension.Return Reason."""
     cols = [
-        str_col("ReturnReasonCode", 12), str_col("ReturnReasonDescription", 80),
-        str_col("RegionCode", 4), int_col("OccurrenceCount"),
+        str_col("ReturnReasonCode", 12), str_col("ReturnReasonName", 100),
+        str_col("ReasonGroupCode", 20), bool_col("IsCustomerFault"), bool_col("IsSupplierFault"),
+        bool_col("RequiresApproval"), bigint_col("SourceCodeCount"),
     ]
-    flow = DataFlow("DFT Load Return Reason", "Group return reasons into the conformed reason set")
+    flow = DataFlow("DFT Publish Return Reason Dimension",
+                    "Publish the conformed return reasons with their fault attribution")
     flow.oledb_source(
-        "STG Return Reason Usage", CONN_STAGING,
-        "SELECT r.ReturnReasonCode, MAX(r.ReturnReasonDescription) AS ReturnReasonDescription,\n"
-        "       r.RegionCode, COUNT_BIG(*) AS OccurrenceCount\n"
-        "FROM stg.[Return] AS r\n"
-        "GROUP BY r.ReturnReasonCode, r.RegionCode;",
+        "REF ReturnReason Conformed", CONN_STAGING,
+        "SELECT r.ConformedReasonCode AS ReturnReasonCode, r.ConformedReasonName AS ReturnReasonName,\n"
+        "       r.ReasonGroupCode, r.IsCustomerFault, r.IsSupplierFault, r.RequiresApproval,\n"
+        "       (SELECT COUNT_BIG(*) FROM ref.CodeCrosswalk AS x\n"
+        "        WHERE x.CodeDomainCode = N'RETURN'\n"
+        "          AND x.ConformedCodeValue = r.ConformedReasonCode\n"
+        "          AND x.EffectiveToDate IS NULL) AS SourceCodeCount\n"
+        "FROM ref.ReasonCode AS r\n"
+        "WHERE r.ReasonDomainCode = N'RETURN' AND r.IsActive = 1;",
         cols, timeout=1800)
     flow.row_count("Count Return Reasons Read", "User::RowsRead")
     flow.derived_column("Classify Return Reason", [
         ("ReturnReasonCode", 'UPPER(TRIM(ReturnReasonCode))', str_col("ReturnReasonCode", 12)),
         ("ReasonCategoryCode",
-         'UPPER(TRIM(ReturnReasonCode)) == "DAMAGED" || UPPER(TRIM(ReturnReasonCode)) == "FAULTY" '
-         '? "QUALITY" : (UPPER(TRIM(ReturnReasonCode)) == "LATE" ? "SERVICE" : '
-         '(UPPER(TRIM(ReturnReasonCode)) == "CHANGEDMIND" ? "CUSTOMER" : "OTHER"))',
+         'ReasonGroupCode == "QUALITY" ? "QUALITY" : (ReasonGroupCode == "FULFILMENT" ? "SERVICE" : '
+         '(ReasonGroupCode == "COMMERCIAL" ? "CUSTOMER" : "OTHER"))',
          str_col("ReasonCategoryCode", 10)),
-        ("SupplierRecoverableFlag",
-         'UPPER(TRIM(ReturnReasonCode)) == "DAMAGED" || UPPER(TRIM(ReturnReasonCode)) == "FAULTY" '
-         '? "Y" : "N"', str_col("SupplierRecoverableFlag", 1)),
+        ("SupplierRecoverableFlag", 'IsSupplierFault == TRUE ? "Y" : "N"',
+         str_col("SupplierRecoverableFlag", 1)),
         # EU distance selling means a change of mind is always refundable; NA and
-        # APAC apply a restocking fee outside the goodwill window.
-        ("RestockingFeePercent",
-         'RegionCode == "EU" ? (DT_NUMERIC,9,4)0 : (UPPER(TRIM(ReturnReasonCode)) == "CHANGEDMIND" '
-         '? (DT_NUMERIC,9,4)15 : (DT_NUMERIC,9,4)0)', dec_col("RestockingFeePercent", 9, 4)),
-        ("CodeValue", 'UPPER(TRIM(ReturnReasonCode))', str_col("CodeValue", 60)),
-        ("CodeDescription", 'TRIM(ReturnReasonDescription)', str_col("CodeDescription", 200)),
-        ("ChangeHash", hash_expression(["ReturnReasonCode", "ReturnReasonDescription", "RegionCode"]),
+        # APAC apply a restocking fee outside the goodwill window. The reason set
+        # is not regional, so the fee is published per region on the dimension.
+        ("RestockingFeePercentEu", '(DT_NUMERIC,9,4)0', dec_col("RestockingFeePercentEu", 9, 4)),
+        ("RestockingFeePercentNa",
+         'UPPER(TRIM(ReturnReasonCode)) == "NOTNEEDED" ? (DT_NUMERIC,9,4)15 : (DT_NUMERIC,9,4)0',
+         dec_col("RestockingFeePercentNa", 9, 4)),
+        ("RestockingFeePercentApac",
+         'UPPER(TRIM(ReturnReasonCode)) == "NOTNEEDED" ? (DT_NUMERIC,9,4)15 : (DT_NUMERIC,9,4)0',
+         dec_col("RestockingFeePercentApac", 9, 4)),
+        ("LineageKey", '(DT_WSTR,40)"REF_Load_ReturnReason"', str_col("LineageKey", 40)),
+        ("ChangeHash", hash_expression(["ReturnReasonCode", "ReturnReasonName", "ReasonGroupCode"]),
          str_col("ChangeHash", 200)),
     ])
     flow.conditional_split("Screen Return Reason", [
-        ("Described Reason", 'LEN(TRIM(CodeDescription)) > 0'),
-    ], default_output="Undescribed Reason")
-    flow.row_count("Count Return Reasons Loaded", "User::RowsInserted")
-    flow.oledb_destination("REF ReturnReason Incoming", CONN_STAGING, "[ref].[ReturnReason_Incoming]",
+        ("Mapped Reason", 'SourceCodeCount > 0'),
+    ], default_output="Unsourced Reason")
+    flow.row_count("Count Return Reasons Published", "User::RowsInserted")
+    flow.oledb_destination("DW Dimension Return Reason", CONN_DW, "[Dimension].[Return Reason]",
                            batch_size=5000)
-    flow.branch_destination("ERR Return Reason Undescribed", CONN_STAGING,
-                            "[err].[RejectedConstraintViolation]",
-                            "Screen Return Reason", "Undescribed Reason")
-
-    dim = DataFlow("DFT Publish Return Reason Dimension", "Publish the current version to the DW")
-    dim.oledb_source(
-        "REF ReturnReason Current", CONN_STAGING,
-        "SELECT CodeValue AS ReturnReasonCode, CodeDescription AS ReturnReasonName, RegionCode,\n"
-        "       VersionNumber, ValidFrom\n"
-        "FROM ref.ReturnReason WHERE IsCurrent = 1;",
-        [str_col("ReturnReasonCode", 12), str_col("ReturnReasonName", 80), str_col("RegionCode", 4),
-         int_col("VersionNumber"), date_col("ValidFrom")], timeout=1800)
-    dim.row_count("Count Reason Dimension Rows", "User::RowsUpdated")
-    dim.oledb_destination("DW Dimension Return Reason", CONN_DW, "[Dimension].[Return Reason]",
-                          batch_size=5000)
+    flow.branch_destination("ERR Return Reason Unsourced", CONN_STAGING,
+                            "[err].[RejectedLookupFailure]",
+                            "Screen Return Reason", "Unsourced Reason")
     return build_reference_package(
         "REF_Load_ReturnReason",
-        "Rebuild the return reason code set from observed returns, grouping reasons into quality, "
-        "service, customer and other categories, marking the supplier-recoverable ones and setting "
-        "the restocking fee to zero for EU distance-selling returns.",
-        OLTP, "ref.ReturnReason", [flow, dim],
-        truncate_tables=["[ref].[ReturnReason_Incoming]"],
-        post_tasks=[version_reference_set("ref.ReturnReason", "RETURN_REASON"),
-                    report_unmapped("RETURN_REASON", "stg.Return")])
+        "Conform the return and credit reason sets into ref.ReasonCode, map the OLTP return "
+        "reasons and the ERP RTN-* codes onto them through ref.CodeCrosswalk, and publish the "
+        "return reasons into Dimension.Return Reason with their fault attribution and the "
+        "regional restocking fee (zero in the EU under distance selling).",
+        OLTP, "ref.ReasonCode", [flow],
+        truncate_tables=["[Dimension].[Return Reason]"],
+        pre_tasks=[load_reference("Load Reason Codes", "ref.usp_LoadReasonCode"),
+                   load_crosswalk("RETURN"),
+                   load_crosswalk("CREDIT")],
+        post_tasks=[report_unmapped("RETURN")])
 
 
 @package
 def ref_load_loyalty_tier():
-    """stg.LoyaltyLedger -> ref.LoyaltyTier and Dimension.Loyalty Tier."""
+    """ref.usp_LoadCodeCrosswalk (LOYALTY_TIER) -> Dimension.Loyalty Tier."""
     cols = [
-        str_col("LoyaltyTierCode", 3), str_col("ProgramCode", 10), str_col("RegionCode", 4),
-        int_col("MemberCount"), bigint_col("TotalPoints"),
+        str_col("LoyaltyTierCode", 8), str_col("TierName", 60), str_col("RegionCode", 4),
+        date_col("EffectiveFromDate"), bigint_col("SourceCodeCount"),
     ]
-    flow = DataFlow("DFT Load Loyalty Tier", "Recompute tier thresholds from the member distribution")
+    flow = DataFlow("DFT Publish Loyalty Tier Dimension",
+                    "Rank the conformed tiers and apply the regional discount schedule")
     flow.oledb_source(
-        "STG Loyalty Tier Distribution", CONN_STAGING,
-        "SELECT l.LoyaltyTierCode, l.ProgramCode, l.RegionCode,\n"
-        "       COUNT_BIG(DISTINCT l.CustomerId) AS MemberCount,\n"
-        "       SUM(CAST(l.NetPointsBalance AS BIGINT)) AS TotalPoints\n"
-        "FROM stg.LoyaltyLedger AS l\n"
-        "GROUP BY l.LoyaltyTierCode, l.ProgramCode, l.RegionCode;",
+        "REF LoyaltyTier Conformed", CONN_STAGING,
+        conformed_code_query("LOYALTY_TIER", "LoyaltyTierCode", "TierName"),
         cols, timeout=1800)
     flow.row_count("Count Tiers Read", "User::RowsRead")
     flow.derived_column("Conform Loyalty Tier", [
-        ("LoyaltyTierCode", 'UPPER(TRIM(LoyaltyTierCode))', str_col("LoyaltyTierCode", 3)),
-        ("TierName",
-         'UPPER(TRIM(LoyaltyTierCode)) == "PLT" ? "Platinum" : (UPPER(TRIM(LoyaltyTierCode)) == "GLD" '
-         '? "Gold" : (UPPER(TRIM(LoyaltyTierCode)) == "SLV" ? "Silver" : "Bronze"))',
-         str_col("TierName", 40)),
+        ("LoyaltyTierCode", 'UPPER(TRIM(LoyaltyTierCode))', str_col("LoyaltyTierCode", 8)),
+        ("TierName", 'ISNULL(TierName) ? UPPER(TRIM(LoyaltyTierCode)) : TRIM(TierName)',
+         str_col("TierName", 60)),
         ("TierRank",
-         'UPPER(TRIM(LoyaltyTierCode)) == "PLT" ? 1 : (UPPER(TRIM(LoyaltyTierCode)) == "GLD" ? 2 : '
-         '(UPPER(TRIM(LoyaltyTierCode)) == "SLV" ? 3 : 4))', int_col("TierRank")),
+         'UPPER(TRIM(LoyaltyTierCode)) == "TIER4" ? 1 : (UPPER(TRIM(LoyaltyTierCode)) == "TIER3" ? 2 : '
+         '(UPPER(TRIM(LoyaltyTierCode)) == "TIER2" ? 3 : 4))', int_col("TierRank")),
         # The APAC programme runs richer discounts than the legacy NA scheme and
         # the EU scheme is capped by the local promotions rules.
         ("DiscountPercent",
-         'RegionCode == "APAC" ? (DT_NUMERIC,9,4)(12 - 2 * (UPPER(TRIM(LoyaltyTierCode)) == "PLT" ? 1 : '
-         '(UPPER(TRIM(LoyaltyTierCode)) == "GLD" ? 2 : (UPPER(TRIM(LoyaltyTierCode)) == "SLV" ? 3 : 4)))) '
+         'RegionCode == "APAC" ? (DT_NUMERIC,9,4)(12 - 2 * (UPPER(TRIM(LoyaltyTierCode)) == "TIER4" ? 1 : '
+         '(UPPER(TRIM(LoyaltyTierCode)) == "TIER3" ? 2 : (UPPER(TRIM(LoyaltyTierCode)) == "TIER2" ? 3 : 4)))) '
          ': (RegionCode == "EU" ? (DT_NUMERIC,9,4)5 : (DT_NUMERIC,9,4)(10 - 2 * '
-         '(UPPER(TRIM(LoyaltyTierCode)) == "PLT" ? 1 : (UPPER(TRIM(LoyaltyTierCode)) == "GLD" ? 2 : '
-         '(UPPER(TRIM(LoyaltyTierCode)) == "SLV" ? 3 : 4)))))', dec_col("DiscountPercent", 9, 4)),
-        ("AveragePointsPerMember",
-         'MemberCount == 0 ? (DT_NUMERIC,18,2)0 : (DT_NUMERIC,18,2)(TotalPoints / MemberCount)',
-         money_col("AveragePointsPerMember")),
-        ("CodeValue", 'UPPER(TRIM(LoyaltyTierCode))', str_col("CodeValue", 60)),
-        ("CodeDescription",
-         'UPPER(TRIM(LoyaltyTierCode)) == "PLT" ? "Platinum" : (UPPER(TRIM(LoyaltyTierCode)) == "GLD" '
-         '? "Gold" : (UPPER(TRIM(LoyaltyTierCode)) == "SLV" ? "Silver" : "Bronze"))',
-         str_col("CodeDescription", 200)),
-        ("ChangeHash", hash_expression(["LoyaltyTierCode", "ProgramCode", "RegionCode"]),
+         '(UPPER(TRIM(LoyaltyTierCode)) == "TIER4" ? 1 : (UPPER(TRIM(LoyaltyTierCode)) == "TIER3" ? 2 : '
+         '(UPPER(TRIM(LoyaltyTierCode)) == "TIER2" ? 3 : 4)))))', dec_col("DiscountPercent", 9, 4)),
+        ("PointsMultiplier",
+         'RegionCode == "APAC" ? (DT_NUMERIC,18,2)1.5 : (DT_NUMERIC,18,2)1',
+         money_col("PointsMultiplier")),
+        ("LineageKey", '(DT_WSTR,40)"REF_Load_LoyaltyTier"', str_col("LineageKey", 40)),
+        ("ChangeHash", hash_expression(["LoyaltyTierCode", "TierName", "RegionCode"]),
          str_col("ChangeHash", 200)),
     ])
     flow.conditional_split("Screen Loyalty Tier", [
-        ("Populated Tier", 'MemberCount > 0'),
-    ], default_output="Empty Tier")
-    flow.row_count("Count Tiers Loaded", "User::RowsInserted")
-    flow.oledb_destination("REF LoyaltyTier Incoming", CONN_STAGING, "[ref].[LoyaltyTier_Incoming]",
+        ("Mapped Tier", 'SourceCodeCount > 0'),
+    ], default_output="Unsourced Tier")
+    flow.row_count("Count Tiers Published", "User::RowsInserted")
+    flow.oledb_destination("DW Dimension Loyalty Tier", CONN_DW, "[Dimension].[Loyalty Tier]",
                            batch_size=5000)
-    flow.branch_destination("ERR Loyalty Tier Empty", CONN_STAGING,
-                            "[err].[RejectedConstraintViolation]",
-                            "Screen Loyalty Tier", "Empty Tier")
-
-    dim = DataFlow("DFT Publish Loyalty Tier Dimension", "Publish the current version to the DW")
-    dim.oledb_source(
-        "REF LoyaltyTier Current", CONN_STAGING,
-        "SELECT CodeValue AS LoyaltyTierCode, CodeDescription AS TierName, RegionCode,\n"
-        "       VersionNumber, ValidFrom\n"
-        "FROM ref.LoyaltyTier WHERE IsCurrent = 1;",
-        [str_col("LoyaltyTierCode", 3), str_col("TierName", 40), str_col("RegionCode", 4),
-         int_col("VersionNumber"), date_col("ValidFrom")], timeout=1800)
-    dim.row_count("Count Tier Dimension Rows", "User::RowsUpdated")
-    dim.oledb_destination("DW Dimension Loyalty Tier", CONN_DW, "[Dimension].[Loyalty Tier]",
-                          batch_size=5000)
+    flow.branch_destination("ERR Loyalty Tier Unsourced", CONN_STAGING,
+                            "[err].[RejectedLookupFailure]",
+                            "Screen Loyalty Tier", "Unsourced Tier")
     return build_reference_package(
         "REF_Load_LoyaltyTier",
-        "Rebuild the loyalty tier reference set from the staged member balances, ranking the tiers "
-        "and applying the regional discount schedule: richer in APAC, capped at five percent in the "
-        "EU by local promotion rules and the legacy schedule in NA.",
-        OLTP, "ref.LoyaltyTier", [flow, dim],
-        truncate_tables=["[ref].[LoyaltyTier_Incoming]"],
-        post_tasks=[version_reference_set("ref.LoyaltyTier", "LOYALTY_TIER")])
+        "Refresh the LOYALTY_TIER domain of ref.CodeCrosswalk, which maps the OLTP tier names onto "
+        "the conformed TIER1-TIER4 set, and publish the tiers into Dimension.Loyalty Tier with the "
+        "regional discount schedule: richer in APAC, capped at five percent in the EU by local "
+        "promotion rules and the legacy schedule in NA.",
+        OLTP, "ref.CodeCrosswalk", [flow],
+        truncate_tables=["[Dimension].[Loyalty Tier]"],
+        pre_tasks=[load_crosswalk("LOYALTY_TIER")],
+        post_tasks=[report_unmapped("LOYALTY_TIER")])
 
 
 @package
 def ref_load_sales_channel():
-    """stg.Order + stg.WebSession + stg.PartnerSale -> ref.SalesChannel."""
-    order_cols = [str_col("ChannelCode", 10), str_col("ChannelName", 60), int_col("OrderCount")]
-    orders = DataFlow("DFT Channel From Orders", "Direct and telesales channels observed on orders")
-    orders.oledb_source(
-        "STG Order Channels", CONN_STAGING,
-        "SELECT o.ChannelCode, MAX(o.ChannelName) AS ChannelName, COUNT_BIG(*) AS OrderCount\n"
-        "FROM stg.[Order] AS o GROUP BY o.ChannelCode;",
-        order_cols, timeout=1800)
-    orders.row_count("Count Order Channels", "User::RowsRead")
-    orders.derived_column("Shape Order Channel", [
-        ("ChannelCode", 'UPPER(TRIM(ISNULL(ChannelCode) ? "DIRECT" : ChannelCode))',
-         str_col("ChannelCode", 10)),
-        ("ChannelGroupCode", '"DIRECT"', str_col("ChannelGroupCode", 10)),
-        ("DigitalFlag", '"N"', str_col("DigitalFlag", 1)),
-    ])
-    orders.union_all("Union Channel Feeds")
-    orders.aggregate("Aggregate Channel Usage", ["ChannelCode", "ChannelGroupCode", "DigitalFlag"], [
-        ("OrderCount", "TotalUsageCount", "Sum"),
-    ])
-    orders.derived_column("Conform Sales Channel", [
-        ("CodeValue", 'UPPER(TRIM(ChannelCode))', str_col("CodeValue", 60)),
-        ("CodeDescription", 'UPPER(TRIM(ChannelCode)) + " channel"', str_col("CodeDescription", 200)),
-        ("RegionCode", '"ALL"', str_col("RegionCode", 4)),
-        ("ChangeHash", hash_expression(["ChannelCode", "ChannelGroupCode", "DigitalFlag"]),
+    """ref.usp_LoadCodeCrosswalk (SALES_CHANNEL) -> Dimension.Sales Channel."""
+    cols = [
+        str_col("ChannelCode", 10), str_col("ChannelName", 60), str_col("RegionCode", 4),
+        date_col("EffectiveFromDate"), bigint_col("SourceCodeCount"),
+    ]
+    flow = DataFlow("DFT Publish Sales Channel Dimension",
+                    "Group the conformed channels into direct, digital and partner families")
+    flow.oledb_source(
+        "REF SalesChannel Conformed", CONN_STAGING,
+        conformed_code_query("SALES_CHANNEL", "ChannelCode", "ChannelName"),
+        cols, timeout=1800)
+    flow.row_count("Count Channels Read", "User::RowsRead")
+    flow.derived_column("Conform Sales Channel", [
+        ("ChannelCode", 'UPPER(TRIM(ChannelCode))', str_col("ChannelCode", 10)),
+        ("ChannelName", 'ISNULL(ChannelName) ? UPPER(TRIM(ChannelCode)) + " channel" : TRIM(ChannelName)',
+         str_col("ChannelName", 60)),
+        ("ChannelGroupCode",
+         'UPPER(TRIM(ChannelCode)) == "ONLINE" ? "DIGITAL" : (UPPER(TRIM(ChannelCode)) == "PARTNER" '
+         '? "PARTNER" : "DIRECT")', str_col("ChannelGroupCode", 10)),
+        ("DigitalFlag", 'UPPER(TRIM(ChannelCode)) == "ONLINE" ? "Y" : "N"', str_col("DigitalFlag", 1)),
+        ("LineageKey", '(DT_WSTR,40)"REF_Load_SalesChannel"', str_col("LineageKey", 40)),
+        ("ChangeHash", hash_expression(["ChannelCode", "ChannelGroupCode", "RegionCode"]),
          str_col("ChangeHash", 200)),
     ])
-    orders.conditional_split("Screen Sales Channel", [
-        ("Active Channel", 'TotalUsageCount > 0'),
-    ], default_output="Dormant Channel")
-    orders.row_count("Count Channels Loaded", "User::RowsInserted")
-    orders.oledb_destination("REF SalesChannel Incoming", CONN_STAGING,
-                             "[ref].[SalesChannel_Incoming]", batch_size=5000)
-    orders.branch_destination("ERR Sales Channel Dormant", CONN_STAGING,
-                              "[err].[RejectedConstraintViolation]",
-                              "Screen Sales Channel", "Dormant Channel")
-
-    web = DataFlow("DFT Channel From Web And Partner", "Digital and partner channels")
-    web.oledb_source(
-        "STG Web And Partner Channels", CONN_STAGING,
-        "SELECT ChannelCode, COUNT_BIG(*) AS SessionCount FROM stg.WebSession GROUP BY ChannelCode\n"
-        "UNION ALL\n"
-        "SELECT N'PARTNER' AS ChannelCode, COUNT_BIG(*) AS SessionCount FROM stg.PartnerSale;",
-        [str_col("ChannelCode", 10), bigint_col("SessionCount")], timeout=1800)
-    web.derived_column("Shape Digital Channel", [
-        ("ChannelCode", 'UPPER(TRIM(ChannelCode))', str_col("ChannelCode", 10)),
-        ("ChannelGroupCode", 'UPPER(TRIM(ChannelCode)) == "PARTNER" ? "PARTNER" : "DIGITAL"',
-         str_col("ChannelGroupCode", 10)),
-        ("DigitalFlag", 'UPPER(TRIM(ChannelCode)) == "PARTNER" ? "N" : "Y"', str_col("DigitalFlag", 1)),
-    ])
-    web.row_count("Count Digital Channels", "User::RowsUpdated")
-    web.oledb_destination("REF SalesChannel Feed", CONN_STAGING, "[ref].[SalesChannel_Feed]",
-                          batch_size=5000)
-
-    dim = DataFlow("DFT Publish Sales Channel Dimension", "Publish the current version to the DW")
-    dim.oledb_source(
-        "REF SalesChannel Current", CONN_STAGING,
-        "SELECT CodeValue AS ChannelCode, CodeDescription AS ChannelName, VersionNumber, ValidFrom\n"
-        "FROM ref.SalesChannel WHERE IsCurrent = 1;",
-        [str_col("ChannelCode", 10), str_col("ChannelName", 60), int_col("VersionNumber"),
-         date_col("ValidFrom")], timeout=1800)
-    dim.row_count("Count Channel Dimension Rows", "User::RowsUpdated")
-    dim.oledb_destination("DW Dimension Sales Channel", CONN_DW, "[Dimension].[Sales Channel]",
-                          batch_size=5000)
+    flow.conditional_split("Screen Sales Channel", [
+        ("Mapped Channel", 'SourceCodeCount > 0'),
+    ], default_output="Unsourced Channel")
+    flow.row_count("Count Channels Published", "User::RowsInserted")
+    flow.oledb_destination("DW Dimension Sales Channel", CONN_DW, "[Dimension].[Sales Channel]",
+                           batch_size=5000)
+    flow.branch_destination("ERR Sales Channel Unsourced", CONN_STAGING,
+                            "[err].[RejectedLookupFailure]",
+                            "Screen Sales Channel", "Unsourced Channel")
     return build_reference_package(
         "REF_Load_SalesChannel",
-        "Rebuild the sales channel code set by unioning the channels observed on orders, web "
-        "sessions and the partner file feed, grouping them into direct, digital and partner "
-        "families and retiring channels with no activity in the window.",
-        OLTP, "ref.SalesChannel", [web, orders, dim],
-        truncate_tables=["[ref].[SalesChannel_Incoming]", "[ref].[SalesChannel_Feed]"],
-        post_tasks=[version_reference_set("ref.SalesChannel", "SALES_CHANNEL")])
+        "Refresh the SALES_CHANNEL domain of ref.CodeCrosswalk - the domain that has to carry a "
+        "region, because the OLTP code DIR is the direct sales force in NA and a distributor in "
+        "APAC - and publish the conformed channels into Dimension.Sales Channel grouped into "
+        "direct, digital and partner families.",
+        OLTP, "ref.CodeCrosswalk", [flow],
+        truncate_tables=["[Dimension].[Sales Channel]"],
+        pre_tasks=[load_crosswalk("SALES_CHANNEL")],
+        post_tasks=[report_unmapped("SALES_CHANNEL")])
 
 
 @package
 def ref_load_carrier():
-    """stg.Shipment -> ref.Carrier and Dimension.Carrier."""
+    """ref.usp_LoadCodeCrosswalk (CARRIER) -> Dimension.Carrier."""
     cols = [
-        str_col("CarrierCode", 10), str_col("CarrierName", 60), str_col("ServiceLevelCode", 10),
-        str_col("RegionCode", 4), int_col("ShipmentCount"), dec_col("AverageTransitDays", 9, 2),
+        str_col("CarrierCode", 10), str_col("CarrierName", 60), str_col("RegionCode", 4),
+        date_col("EffectiveFromDate"), bigint_col("SourceCodeCount"),
     ]
-    flow = DataFlow("DFT Load Carrier", "Carrier service levels derived from observed transit times")
+    flow = DataFlow("DFT Publish Carrier Dimension",
+                    "Publish the conformed carriers with their regional on-time targets")
     flow.oledb_source(
-        "STG Carrier Usage", CONN_STAGING,
-        "SELECT s.CarrierCode, MAX(s.CarrierName) AS CarrierName, s.ServiceLevelCode, s.RegionCode,\n"
-        "       COUNT_BIG(*) AS ShipmentCount,\n"
-        "       CAST(AVG(CAST(s.TransitDays AS DECIMAL(9,2))) AS DECIMAL(9,2)) AS AverageTransitDays\n"
-        "FROM stg.Shipment AS s\n"
-        "WHERE s.DeliveredFlag = N'Y'\n"
-        "GROUP BY s.CarrierCode, s.ServiceLevelCode, s.RegionCode;",
+        "REF Carrier Conformed", CONN_STAGING,
+        conformed_code_query("CARRIER", "CarrierCode", "CarrierName"),
         cols, timeout=1800)
     flow.row_count("Count Carriers Read", "User::RowsRead")
     flow.derived_column("Conform Carrier", [
         ("CarrierCode", 'UPPER(TRIM(CarrierCode))', str_col("CarrierCode", 10)),
-        ("ServiceLevelCode",
-         'ISNULL(ServiceLevelCode) || TRIM(ServiceLevelCode) == "" ? '
-         '(AverageTransitDays <= 1 ? "NEXTDAY" : (AverageTransitDays <= 3 ? "EXPRESS" : "STANDARD")) '
-         ': UPPER(TRIM(ServiceLevelCode))', str_col("ServiceLevelCode", 10)),
+        ("CarrierName", 'ISNULL(CarrierName) ? UPPER(TRIM(CarrierCode)) : TRIM(CarrierName)',
+         str_col("CarrierName", 60)),
         ("CrossBorderFlag", 'RegionCode == "ALL" ? "Y" : "N"', str_col("CrossBorderFlag", 1)),
         ("OnTimeTargetDays",
          'RegionCode == "APAC" ? (DT_NUMERIC,9,2)5 : (RegionCode == "EU" ? (DT_NUMERIC,9,2)3 '
          ': (DT_NUMERIC,9,2)4)', dec_col("OnTimeTargetDays", 9, 2)),
-        ("CodeValue", 'UPPER(TRIM(CarrierCode))', str_col("CodeValue", 60)),
-        ("CodeDescription", 'TRIM(CarrierName)', str_col("CodeDescription", 200)),
-        ("ChangeHash", hash_expression(["CarrierCode", "CarrierName", "ServiceLevelCode", "RegionCode"]),
+        ("OwnFleetFlag", 'UPPER(TRIM(CarrierCode)) == "OWN" ? "Y" : "N"', str_col("OwnFleetFlag", 1)),
+        ("LineageKey", '(DT_WSTR,40)"REF_Load_Carrier"', str_col("LineageKey", 40)),
+        ("ChangeHash", hash_expression(["CarrierCode", "CarrierName", "RegionCode"]),
          str_col("ChangeHash", 200)),
     ])
     flow.conditional_split("Screen Carrier", [
-        ("Performing Carrier", 'AverageTransitDays <= OnTimeTargetDays * 3'),
-    ], default_output="Transit Time Outlier")
-    flow.row_count("Count Carriers Loaded", "User::RowsInserted")
-    flow.oledb_destination("REF Carrier Incoming", CONN_STAGING, "[ref].[Carrier_Incoming]",
-                           batch_size=5000)
-    flow.branch_destination("ERR Carrier Transit Outlier", CONN_STAGING,
-                            "[err].[RejectedConstraintViolation]",
-                            "Screen Carrier", "Transit Time Outlier")
-
-    dim = DataFlow("DFT Publish Carrier Dimension", "Publish the current version to the DW")
-    dim.oledb_source(
-        "REF Carrier Current", CONN_STAGING,
-        "SELECT CodeValue AS CarrierCode, CodeDescription AS CarrierName, RegionCode,\n"
-        "       VersionNumber, ValidFrom\n"
-        "FROM ref.Carrier WHERE IsCurrent = 1;",
-        [str_col("CarrierCode", 10), str_col("CarrierName", 60), str_col("RegionCode", 4),
-         int_col("VersionNumber"), date_col("ValidFrom")], timeout=1800)
-    dim.row_count("Count Carrier Dimension Rows", "User::RowsUpdated")
-    dim.oledb_destination("DW Dimension Carrier", CONN_DW, "[Dimension].[Carrier]", batch_size=5000)
+        ("Mapped Carrier", 'SourceCodeCount > 0'),
+    ], default_output="Unsourced Carrier")
+    flow.row_count("Count Carriers Published", "User::RowsInserted")
+    flow.oledb_destination("DW Dimension Carrier", CONN_DW, "[Dimension].[Carrier]", batch_size=5000)
+    flow.branch_destination("ERR Carrier Unsourced", CONN_STAGING,
+                            "[err].[RejectedLookupFailure]",
+                            "Screen Carrier", "Unsourced Carrier")
     return build_reference_package(
         "REF_Load_Carrier",
-        "Rebuild the carrier reference set from delivered shipments, inferring a missing service "
-        "level from the observed average transit time and holding the regional on-time targets "
-        "(three days in the EU, four in NA, five across APAC).",
-        OLTP, "ref.Carrier", [flow, dim],
-        truncate_tables=["[ref].[Carrier_Incoming]"],
-        post_tasks=[version_reference_set("ref.Carrier", "CARRIER"),
-                    report_unmapped("CARRIER", "stg.Shipment")])
+        "Refresh the CARRIER domain of ref.CodeCrosswalk, which maps the OLTP carrier names and "
+        "the ERP's APAC carriers onto the conformed carrier set, and publish them into "
+        "Dimension.Carrier holding the regional on-time targets (three days in the EU, four in NA, "
+        "five across APAC).",
+        OLTP, "ref.CodeCrosswalk", [flow],
+        truncate_tables=["[Dimension].[Carrier]"],
+        pre_tasks=[load_crosswalk("CARRIER")],
+        post_tasks=[report_unmapped("CARRIER")])
 
 
 @package
 def ref_load_warehouse_site():
-    """stg.StockMovement + work.InventoryPositionDaily -> ref.WarehouseSite."""
+    """ref.PostalFormatRule + ref.Country -> Dimension.Warehouse Site."""
     cols = [
-        int_col("WarehouseSiteId"), str_col("WarehouseSiteCode", 10), str_col("WarehouseSiteName", 60),
-        str_col("CountryCode", 3), str_col("RegionCode", 4), str_col("PostalCode", 16),
-        int_col("MovementCount"),
+        int_col("WarehouseSiteId"), str_col("WarehouseSiteCode", 10), str_col("WarehouseSiteName", 100),
+        str_col("CountryCode", 2), str_col("RegionCode", 10), str_col("PostalCode", 20),
+        str_col("FormatMask", 30), str_col("StripCharacters", 30), bool_col("UpperCaseFlag"),
+        int_col("TruncateToLength"), bigint_col("MovementCount"),
     ]
-    flow = DataFlow("DFT Load Warehouse Site", "Site master with regional postal standardisation")
+    flow = DataFlow("DFT Publish Warehouse Site Dimension",
+                    "Standardise the site postal code by the conformed per-country rule")
     flow.oledb_source(
-        "STG Warehouse Site Usage", CONN_STAGING,
+        "REF Warehouse Site Conformed", CONN_STAGING,
         "SELECT m.WarehouseSiteId, MAX(m.WarehouseSiteCode) AS WarehouseSiteCode,\n"
-        "       MAX(m.WarehouseSiteName) AS WarehouseSiteName, MAX(m.CountryCode) AS CountryCode,\n"
-        "       MAX(m.RegionCode) AS RegionCode, MAX(m.PostalCode) AS PostalCode,\n"
+        "       MAX(m.WarehouseSiteName) AS WarehouseSiteName, c.CountryCode, c.RegionCode,\n"
+        "       MAX(m.PostalCode) AS PostalCode, MAX(p.FormatMask) AS FormatMask,\n"
+        "       MAX(p.StripCharacters) AS StripCharacters,\n"
+        "       MAX(CONVERT(TINYINT, p.UpperCaseFlag)) AS UpperCaseFlag,\n"
+        "       MAX(CONVERT(INT, p.TruncateToLength)) AS TruncateToLength,\n"
         "       COUNT_BIG(*) AS MovementCount\n"
         "FROM stg.StockMovement AS m\n"
-        "GROUP BY m.WarehouseSiteId;",
+        "     INNER JOIN ref.Country AS c ON c.CountryCode = LEFT(UPPER(m.CountryCode), 2)\n"
+        "     LEFT OUTER JOIN ref.PostalFormatRule AS p\n"
+        "       ON p.CountryCode = c.CountryCode AND p.RulePriority = 1\n"
+        "GROUP BY m.WarehouseSiteId, c.CountryCode, c.RegionCode;",
         cols, timeout=1800)
     flow.row_count("Count Sites Read", "User::RowsRead")
     flow.derived_column("Standardize Site", [
         ("WarehouseSiteCode", 'UPPER(TRIM(WarehouseSiteCode))', str_col("WarehouseSiteCode", 10)),
-        ("CountryCode", 'UPPER(TRIM(ISNULL(CountryCode) ? "USA" : CountryCode))', str_col("CountryCode", 3)),
-        # Each region prints its postal codes differently and the warehouse master
-        # was keyed by hand for twenty years.
+        # The conformed rule says what to strip and how long the result is; the
+        # package still applies it by hand, exactly as it always has.
         ("PostalCodeStandardized",
-         'UPPER(TRIM(ISNULL(RegionCode) ? "NA" : RegionCode)) == "NA" ? '
-         'LEFT(REPLACE(TRIM(ISNULL(PostalCode) ? "00000" : PostalCode), " ", ""), 5) : '
-         '(UPPER(TRIM(ISNULL(RegionCode) ? "NA" : RegionCode)) == "EU" ? UPPER(TRIM(CountryCode)) + "-" + '
-         'REPLACE(TRIM(ISNULL(PostalCode) ? "0000" : PostalCode), " ", "") : '
-         'REPLACE(REPLACE(TRIM(ISNULL(PostalCode) ? "0000" : PostalCode), "-", ""), " ", ""))',
-         str_col("PostalCodeStandardized", 16)),
+         'TruncateToLength > 0 ? LEFT(REPLACE(REPLACE(UPPER(TRIM(ISNULL(PostalCode) ? "" : PostalCode)), '
+         '" ", ""), "-", ""), TruncateToLength) : '
+         'REPLACE(REPLACE(UPPER(TRIM(ISNULL(PostalCode) ? "" : PostalCode)), " ", ""), "-", "")',
+         str_col("PostalCodeStandardized", 20)),
         ("SiteTypeCode",
          'MovementCount > 100000 ? "DC" : (MovementCount > 10000 ? "REGIONAL" : "SATELLITE")',
          str_col("SiteTypeCode", 10)),
-        ("CodeValue", 'UPPER(TRIM(WarehouseSiteCode))', str_col("CodeValue", 60)),
-        ("CodeDescription", 'TRIM(WarehouseSiteName)', str_col("CodeDescription", 200)),
+        ("LineageKey", '(DT_WSTR,40)"REF_Load_WarehouseSite"', str_col("LineageKey", 40)),
         ("ChangeHash", hash_expression(["WarehouseSiteCode", "WarehouseSiteName", "CountryCode",
                                         "PostalCode"]), str_col("ChangeHash", 200)),
     ])
     flow.lookup(
-        "Lookup Site Country (Full Cache)", CONN_STAGING,
-        "SELECT CountryCode, CountryName, RegionCode AS ReferenceRegionCode FROM ref.Country;",
-        ["CountryCode"], [str_col("CountryName", 60), str_col("ReferenceRegionCode", 4)], no_match="RD")
-    flow.row_count("Count Sites Loaded", "User::RowsInserted")
-    flow.oledb_destination("REF WarehouseSite Incoming", CONN_STAGING,
-                           "[ref].[WarehouseSite_Incoming]", batch_size=5000)
-    flow.reject_destination("ERR Site Unknown Country", CONN_STAGING, "[err].[RejectedLookupFailure]",
-                            "Lookup Site Country (Full Cache)", "Lookup No Match Output")
-
-    dim = DataFlow("DFT Publish Warehouse Site Dimension", "Publish the current version to the DW")
-    dim.oledb_source(
-        "REF WarehouseSite Current", CONN_STAGING,
-        "SELECT CodeValue AS WarehouseSiteCode, CodeDescription AS WarehouseSiteName, RegionCode,\n"
-        "       VersionNumber, ValidFrom\n"
-        "FROM ref.WarehouseSite WHERE IsCurrent = 1;",
-        [str_col("WarehouseSiteCode", 10), str_col("WarehouseSiteName", 60), str_col("RegionCode", 4),
-         int_col("VersionNumber"), date_col("ValidFrom")], timeout=1800)
-    dim.row_count("Count Site Dimension Rows", "User::RowsUpdated")
-    dim.oledb_destination("DW Dimension Warehouse Site", CONN_DW, "[Dimension].[Warehouse Site]",
-                          batch_size=5000)
+        "Lookup Site Region (Full Cache)", CONN_STAGING,
+        "SELECT RegionCode, RegionName, AddressRuleSetCode, WeightUomCode FROM ref.Region;",
+        ["RegionCode"], [str_col("RegionName", 100), str_col("AddressRuleSetCode", 30),
+                         str_col("WeightUomCode", 10)], no_match="RD")
+    flow.conditional_split("Screen Warehouse Site", [
+        ("Formatted Site", 'LEN(PostalCodeStandardized) > 2'),
+    ], default_output="Unformatted Site")
+    flow.row_count("Count Sites Published", "User::RowsInserted")
+    flow.oledb_destination("DW Dimension Warehouse Site", CONN_DW, "[Dimension].[Warehouse Site]",
+                           batch_size=5000)
+    flow.branch_destination("ERR Site Postal Unformatted", CONN_STAGING,
+                            "[err].[RejectedConstraintViolation]",
+                            "Screen Warehouse Site", "Unformatted Site")
+    flow.reject_destination("ERR Site Unknown Region", CONN_STAGING, "[err].[RejectedLookupFailure]",
+                            "Lookup Site Region (Full Cache)", "Lookup No Match Output")
     return build_reference_package(
         "REF_Load_WarehouseSite",
-        "Rebuild the warehouse site reference set from observed stock movements, standardising the "
-        "site postal code by regional convention and classifying sites as distribution centres, "
-        "regional sites or satellites from their movement volume.",
-        OLTP, "ref.WarehouseSite", [flow, dim],
-        truncate_tables=["[ref].[WarehouseSite_Incoming]"],
-        post_tasks=[version_reference_set("ref.WarehouseSite", "WAREHOUSE_SITE")])
+        "Refresh the conformed regions and the per-country postal rules, then publish the "
+        "warehouse sites into Dimension.Warehouse Site with their postal code standardised by the "
+        "rule ref.PostalFormatRule holds for the site's country rather than by a region-wide guess, "
+        "and classify sites as distribution centres, regional sites or satellites by volume.",
+        OLTP, "ref.PostalFormatRule", [flow],
+        truncate_tables=["[Dimension].[Warehouse Site]"],
+        pre_tasks=[load_reference("Load Regions", "ref.usp_LoadRegion"),
+                   load_reference("Load Postal Format Rules", "ref.usp_LoadPostalFormatRule")],
+        post_tasks=[report_unmapped("REGION")])
 
 
 @package
 def ref_load_cost_center():
-    """stg.CostCenter -> ref.CostCenter with the hierarchy rebuilt row by row."""
+    """ref.usp_LoadCodeCrosswalk (COST_CENTER) -> Dimension.Cost Center."""
     cols = [
-        str_col("CostCenterCode", 12), str_col("CostCenterName", 60), str_col("ParentCostCenterCode", 12),
-        str_col("CompanyCode", 6), str_col("RegionCode", 4), bool_col("IsActive"),
+        str_col("CostCenterCode", 12), str_col("CostCenterName", 60), str_col("RegionCode", 4),
+        date_col("EffectiveFromDate"), bigint_col("SourceCodeCount"),
     ]
-    flow = DataFlow("DFT Load Cost Center", "Cost centre master with company and region attribution")
+    flow = DataFlow("DFT Publish Cost Center Dimension",
+                    "Rebuild the cost centre hierarchy attributes from the conformed codes")
     flow.oledb_source(
-        "STG Cost Center", CONN_STAGING,
-        "SELECT CostCenterCode, CostCenterName, ParentCostCenterCode, CompanyCode, RegionCode, IsActive\n"
-        "FROM stg.CostCenter;",
+        "REF CostCenter Conformed", CONN_STAGING,
+        conformed_code_query("COST_CENTER", "CostCenterCode", "CostCenterName"),
         cols, timeout=1800)
     flow.row_count("Count Cost Centers Read", "User::RowsRead")
     flow.derived_column("Conform Cost Center", [
         ("CostCenterCode", 'UPPER(TRIM(CostCenterCode))', str_col("CostCenterCode", 12)),
+        ("CostCenterName",
+         'ISNULL(CostCenterName) ? UPPER(TRIM(CostCenterCode)) : TRIM(CostCenterName)',
+         str_col("CostCenterName", 60)),
+        # Everything rolls up to CORP except CORP itself; the Oracle chart of
+        # accounts has never had more than two levels that the warehouse uses.
         ("ParentCostCenterCode",
-         'ISNULL(ParentCostCenterCode) || TRIM(ParentCostCenterCode) == "" ? "ROOT" '
-         ': UPPER(TRIM(ParentCostCenterCode))', str_col("ParentCostCenterCode", 12)),
-        ("CompanyCode", 'UPPER(TRIM(ISNULL(CompanyCode) ? "0001" : CompanyCode))', str_col("CompanyCode", 6)),
-        # The Oracle chart of accounts encodes the function in the second segment.
-        ("FunctionCode",
-         'LEN(UPPER(TRIM(CostCenterCode))) >= 4 ? SUBSTRING(UPPER(TRIM(CostCenterCode)), 3, 2) : "XX"',
-         str_col("FunctionCode", 2)),
-        ("CodeValue", 'UPPER(TRIM(CostCenterCode))', str_col("CodeValue", 60)),
-        ("CodeDescription", 'TRIM(CostCenterName)', str_col("CodeDescription", 200)),
-        ("ChangeHash", hash_expression(["CostCenterCode", "CostCenterName", "ParentCostCenterCode",
-                                        "CompanyCode"]), str_col("ChangeHash", 200)),
+         'UPPER(TRIM(CostCenterCode)) == "CORP" ? "ROOT" : "CORP"',
+         str_col("ParentCostCenterCode", 12)),
+        ("CompanyCode", '"0001"', str_col("CompanyCode", 6)),
+        ("FunctionCode", 'LEFT(UPPER(TRIM(CostCenterCode)), 2)', str_col("FunctionCode", 2)),
+        ("SuspenseFlag", 'UPPER(TRIM(CostCenterCode)) == "SUSP" ? "Y" : "N"',
+         str_col("SuspenseFlag", 1)),
+        ("LineageKey", '(DT_WSTR,40)"REF_Load_CostCenter"', str_col("LineageKey", 40)),
+        ("ChangeHash", hash_expression(["CostCenterCode", "CostCenterName", "RegionCode"]),
+         str_col("ChangeHash", 200)),
     ])
     flow.sort("Sort Cost Centers By Hierarchy", ["ParentCostCenterCode", "CostCenterCode"])
     flow.conditional_split("Screen Cost Center", [
-        ("Active Cost Center", 'IsActive == TRUE && CostCenterCode != ParentCostCenterCode'),
+        ("Mapped Cost Center", 'SourceCodeCount > 0 && CostCenterCode != ParentCostCenterCode'),
         ("Self Referencing", 'CostCenterCode == ParentCostCenterCode'),
-    ], default_output="Inactive Cost Center")
-    flow.row_count("Count Cost Centers Loaded", "User::RowsInserted")
-    flow.oledb_destination("REF CostCenter Incoming", CONN_STAGING, "[ref].[CostCenter_Incoming]",
+    ], default_output="Unsourced Cost Center")
+    flow.row_count("Count Cost Centers Published", "User::RowsInserted")
+    flow.oledb_destination("DW Dimension Cost Center", CONN_DW, "[Dimension].[Cost Center]",
                            batch_size=5000)
     flow.branch_destination("ERR Cost Center Self Reference", CONN_STAGING,
                             "[err].[RejectedConstraintViolation]",
                             "Screen Cost Center", "Self Referencing")
-    flow.branch_destination("REF CostCenter Retired", CONN_STAGING, "[ref].[CostCenter_Incoming]",
-                            "Screen Cost Center", "Inactive Cost Center")
-
-    dim = DataFlow("DFT Publish Cost Center Dimension", "Publish the current version to the DW")
-    dim.oledb_source(
-        "REF CostCenter Current", CONN_STAGING,
-        "SELECT CodeValue AS CostCenterCode, CodeDescription AS CostCenterName, RegionCode,\n"
-        "       VersionNumber, ValidFrom\n"
-        "FROM ref.CostCenter WHERE IsCurrent = 1;",
-        [str_col("CostCenterCode", 12), str_col("CostCenterName", 60), str_col("RegionCode", 4),
-         int_col("VersionNumber"), date_col("ValidFrom")], timeout=1800)
-    dim.row_count("Count Cost Center Dimension Rows", "User::RowsUpdated")
-    dim.oledb_destination("DW Dimension Cost Center", CONN_DW, "[Dimension].[Cost Center]",
-                          batch_size=5000)
+    flow.branch_destination("ERR Cost Center Unsourced", CONN_STAGING,
+                            "[err].[RejectedLookupFailure]",
+                            "Screen Cost Center", "Unsourced Cost Center")
     return build_reference_package(
         "REF_Load_CostCenter",
-        "Rebuild the cost centre reference set from the Oracle chart of accounts, rooting orphaned "
-        "nodes, decoding the function segment out of the code and rejecting self-referencing "
-        "hierarchy rows that would otherwise loop the rollup procedure.",
-        ORA, "ref.CostCenter", [flow, dim],
-        truncate_tables=["[ref].[CostCenter_Incoming]"],
-        post_tasks=[version_reference_set("ref.CostCenter", "COST_CENTER"),
-                    exec_proc("Rebuild Cost Center Hierarchy",
-                              "EXEC ref.usp_RebuildCostCenterHierarchy @BatchId = ?;",
-                              parameter_bindings=[("$Package::BatchId", 0, "LONG")])])
+        "Refresh the COST_CENTER domain of ref.CodeCrosswalk, which maps the numeric Oracle cost "
+        "centres onto the conformed mnemonics, and publish them into Dimension.Cost Center with "
+        "the rollup parent and the function segment, rejecting self-referencing rows that would "
+        "otherwise loop the hierarchy rollup.",
+        ORA, "ref.CodeCrosswalk", [flow],
+        truncate_tables=["[Dimension].[Cost Center]"],
+        pre_tasks=[load_crosswalk("COST_CENTER")],
+        post_tasks=[report_unmapped("COST_CENTER")])
 
 
 @package
 def ref_load_geography():
-    """stg.Geography + stg.CustomerAddress -> ref.Geography and Dimension.Geography."""
+    """ref.usp_LoadRegion / LoadCountry / LoadTaxJurisdiction -> Dimension.Geography."""
     cols = [
-        str_col("CountryCode", 3), str_col("CountryName", 60), str_col("StateProvinceCode", 6),
-        str_col("StateProvinceName", 60), str_col("CityName", 60), str_col("PostalCode", 16),
-        str_col("RegionCode", 4), str_col("SubRegionName", 60),
+        str_col("CountryCode", 2), str_col("CountryCodeIso3", 3), str_col("CountryName", 100),
+        str_col("RegionCode", 10), str_col("SubRegionName", 100), str_col("LocalCurrencyCode", 3),
+        bool_col("IsEuMemberState"), date_col("EuExitDate"), str_col("TaxRegimeCode", 20),
+        str_col("TaxJurisdictionCode", 30), dec_col("CombinedRatePercent", 9, 4),
+        bool_col("ReverseChargeEligible"), str_col("PostalFormatMask", 30),
     ]
-    flow = DataFlow("DFT Load Geography", "Region-specific geography and postal standardisation")
+    flow = DataFlow("DFT Publish Geography Dimension",
+                    "Publish the conformed country set with its regional tax structure")
     flow.oledb_source(
-        "STG Geography", CONN_STAGING,
-        "SELECT g.CountryCode, g.CountryName, g.StateProvinceCode, g.StateProvinceName, g.CityName,\n"
-        "       g.PostalCode, g.RegionCode, g.SubRegionName\n"
-        "FROM stg.Geography AS g;",
+        "REF Geography Conformed", CONN_STAGING,
+        "SELECT c.CountryCode, c.CountryCodeIso3, c.CountryName, c.RegionCode, c.SubRegionName,\n"
+        "       c.LocalCurrencyCode, c.IsEuMemberState, c.EuExitDate, r.TaxRegimeCode,\n"
+        "       j.TaxJurisdictionCode, j.CombinedRatePercent, j.ReverseChargeEligible,\n"
+        "       c.PostalFormatMask\n"
+        "FROM ref.Country AS c\n"
+        "     INNER JOIN ref.Region AS r ON r.RegionCode = c.RegionCode\n"
+        "     OUTER APPLY (SELECT TOP (1) t.TaxJurisdictionCode, t.CombinedRatePercent,\n"
+        "                         t.ReverseChargeEligible\n"
+        "                  FROM ref.TaxJurisdiction AS t\n"
+        "                  WHERE t.CountryCode = c.CountryCode\n"
+        "                    AND t.StateProvinceCode IS NULL\n"
+        "                    AND (t.EffectiveToDate IS NULL\n"
+        "                         OR t.EffectiveToDate >= CONVERT(date, GETDATE()))\n"
+        "                  ORDER BY t.EffectiveFromDate DESC) AS j\n"
+        "WHERE c.IsActive = 1;",
         cols, timeout=3600)
     flow.row_count("Count Geography Rows Read", "User::RowsRead")
     flow.derived_column("Standardize Geography", [
-        ("CountryCode", 'UPPER(TRIM(CountryCode))', str_col("CountryCode", 3)),
-        ("CityNameStandardized", 'UPPER(TRIM(CityName))', str_col("CityNameStandardized", 60)),
-        # NA keeps the five digit ZIP, the EU prefixes the country, APAC strips
-        # separators entirely - three different conventions, three code paths.
-        ("PostalCodeStandardized",
-         'UPPER(TRIM(RegionCode)) == "NA" ? LEFT(REPLACE(TRIM(PostalCode), " ", ""), 5) : '
-         '(UPPER(TRIM(RegionCode)) == "EU" ? UPPER(TRIM(CountryCode)) + "-" + '
-         'REPLACE(TRIM(PostalCode), " ", "") : REPLACE(REPLACE(TRIM(PostalCode), "-", ""), " ", ""))',
-         str_col("PostalCodeStandardized", 16)),
-        ("PostalPrefix", 'LEFT(REPLACE(TRIM(PostalCode), " ", ""), 3)', str_col("PostalPrefix", 3)),
-        ("GeographyKeyText",
-         'UPPER(TRIM(CountryCode)) + "|" + UPPER(TRIM(ISNULL(StateProvinceCode) ? "XX" : StateProvinceCode)) '
-         '+ "|" + UPPER(TRIM(CityName))', str_col("GeographyKeyText", 130)),
-        ("CodeValue",
-         'UPPER(TRIM(CountryCode)) + "|" + UPPER(TRIM(ISNULL(StateProvinceCode) ? "XX" : StateProvinceCode))',
-         str_col("CodeValue", 60)),
-        ("CodeDescription", 'TRIM(CountryName) + " / " + TRIM(ISNULL(StateProvinceName) ? "" : StateProvinceName)',
-         str_col("CodeDescription", 200)),
-        ("ChangeHash", hash_expression(["CountryCode", "StateProvinceCode", "CityName", "PostalCode"]),
-         str_col("ChangeHash", 200)),
+        ("CountryCode", 'UPPER(TRIM(CountryCode))', str_col("CountryCode", 2)),
+        ("GeographyCode", 'UPPER(TRIM(CountryCode)) + "|" + UPPER(TRIM(RegionCode))',
+         str_col("GeographyCode", 20)),
+        ("GeographyName", 'TRIM(CountryName)', str_col("GeographyName", 100)),
+        # Three tax regimes, three genuinely different shapes: NA stacks state,
+        # county and city rates onto a jurisdiction, the EU carries one country
+        # VAT rate that can reverse-charge, APAC carries a flat national GST.
+        ("TaxStructureCode",
+         'TaxRegimeCode == "VAT" ? "EU_VAT" : (TaxRegimeCode == "GST" ? "APAC_GST" : "NA_SALESTAX")',
+         str_col("TaxStructureCode", 12)),
+        ("ReverseChargeFlag",
+         'TaxRegimeCode == "VAT" && ReverseChargeEligible == TRUE ? "Y" : "N"',
+         str_col("ReverseChargeFlag", 1)),
+        ("EuStatusCode",
+         'IsEuMemberState == TRUE ? "MEMBER" : (ISNULL(EuExitDate) ? "NONMEMBER" : "EXITED")',
+         str_col("EuStatusCode", 12)),
+        ("LineageKey", '(DT_WSTR,40)"REF_Load_Geography"', str_col("LineageKey", 40)),
+        ("ChangeHash", hash_expression(["CountryCode", "CountryName", "RegionCode",
+                                        "TaxJurisdictionCode"]), str_col("ChangeHash", 200)),
     ])
-    flow.sort("Sort Geography For Dedup", ["GeographyKeyText", "PostalCodeStandardized"],
-              eliminate_duplicates=True)
     flow.lookup(
-        "Lookup Country Reference (Full Cache)", CONN_STAGING,
-        "SELECT CountryCode, IsoNumericCode, ContinentName FROM ref.Country;",
-        ["CountryCode"], [str_col("IsoNumericCode", 3), str_col("ContinentName", 30)], no_match="RD")
+        "Lookup Country Currency (Full Cache)", CONN_STAGING,
+        "SELECT CurrencyCode AS LocalCurrencyCode, CurrencyName, MinorUnitDigits FROM ref.Currency;",
+        ["LocalCurrencyCode"], [str_col("CurrencyName", 100), int_col("MinorUnitDigits")],
+        no_match="RD")
     flow.conditional_split("Screen Geography", [
-        ("Complete Geography", 'LEN(CityNameStandardized) > 0 && LEN(PostalCodeStandardized) > 2'),
-    ], default_output="Incomplete Geography")
-    flow.row_count("Count Geography Rows Loaded", "User::RowsInserted")
-    flow.oledb_destination("REF Geography Incoming", CONN_STAGING, "[ref].[Geography_Incoming]",
+        ("Taxed Country", 'LEN(TRIM(ISNULL(TaxJurisdictionCode) ? "" : TaxJurisdictionCode)) > 0'),
+    ], default_output="Country Without Jurisdiction")
+    flow.row_count("Count Geography Rows Published", "User::RowsInserted")
+    flow.oledb_destination("DW Dimension Geography", CONN_DW, "[Dimension].[Geography]",
                            batch_size=50000)
-    flow.branch_destination("ERR Geography Incomplete", CONN_STAGING,
-                            "[err].[RejectedConstraintViolation]",
-                            "Screen Geography", "Incomplete Geography")
-    flow.reject_destination("ERR Geography Unknown Country", CONN_STAGING,
+    flow.branch_destination("ERR Geography Without Jurisdiction", CONN_STAGING,
                             "[err].[RejectedLookupFailure]",
-                            "Lookup Country Reference (Full Cache)", "Lookup No Match Output")
-
-    dim = DataFlow("DFT Publish Geography Dimension", "Publish the current version to the DW")
-    dim.oledb_source(
-        "REF Geography Current", CONN_STAGING,
-        "SELECT CodeValue AS GeographyCode, CodeDescription AS GeographyName, RegionCode,\n"
-        "       VersionNumber, ValidFrom\n"
-        "FROM ref.Geography WHERE IsCurrent = 1;",
-        [str_col("GeographyCode", 60), str_col("GeographyName", 200), str_col("RegionCode", 4),
-         int_col("VersionNumber"), date_col("ValidFrom")], timeout=1800)
-    dim.row_count("Count Geography Dimension Rows", "User::RowsUpdated")
-    dim.oledb_destination("DW Dimension Geography", CONN_DW, "[Dimension].[Geography]", batch_size=50000)
+                            "Screen Geography", "Country Without Jurisdiction")
+    flow.reject_destination("ERR Geography Unknown Currency", CONN_STAGING,
+                            "[err].[RejectedLookupFailure]",
+                            "Lookup Country Currency (Full Cache)", "Lookup No Match Output")
     return build_reference_package(
         "REF_Load_Geography",
-        "Rebuild the conformed geography reference set. Postal codes are standardised three "
-        "different ways depending on the region, duplicate country/state/city combinations are "
-        "collapsed on sort and rows without a usable city or postal code are rejected.",
-        OLTP, "ref.Geography", [flow, dim],
-        truncate_tables=["[ref].[Geography_Incoming]"],
-        post_tasks=[version_reference_set("ref.Geography", "GEOGRAPHY")])
+        "Rebuild the conformed geography spine - ref.Region, ref.Country, the effective-dated "
+        "ref.TaxJurisdiction and the per-country ref.PostalFormatRule - from the Oracle geography "
+        "and tax extracts, then publish the countries into Dimension.Geography carrying which of "
+        "the three tax structures applies (NA sales tax stack, EU VAT with reverse charge, APAC "
+        "GST) and the country's EU membership history.",
+        ORA, "ref.Country", [flow],
+        truncate_tables=["[Dimension].[Geography]"],
+        pre_tasks=[load_reference("Load Regions", "ref.usp_LoadRegion"),
+                   load_reference("Load Countries", "ref.usp_LoadCountry"),
+                   load_reference("Load Tax Jurisdictions", "ref.usp_LoadTaxJurisdiction"),
+                   load_reference("Load Postal Format Rules", "ref.usp_LoadPostalFormatRule")],
+        post_tasks=[report_unmapped("COUNTRY")])
 
 
 @package
 def ref_load_date_dimension():
-    """Generate ref.Calendar and Dimension.Date with the three regional fiscal calendars."""
+    """Generate Dimension.Date with the fiscal calendar each conformed region keeps."""
     cols = [
         date_col("CalendarDate"), int_col("CalendarYear"), int_col("CalendarMonth"),
         int_col("CalendarDay"), int_col("DayOfWeekNumber"), str_col("MonthName", 12),
-        str_col("DayName", 12),
+        str_col("DayName", 12), int_col("FiscalYearStartMonthNa"), int_col("FiscalYearStartMonthEu"),
+        int_col("FiscalYearStartMonthApac"),
     ]
-    flow = DataFlow("DFT Generate Calendar", "Derive the regional fiscal attributes for each date")
+    flow = DataFlow("DFT Generate Calendar",
+                    "Derive each region's fiscal attributes from ref.Region")
     flow.oledb_source(
         "STG Calendar Spine", CONN_STAGING,
-        "SELECT CalendarDate, YEAR(CalendarDate) AS CalendarYear, MONTH(CalendarDate) AS CalendarMonth,\n"
-        "       DAY(CalendarDate) AS CalendarDay, DATEPART(weekday, CalendarDate) AS DayOfWeekNumber,\n"
-        "       DATENAME(month, CalendarDate) AS MonthName, DATENAME(weekday, CalendarDate) AS DayName\n"
-        "FROM stg.CalendarSpine\n"
-        "WHERE CalendarDate BETWEEN CONVERT(date, N'2005-01-01') AND CONVERT(date, N'2035-12-31');",
+        # The spine is generated on the fly; the estate has never held a
+        # permanent calendar table in the staging database.
+        "WITH DateSpine AS\n"
+        "(\n"
+        "    SELECT CONVERT(date, N'2005-01-01') AS CalendarDate\n"
+        "    UNION ALL\n"
+        "    SELECT DATEADD(day, 1, CalendarDate) FROM DateSpine\n"
+        "    WHERE CalendarDate < CONVERT(date, N'2035-12-31')\n"
+        ")\n"
+        "SELECT s.CalendarDate, YEAR(s.CalendarDate) AS CalendarYear,\n"
+        "       MONTH(s.CalendarDate) AS CalendarMonth, DAY(s.CalendarDate) AS CalendarDay,\n"
+        "       DATEPART(weekday, s.CalendarDate) AS DayOfWeekNumber,\n"
+        "       DATENAME(month, s.CalendarDate) AS MonthName,\n"
+        "       DATENAME(weekday, s.CalendarDate) AS DayName,\n"
+        "       (SELECT FiscalYearStartMonth FROM ref.Region WHERE RegionCode = N'NA')\n"
+        "           AS FiscalYearStartMonthNa,\n"
+        "       (SELECT FiscalYearStartMonth FROM ref.Region WHERE RegionCode = N'EU')\n"
+        "           AS FiscalYearStartMonthEu,\n"
+        "       (SELECT FiscalYearStartMonth FROM ref.Region WHERE RegionCode = N'APAC')\n"
+        "           AS FiscalYearStartMonthApac\n"
+        "FROM DateSpine AS s\n"
+        "OPTION (MAXRECURSION 0);",
         cols, timeout=1800)
     flow.row_count("Count Calendar Rows Read", "User::RowsRead")
     flow.derived_column("Derive Fiscal Calendars", [
-        # NA runs a July fiscal year, EU the calendar year and APAC an April year.
-        ("FiscalYearNa", 'CalendarMonth >= 7 ? CalendarYear + 1 : CalendarYear', int_col("FiscalYearNa")),
-        ("FiscalPeriodNa", 'CalendarMonth >= 7 ? CalendarMonth - 6 : CalendarMonth + 6',
-         int_col("FiscalPeriodNa")),
-        ("FiscalYearEu", 'CalendarYear', int_col("FiscalYearEu")),
-        ("FiscalPeriodEu", 'CalendarMonth', int_col("FiscalPeriodEu")),
-        ("FiscalYearApac", 'CalendarMonth >= 4 ? CalendarYear : CalendarYear - 1',
+        # The fiscal year start months come from ref.Region rather than being
+        # hard-coded here, so a region that moves its year end moves everywhere.
+        ("FiscalYearNa",
+         'CalendarMonth >= FiscalYearStartMonthNa ? CalendarYear + 1 : CalendarYear',
+         int_col("FiscalYearNa")),
+        ("FiscalPeriodNa",
+         'CalendarMonth >= FiscalYearStartMonthNa ? CalendarMonth - FiscalYearStartMonthNa + 1 '
+         ': CalendarMonth + 12 - FiscalYearStartMonthNa + 1', int_col("FiscalPeriodNa")),
+        ("FiscalYearEu",
+         'FiscalYearStartMonthEu == 1 ? CalendarYear : (CalendarMonth >= FiscalYearStartMonthEu '
+         '? CalendarYear + 1 : CalendarYear)', int_col("FiscalYearEu")),
+        ("FiscalPeriodEu",
+         'CalendarMonth >= FiscalYearStartMonthEu ? CalendarMonth - FiscalYearStartMonthEu + 1 '
+         ': CalendarMonth + 12 - FiscalYearStartMonthEu + 1', int_col("FiscalPeriodEu")),
+        ("FiscalYearApac",
+         'CalendarMonth >= FiscalYearStartMonthApac ? CalendarYear : CalendarYear - 1',
          int_col("FiscalYearApac")),
-        ("FiscalPeriodApac", 'CalendarMonth >= 4 ? CalendarMonth - 3 : CalendarMonth + 9',
-         int_col("FiscalPeriodApac")),
+        ("FiscalPeriodApac",
+         'CalendarMonth >= FiscalYearStartMonthApac ? CalendarMonth - FiscalYearStartMonthApac + 1 '
+         ': CalendarMonth + 12 - FiscalYearStartMonthApac + 1', int_col("FiscalPeriodApac")),
         ("CalendarQuarter", '((CalendarMonth - 1) / 3) + 1', int_col("CalendarQuarter")),
         ("WeekendFlag", 'DayOfWeekNumber == 1 || DayOfWeekNumber == 7 ? "Y" : "N"',
          str_col("WeekendFlag", 1)),
-        ("DateKey", '(CalendarYear * 10000) + (CalendarMonth * 100) + CalendarDay', int_col("DateKey")),
-        ("IsoWeekText",
-         '(DT_WSTR,4)CalendarYear + "-W" + RIGHT("0" + (DT_WSTR,2)((CalendarMonth * 4)), 2)',
-         str_col("IsoWeekText", 8)),
-    ])
-    flow.lookup(
-        "Lookup Public Holiday (Full Cache)", CONN_STAGING,
-        "SELECT HolidayDate AS CalendarDate, HolidayName, RegionCode AS HolidayRegionCode\n"
-        "FROM ref.PublicHoliday;",
-        ["CalendarDate"], [str_col("HolidayName", 60), str_col("HolidayRegionCode", 4)], no_match="IG")
-    flow.derived_column("Derive Working Day", [
-        ("HolidayFlag", 'ISNULL(HolidayName) ? "N" : "Y"', str_col("HolidayFlag", 1)),
-        ("WorkingDayFlag", 'WeekendFlag == "N" && ISNULL(HolidayName) ? "Y" : "N"',
+        ("WorkingDayFlag", 'DayOfWeekNumber == 1 || DayOfWeekNumber == 7 ? "N" : "Y"',
          str_col("WorkingDayFlag", 1)),
+        ("DateKey", '(CalendarYear * 10000) + (CalendarMonth * 100) + CalendarDay', int_col("DateKey")),
+        ("LineageKey", '(DT_WSTR,40)"REF_Load_DateDimension"', str_col("LineageKey", 40)),
     ])
     flow.conditional_split("Screen Calendar", [
         ("Valid Date", 'CalendarYear >= 2005 && CalendarYear <= 2035'),
     ], default_output="Out Of Range Date")
-    flow.row_count("Count Calendar Rows Loaded", "User::RowsInserted")
-    flow.oledb_destination("REF Calendar", CONN_STAGING, "[ref].[Calendar]", batch_size=50000)
+    flow.row_count("Count Calendar Rows Published", "User::RowsInserted")
+    flow.oledb_destination("DW Dimension Date", CONN_DW, "[Dimension].[Date]", batch_size=50000)
     flow.branch_destination("ERR Calendar Out Of Range", CONN_STAGING,
                             "[err].[RejectedConstraintViolation]",
                             "Screen Calendar", "Out Of Range Date")
-
-    dim = DataFlow("DFT Publish Date Dimension", "Publish the generated calendar to the DW")
-    dim.oledb_source(
-        "REF Calendar For Dimension", CONN_STAGING,
-        "SELECT DateKey, CalendarDate, CalendarYear, CalendarMonth, CalendarQuarter, MonthName,\n"
-        "       DayName, FiscalYearNa, FiscalPeriodNa, FiscalYearEu, FiscalPeriodEu, FiscalYearApac,\n"
-        "       FiscalPeriodApac, WorkingDayFlag\n"
-        "FROM ref.Calendar;",
-        [int_col("DateKey"), date_col("CalendarDate"), int_col("CalendarYear"), int_col("CalendarMonth"),
-         int_col("CalendarQuarter"), str_col("MonthName", 12), str_col("DayName", 12),
-         int_col("FiscalYearNa"), int_col("FiscalPeriodNa"), int_col("FiscalYearEu"),
-         int_col("FiscalPeriodEu"), int_col("FiscalYearApac"), int_col("FiscalPeriodApac"),
-         str_col("WorkingDayFlag", 1)], timeout=1800)
-    dim.row_count("Count Date Dimension Rows", "User::RowsUpdated")
-    dim.oledb_destination("DW Dimension Date", CONN_DW, "[Dimension].[Date]", batch_size=50000)
     return build_reference_package(
         "REF_Load_DateDimension",
-        "Regenerate ref.Calendar for 2005-2035 and publish Dimension.Date. Each date carries all "
-        "three fiscal calendars in parallel - a July year for NA, the calendar year for the EU and "
-        "an April year for APAC - plus the regional public holiday and working day flags.",
-        OLTP, "ref.Calendar", [flow, dim],
-        truncate_tables=["[ref].[Calendar]"])
+        "Regenerate Dimension.Date for 2005-2035. Each date carries all three fiscal calendars in "
+        "parallel, and the year start month for each of them is read from ref.Region rather than "
+        "being written into the package, so the conformed region policy is the only place a "
+        "fiscal year end is defined.",
+        OLTP, "ref.Region", [flow],
+        truncate_tables=["[Dimension].[Date]"],
+        pre_tasks=[load_reference("Load Regions", "ref.usp_LoadRegion")])
 
 
 @package
 def ref_load_unknown_members():
-    """Seed the -1 unknown member into every conformed reference set."""
+    """Seed the unknown members and refresh ref.SourceKeyCrosswalk."""
     cols = [str_col("ReferenceTableName", 60), str_col("UnknownCodeValue", 20),
-            str_col("UnknownDescription", 60)]
-    flow = DataFlow("DFT Seed Unknown Members", "One unknown member per conformed reference table")
+            str_col("UnknownDescription", 100), str_col("DomainCode", 30)]
+    flow = DataFlow("DFT Publish Unknown Members",
+                    "One unknown member per conformed domain, taken from the conformed sets")
     flow.oledb_source(
-        "REF Table Inventory", CONN_STAGING,
-        "SELECT t.ReferenceTableName, N'-1' AS UnknownCodeValue, N'Unknown' AS UnknownDescription\n"
-        "FROM ref.ReferenceTableInventory AS t\n"
-        "WHERE t.RequiresUnknownMember = 1;",
+        "REF Unknown Members", CONN_STAGING,
+        "SELECT N'ref.StatusCode' AS ReferenceTableName, s.ConformedStatusCode AS UnknownCodeValue,\n"
+        "       s.ConformedStatusName AS UnknownDescription, s.StatusDomainCode AS DomainCode\n"
+        "FROM ref.StatusCode AS s\n"
+        "WHERE s.ConformedStatusCode = N'UNKNOWN'\n"
+        "UNION ALL\n"
+        "SELECT N'ref.ReasonCode', r.ConformedReasonCode, r.ConformedReasonName, r.ReasonDomainCode\n"
+        "FROM ref.ReasonCode AS r\n"
+        "WHERE r.ConformedReasonCode = N'UNKNOWN';",
         cols, timeout=600)
-    flow.row_count("Count Reference Tables", "User::RowsRead")
+    flow.row_count("Count Unknown Members Read", "User::RowsRead")
     flow.derived_column("Shape Unknown Member", [
-        ("CodeValue", '"-1"', str_col("CodeValue", 60)),
-        ("CodeDescription", '"Unknown"', str_col("CodeDescription", 200)),
-        ("RegionCode", '"ALL"', str_col("RegionCode", 4)),
+        ("UnknownMemberKey", '-1', int_col("UnknownMemberKey")),
+        ("NotApplicableKey", '-2', int_col("NotApplicableKey")),
         ("IsUnknownMemberFlag", '"Y"', str_col("IsUnknownMemberFlag", 1)),
-        ("ChangeHash", '"UNKNOWN|MEMBER|SEED"', str_col("ChangeHash", 200)),
+        ("LineageKey", '(DT_WSTR,40)"REF_Load_UnknownMembers"', str_col("LineageKey", 40)),
     ])
     flow.conditional_split("Screen Unknown Member", [
-        ("Seedable Table", 'LEN(TRIM(ReferenceTableName)) > 0'),
-    ], default_output="Unnamed Table")
-    flow.row_count("Count Unknown Members Seeded", "User::RowsInserted")
-    flow.oledb_destination("REF Unknown Member", CONN_STAGING, "[ref].[UnknownMember]", batch_size=1000)
+        ("Seedable Domain", 'LEN(TRIM(DomainCode)) > 0'),
+    ], default_output="Unnamed Domain")
+    flow.row_count("Count Unknown Members Published", "User::RowsInserted")
+    flow.oledb_destination("DW Dimension Unknown Member", CONN_DW, "[Dimension].[Unknown Member]",
+                           batch_size=1000)
     flow.branch_destination("ERR Unknown Member Unnamed", CONN_STAGING,
                             "[err].[RejectedConstraintViolation]",
-                            "Screen Unknown Member", "Unnamed Table")
-    # The seeding itself is a row-by-row loop over the inventory because each
-    # reference table has its own column list; this has never been generalised.
-    seed = ExecuteSql(
-        "Seed Unknown Member Rows",
-        CONN_STAGING,
-        "DECLARE @Table NVARCHAR(60), @Sql NVARCHAR(MAX);\n"
-        "DECLARE seed_cur CURSOR LOCAL FAST_FORWARD FOR\n"
-        "    SELECT ReferenceTableName FROM ref.ReferenceTableInventory WHERE RequiresUnknownMember = 1;\n"
-        "OPEN seed_cur;\n"
-        "FETCH NEXT FROM seed_cur INTO @Table;\n"
-        "WHILE @@FETCH_STATUS = 0\n"
-        "BEGIN\n"
-        "    SET @Sql = N'IF NOT EXISTS (SELECT 1 FROM ref.' + QUOTENAME(@Table) +\n"
-        "               N' WHERE CodeValue = N''-1'') INSERT INTO ref.' + QUOTENAME(@Table) +\n"
-        "               N' (CodeValue, CodeDescription, RegionCode, ChangeHash, ValidFrom, ValidTo, "
-        "IsCurrent, VersionNumber) VALUES (N''-1'', N''Unknown'', N''ALL'', N''UNKNOWN'', "
-        "SYSUTCDATETIME(), CONVERT(DATETIME2(3), N''9999-12-31''), 1, 1);';\n"
-        "    EXEC sp_executesql @Sql;\n"
-        "    FETCH NEXT FROM seed_cur INTO @Table;\n"
-        "END\n"
-        "CLOSE seed_cur;\n"
-        "DEALLOCATE seed_cur;",
-    )
-
-    dim = DataFlow("DFT Publish Unknown Members", "Publish the unknown members into the DW dimensions")
-    dim.oledb_source(
-        "REF Unknown Member Current", CONN_STAGING,
-        "SELECT ReferenceTableName, CodeValue, CodeDescription, RegionCode FROM ref.UnknownMember;",
-        [str_col("ReferenceTableName", 60), str_col("CodeValue", 60), str_col("CodeDescription", 200),
-         str_col("RegionCode", 4)], timeout=600)
-    dim.row_count("Count Unknown Members Published", "User::RowsUpdated")
-    dim.oledb_destination("DW Dimension Unknown Member", CONN_DW, "[Dimension].[UnknownMember]",
-                          batch_size=1000)
+                            "Screen Unknown Member", "Unnamed Domain")
     return build_reference_package(
         "REF_Load_UnknownMembers",
-        "Seed the -1 unknown member into every conformed reference table that declares it is "
-        "required, so that fact loads can always resolve a dimension key. The seeding loops over "
-        "the inventory table and builds the insert with dynamic SQL per reference table.",
-        OLTP, "ref.UnknownMember", [flow, dim],
-        truncate_tables=["[ref].[UnknownMember]"],
-        post_tasks=[seed])
+        "Make sure every conformed domain has the UNKNOWN member the fact loads route to when a "
+        "code cannot be translated, and refresh ref.SourceKeyCrosswalk so an ERP product code and "
+        "an OLTP stock item id resolve to the same conformed business key. The unknown members "
+        "come from ref.StatusCode and ref.ReasonCode rather than from a separate inventory table.",
+        OLTP, "ref.SourceKeyCrosswalk", [flow],
+        truncate_tables=["[Dimension].[Unknown Member]"],
+        pre_tasks=[load_reference("Load Status Codes", "ref.usp_LoadStatusCode"),
+                   load_reference("Load Reason Codes", "ref.usp_LoadReasonCode"),
+                   load_reference("Load Source Key Crosswalk", "ref.usp_LoadSourceKeyCrosswalk")])
 
 
 @package
 def ref_load_code_translation():
-    """Maintain ref.CodeCrosswalk and report unmapped source codes."""
+    """Maintain every ref.CodeCrosswalk domain and report unmapped source codes."""
     cols = [
-        str_col("CodeSetName", 30), str_col("SourceSystemCode", 10), str_col("SourceCode", 60),
-        str_col("TargetCode", 60), str_col("TargetDescription", 200), str_col("AttributeValue", 60),
-        date_col("EffectiveFromDate"), bool_col("IsActive"),
+        str_col("CodeDomainCode", 30), str_col("SourceSystemCode", 20), str_col("SourceCodeValue", 50),
+        str_col("ConformedCodeValue", 20), str_col("RegionCode", 10),
+        bool_col("IsDefaultForConformed"), date_col("EffectiveFromDate"), date_col("EffectiveToDate"),
     ]
-    flow = DataFlow("DFT Maintain Code Crosswalk",
-                    "Merge the steward-maintained crosswalk with the codes seen in staging")
+    flow = DataFlow("DFT Publish Code Crosswalk Configuration",
+                    "Register the active mapping count per domain in the control configuration")
     flow.oledb_source(
-        "STG Code Crosswalk Feed", CONN_STAGING,
-        "SELECT CodeSetName, SourceSystemCode, SourceCode, TargetCode, TargetDescription,\n"
-        "       AttributeValue, EffectiveFromDate, IsActive\n"
-        "FROM stg.CodeCrosswalkFeed;",
+        "REF CodeCrosswalk Active", CONN_STAGING,
+        "SELECT x.CodeDomainCode, x.SourceSystemCode, x.SourceCodeValue, x.ConformedCodeValue,\n"
+        "       x.RegionCode, x.IsDefaultForConformed, x.EffectiveFromDate, x.EffectiveToDate\n"
+        "FROM ref.CodeCrosswalk AS x\n"
+        "WHERE x.EffectiveToDate IS NULL;",
         cols, timeout=1800)
-    flow.row_count("Count Crosswalk Rows Read", "User::RowsRead")
-    flow.derived_column("Conform Crosswalk", [
-        ("CodeSetName", 'UPPER(TRIM(CodeSetName))', str_col("CodeSetName", 30)),
-        ("SourceSystemCode", 'UPPER(TRIM(SourceSystemCode))', str_col("SourceSystemCode", 10)),
-        ("SourceCode", 'UPPER(TRIM(SourceCode))', str_col("SourceCode", 60)),
-        ("TargetCode", 'UPPER(TRIM(ISNULL(TargetCode) ? "-1" : TargetCode))', str_col("TargetCode", 60)),
-        ("TargetDescription",
-         'ISNULL(TargetDescription) || TRIM(TargetDescription) == "" ? "Unmapped" : TRIM(TargetDescription)',
-         str_col("TargetDescription", 200)),
-        ("EffectiveFromDate",
-         'ISNULL(EffectiveFromDate) ? (DT_DBTIMESTAMP)"1900-01-01" : EffectiveFromDate',
-         date_col("EffectiveFromDate")),
-        ("ChangeHash", hash_expression(["CodeSetName", "SourceSystemCode", "SourceCode", "TargetCode"]),
-         str_col("ChangeHash", 200)),
+    flow.row_count("Count Active Mappings", "User::RowsRead")
+    flow.derived_column("Shape Configuration Row", [
+        ("ConfigurationKey", '"CodeSetVersion." + UPPER(TRIM(CodeDomainCode))',
+         str_col("ConfigurationKey", 60)),
+        ("ConfigurationValue", 'UPPER(TRIM(SourceSystemCode)) + "|" + UPPER(TRIM(ConformedCodeValue))',
+         str_col("ConfigurationValue", 200)),
+        ("LineageKey", '(DT_WSTR,40)"REF_Load_CodeTranslation"', str_col("LineageKey", 40)),
     ])
-    flow.sort("Sort Crosswalk By Set And Source", ["CodeSetName", "SourceSystemCode", "SourceCode"],
-              eliminate_duplicates=True)
-    flow.conditional_split("Route Crosswalk Rows", [
-        ("Mapped Code", 'TargetCode != "-1" && IsActive == TRUE'),
-        ("Unmapped Code", 'TargetCode == "-1"'),
-    ], default_output="Retired Mapping")
-    flow.row_count("Count Crosswalk Rows Loaded", "User::RowsInserted")
-    flow.oledb_destination("REF CodeCrosswalk", CONN_STAGING, "[ref].[CodeCrosswalk]", batch_size=20000)
-    flow.branch_destination("ERR Crosswalk Unmapped", CONN_STAGING, "[err].[UnmappedCode]",
-                            "Route Crosswalk Rows", "Unmapped Code")
-    flow.branch_destination("REF CodeCrosswalk Retired", CONN_STAGING, "[ref].[CodeCrosswalkHistory]",
-                            "Route Crosswalk Rows", "Retired Mapping")
+    flow.aggregate("Summarize Mapping Coverage", ["CodeDomainCode", "SourceSystemCode"], [
+        ("SourceCodeValue", "MappingCount", "Count"),
+    ])
+    flow.row_count("Count Domains Registered", "User::RowsInserted")
+    flow.oledb_destination("CTL Configuration", CONN_STAGING, "[etl].[Configuration]",
+                           batch_size=5000)
 
-    scan_cols = [str_col("CodeSetName", 30), str_col("SourceSystemCode", 10), str_col("SourceCode", 60),
-                 bigint_col("OccurrenceCount")]
-    scan = DataFlow("DFT Scan Staging For Unmapped Codes",
-                    "Union the code-bearing staging columns and find what the crosswalk misses")
+    scan_cols = [str_col("CodeDomainCode", 30), str_col("SourceSystemCode", 20),
+                 str_col("SourceCodeValue", 50), bigint_col("TotalOccurrenceCount"),
+                 date_col("LastObservedAtUtc")]
+    scan = DataFlow("DFT Scan For Unmapped Codes",
+                    "Read the steward-facing unmapped list and register the worst offenders")
     scan.oledb_source(
-        "STG Observed Codes", CONN_STAGING,
-        "SELECT N'PAYMENT_METHOD' AS CodeSetName, N'ORA_ERP' AS SourceSystemCode,\n"
-        "       SourcePaymentMethodCode AS SourceCode, COUNT_BIG(*) AS OccurrenceCount\n"
-        "FROM stg.Payment GROUP BY SourcePaymentMethodCode\n"
-        "UNION ALL\n"
-        "SELECT N'RETURN_REASON', N'WWI_OLTP', SourceReturnReasonCode, COUNT_BIG(*)\n"
-        "FROM stg.[Return] GROUP BY SourceReturnReasonCode\n"
-        "UNION ALL\n"
-        "SELECT N'TRANSACTION_TYPE', N'WWI_OLTP', TransactionTypeCode, COUNT_BIG(*)\n"
-        "FROM stg.StockMovement GROUP BY TransactionTypeCode;",
+        "REF Unmapped Source Codes", CONN_STAGING,
+        "SELECT u.CodeDomainCode, u.SourceSystemCode, u.SourceCodeValue, u.TotalOccurrenceCount,\n"
+        "       u.LastObservedAtUtc\n"
+        "FROM ref.vw_UnmappedSourceCode AS u;",
         scan_cols, timeout=3600)
-    scan.lookup(
-        "Lookup Existing Mapping (Partial Cache)", CONN_STAGING,
-        "SELECT CodeSetName, SourceSystemCode, SourceCode, TargetCode FROM ref.CodeCrosswalk\n"
-        "WHERE IsActive = 1;",
-        ["CodeSetName", "SourceSystemCode", "SourceCode"], [str_col("TargetCode", 60)], no_match="RD")
     scan.derived_column("Tag Mapping Coverage", [
-        ("CoverageStatusCode", '"MAPPED"', str_col("CoverageStatusCode", 10)),
+        ("CoverageStatusCode", '"UNMAPPED"', str_col("CoverageStatusCode", 10)),
+        ("SeverityCode", 'TotalOccurrenceCount > 1000 ? "HIGH" : "LOW"', str_col("SeverityCode", 4)),
         ("ReviewedFlag", '"N"', str_col("ReviewedFlag", 1)),
     ])
-    scan.row_count("Count Mapped Observations", "User::RowsUpdated")
-    scan.oledb_destination("REF CodeCoverage", CONN_STAGING, "[ref].[CodeCoverage]", batch_size=20000)
-    scan.reject_destination("ERR Unmapped Observed Code", CONN_STAGING, "[err].[UnmappedCode]",
-                            "Lookup Existing Mapping (Partial Cache)", "Lookup No Match Output")
+    scan.conditional_split("Screen Unmapped Code", [
+        ("Reportable Code", 'LEN(TRIM(SourceCodeValue)) > 0'),
+    ], default_output="Blank Code")
+    scan.row_count("Count Unmapped Codes", "User::RowsUpdated")
+    scan.oledb_destination("ERR Unmapped Code Report", CONN_STAGING,
+                           "[err].[RejectedLookupFailure]", batch_size=20000)
+    scan.branch_destination("ERR Unmapped Blank Code", CONN_STAGING,
+                            "[err].[RejectedConstraintViolation]",
+                            "Screen Unmapped Code", "Blank Code")
     return build_reference_package(
         "REF_Load_CodeTranslation",
-        "Maintain ref.CodeCrosswalk from the steward-maintained feed, retire superseded mappings "
-        "into the crosswalk history and then sweep the staged payment, return and stock movement "
-        "codes to report anything the crosswalk still does not cover.",
+        "Refresh every domain of ref.CodeCrosswalk from the steward grid held in "
+        "ref.usp_LoadCodeCrosswalk, register the active mapping count per domain in "
+        "etl.Configuration, and then sweep the raw extracts for codes that still have no mapping. "
+        "The unmapped list is what the data-quality packages read out of "
+        "ref.vw_UnmappedSourceCode.",
         ORA, "ref.CodeCrosswalk", [flow, scan],
-        post_tasks=[exec_proc("Refresh Crosswalk Configuration",
-                              "EXEC etl.usp_GetConfiguration @ConfigurationKey = N'CodeSetVersion', "
-                              "@SourceSystemCode = ?;",
-                              parameter_bindings=[("$Package::SourceSystemCode", 0, "NVARCHAR")]),
-                    report_unmapped("CODE_TRANSLATION", "stg.CodeCrosswalkFeed"),
-                    log_unmapped_rejects("CODE_TRANSLATION")])
+        pre_tasks=[load_reference("Load Status Codes", "ref.usp_LoadStatusCode"),
+                   load_reference("Load Reason Codes", "ref.usp_LoadReasonCode"),
+                   load_reference("Load All Code Crosswalk Domains", "ref.usp_LoadCodeCrosswalk")],
+        post_tasks=[exec_proc("Report Unmapped Codes - All Domains",
+                              "EXEC ref.usp_ReportUnmappedCodes @BatchId = ?, "
+                              "@PackageExecutionId = ?;",
+                              parameter_bindings=list(BATCH_BINDINGS))])
 
 
 # ---------------------------------------------------------------------------
