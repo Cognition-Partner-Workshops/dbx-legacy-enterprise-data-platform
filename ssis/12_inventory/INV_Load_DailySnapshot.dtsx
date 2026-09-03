@@ -1,0 +1,794 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{48A4D0D2-9B88-56B0-2602-34460E8E8B93}"
+  DTS:Description="Full daily rewrite of the inventory position snapshot. Every stock item and site combination is snapshotted whether or not it moved, because the turns calculation needs a dense series; chiller stock past its shelf life is flagged so the write-off report can pick it up."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="INV_Load_DailySnapshot"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{D23ABEAF-BC7B-B8F4-4147-5D53CED06F98}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{62629B35-ECFA-CD7C-E967-FFCB98601661}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{76504D0F-4B8D-456A-9852-37E1DAE39E5D}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{FCC56E99-E925-C3DE-262D-6D81F4893089}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{4864E576-CCC2-668A-657E-17A771E117D4}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWIOLTP</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SnapshotBusinessDate]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="Snapshot date; the master passes the batch business date."
+      DTS:DTSID="{91589BDB-2EB7-A6F5-4F4B-3C053922D690}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SnapshotBusinessDate"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">1900-01-01</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::DeleteExistingSnapshot]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="Reruns delete the day's rows first rather than double-counting."
+      DTS:DTSID="{5CFFB495-96A3-758B-A760-319B2523CF1E}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="DeleteExistingSnapshot"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">True</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{2F283E7A-B29F-13E2-1D57-0FAA253A6F42}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{DA15701B-EAA3-E5E8-3C26-19F86DE7A8FE}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{CF2063A5-EA36-26A3-2B99-B83FEAD78D28}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{72F31807-E452-6DEF-A2D9-1D0A291ED867}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{CCD5F7DE-A525-FBE2-3216-5309DDF20498}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{A872062A-DB0D-6F11-BBC8-7FA1C900C6B8}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{5C031172-1834-5FD1-4784-1B926FE0ABCA}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{FAE2AE3D-4317-D2FC-27C8-611653359A45}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::SnapshotDate]"
+      DTS:CreationName=""
+      DTS:DTSID="{5C1B5779-36EB-6DE0-816E-9250F31DAB58}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="SnapshotDate">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ExpiredChillerCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{71CEB6D1-6C79-E317-383F-50F9062E59C7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ExpiredChillerCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Resolve Snapshot Date"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{508F12E1-B0B9-458F-02D8-7416EF18887D}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Resolve Snapshot Date"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::SnapshotDate] = @[$Package::SnapshotBusinessDate]" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Delete Existing Snapshot"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{0AAAAF04-C687-20F2-0D02-E87F73840757}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Delete Existing Snapshot"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="DELETE FROM Fact.[Daily Inventory Snapshot] WHERE [Snapshot Date] = CAST(? AS date);"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::SnapshotDate" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Load Inventory Snapshot"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{556C3882-3FBD-CF55-1C68-BD7A9A9E65E5}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Load Inventory Snapshot"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Load Inventory Snapshot\work InventoryPositionDaily" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="work InventoryPositionDaily" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">3600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT  p.StockItemId
+,       p.WarehouseSiteCode
+,       p.BinLocationCode
+,       p.SnapshotDate
+,       p.QuantityOnHand
+,       p.QuantityAllocated
+,       p.QuantityOnOrder
+,       p.QuantityInTransit
+,       p.QuantityOnHand - p.QuantityAllocated          AS QuantityAvailable
+,       p.LastMovementDate
+,       si.UnitCost
+,       si.IsChillerStock
+,       si.ShelfLifeDays
+,       (p.QuantityOnHand * si.UnitCost)                AS OnHandValue
+        /* Ageing bands were agreed with the finance team in 2008 and are still
+           what the obsolescence provision is calculated from. */
+,       CASE
+            WHEN p.LastMovementDate IS NULL                              THEN 'NEVER'
+            WHEN DATEDIFF(DAY, p.LastMovementDate, p.SnapshotDate) &gt; 365 THEN 'D365P'
+            WHEN DATEDIFF(DAY, p.LastMovementDate, p.SnapshotDate) &gt; 180 THEN 'D180'
+            WHEN DATEDIFF(DAY, p.LastMovementDate, p.SnapshotDate) &gt; 90  THEN 'D090'
+            ELSE 'FRESH'
+        END                                             AS AgeBandCode
+,       CASE WHEN si.IsChillerStock = 1
+                  AND DATEDIFF(DAY, p.ReceiptDate, p.SnapshotDate) &gt; si.ShelfLifeDays
+             THEN 1 ELSE 0 END                          AS IsExpiredChillerStock
+FROM    work.InventoryPositionDaily AS p
+INNER JOIN stg.StockItem AS si
+        ON  si.StockItemId = p.StockItemId
+WHERE   p.SnapshotDate = CAST(? AS date)</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[StockItemId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[StockItemId]" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[StockItemId]" name="StockItemId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[WarehouseSiteCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[WarehouseSiteCode]" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[WarehouseSiteCode]" name="WarehouseSiteCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[BinLocationCode]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[BinLocationCode]" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[BinLocationCode]" name="BinLocationCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[SnapshotDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[SnapshotDate]" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[SnapshotDate]" name="SnapshotDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[QuantityOnHand]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[QuantityOnHand]" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[QuantityOnHand]" name="QuantityOnHand" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[QuantityAllocated]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[QuantityAllocated]" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[QuantityAllocated]" name="QuantityAllocated" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[QuantityOnOrder]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[QuantityOnOrder]" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[QuantityOnOrder]" name="QuantityOnOrder" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[QuantityInTransit]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[QuantityInTransit]" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[QuantityInTransit]" name="QuantityInTransit" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[QuantityAvailable]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[QuantityAvailable]" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[QuantityAvailable]" name="QuantityAvailable" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[LastMovementDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[LastMovementDate]" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[LastMovementDate]" name="LastMovementDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[UnitCost]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[UnitCost]" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[UnitCost]" name="UnitCost" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[IsChillerStock]" dataType="bool" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[IsChillerStock]" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[IsChillerStock]" name="IsChillerStock" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[ShelfLifeDays]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[ShelfLifeDays]" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[ShelfLifeDays]" name="ShelfLifeDays" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[OnHandValue]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[OnHandValue]" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[OnHandValue]" name="OnHandValue" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[AgeBandCode]" dataType="wstr" length="6" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[AgeBandCode]" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[AgeBandCode]" name="AgeBandCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[IsExpiredChillerStock]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[IsExpiredChillerStock]" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].Columns[IsExpiredChillerStock]" name="IsExpiredChillerStock" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[StockItemId]" dataType="i4" name="StockItemId" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[WarehouseSiteCode]" dataType="wstr" length="10" name="WarehouseSiteCode" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[BinLocationCode]" dataType="wstr" length="12" name="BinLocationCode" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[SnapshotDate]" dataType="dbTimeStamp" name="SnapshotDate" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[QuantityOnHand]" dataType="i4" name="QuantityOnHand" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[QuantityAllocated]" dataType="i4" name="QuantityAllocated" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[QuantityOnOrder]" dataType="i4" name="QuantityOnOrder" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[QuantityInTransit]" dataType="i4" name="QuantityInTransit" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[QuantityAvailable]" dataType="i4" name="QuantityAvailable" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[LastMovementDate]" dataType="dbTimeStamp" name="LastMovementDate" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[UnitCost]" dataType="numeric" precision="18" scale="2" name="UnitCost" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[IsChillerStock]" dataType="bool" name="IsChillerStock" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[ShelfLifeDays]" dataType="i4" name="ShelfLifeDays" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[OnHandValue]" dataType="numeric" precision="18" scale="2" name="OnHandValue" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[AgeBandCode]" dataType="wstr" length="6" name="AgeBandCode" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output].ExternalColumns[IsExpiredChillerStock]" dataType="i4" name="IsExpiredChillerStock" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[StockItemId]" dataType="i4" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[StockItemId]" name="StockItemId" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[WarehouseSiteCode]" dataType="wstr" length="10" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[WarehouseSiteCode]" name="WarehouseSiteCode" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[BinLocationCode]" dataType="wstr" length="12" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[BinLocationCode]" name="BinLocationCode" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[SnapshotDate]" dataType="dbTimeStamp" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[SnapshotDate]" name="SnapshotDate" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[QuantityOnHand]" dataType="i4" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[QuantityOnHand]" name="QuantityOnHand" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[QuantityAllocated]" dataType="i4" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[QuantityAllocated]" name="QuantityAllocated" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[QuantityOnOrder]" dataType="i4" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[QuantityOnOrder]" name="QuantityOnOrder" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[QuantityInTransit]" dataType="i4" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[QuantityInTransit]" name="QuantityInTransit" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[QuantityAvailable]" dataType="i4" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[QuantityAvailable]" name="QuantityAvailable" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[LastMovementDate]" dataType="dbTimeStamp" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[LastMovementDate]" name="LastMovementDate" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[UnitCost]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[UnitCost]" name="UnitCost" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[IsChillerStock]" dataType="bool" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[IsChillerStock]" name="IsChillerStock" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[ShelfLifeDays]" dataType="i4" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[ShelfLifeDays]" name="ShelfLifeDays" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[OnHandValue]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[OnHandValue]" name="OnHandValue" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[AgeBandCode]" dataType="wstr" length="6" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[AgeBandCode]" name="AgeBandCode" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[IsExpiredChillerStock]" dataType="i4" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[IsExpiredChillerStock]" name="IsExpiredChillerStock" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Inventory Snapshot\Lookup Stock Item Key" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Stock Item Key" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [Stock Item Key] AS StockItemKey, [WWI Stock Item ID] AS StockItemId FROM Dimension.[Stock Item] WHERE [Valid To] &gt; SYSDATETIME();</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">0</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Inventory Snapshot\Lookup Stock Item Key.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Inventory Snapshot\Lookup Stock Item Key.Inputs[Lookup Input]" errorRowDisposition="RedirectRow" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Inventory Snapshot\Lookup Stock Item Key.Inputs[Lookup Input].Columns[StockItemId]" cachedName="StockItemId" name="StockItemId" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Inventory Snapshot\Lookup Stock Item Key.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Inventory Snapshot\Lookup Stock Item Key.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Inventory Snapshot\Lookup Stock Item Key.Outputs[Lookup Match Output].Columns[StockItemKey]" dataType="i4" lineageId="Package\Load Inventory Snapshot\Lookup Stock Item Key.Outputs[Lookup Match Output].Columns[StockItemKey]" name="StockItemKey" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Inventory Snapshot\Lookup Stock Item Key.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Inventory Snapshot\Lookup Stock Item Key.Inputs[Lookup Input]" />
+              <output refId="Package\Load Inventory Snapshot\Lookup Stock Item Key.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Inventory Snapshot\Lookup Stock Item Key.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Inventory Snapshot\Derive Snapshot Measures" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Snapshot Measures" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Load Inventory Snapshot\Derive Snapshot Measures.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Inventory Snapshot\Derive Snapshot Measures.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Load Inventory Snapshot\Derive Snapshot Measures.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Inventory Snapshot\Derive Snapshot Measures.Outputs[Derived Column Output].Columns[DaysCoverAtCurrentRate]" dataType="i4" lineageId="Package\Load Inventory Snapshot\Derive Snapshot Measures.Outputs[Derived Column Output].Columns[DaysCoverAtCurrentRate]" name="DaysCoverAtCurrentRate">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">QuantityAvailable &lt;= 0 ? (DT_I4)0 : QuantityAvailable</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">QuantityAvailable &lt;= 0 ? (DT_I4)0 : QuantityAvailable</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Inventory Snapshot\Derive Snapshot Measures.Outputs[Derived Column Output].Columns[ObsolescenceProvisionAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Inventory Snapshot\Derive Snapshot Measures.Outputs[Derived Column Output].Columns[ObsolescenceProvisionAmount]" name="ObsolescenceProvisionAmount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">AgeBandCode == "D365P" ? OnHandValue : (AgeBandCode == "D180" ? OnHandValue / 2 : (DT_NUMERIC,18,2)0)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">AgeBandCode == "D365P" ? OnHandValue : (AgeBandCode == "D180" ? OnHandValue / 2 : (DT_NUMERIC,18,2)0)</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Inventory Snapshot\Count Snapshot Rows" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Snapshot Rows" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsInserted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Load Inventory Snapshot\Count Snapshot Rows.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Inventory Snapshot\Count Snapshot Rows.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Load Inventory Snapshot\Count Snapshot Rows.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Fact Daily Inventory Snapshot" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Fact].[Daily Inventory Snapshot]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">100000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[StockItemId]" cachedDataType="i4" cachedName="StockItemId" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" name="StockItemId" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[WarehouseSiteCode]" cachedDataType="wstr" cachedLength="10" cachedName="WarehouseSiteCode" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseSiteCode]" name="WarehouseSiteCode" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[BinLocationCode]" cachedDataType="wstr" cachedLength="12" cachedName="BinLocationCode" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[BinLocationCode]" name="BinLocationCode" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[SnapshotDate]" cachedDataType="dbTimeStamp" cachedName="SnapshotDate" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[SnapshotDate]" name="SnapshotDate" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[QuantityOnHand]" cachedDataType="i4" cachedName="QuantityOnHand" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnHand]" name="QuantityOnHand" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[QuantityAllocated]" cachedDataType="i4" cachedName="QuantityAllocated" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAllocated]" name="QuantityAllocated" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[QuantityOnOrder]" cachedDataType="i4" cachedName="QuantityOnOrder" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnOrder]" name="QuantityOnOrder" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[QuantityInTransit]" cachedDataType="i4" cachedName="QuantityInTransit" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[QuantityInTransit]" name="QuantityInTransit" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[QuantityAvailable]" cachedDataType="i4" cachedName="QuantityAvailable" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAvailable]" name="QuantityAvailable" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[LastMovementDate]" cachedDataType="dbTimeStamp" cachedName="LastMovementDate" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[LastMovementDate]" name="LastMovementDate" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[UnitCost]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitCost" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[UnitCost]" name="UnitCost" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[IsChillerStock]" cachedDataType="bool" cachedName="IsChillerStock" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[IsChillerStock]" name="IsChillerStock" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[ShelfLifeDays]" cachedDataType="i4" cachedName="ShelfLifeDays" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[ShelfLifeDays]" name="ShelfLifeDays" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[OnHandValue]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OnHandValue" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[OnHandValue]" name="OnHandValue" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[AgeBandCode]" cachedDataType="wstr" cachedLength="6" cachedName="AgeBandCode" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[AgeBandCode]" name="AgeBandCode" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[IsExpiredChillerStock]" cachedDataType="i4" cachedName="IsExpiredChillerStock" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[IsExpiredChillerStock]" name="IsExpiredChillerStock" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[StockItemKey]" cachedDataType="i4" cachedName="StockItemKey" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" name="StockItemKey" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[DaysCoverAtCurrentRate]" cachedDataType="i4" cachedName="DaysCoverAtCurrentRate" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[DaysCoverAtCurrentRate]" name="DaysCoverAtCurrentRate" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].Columns[ObsolescenceProvisionAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ObsolescenceProvisionAmount" externalMetadataColumnId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[ObsolescenceProvisionAmount]" name="ObsolescenceProvisionAmount" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" dataType="i4" name="StockItemId" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseSiteCode]" dataType="wstr" length="10" name="WarehouseSiteCode" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[BinLocationCode]" dataType="wstr" length="12" name="BinLocationCode" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[SnapshotDate]" dataType="dbTimeStamp" name="SnapshotDate" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnHand]" dataType="i4" name="QuantityOnHand" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAllocated]" dataType="i4" name="QuantityAllocated" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnOrder]" dataType="i4" name="QuantityOnOrder" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[QuantityInTransit]" dataType="i4" name="QuantityInTransit" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAvailable]" dataType="i4" name="QuantityAvailable" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[LastMovementDate]" dataType="dbTimeStamp" name="LastMovementDate" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[UnitCost]" dataType="numeric" precision="18" scale="2" name="UnitCost" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[IsChillerStock]" dataType="bool" name="IsChillerStock" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[ShelfLifeDays]" dataType="i4" name="ShelfLifeDays" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[OnHandValue]" dataType="numeric" precision="18" scale="2" name="OnHandValue" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[AgeBandCode]" dataType="wstr" length="6" name="AgeBandCode" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[IsExpiredChillerStock]" dataType="i4" name="IsExpiredChillerStock" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" dataType="i4" name="StockItemKey" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[DaysCoverAtCurrentRate]" dataType="i4" name="DaysCoverAtCurrentRate" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input].ExternalColumns[ObsolescenceProvisionAmount]" dataType="numeric" precision="18" scale="2" name="ObsolescenceProvisionAmount" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Unknown Stock Items" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[InventorySnapshotReject]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[StockItemId]" cachedDataType="i4" cachedName="StockItemId" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" name="StockItemId" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[WarehouseSiteCode]" cachedDataType="wstr" cachedLength="10" cachedName="WarehouseSiteCode" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseSiteCode]" name="WarehouseSiteCode" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[BinLocationCode]" cachedDataType="wstr" cachedLength="12" cachedName="BinLocationCode" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[BinLocationCode]" name="BinLocationCode" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[SnapshotDate]" cachedDataType="dbTimeStamp" cachedName="SnapshotDate" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[SnapshotDate]" name="SnapshotDate" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[QuantityOnHand]" cachedDataType="i4" cachedName="QuantityOnHand" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnHand]" name="QuantityOnHand" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[QuantityAllocated]" cachedDataType="i4" cachedName="QuantityAllocated" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAllocated]" name="QuantityAllocated" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[QuantityOnOrder]" cachedDataType="i4" cachedName="QuantityOnOrder" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnOrder]" name="QuantityOnOrder" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[QuantityInTransit]" cachedDataType="i4" cachedName="QuantityInTransit" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[QuantityInTransit]" name="QuantityInTransit" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[QuantityAvailable]" cachedDataType="i4" cachedName="QuantityAvailable" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAvailable]" name="QuantityAvailable" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[LastMovementDate]" cachedDataType="dbTimeStamp" cachedName="LastMovementDate" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[LastMovementDate]" name="LastMovementDate" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[UnitCost]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitCost" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[UnitCost]" name="UnitCost" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[IsChillerStock]" cachedDataType="bool" cachedName="IsChillerStock" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[IsChillerStock]" name="IsChillerStock" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[ShelfLifeDays]" cachedDataType="i4" cachedName="ShelfLifeDays" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[ShelfLifeDays]" name="ShelfLifeDays" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[OnHandValue]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OnHandValue" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[OnHandValue]" name="OnHandValue" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[AgeBandCode]" cachedDataType="wstr" cachedLength="6" cachedName="AgeBandCode" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[AgeBandCode]" name="AgeBandCode" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[IsExpiredChillerStock]" cachedDataType="i4" cachedName="IsExpiredChillerStock" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[IsExpiredChillerStock]" name="IsExpiredChillerStock" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[StockItemKey]" cachedDataType="i4" cachedName="StockItemKey" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" name="StockItemKey" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[DaysCoverAtCurrentRate]" cachedDataType="i4" cachedName="DaysCoverAtCurrentRate" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[DaysCoverAtCurrentRate]" name="DaysCoverAtCurrentRate" />
+                  <inputColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].Columns[ObsolescenceProvisionAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ObsolescenceProvisionAmount" externalMetadataColumnId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[ObsolescenceProvisionAmount]" name="ObsolescenceProvisionAmount" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" dataType="i4" name="StockItemId" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseSiteCode]" dataType="wstr" length="10" name="WarehouseSiteCode" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[BinLocationCode]" dataType="wstr" length="12" name="BinLocationCode" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[SnapshotDate]" dataType="dbTimeStamp" name="SnapshotDate" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnHand]" dataType="i4" name="QuantityOnHand" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAllocated]" dataType="i4" name="QuantityAllocated" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnOrder]" dataType="i4" name="QuantityOnOrder" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[QuantityInTransit]" dataType="i4" name="QuantityInTransit" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAvailable]" dataType="i4" name="QuantityAvailable" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[LastMovementDate]" dataType="dbTimeStamp" name="LastMovementDate" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[UnitCost]" dataType="numeric" precision="18" scale="2" name="UnitCost" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[IsChillerStock]" dataType="bool" name="IsChillerStock" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[ShelfLifeDays]" dataType="i4" name="ShelfLifeDays" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[OnHandValue]" dataType="numeric" precision="18" scale="2" name="OnHandValue" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[AgeBandCode]" dataType="wstr" length="6" name="AgeBandCode" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[IsExpiredChillerStock]" dataType="i4" name="IsExpiredChillerStock" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" dataType="i4" name="StockItemKey" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[DaysCoverAtCurrentRate]" dataType="i4" name="DaysCoverAtCurrentRate" />
+                  <externalMetadataColumn refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input].ExternalColumns[ObsolescenceProvisionAmount]" dataType="numeric" precision="18" scale="2" name="ObsolescenceProvisionAmount" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Load Inventory Snapshot.Paths[OLE DB Source Output]" endId="Package\Load Inventory Snapshot\Lookup Stock Item Key.Inputs[Lookup Input]" name="OLE DB Source Output" startId="Package\Load Inventory Snapshot\work InventoryPositionDaily.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Load Inventory Snapshot.Paths[Lookup Match Output 1]" endId="Package\Load Inventory Snapshot\Derive Snapshot Measures.Inputs[Derived Column Input]" name="Lookup Match Output 1" startId="Package\Load Inventory Snapshot\Lookup Stock Item Key.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Inventory Snapshot.Paths[Derived Column Output 2]" endId="Package\Load Inventory Snapshot\Count Snapshot Rows.Inputs[Row Count Input]" name="Derived Column Output 2" startId="Package\Load Inventory Snapshot\Derive Snapshot Measures.Outputs[Derived Column Output]" />
+          <path refId="Package\Load Inventory Snapshot.Paths[Row Count Output 3]" endId="Package\Load Inventory Snapshot\Fact Daily Inventory Snapshot.Inputs[OLE DB Destination Input]" name="Row Count Output 3" startId="Package\Load Inventory Snapshot\Count Snapshot Rows.Outputs[Row Count Output]" />
+          <path refId="Package\Load Inventory Snapshot.Paths[Lookup No Match Output 4]" endId="Package\Load Inventory Snapshot\Reject Unknown Stock Items.Inputs[OLE DB Destination Input]" name="Lookup No Match Output 4" startId="Package\Load Inventory Snapshot\Lookup Stock Item Key.Outputs[Lookup No Match Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Count Expired Chiller Stock"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{DB31137D-0F31-BBBC-65AA-15C874D6EE27}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Count Expired Chiller Stock"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="SELECT COUNT(*) AS ExpiredChillerRows FROM Fact.[Daily Inventory Snapshot] WHERE [Snapshot Date] = CAST(? AS date) AND [Is Expired Chiller Stock] = 1;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::SnapshotDate" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::ExpiredChillerCount" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Fact.Daily Inventory Snapshot', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Resolve Snapshot Date" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Resolve Snapshot Date"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:EvalOp="2"
+      DTS:Expression="@[$Package::DeleteExistingSnapshot]"
+      DTS:To="Package\Delete Existing Snapshot" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Resolve Snapshot Date"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:EvalOp="2"
+      DTS:Expression="!@[$Package::DeleteExistingSnapshot]"
+      DTS:To="Package\Load Inventory Snapshot" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Delete Existing Snapshot"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Load Inventory Snapshot" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Load Inventory Snapshot"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Count Expired Chiller Stock" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Count Expired Chiller Stock"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{0607266F-DDC2-7A6F-69F3-ABCC985331F9}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

@@ -1,0 +1,748 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{4B905954-CD5F-FB33-D89D-F5C556D5F602}"
+  DTS:Description="Splits AP invoice lines into net payable and withholding tax by jurisdiction and writes the withholding rows into the payment fact. The three regional regimes are genuinely different: NA 1099 service categories, EU treaty rates keyed on the supplier registration number, APAC threshold withholding."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="FIN_Load_WithholdingTax"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{4AA047D6-935C-55FE-5CB1-6D2761B616FF}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{9AC34F20-2A16-46D6-7598-74A5C6474906}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{6072CCFA-A543-DB37-75DF-7CA5654BCD13}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{59733595-A697-1E48-9F81-5E462CC95886}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{59FEC6B9-3DB6-6750-86DD-F6E945EDD32B}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">ORAERP</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::JurisdictionScope]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="ALL, or a single jurisdiction code for a targeted rerun."
+      DTS:DTSID="{529554E6-F5AE-8A79-CCAC-1D0B7FB0E8D3}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="JurisdictionScope"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">ALL</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{A8A29FA3-6CD7-E4EA-0AA7-3A73CA311062}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{EA2AF55D-1CDE-3BB9-F5C8-2009090F32C3}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{9B047403-6CB6-0B3E-95CC-9B35CACCE57F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{4BBADA1B-344F-1562-401A-875E04D81A7C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{1C1EB4EB-4FE2-CCB6-843A-CAE5B2B2CAEE}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{AFF5346E-24DA-9BFF-6C04-4E01B69B0F3D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{A650FBEB-7F2D-8EFA-95BC-726FBAAB4C5F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{A7D56A41-E94C-078C-2C00-1101A8F67685}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::UnmappedJurisdictionCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{3CE6B385-E734-B49A-A882-D9D40EE27B78}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="UnmappedJurisdictionCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Truncate work.WithholdingTaxLine"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{7FB0A10D-1D41-24C9-7F7C-6A3C7A8B5534}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Truncate work.WithholdingTaxLine"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE work.WithholdingTaxLine;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Split Withholding Tax"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{C1DE7551-57DA-FD9D-D3A7-03A7B34C086F}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Split Withholding Tax"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Split Withholding Tax\stg ApInvoiceLine" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="stg ApInvoiceLine" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">1800</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT  l.ApInvoiceLineId
+,       l.ApInvoiceKey
+,       l.SupplierId
+,       l.SupplierTaxRegistrationNumber
+,       l.JurisdictionCode
+,       l.RegionCode
+,       l.LineAmount
+,       l.TaxCode
+,       l.ServiceCategoryCode
+,       ISNULL(t.WithholdingRatePercent, 0)     AS WithholdingRatePercent
+,       ISNULL(t.WithholdingThresholdAmount, 0) AS WithholdingThresholdAmount
+        /* Three jurisdictions, three completely different rules. NA withholds
+           only for 1099-reportable service categories, EU applies the treaty
+           rate when the supplier has a registration number, and APAC withholds
+           on everything above the local threshold. */
+,       CASE
+            WHEN l.RegionCode = 'NA'
+                 AND l.ServiceCategoryCode IN ('CONS', 'LEGL', 'MEDI', 'RENT')
+                THEN l.LineAmount * ISNULL(t.WithholdingRatePercent, 0) / 100
+            WHEN l.RegionCode = 'EU'
+                 AND NULLIF(l.SupplierTaxRegistrationNumber, '') IS NOT NULL
+                THEN l.LineAmount * ISNULL(t.TreatyRatePercent, t.WithholdingRatePercent) / 100
+            WHEN l.RegionCode = 'EU'
+                THEN l.LineAmount * ISNULL(t.WithholdingRatePercent, 0) / 100
+            WHEN l.RegionCode = 'APAC'
+                 AND l.LineAmount &gt;= ISNULL(t.WithholdingThresholdAmount, 0)
+                THEN l.LineAmount * ISNULL(t.WithholdingRatePercent, 0) / 100
+            ELSE 0
+        END                                     AS WithholdingAmount
+FROM    stg.ApInvoiceLine AS l
+LEFT OUTER JOIN stg.WithholdingTaxRate AS t
+        ON  t.JurisdictionCode = l.JurisdictionCode
+        AND t.ServiceCategoryCode = l.ServiceCategoryCode
+        AND l.InvoiceDate BETWEEN t.EffectiveFrom AND ISNULL(t.EffectiveTo, '9999-12-31')
+WHERE   l.LoadBatchId = ?
+AND     l.LineTypeCode &lt;&gt; 'FREIGHT'</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Split Withholding Tax\stg ApInvoiceLine.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[ApInvoiceLineId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[ApInvoiceLineId]" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[ApInvoiceLineId]" name="ApInvoiceLineId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[ApInvoiceKey]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[ApInvoiceKey]" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[ApInvoiceKey]" name="ApInvoiceKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[SupplierId]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[SupplierId]" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[SupplierId]" name="SupplierId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[SupplierTaxRegistrationNumber]" dataType="wstr" length="30" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[SupplierTaxRegistrationNumber]" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[SupplierTaxRegistrationNumber]" name="SupplierTaxRegistrationNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[JurisdictionCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[JurisdictionCode]" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[JurisdictionCode]" name="JurisdictionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[LineAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[LineAmount]" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[LineAmount]" name="LineAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[TaxCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[TaxCode]" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[TaxCode]" name="TaxCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[ServiceCategoryCode]" dataType="wstr" length="6" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[ServiceCategoryCode]" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[ServiceCategoryCode]" name="ServiceCategoryCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[WithholdingRatePercent]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[WithholdingRatePercent]" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[WithholdingRatePercent]" name="WithholdingRatePercent" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[WithholdingThresholdAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[WithholdingThresholdAmount]" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[WithholdingThresholdAmount]" name="WithholdingThresholdAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[WithholdingAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[WithholdingAmount]" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].Columns[WithholdingAmount]" name="WithholdingAmount" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[ApInvoiceLineId]" dataType="i4" name="ApInvoiceLineId" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[ApInvoiceKey]" dataType="i4" name="ApInvoiceKey" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[SupplierId]" dataType="wstr" length="20" name="SupplierId" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[SupplierTaxRegistrationNumber]" dataType="wstr" length="30" name="SupplierTaxRegistrationNumber" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[JurisdictionCode]" dataType="wstr" length="10" name="JurisdictionCode" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[LineAmount]" dataType="numeric" precision="18" scale="2" name="LineAmount" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[TaxCode]" dataType="wstr" length="10" name="TaxCode" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[ServiceCategoryCode]" dataType="wstr" length="6" name="ServiceCategoryCode" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[WithholdingRatePercent]" dataType="numeric" precision="18" scale="2" name="WithholdingRatePercent" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[WithholdingThresholdAmount]" dataType="numeric" precision="18" scale="2" name="WithholdingThresholdAmount" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output].ExternalColumns[WithholdingAmount]" dataType="numeric" precision="18" scale="2" name="WithholdingAmount" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[ApInvoiceLineId]" dataType="i4" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[ApInvoiceLineId]" name="ApInvoiceLineId" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[ApInvoiceKey]" dataType="i4" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[ApInvoiceKey]" name="ApInvoiceKey" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[SupplierId]" dataType="wstr" length="20" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[SupplierId]" name="SupplierId" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[SupplierTaxRegistrationNumber]" dataType="wstr" length="30" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[SupplierTaxRegistrationNumber]" name="SupplierTaxRegistrationNumber" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[JurisdictionCode]" dataType="wstr" length="10" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[JurisdictionCode]" name="JurisdictionCode" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[LineAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[LineAmount]" name="LineAmount" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[TaxCode]" dataType="wstr" length="10" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[TaxCode]" name="TaxCode" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[ServiceCategoryCode]" dataType="wstr" length="6" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[ServiceCategoryCode]" name="ServiceCategoryCode" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[WithholdingRatePercent]" dataType="numeric" precision="18" scale="2" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[WithholdingRatePercent]" name="WithholdingRatePercent" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[WithholdingThresholdAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[WithholdingThresholdAmount]" name="WithholdingThresholdAmount" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[WithholdingAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[WithholdingAmount]" name="WithholdingAmount" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Split Withholding Tax\Derive Net Payable" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Net Payable" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Split Withholding Tax\Derive Net Payable.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Split Withholding Tax\Derive Net Payable.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Split Withholding Tax\Derive Net Payable.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Split Withholding Tax\Derive Net Payable.Outputs[Derived Column Output].Columns[NetPayableAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Split Withholding Tax\Derive Net Payable.Outputs[Derived Column Output].Columns[NetPayableAmount]" name="NetPayableAmount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">LineAmount - WithholdingAmount</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">LineAmount - WithholdingAmount</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Split Withholding Tax\Derive Net Payable.Outputs[Derived Column Output].Columns[IsWithheld]" dataType="bool" lineageId="Package\Split Withholding Tax\Derive Net Payable.Outputs[Derived Column Output].Columns[IsWithheld]" name="IsWithheld">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">WithholdingAmount &gt; 0 ? (DT_BOOL)1 : (DT_BOOL)0</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">WithholdingAmount &gt; 0 ? (DT_BOOL)1 : (DT_BOOL)0</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Split Withholding Tax\Derive Net Payable.Outputs[Derived Column Output].Columns[WithholdingCertificateRequired]" dataType="bool" lineageId="Package\Split Withholding Tax\Derive Net Payable.Outputs[Derived Column Output].Columns[WithholdingCertificateRequired]" name="WithholdingCertificateRequired">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">RegionCode == "EU" &amp;&amp; WithholdingAmount &gt; 0 ? (DT_BOOL)1 : (DT_BOOL)0</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">RegionCode == "EU" &amp;&amp; WithholdingAmount &gt; 0 ? (DT_BOOL)1 : (DT_BOOL)0</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Split Withholding Tax\Split Unmapped Jurisdictions" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Split Unmapped Jurisdictions" version="1">
+            <inputs>
+              <input refId="Package\Split Withholding Tax\Split Unmapped Jurisdictions.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Split Withholding Tax\Split Unmapped Jurisdictions.Outputs[Mapped]" exclusionGroup="1" name="Mapped" synchronousInputId="Package\Split Withholding Tax\Split Unmapped Jurisdictions.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">WithholdingRatePercent &gt; 0 || WithholdingAmount == 0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">WithholdingRatePercent &gt; 0 || WithholdingAmount == 0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Split Withholding Tax\Split Unmapped Jurisdictions.Outputs[Unmapped]" exclusionGroup="1" name="Unmapped" synchronousInputId="Package\Split Withholding Tax\Split Unmapped Jurisdictions.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">WithholdingRatePercent == 0 &amp;&amp; WithholdingAmount &gt; 0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">WithholdingRatePercent == 0 &amp;&amp; WithholdingAmount &gt; 0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Split Withholding Tax\Split Unmapped Jurisdictions.Outputs[Default]" exclusionGroup="1" isDefaultOut="true" name="Default" synchronousInputId="Package\Split Withholding Tax\Split Unmapped Jurisdictions.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Split Withholding Tax\Count Withholding Lines" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Withholding Lines" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Split Withholding Tax\Count Withholding Lines.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Split Withholding Tax\Count Withholding Lines.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Split Withholding Tax\Count Withholding Lines.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Split Withholding Tax\work WithholdingTaxLine" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="work WithholdingTaxLine" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[WithholdingTaxLine]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">50000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Split Withholding Tax\work WithholdingTaxLine.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].Columns[ApInvoiceLineId]" cachedDataType="i4" cachedName="ApInvoiceLineId" externalMetadataColumnId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[ApInvoiceLineId]" name="ApInvoiceLineId" />
+                  <inputColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].Columns[ApInvoiceKey]" cachedDataType="i4" cachedName="ApInvoiceKey" externalMetadataColumnId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[ApInvoiceKey]" name="ApInvoiceKey" />
+                  <inputColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].Columns[SupplierId]" cachedDataType="wstr" cachedLength="20" cachedName="SupplierId" externalMetadataColumnId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" name="SupplierId" />
+                  <inputColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].Columns[SupplierTaxRegistrationNumber]" cachedDataType="wstr" cachedLength="30" cachedName="SupplierTaxRegistrationNumber" externalMetadataColumnId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[SupplierTaxRegistrationNumber]" name="SupplierTaxRegistrationNumber" />
+                  <inputColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].Columns[JurisdictionCode]" cachedDataType="wstr" cachedLength="10" cachedName="JurisdictionCode" externalMetadataColumnId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[JurisdictionCode]" name="JurisdictionCode" />
+                  <inputColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].Columns[LineAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="LineAmount" externalMetadataColumnId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[LineAmount]" name="LineAmount" />
+                  <inputColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].Columns[TaxCode]" cachedDataType="wstr" cachedLength="10" cachedName="TaxCode" externalMetadataColumnId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[TaxCode]" name="TaxCode" />
+                  <inputColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].Columns[ServiceCategoryCode]" cachedDataType="wstr" cachedLength="6" cachedName="ServiceCategoryCode" externalMetadataColumnId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[ServiceCategoryCode]" name="ServiceCategoryCode" />
+                  <inputColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].Columns[WithholdingRatePercent]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="WithholdingRatePercent" externalMetadataColumnId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[WithholdingRatePercent]" name="WithholdingRatePercent" />
+                  <inputColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].Columns[WithholdingThresholdAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="WithholdingThresholdAmount" externalMetadataColumnId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[WithholdingThresholdAmount]" name="WithholdingThresholdAmount" />
+                  <inputColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].Columns[WithholdingAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="WithholdingAmount" externalMetadataColumnId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[WithholdingAmount]" name="WithholdingAmount" />
+                  <inputColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].Columns[NetPayableAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="NetPayableAmount" externalMetadataColumnId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[NetPayableAmount]" name="NetPayableAmount" />
+                  <inputColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].Columns[IsWithheld]" cachedDataType="bool" cachedName="IsWithheld" externalMetadataColumnId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[IsWithheld]" name="IsWithheld" />
+                  <inputColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].Columns[WithholdingCertificateRequired]" cachedDataType="bool" cachedName="WithholdingCertificateRequired" externalMetadataColumnId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[WithholdingCertificateRequired]" name="WithholdingCertificateRequired" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[ApInvoiceLineId]" dataType="i4" name="ApInvoiceLineId" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[ApInvoiceKey]" dataType="i4" name="ApInvoiceKey" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" dataType="wstr" length="20" name="SupplierId" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[SupplierTaxRegistrationNumber]" dataType="wstr" length="30" name="SupplierTaxRegistrationNumber" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[JurisdictionCode]" dataType="wstr" length="10" name="JurisdictionCode" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[LineAmount]" dataType="numeric" precision="18" scale="2" name="LineAmount" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[TaxCode]" dataType="wstr" length="10" name="TaxCode" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[ServiceCategoryCode]" dataType="wstr" length="6" name="ServiceCategoryCode" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[WithholdingRatePercent]" dataType="numeric" precision="18" scale="2" name="WithholdingRatePercent" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[WithholdingThresholdAmount]" dataType="numeric" precision="18" scale="2" name="WithholdingThresholdAmount" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[WithholdingAmount]" dataType="numeric" precision="18" scale="2" name="WithholdingAmount" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[NetPayableAmount]" dataType="numeric" precision="18" scale="2" name="NetPayableAmount" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[IsWithheld]" dataType="bool" name="IsWithheld" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input].ExternalColumns[WithholdingCertificateRequired]" dataType="bool" name="WithholdingCertificateRequired" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Split Withholding Tax\work WithholdingTaxLine.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Unmapped Jurisdiction" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[WithholdingTaxReject]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].Columns[ApInvoiceLineId]" cachedDataType="i4" cachedName="ApInvoiceLineId" externalMetadataColumnId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[ApInvoiceLineId]" name="ApInvoiceLineId" />
+                  <inputColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].Columns[ApInvoiceKey]" cachedDataType="i4" cachedName="ApInvoiceKey" externalMetadataColumnId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[ApInvoiceKey]" name="ApInvoiceKey" />
+                  <inputColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].Columns[SupplierId]" cachedDataType="wstr" cachedLength="20" cachedName="SupplierId" externalMetadataColumnId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" name="SupplierId" />
+                  <inputColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].Columns[SupplierTaxRegistrationNumber]" cachedDataType="wstr" cachedLength="30" cachedName="SupplierTaxRegistrationNumber" externalMetadataColumnId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[SupplierTaxRegistrationNumber]" name="SupplierTaxRegistrationNumber" />
+                  <inputColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].Columns[JurisdictionCode]" cachedDataType="wstr" cachedLength="10" cachedName="JurisdictionCode" externalMetadataColumnId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[JurisdictionCode]" name="JurisdictionCode" />
+                  <inputColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].Columns[LineAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="LineAmount" externalMetadataColumnId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[LineAmount]" name="LineAmount" />
+                  <inputColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].Columns[TaxCode]" cachedDataType="wstr" cachedLength="10" cachedName="TaxCode" externalMetadataColumnId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[TaxCode]" name="TaxCode" />
+                  <inputColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].Columns[ServiceCategoryCode]" cachedDataType="wstr" cachedLength="6" cachedName="ServiceCategoryCode" externalMetadataColumnId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[ServiceCategoryCode]" name="ServiceCategoryCode" />
+                  <inputColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].Columns[WithholdingRatePercent]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="WithholdingRatePercent" externalMetadataColumnId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[WithholdingRatePercent]" name="WithholdingRatePercent" />
+                  <inputColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].Columns[WithholdingThresholdAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="WithholdingThresholdAmount" externalMetadataColumnId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[WithholdingThresholdAmount]" name="WithholdingThresholdAmount" />
+                  <inputColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].Columns[WithholdingAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="WithholdingAmount" externalMetadataColumnId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[WithholdingAmount]" name="WithholdingAmount" />
+                  <inputColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].Columns[NetPayableAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="NetPayableAmount" externalMetadataColumnId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[NetPayableAmount]" name="NetPayableAmount" />
+                  <inputColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].Columns[IsWithheld]" cachedDataType="bool" cachedName="IsWithheld" externalMetadataColumnId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[IsWithheld]" name="IsWithheld" />
+                  <inputColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].Columns[WithholdingCertificateRequired]" cachedDataType="bool" cachedName="WithholdingCertificateRequired" externalMetadataColumnId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[WithholdingCertificateRequired]" name="WithholdingCertificateRequired" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[ApInvoiceLineId]" dataType="i4" name="ApInvoiceLineId" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[ApInvoiceKey]" dataType="i4" name="ApInvoiceKey" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" dataType="wstr" length="20" name="SupplierId" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[SupplierTaxRegistrationNumber]" dataType="wstr" length="30" name="SupplierTaxRegistrationNumber" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[JurisdictionCode]" dataType="wstr" length="10" name="JurisdictionCode" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[LineAmount]" dataType="numeric" precision="18" scale="2" name="LineAmount" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[TaxCode]" dataType="wstr" length="10" name="TaxCode" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[ServiceCategoryCode]" dataType="wstr" length="6" name="ServiceCategoryCode" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[WithholdingRatePercent]" dataType="numeric" precision="18" scale="2" name="WithholdingRatePercent" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[WithholdingThresholdAmount]" dataType="numeric" precision="18" scale="2" name="WithholdingThresholdAmount" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[WithholdingAmount]" dataType="numeric" precision="18" scale="2" name="WithholdingAmount" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[NetPayableAmount]" dataType="numeric" precision="18" scale="2" name="NetPayableAmount" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[IsWithheld]" dataType="bool" name="IsWithheld" />
+                  <externalMetadataColumn refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input].ExternalColumns[WithholdingCertificateRequired]" dataType="bool" name="WithholdingCertificateRequired" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Split Withholding Tax.Paths[OLE DB Source Output]" endId="Package\Split Withholding Tax\Derive Net Payable.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Split Withholding Tax\stg ApInvoiceLine.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Split Withholding Tax.Paths[Derived Column Output 1]" endId="Package\Split Withholding Tax\Split Unmapped Jurisdictions.Inputs[Conditional Split Input]" name="Derived Column Output 1" startId="Package\Split Withholding Tax\Derive Net Payable.Outputs[Derived Column Output]" />
+          <path refId="Package\Split Withholding Tax.Paths[Mapped 2]" endId="Package\Split Withholding Tax\Count Withholding Lines.Inputs[Row Count Input]" name="Mapped 2" startId="Package\Split Withholding Tax\Split Unmapped Jurisdictions.Outputs[Mapped]" />
+          <path refId="Package\Split Withholding Tax.Paths[Row Count Output 3]" endId="Package\Split Withholding Tax\work WithholdingTaxLine.Inputs[OLE DB Destination Input]" name="Row Count Output 3" startId="Package\Split Withholding Tax\Count Withholding Lines.Outputs[Row Count Output]" />
+          <path refId="Package\Split Withholding Tax.Paths[Unmapped 4]" endId="Package\Split Withholding Tax\Reject Unmapped Jurisdiction.Inputs[OLE DB Destination Input]" name="Unmapped 4" startId="Package\Split Withholding Tax\Split Unmapped Jurisdictions.Outputs[Unmapped]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Post Withholding To Fact"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{B0A85704-EE19-55A7-2648-24BC56B232E7}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Post Withholding To Fact"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="EXEC Integration.usp_PostWithholdingTax @BatchId = ?, @JurisdictionScope = ?, @RowsInserted = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::JurisdictionScope" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Queue EU Withholding Certificates"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{A28B869B-2CEA-34FC-5E0C-1431C18713CE}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Queue EU Withholding Certificates"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="INSERT INTO work.WithholdingCertificateQueue     (SupplierId, JurisdictionCode, WithholdingAmount, QueuedAtUtc, BatchId) SELECT SupplierId, JurisdictionCode, SUM(WithholdingAmount), SYSUTCDATETIME(), ? FROM   work.WithholdingTaxLine WHERE  WithholdingCertificateRequired = 1 GROUP BY SupplierId, JurisdictionCode;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Fact.Payment', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Truncate work.WithholdingTaxLine" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Truncate work.WithholdingTaxLine"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Split Withholding Tax" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Split Withholding Tax"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Post Withholding To Fact" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Post Withholding To Fact"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Queue EU Withholding Certificates" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Queue EU Withholding Certificates"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{AFFBD57F-B05A-7865-A823-0F4C1CAA7D71}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

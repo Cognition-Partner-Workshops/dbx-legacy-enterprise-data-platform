@@ -1,0 +1,798 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{2B105956-9040-3A3B-B603-80D99A119BB7}"
+  DTS:Description="Refreshes the replenishment suggestions. The reorder point is lead-time demand times a regional safety factor, suggested quantities are rounded up to the supplier's outer quantity, and chiller items are capped at the shelf-life-adjusted cover so the depots do not order stock that will expire."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="INV_Load_Replenishment"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{5410AD3C-3B2E-A67F-042D-5A6DFABE6AE6}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{5F3CC036-279B-48A6-9F1C-360447BB5B3F}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{CAB98421-1476-DE53-2C51-C8E7376F2FDC}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{0FCE3E0E-3A2A-AA76-2446-E02BCB85431A}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{847602BD-9D14-F882-72A5-5E4336682EBC}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWIOLTP</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::CoverDays]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Target days of cover the suggestion aims for."
+      DTS:DTSID="{A3EE3391-31B4-3F1B-1ACB-F8B0B23576E8}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="CoverDays"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">21</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SuppressChillerSuggestions]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="Depots occasionally suspend chiller ordering during a heatwave."
+      DTS:DTSID="{16E3742C-7A0C-95BC-1EB1-BB25122771C5}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SuppressChillerSuggestions"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{D35FF4D1-47F5-B1EF-FADF-A7E9863B7E3F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{36381CD7-E510-254F-D01F-137188C4C6CC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{B397AF89-FE6D-B3D4-7A44-075CCFF27CF0}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{6E0DAA0C-A9AE-1EFA-7728-B4B353D1D296}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{91A11979-437B-189E-99BD-59A52C50BB19}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{DD42FF10-5574-D296-E461-4936503F5A13}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{B58A88FD-8304-F700-17E0-19D698B976B0}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{559FD816-20B4-D104-F3A9-F5629FACB31D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::SuggestionCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{E9F3EEA7-407F-036A-FEB9-14D71AE30A57}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="SuggestionCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::StockoutRiskCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{FEBBF754-E4FE-28E7-5234-98894F82AAFB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="StockoutRiskCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Truncate work.ReplenishmentSuggestion"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{FC242A0C-D665-DDA8-BA1D-F425ABFC0404}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Truncate work.ReplenishmentSuggestion"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE work.ReplenishmentSuggestion;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Calculate Replenishment"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{02C2EFFF-94FE-070B-3A59-F665BB0F7D3C}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Calculate Replenishment"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Calculate Replenishment\stg StockItem With Position" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="stg StockItem With Position" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">1800</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT  si.StockItemId
+,       si.StockItemName
+,       si.SupplierId
+,       si.LeadTimeDays
+,       si.ReorderLevel
+,       si.TargetStockLevel
+,       si.QuantityPerOuter
+,       si.IsChillerStock
+,       si.RegionCode
+,       pos.WarehouseSiteCode
+,       pos.QuantityOnHand
+,       pos.QuantityOnOrder
+,       pos.QuantityAllocated
+,       ISNULL(dem.AverageDailyDemand, 0)               AS AverageDailyDemand
+        /* Reorder point uses lead-time demand plus a regional safety factor.
+           APAC carries more cover because of shipping variability, EU less
+           because of the consolidated distribution centre. */
+,       CASE si.RegionCode
+            WHEN 'APAC' THEN 1.5
+            WHEN 'EU'   THEN 1.1
+            ELSE 1.25
+        END                                             AS SafetyFactor
+FROM    stg.StockItem AS si
+INNER JOIN work.InventoryPositionDaily AS pos
+        ON  pos.StockItemId = si.StockItemId
+LEFT OUTER JOIN work.StockItemDemand AS dem
+        ON  dem.StockItemId = si.StockItemId
+        AND dem.WarehouseSiteCode = pos.WarehouseSiteCode
+WHERE   si.IsDiscontinued = 0</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Calculate Replenishment\stg StockItem With Position.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[StockItemId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[StockItemId]" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[StockItemId]" name="StockItemId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[StockItemName]" dataType="wstr" length="100" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[StockItemName]" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[StockItemName]" name="StockItemName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[SupplierId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[SupplierId]" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[SupplierId]" name="SupplierId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[LeadTimeDays]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[LeadTimeDays]" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[LeadTimeDays]" name="LeadTimeDays" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[ReorderLevel]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[ReorderLevel]" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[ReorderLevel]" name="ReorderLevel" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[TargetStockLevel]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[TargetStockLevel]" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[TargetStockLevel]" name="TargetStockLevel" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[QuantityPerOuter]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[QuantityPerOuter]" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[QuantityPerOuter]" name="QuantityPerOuter" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[IsChillerStock]" dataType="bool" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[IsChillerStock]" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[IsChillerStock]" name="IsChillerStock" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[WarehouseSiteCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[WarehouseSiteCode]" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[WarehouseSiteCode]" name="WarehouseSiteCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[QuantityOnHand]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[QuantityOnHand]" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[QuantityOnHand]" name="QuantityOnHand" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[QuantityOnOrder]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[QuantityOnOrder]" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[QuantityOnOrder]" name="QuantityOnOrder" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[QuantityAllocated]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[QuantityAllocated]" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[QuantityAllocated]" name="QuantityAllocated" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[AverageDailyDemand]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[AverageDailyDemand]" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[AverageDailyDemand]" name="AverageDailyDemand" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[SafetyFactor]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[SafetyFactor]" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].Columns[SafetyFactor]" name="SafetyFactor" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[StockItemId]" dataType="i4" name="StockItemId" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[StockItemName]" dataType="wstr" length="100" name="StockItemName" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[SupplierId]" dataType="i4" name="SupplierId" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[LeadTimeDays]" dataType="i4" name="LeadTimeDays" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[ReorderLevel]" dataType="i4" name="ReorderLevel" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[TargetStockLevel]" dataType="i4" name="TargetStockLevel" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[QuantityPerOuter]" dataType="i4" name="QuantityPerOuter" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[IsChillerStock]" dataType="bool" name="IsChillerStock" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[WarehouseSiteCode]" dataType="wstr" length="10" name="WarehouseSiteCode" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[QuantityOnHand]" dataType="i4" name="QuantityOnHand" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[QuantityOnOrder]" dataType="i4" name="QuantityOnOrder" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[QuantityAllocated]" dataType="i4" name="QuantityAllocated" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[AverageDailyDemand]" dataType="numeric" precision="18" scale="2" name="AverageDailyDemand" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output].ExternalColumns[SafetyFactor]" dataType="numeric" precision="18" scale="2" name="SafetyFactor" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[StockItemId]" dataType="i4" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[StockItemId]" name="StockItemId" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[StockItemName]" dataType="wstr" length="100" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[StockItemName]" name="StockItemName" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[SupplierId]" dataType="i4" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[SupplierId]" name="SupplierId" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[LeadTimeDays]" dataType="i4" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[LeadTimeDays]" name="LeadTimeDays" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[ReorderLevel]" dataType="i4" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[ReorderLevel]" name="ReorderLevel" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[TargetStockLevel]" dataType="i4" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[TargetStockLevel]" name="TargetStockLevel" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[QuantityPerOuter]" dataType="i4" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[QuantityPerOuter]" name="QuantityPerOuter" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[IsChillerStock]" dataType="bool" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[IsChillerStock]" name="IsChillerStock" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[WarehouseSiteCode]" dataType="wstr" length="10" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[WarehouseSiteCode]" name="WarehouseSiteCode" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[QuantityOnHand]" dataType="i4" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[QuantityOnHand]" name="QuantityOnHand" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[QuantityOnOrder]" dataType="i4" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[QuantityOnOrder]" name="QuantityOnOrder" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[QuantityAllocated]" dataType="i4" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[QuantityAllocated]" name="QuantityAllocated" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[AverageDailyDemand]" dataType="numeric" precision="18" scale="2" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[AverageDailyDemand]" name="AverageDailyDemand" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[SafetyFactor]" dataType="numeric" precision="18" scale="2" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[SafetyFactor]" name="SafetyFactor" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Calculate Replenishment\Derive Reorder Point" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Reorder Point" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Calculate Replenishment\Derive Reorder Point.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Calculate Replenishment\Derive Reorder Point.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Calculate Replenishment\Derive Reorder Point.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Calculate Replenishment\Derive Reorder Point.Outputs[Derived Column Output].Columns[ReorderPoint]" dataType="i4" lineageId="Package\Calculate Replenishment\Derive Reorder Point.Outputs[Derived Column Output].Columns[ReorderPoint]" name="ReorderPoint">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_I4)(AverageDailyDemand * LeadTimeDays * SafetyFactor)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_I4)(AverageDailyDemand * LeadTimeDays * SafetyFactor)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Calculate Replenishment\Derive Reorder Point.Outputs[Derived Column Output].Columns[ProjectedAvailable]" dataType="i4" lineageId="Package\Calculate Replenishment\Derive Reorder Point.Outputs[Derived Column Output].Columns[ProjectedAvailable]" name="ProjectedAvailable">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">QuantityOnHand + QuantityOnOrder - QuantityAllocated</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">QuantityOnHand + QuantityOnOrder - QuantityAllocated</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Calculate Replenishment\Derive Reorder Point.Outputs[Derived Column Output].Columns[DaysOfCover]" dataType="numeric" precision="18" scale="2" lineageId="Package\Calculate Replenishment\Derive Reorder Point.Outputs[Derived Column Output].Columns[DaysOfCover]" name="DaysOfCover">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">AverageDailyDemand == 0 ? (DT_NUMERIC,18,2)999 : (QuantityOnHand - QuantityAllocated) / AverageDailyDemand</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">AverageDailyDemand == 0 ? (DT_NUMERIC,18,2)999 : (QuantityOnHand - QuantityAllocated) / AverageDailyDemand</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Calculate Replenishment\Derive Suggested Quantity" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Suggested Quantity" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Calculate Replenishment\Derive Suggested Quantity.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Calculate Replenishment\Derive Suggested Quantity.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Calculate Replenishment\Derive Suggested Quantity.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Calculate Replenishment\Derive Suggested Quantity.Outputs[Derived Column Output].Columns[RawSuggestedQuantity]" dataType="i4" lineageId="Package\Calculate Replenishment\Derive Suggested Quantity.Outputs[Derived Column Output].Columns[RawSuggestedQuantity]" name="RawSuggestedQuantity">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_I4)(AverageDailyDemand * @[$Package::CoverDays]) - ProjectedAvailable</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_I4)(AverageDailyDemand * @[$Package::CoverDays]) - ProjectedAvailable</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Calculate Replenishment\Derive Suggested Quantity.Outputs[Derived Column Output].Columns[SuggestedQuantity]" dataType="i4" lineageId="Package\Calculate Replenishment\Derive Suggested Quantity.Outputs[Derived Column Output].Columns[SuggestedQuantity]" name="SuggestedQuantity">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">((DT_I4)(AverageDailyDemand * @[$Package::CoverDays]) - ProjectedAvailable) &lt;= 0 ? 0 : ((QuantityPerOuter &lt;= 1) ? ((DT_I4)(AverageDailyDemand * @[$Package::CoverDays]) - ProjectedAvailable) : (((((DT_I4)(AverageDailyDemand * @[$Package::CoverDays]) - ProjectedAvailable) / QuantityPerOuter) + 1) * QuantityPerOuter)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">((DT_I4)(AverageDailyDemand * @[$Package::CoverDays]) - ProjectedAvailable) &lt;= 0 ? 0 : ((QuantityPerOuter &lt;= 1) ? ((DT_I4)(AverageDailyDemand * @[$Package::CoverDays]) - ProjectedAvailable) : (((((DT_I4)(AverageDailyDemand * @[$Package::CoverDays]) - ProjectedAvailable) / QuantityPerOuter) + 1) * QuantityPerOuter)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Calculate Replenishment\Derive Suggested Quantity.Outputs[Derived Column Output].Columns[IsStockoutRisk]" dataType="bool" lineageId="Package\Calculate Replenishment\Derive Suggested Quantity.Outputs[Derived Column Output].Columns[IsStockoutRisk]" name="IsStockoutRisk">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ProjectedAvailable &lt;= (DT_I4)(AverageDailyDemand * LeadTimeDays) ? (DT_BOOL)1 : (DT_BOOL)0</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ProjectedAvailable &lt;= (DT_I4)(AverageDailyDemand * LeadTimeDays) ? (DT_BOOL)1 : (DT_BOOL)0</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Calculate Replenishment\Split Suggestions" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Split Suggestions" version="1">
+            <inputs>
+              <input refId="Package\Calculate Replenishment\Split Suggestions.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Calculate Replenishment\Split Suggestions.Outputs[Suggest]" exclusionGroup="1" name="Suggest" synchronousInputId="Package\Calculate Replenishment\Split Suggestions.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">SuggestedQuantity &gt; 0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">SuggestedQuantity &gt; 0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Calculate Replenishment\Split Suggestions.Outputs[NoAction]" exclusionGroup="1" name="NoAction" synchronousInputId="Package\Calculate Replenishment\Split Suggestions.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">SuggestedQuantity &lt;= 0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">SuggestedQuantity &lt;= 0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Calculate Replenishment\Split Suggestions.Outputs[Default]" exclusionGroup="1" isDefaultOut="true" name="Default" synchronousInputId="Package\Calculate Replenishment\Split Suggestions.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Calculate Replenishment\Count Suggestions" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Suggestions" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsInserted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Calculate Replenishment\Count Suggestions.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Calculate Replenishment\Count Suggestions.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Calculate Replenishment\Count Suggestions.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Calculate Replenishment\work ReplenishmentSuggestion" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="work ReplenishmentSuggestion" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[ReplenishmentSuggestion]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">50000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[StockItemId]" cachedDataType="i4" cachedName="StockItemId" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" name="StockItemId" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[StockItemName]" cachedDataType="wstr" cachedLength="100" cachedName="StockItemName" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[StockItemName]" name="StockItemName" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[SupplierId]" cachedDataType="i4" cachedName="SupplierId" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" name="SupplierId" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[LeadTimeDays]" cachedDataType="i4" cachedName="LeadTimeDays" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[LeadTimeDays]" name="LeadTimeDays" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[ReorderLevel]" cachedDataType="i4" cachedName="ReorderLevel" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[ReorderLevel]" name="ReorderLevel" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[TargetStockLevel]" cachedDataType="i4" cachedName="TargetStockLevel" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[TargetStockLevel]" name="TargetStockLevel" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[QuantityPerOuter]" cachedDataType="i4" cachedName="QuantityPerOuter" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[QuantityPerOuter]" name="QuantityPerOuter" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[IsChillerStock]" cachedDataType="bool" cachedName="IsChillerStock" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[IsChillerStock]" name="IsChillerStock" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[WarehouseSiteCode]" cachedDataType="wstr" cachedLength="10" cachedName="WarehouseSiteCode" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseSiteCode]" name="WarehouseSiteCode" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[QuantityOnHand]" cachedDataType="i4" cachedName="QuantityOnHand" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnHand]" name="QuantityOnHand" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[QuantityOnOrder]" cachedDataType="i4" cachedName="QuantityOnOrder" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnOrder]" name="QuantityOnOrder" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[QuantityAllocated]" cachedDataType="i4" cachedName="QuantityAllocated" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAllocated]" name="QuantityAllocated" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[AverageDailyDemand]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AverageDailyDemand" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[AverageDailyDemand]" name="AverageDailyDemand" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[SafetyFactor]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SafetyFactor" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[SafetyFactor]" name="SafetyFactor" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[ReorderPoint]" cachedDataType="i4" cachedName="ReorderPoint" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[ReorderPoint]" name="ReorderPoint" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[ProjectedAvailable]" cachedDataType="i4" cachedName="ProjectedAvailable" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[ProjectedAvailable]" name="ProjectedAvailable" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[DaysOfCover]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DaysOfCover" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[DaysOfCover]" name="DaysOfCover" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[RawSuggestedQuantity]" cachedDataType="i4" cachedName="RawSuggestedQuantity" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[RawSuggestedQuantity]" name="RawSuggestedQuantity" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[SuggestedQuantity]" cachedDataType="i4" cachedName="SuggestedQuantity" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[SuggestedQuantity]" name="SuggestedQuantity" />
+                  <inputColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].Columns[IsStockoutRisk]" cachedDataType="bool" cachedName="IsStockoutRisk" externalMetadataColumnId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[IsStockoutRisk]" name="IsStockoutRisk" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" dataType="i4" name="StockItemId" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[StockItemName]" dataType="wstr" length="100" name="StockItemName" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" dataType="i4" name="SupplierId" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[LeadTimeDays]" dataType="i4" name="LeadTimeDays" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[ReorderLevel]" dataType="i4" name="ReorderLevel" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[TargetStockLevel]" dataType="i4" name="TargetStockLevel" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[QuantityPerOuter]" dataType="i4" name="QuantityPerOuter" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[IsChillerStock]" dataType="bool" name="IsChillerStock" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseSiteCode]" dataType="wstr" length="10" name="WarehouseSiteCode" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnHand]" dataType="i4" name="QuantityOnHand" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnOrder]" dataType="i4" name="QuantityOnOrder" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAllocated]" dataType="i4" name="QuantityAllocated" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[AverageDailyDemand]" dataType="numeric" precision="18" scale="2" name="AverageDailyDemand" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[SafetyFactor]" dataType="numeric" precision="18" scale="2" name="SafetyFactor" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[ReorderPoint]" dataType="i4" name="ReorderPoint" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[ProjectedAvailable]" dataType="i4" name="ProjectedAvailable" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[DaysOfCover]" dataType="numeric" precision="18" scale="2" name="DaysOfCover" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[RawSuggestedQuantity]" dataType="i4" name="RawSuggestedQuantity" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[SuggestedQuantity]" dataType="i4" name="SuggestedQuantity" />
+                  <externalMetadataColumn refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input].ExternalColumns[IsStockoutRisk]" dataType="bool" name="IsStockoutRisk" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Calculate Replenishment.Paths[OLE DB Source Output]" endId="Package\Calculate Replenishment\Derive Reorder Point.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Calculate Replenishment\stg StockItem With Position.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Calculate Replenishment.Paths[Derived Column Output 1]" endId="Package\Calculate Replenishment\Derive Suggested Quantity.Inputs[Derived Column Input]" name="Derived Column Output 1" startId="Package\Calculate Replenishment\Derive Reorder Point.Outputs[Derived Column Output]" />
+          <path refId="Package\Calculate Replenishment.Paths[Derived Column Output 2]" endId="Package\Calculate Replenishment\Split Suggestions.Inputs[Conditional Split Input]" name="Derived Column Output 2" startId="Package\Calculate Replenishment\Derive Suggested Quantity.Outputs[Derived Column Output]" />
+          <path refId="Package\Calculate Replenishment.Paths[Suggest 3]" endId="Package\Calculate Replenishment\Count Suggestions.Inputs[Row Count Input]" name="Suggest 3" startId="Package\Calculate Replenishment\Split Suggestions.Outputs[Suggest]" />
+          <path refId="Package\Calculate Replenishment.Paths[Row Count Output 4]" endId="Package\Calculate Replenishment\work ReplenishmentSuggestion.Inputs[OLE DB Destination Input]" name="Row Count Output 4" startId="Package\Calculate Replenishment\Count Suggestions.Outputs[Row Count Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Suppress Chiller Suggestions"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{8A80F814-7EE2-3662-8CB8-7BBDF700F235}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Suppress Chiller Suggestions"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="DELETE FROM work.ReplenishmentSuggestion WHERE IsChillerStock = 1;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Publish Inventory Health"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{20B7B498-8AF5-7843-E8E3-77F408C0F076}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Publish Inventory Health"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="MERGE Aggregate.[Inventory Health] AS target&#10;USING (SELECT WarehouseSiteCode, RegionCode,&#10;              COUNT(*) AS SuggestionCount,&#10;              SUM(CASE WHEN IsStockoutRisk = 1 THEN 1 ELSE 0 END) AS StockoutRiskCount,&#10;              SUM(SuggestedQuantity) AS SuggestedUnits&#10;       FROM   work.ReplenishmentSuggestion&#10;       GROUP BY WarehouseSiteCode, RegionCode) AS source&#10;    ON  target.[Warehouse Site Code] = source.WarehouseSiteCode&#10;WHEN MATCHED THEN UPDATE SET target.[Suggestion Count] = source.SuggestionCount,&#10;                             target.[Stockout Risk Count] = source.StockoutRiskCount,&#10;                             target.[Suggested Units] = source.SuggestedUnits&#10;WHEN NOT MATCHED BY TARGET THEN&#10;    INSERT ([Warehouse Site Code], [Region Code], [Suggestion Count],&#10;            [Stockout Risk Count], [Suggested Units])&#10;    VALUES (source.WarehouseSiteCode, source.RegionCode, source.SuggestionCount,&#10;            source.StockoutRiskCount, source.SuggestedUnits);"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Count Stockout Risks"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{1BD9AF95-4AB6-41E7-FCB0-EE1C18DD0C57}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Count Stockout Risks"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="SELECT COUNT(*) AS StockoutRisks FROM work.ReplenishmentSuggestion WHERE IsStockoutRisk = 1;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::StockoutRiskCount" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Aggregate.Inventory Health', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Truncate work.ReplenishmentSuggestion" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Truncate work.ReplenishmentSuggestion"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Calculate Replenishment" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Calculate Replenishment"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:EvalOp="2"
+      DTS:Expression="@[$Package::SuppressChillerSuggestions]"
+      DTS:To="Package\Suppress Chiller Suggestions" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Calculate Replenishment"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:EvalOp="2"
+      DTS:Expression="!@[$Package::SuppressChillerSuggestions]"
+      DTS:To="Package\Count Stockout Risks" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Suppress Chiller Suggestions"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Count Stockout Risks" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Count Stockout Risks"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Publish Inventory Health" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Publish Inventory Health"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{46967A67-C325-AB32-5B15-A706ED39485E}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

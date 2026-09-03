@@ -1,0 +1,754 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{C3CBF058-2426-C6C3-52D7-B5329F8F11D3}"
+  DTS:Description="Routes the per-object reject tables in the err schema onto the error file share and registers each rejected row in etl.RejectedRecord so the data stewards work from one queue. Rows that a steward has already resolved are not re-routed, and rejects older than the escalation age are raised to the domain owner."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="ERR_Route_RejectedRows"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{4674BC91-C835-2BB2-45C7-76B227F69364}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{AEC87895-CDCE-7B31-33C9-7AF8D92D1AF8}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{06CB4CAC-3E34-5CF8-707D-ECB3BA07E702}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{391F7429-B042-3E99-BA0C-B20492E6E48D}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::RejectEscalationDays]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Age at which an unresolved reject is escalated."
+      DTS:DTSID="{91C8089E-7472-91B6-1B9E-0A5877C5546C}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="RejectEscalationDays"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">5</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ObjectScope]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="ALL, or a single object name to re-route."
+      DTS:DTSID="{B88037ED-9D2B-1EA9-46DF-14D62515616E}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ObjectScope"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">ALL</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Inbound_Files]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{5B9B814D-2D49-C9BB-A7CD-36353A6059BF}"
+      DTS:ObjectName="WWI_Inbound_Files"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{5E4C626B-78D8-7A7D-A33B-B06F639F3EDC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{0817F839-0D40-D631-8EE6-327236C74A0F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{1AFA708F-B861-AF25-A61C-351936835537}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{DDE55B1F-F424-5C27-89AB-FA0319CEF819}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{00C5C39A-04CF-59D1-1165-1C978F27D25D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{8C33D3BE-D1C4-3026-DB37-7F3E0CA3F55C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{666FB3D7-17C4-5C46-3372-09203F01822E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{27457F17-2791-843C-545A-674F4C906844}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RejectFileName]"
+      DTS:CreationName=""
+      DTS:DTSID="{557488B5-EE85-EDC9-784D-697500FAB721}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RejectFileName">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">rejects.csv</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RoutedRowCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{C7B1AF5C-F3FA-F170-C4B1-488E9A179BA5}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RoutedRowCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::EscalatedCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{78C27B43-335B-3017-B1B4-946EC8DC223D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="EscalatedCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Truncate work.RejectRoutingSet"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{1525CF86-1199-2A25-801E-9DD10319BF13}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Truncate work.RejectRoutingSet"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE work.RejectRoutingSet;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Gather Unrouted Rejects"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{64708495-CCAA-F8E0-553D-3958527688F8}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Gather Unrouted Rejects"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="INSERT INTO work.RejectRoutingSet&#10;    (RejectedRecordId, BatchId, ObjectName, RejectStage, RejectReasonCode,&#10;     RejectReasonDescription, SourceKey, RejectedAtUtc, AgeDays)&#10;SELECT  r.RejectedRecordId&#10;,       r.BatchId&#10;,       r.ObjectName&#10;,       r.RejectStage&#10;,       r.RejectReasonCode&#10;,       r.RejectReasonDescription&#10;,       r.SourceKey&#10;,       r.RejectedAtUtc&#10;,       DATEDIFF(DAY, r.RejectedAtUtc, SYSUTCDATETIME())&#10;FROM    etl.RejectedRecord AS r&#10;WHERE   r.IsReprocessed = 0&#10;AND     (? = N'ALL' OR r.ObjectName = ?)&#10;AND     NOT EXISTS (SELECT 1 FROM work.RejectRoutingHistory AS h&#10;                    WHERE h.RejectedRecordId = r.RejectedRecordId);"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::ObjectScope" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::ObjectScope" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Build Reject File Name"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{332FD18A-38FD-90B6-AB20-086C70A18BE2}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Build Reject File Name"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression='@[User::RejectFileName] = "rejects_" + (DT_WSTR,20)@[$Package::BatchId] + "_" + (DT_WSTR,4)YEAR(GETDATE()) + RIGHT("0" + (DT_WSTR,2)MONTH(GETDATE()), 2) + RIGHT("0" + (DT_WSTR,2)DAY(GETDATE()), 2) + ".csv"' />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Route Rejects To Share"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{7CE32717-E087-B218-15BC-B4F88E043B51}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Route Rejects To Share"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Route Rejects To Share\work RejectRoutingSet" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="work RejectRoutingSet" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">900</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT RejectedRecordId, BatchId, ObjectName, RejectStage, RejectReasonCode, RejectReasonDescription, SourceKey, RejectedAtUtc, AgeDays FROM work.RejectRoutingSet ORDER BY ObjectName, RejectedAtUtc;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Route Rejects To Share\work RejectRoutingSet.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].Columns[RejectedRecordId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].ExternalColumns[RejectedRecordId]" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].Columns[RejectedRecordId]" name="RejectedRecordId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].Columns[BatchId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].ExternalColumns[BatchId]" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].Columns[BatchId]" name="BatchId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].Columns[ObjectName]" dataType="wstr" length="128" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].ExternalColumns[ObjectName]" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].Columns[ObjectName]" name="ObjectName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].Columns[RejectStage]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].ExternalColumns[RejectStage]" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].Columns[RejectStage]" name="RejectStage" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].Columns[RejectReasonCode]" dataType="wstr" length="40" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].ExternalColumns[RejectReasonCode]" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].Columns[RejectReasonCode]" name="RejectReasonCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].Columns[RejectReasonDescription]" dataType="wstr" length="400" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].ExternalColumns[RejectReasonDescription]" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].Columns[RejectReasonDescription]" name="RejectReasonDescription" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].Columns[SourceKey]" dataType="wstr" length="200" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].ExternalColumns[SourceKey]" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].Columns[SourceKey]" name="SourceKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].Columns[RejectedAtUtc]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].ExternalColumns[RejectedAtUtc]" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].Columns[RejectedAtUtc]" name="RejectedAtUtc" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].Columns[AgeDays]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].ExternalColumns[AgeDays]" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].Columns[AgeDays]" name="AgeDays" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].ExternalColumns[RejectedRecordId]" dataType="i4" name="RejectedRecordId" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].ExternalColumns[BatchId]" dataType="i4" name="BatchId" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].ExternalColumns[ObjectName]" dataType="wstr" length="128" name="ObjectName" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].ExternalColumns[RejectStage]" dataType="wstr" length="20" name="RejectStage" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].ExternalColumns[RejectReasonCode]" dataType="wstr" length="40" name="RejectReasonCode" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].ExternalColumns[RejectReasonDescription]" dataType="wstr" length="400" name="RejectReasonDescription" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].ExternalColumns[SourceKey]" dataType="wstr" length="200" name="SourceKey" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].ExternalColumns[RejectedAtUtc]" dataType="dbTimeStamp" name="RejectedAtUtc" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output].ExternalColumns[AgeDays]" dataType="i4" name="AgeDays" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[RejectedRecordId]" dataType="i4" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[RejectedRecordId]" name="RejectedRecordId" />
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[BatchId]" dataType="i4" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[BatchId]" name="BatchId" />
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[ObjectName]" dataType="wstr" length="128" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[ObjectName]" name="ObjectName" />
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[RejectStage]" dataType="wstr" length="20" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[RejectStage]" name="RejectStage" />
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[RejectReasonCode]" dataType="wstr" length="40" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[RejectReasonCode]" name="RejectReasonCode" />
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[RejectReasonDescription]" dataType="wstr" length="400" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[RejectReasonDescription]" name="RejectReasonDescription" />
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[SourceKey]" dataType="wstr" length="200" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[SourceKey]" name="SourceKey" />
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[RejectedAtUtc]" dataType="dbTimeStamp" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[RejectedAtUtc]" name="RejectedAtUtc" />
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[AgeDays]" dataType="i4" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[AgeDays]" name="AgeDays" />
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Route Rejects To Share\Classify Reject Age" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Classify Reject Age" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Route Rejects To Share\Classify Reject Age.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Route Rejects To Share\Classify Reject Age.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Route Rejects To Share\Classify Reject Age.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Route Rejects To Share\Classify Reject Age.Outputs[Derived Column Output].Columns[IsEscalated]" dataType="bool" lineageId="Package\Route Rejects To Share\Classify Reject Age.Outputs[Derived Column Output].Columns[IsEscalated]" name="IsEscalated">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">AgeDays &gt; @[$Package::RejectEscalationDays] ? (DT_BOOL)1 : (DT_BOOL)0</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">AgeDays &gt; @[$Package::RejectEscalationDays] ? (DT_BOOL)1 : (DT_BOOL)0</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Route Rejects To Share\Classify Reject Age.Outputs[Derived Column Output].Columns[RejectFileLine]" dataType="wstr" length="400" lineageId="Package\Route Rejects To Share\Classify Reject Age.Outputs[Derived Column Output].Columns[RejectFileLine]" name="RejectFileLine">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_WSTR,128)ObjectName + "|" + (DT_WSTR,40)RejectReasonCode + "|" + (DT_WSTR,200)SourceKey</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_WSTR,128)ObjectName + "|" + (DT_WSTR,40)RejectReasonCode + "|" + (DT_WSTR,200)SourceKey</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Route Rejects To Share\Split Escalations" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Split Escalations" version="1">
+            <inputs>
+              <input refId="Package\Route Rejects To Share\Split Escalations.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Route Rejects To Share\Split Escalations.Outputs[Escalated]" exclusionGroup="1" name="Escalated" synchronousInputId="Package\Route Rejects To Share\Split Escalations.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">IsEscalated == (DT_BOOL)1</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">IsEscalated == (DT_BOOL)1</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Route Rejects To Share\Split Escalations.Outputs[Standard]" exclusionGroup="1" name="Standard" synchronousInputId="Package\Route Rejects To Share\Split Escalations.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">IsEscalated == (DT_BOOL)0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">IsEscalated == (DT_BOOL)0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Route Rejects To Share\Split Escalations.Outputs[Default]" exclusionGroup="1" isDefaultOut="true" name="Default" synchronousInputId="Package\Route Rejects To Share\Split Escalations.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Route Rejects To Share\Count Routed Rejects" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Routed Rejects" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RoutedRowCount</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Route Rejects To Share\Count Routed Rejects.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Route Rejects To Share\Count Routed Rejects.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Route Rejects To Share\Count Routed Rejects.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Route Rejects To Share\work RejectRoutingHistory" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="work RejectRoutingHistory" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[RejectRoutingHistory]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">20000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Route Rejects To Share\work RejectRoutingHistory.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].Columns[RejectedRecordId]" cachedDataType="i4" cachedName="RejectedRecordId" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[RejectedRecordId]" name="RejectedRecordId" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].Columns[BatchId]" cachedDataType="i4" cachedName="BatchId" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[BatchId]" name="BatchId" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].Columns[ObjectName]" cachedDataType="wstr" cachedLength="128" cachedName="ObjectName" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[ObjectName]" name="ObjectName" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].Columns[RejectStage]" cachedDataType="wstr" cachedLength="20" cachedName="RejectStage" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[RejectStage]" name="RejectStage" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].Columns[RejectReasonCode]" cachedDataType="wstr" cachedLength="40" cachedName="RejectReasonCode" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" name="RejectReasonCode" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].Columns[RejectReasonDescription]" cachedDataType="wstr" cachedLength="400" cachedName="RejectReasonDescription" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonDescription]" name="RejectReasonDescription" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].Columns[SourceKey]" cachedDataType="wstr" cachedLength="200" cachedName="SourceKey" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[SourceKey]" name="SourceKey" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].Columns[RejectedAtUtc]" cachedDataType="dbTimeStamp" cachedName="RejectedAtUtc" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[RejectedAtUtc]" name="RejectedAtUtc" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].Columns[AgeDays]" cachedDataType="i4" cachedName="AgeDays" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[AgeDays]" name="AgeDays" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].Columns[IsEscalated]" cachedDataType="bool" cachedName="IsEscalated" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[IsEscalated]" name="IsEscalated" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].Columns[RejectFileLine]" cachedDataType="wstr" cachedLength="400" cachedName="RejectFileLine" externalMetadataColumnId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[RejectFileLine]" name="RejectFileLine" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[RejectedRecordId]" dataType="i4" name="RejectedRecordId" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[BatchId]" dataType="i4" name="BatchId" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[ObjectName]" dataType="wstr" length="128" name="ObjectName" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[RejectStage]" dataType="wstr" length="20" name="RejectStage" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" dataType="wstr" length="40" name="RejectReasonCode" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonDescription]" dataType="wstr" length="400" name="RejectReasonDescription" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[SourceKey]" dataType="wstr" length="200" name="SourceKey" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[RejectedAtUtc]" dataType="dbTimeStamp" name="RejectedAtUtc" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[AgeDays]" dataType="i4" name="AgeDays" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[IsEscalated]" dataType="bool" name="IsEscalated" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input].ExternalColumns[RejectFileLine]" dataType="wstr" length="400" name="RejectFileLine" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Route Rejects To Share\work RejectRoutingHistory.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Route Rejects To Share\work RejectEscalation" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="work RejectEscalation" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[RejectEscalation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Route Rejects To Share\work RejectEscalation.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].Columns[RejectedRecordId]" cachedDataType="i4" cachedName="RejectedRecordId" externalMetadataColumnId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[RejectedRecordId]" name="RejectedRecordId" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].Columns[BatchId]" cachedDataType="i4" cachedName="BatchId" externalMetadataColumnId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[BatchId]" name="BatchId" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].Columns[ObjectName]" cachedDataType="wstr" cachedLength="128" cachedName="ObjectName" externalMetadataColumnId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[ObjectName]" name="ObjectName" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].Columns[RejectStage]" cachedDataType="wstr" cachedLength="20" cachedName="RejectStage" externalMetadataColumnId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[RejectStage]" name="RejectStage" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].Columns[RejectReasonCode]" cachedDataType="wstr" cachedLength="40" cachedName="RejectReasonCode" externalMetadataColumnId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" name="RejectReasonCode" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].Columns[RejectReasonDescription]" cachedDataType="wstr" cachedLength="400" cachedName="RejectReasonDescription" externalMetadataColumnId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonDescription]" name="RejectReasonDescription" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].Columns[SourceKey]" cachedDataType="wstr" cachedLength="200" cachedName="SourceKey" externalMetadataColumnId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[SourceKey]" name="SourceKey" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].Columns[RejectedAtUtc]" cachedDataType="dbTimeStamp" cachedName="RejectedAtUtc" externalMetadataColumnId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[RejectedAtUtc]" name="RejectedAtUtc" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].Columns[AgeDays]" cachedDataType="i4" cachedName="AgeDays" externalMetadataColumnId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[AgeDays]" name="AgeDays" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].Columns[IsEscalated]" cachedDataType="bool" cachedName="IsEscalated" externalMetadataColumnId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[IsEscalated]" name="IsEscalated" />
+                  <inputColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].Columns[RejectFileLine]" cachedDataType="wstr" cachedLength="400" cachedName="RejectFileLine" externalMetadataColumnId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[RejectFileLine]" name="RejectFileLine" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[RejectedRecordId]" dataType="i4" name="RejectedRecordId" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[BatchId]" dataType="i4" name="BatchId" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[ObjectName]" dataType="wstr" length="128" name="ObjectName" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[RejectStage]" dataType="wstr" length="20" name="RejectStage" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" dataType="wstr" length="40" name="RejectReasonCode" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonDescription]" dataType="wstr" length="400" name="RejectReasonDescription" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[SourceKey]" dataType="wstr" length="200" name="SourceKey" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[RejectedAtUtc]" dataType="dbTimeStamp" name="RejectedAtUtc" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[AgeDays]" dataType="i4" name="AgeDays" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[IsEscalated]" dataType="bool" name="IsEscalated" />
+                  <externalMetadataColumn refId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input].ExternalColumns[RejectFileLine]" dataType="wstr" length="400" name="RejectFileLine" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Route Rejects To Share\work RejectEscalation.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Route Rejects To Share.Paths[OLE DB Source Output]" endId="Package\Route Rejects To Share\Classify Reject Age.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Route Rejects To Share\work RejectRoutingSet.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Route Rejects To Share.Paths[Derived Column Output 1]" endId="Package\Route Rejects To Share\Split Escalations.Inputs[Conditional Split Input]" name="Derived Column Output 1" startId="Package\Route Rejects To Share\Classify Reject Age.Outputs[Derived Column Output]" />
+          <path refId="Package\Route Rejects To Share.Paths[Escalated 2]" endId="Package\Route Rejects To Share\Count Routed Rejects.Inputs[Row Count Input]" name="Escalated 2" startId="Package\Route Rejects To Share\Split Escalations.Outputs[Escalated]" />
+          <path refId="Package\Route Rejects To Share.Paths[Row Count Output 3]" endId="Package\Route Rejects To Share\work RejectRoutingHistory.Inputs[OLE DB Destination Input]" name="Row Count Output 3" startId="Package\Route Rejects To Share\Count Routed Rejects.Outputs[Row Count Output]" />
+          <path refId="Package\Route Rejects To Share.Paths[Escalated 4]" endId="Package\Route Rejects To Share\work RejectEscalation.Inputs[OLE DB Destination Input]" name="Escalated 4" startId="Package\Route Rejects To Share\Split Escalations.Outputs[Escalated]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Escalate Aged Rejects"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{AF8058DC-F457-8489-210D-25F999C44B9F}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Escalate Aged Rejects"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="INSERT INTO etl.OperatorNotification     (BatchId, NotificationTypeCode, Severity, Subject, Body, RaisedAtUtc, IsAcknowledged) SELECT ?, N'REJECT_ESCALATION', N'WARNING',        CONCAT(N'Aged rejects for ', ObjectName),        CONCAT(N'Rejects unresolved beyond the escalation window: ', COUNT(*)),        SYSUTCDATETIME(), 0 FROM   work.RejectEscalation GROUP BY ObjectName;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Count Escalations"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{0A3FE995-921B-9167-7AD6-6ED70A66A853}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Count Escalations"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="SELECT COUNT(*) AS Escalations FROM work.RejectEscalation;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::EscalatedCount" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'etl.RejectedRecord', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Truncate work.RejectRoutingSet" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Truncate work.RejectRoutingSet"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Gather Unrouted Rejects" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Gather Unrouted Rejects"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Build Reject File Name" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Build Reject File Name"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Route Rejects To Share" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Route Rejects To Share"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Escalate Aged Rejects" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Escalate Aged Rejects"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:Value="2"
+      DTS:To="Package\Count Escalations" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Count Escalations"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{A799A8F6-8EE5-0C14-4ECD-285433766C56}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>
