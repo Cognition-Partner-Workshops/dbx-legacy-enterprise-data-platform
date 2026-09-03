@@ -6,6 +6,15 @@ the bounded retry driver, the bad-file quarantine and the row-count
 reconciliation. They are utilities - they take a batch id and work on the
 control tables rather than loading business data.
 
+ERR_Retry_FailedSteps used to be reachable only from the four-hourly recovery
+Agent job. Master_Daily_ETL now drives it twice: once from the Restart Recovery
+container, which reopens the retryable steps of an adopted batch before the
+first extract phase, and once from the Extract Retry Driver container on the
+failure path of the extract phases, where MaxRetryAttempts is bound to the
+master's MaxExtractAttempts and the attempt number is written back through
+etl.BatchStep. ERR_Quarantine_BadFiles is likewise on the failure path of the
+nightly File Screen container as well as the file ingestion master.
+
 Run:  python3 ssis/15_error_handling/build_error_handling_packages.py
 """
 
