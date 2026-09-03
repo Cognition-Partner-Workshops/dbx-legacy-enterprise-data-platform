@@ -1,0 +1,1060 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{C8F009E5-D347-905F-04FD-B8D84DDCC8FB}"
+  DTS:Description="Surrogate-key repair pass. Walks work.LateArrivingDimensionQueue, enriches the inferred members the fact loads created, then re-points the facts that were loaded against the unknown member at the newly assigned surrogate keys."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="DIM_Rekey_LateArriving"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{DD56F022-D3C2-7970-32BC-13FD0CBA700A}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{64D2776B-B0D5-4E9E-E238-B9CA825618DE}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{3E9AC998-6E3A-267D-EB7F-8F2F223D80AD}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{D207EDF1-B6A4-CEAE-6CDF-67F001CD1E00}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{6E206BDF-605B-1C11-1A4A-871EEEC5881C}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">SQLSTG</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::MaxQueueAgeDays]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Queue entries older than this are escalated rather than retried silently."
+      DTS:DTSID="{2742C55A-A81B-1C38-8CAC-E0C942D0C50D}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="MaxQueueAgeDays"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">30</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{C780E2B9-EA42-9DCE-C725-470BB2D2AB8D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{6B645578-642D-830F-3D44-1CB31F00C697}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{6ADE3AE5-46F1-499C-F776-5B9B39F871DF}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{C511CEF9-2A58-0184-4A9B-4CB8577CD7F0}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{7EBC2244-41F2-8433-F48E-C5AA0B15D922}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{5C03FEEF-8D47-4A33-77CA-F2DBD9CFEFE9}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{AE8A4EAF-FAB5-B4B1-24B5-2DF59F3A0B9B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{A2C140CB-B949-7B74-5CF2-C001A65C8C72}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInferred]"
+      DTS:CreationName=""
+      DTS:DTSID="{AD3CAB2C-1C52-7E8A-F63E-D81DCED9CAB7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInferred">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsClosedOut]"
+      DTS:CreationName=""
+      DTS:DTSID="{BDC53ACA-14DF-32A2-C3B9-CB8E186F91E9}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsClosedOut">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::SourceHashMismatch]"
+      DTS:CreationName=""
+      DTS:DTSID="{894DF57E-2CA3-BBAD-6CAA-83A664A33EAB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="SourceHashMismatch">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::QueueDepth]"
+      DTS:CreationName=""
+      DTS:DTSID="{F301DC60-99C4-67C5-50CB-C1952CC59FB4}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="QueueDepth">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::FactRowsRekeyed]"
+      DTS:CreationName=""
+      DTS:DTSID="{482EA178-E9D8-4857-875B-75006595F0AE}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="FactRowsRekeyed">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Batch Variables"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{647AE7A9-EE4E-0DAF-FBD6-04CEA9DB74E4}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Batch Variables"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::WatermarkTo] = (DT_WSTR, 30)(DT_DBTIMESTAMP) GETDATE()" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Measure Queue Depth"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{0A1DE9C2-949C-1D29-557A-DBB42FF204BA}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Measure Queue Depth"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="SELECT COUNT_BIG(*) AS QueueDepth FROM work.LateArrivingDimensionQueue WHERE ResolvedAt IS NULL;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::QueueDepth" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Clear Fact Rekey Queue"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{A067B474-9B0F-A3FE-36DC-8F2C9E9CB473}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Clear Fact Rekey Queue"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE [work].[FactRekeyQueue];"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Classify Late Arriving Queue"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{DFC32B7B-E191-9FAD-7DB5-582A82067408}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Classify Late Arriving Queue"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="work LateArrivingDimensionQueue" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT q.QueueId, q.DimensionName, q.BusinessKey, q.PlaceholderKey, q.SourcePackageName, q.QueuedAt, q.RetryCount FROM work.LateArrivingDimensionQueue AS q WHERE q.ResolvedAt IS NULL ORDER BY q.DimensionName, q.QueuedAt;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].Columns[QueueId]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].ExternalColumns[QueueId]" lineageId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].Columns[QueueId]" name="QueueId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].Columns[DimensionName]" dataType="wstr" length="40" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].ExternalColumns[DimensionName]" lineageId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].Columns[DimensionName]" name="DimensionName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].Columns[BusinessKey]" dataType="wstr" length="40" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].ExternalColumns[BusinessKey]" lineageId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].Columns[BusinessKey]" name="BusinessKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].Columns[PlaceholderKey]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].ExternalColumns[PlaceholderKey]" lineageId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].Columns[PlaceholderKey]" name="PlaceholderKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].Columns[SourcePackageName]" dataType="wstr" length="60" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].ExternalColumns[SourcePackageName]" lineageId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].Columns[SourcePackageName]" name="SourcePackageName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].Columns[QueuedAt]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].ExternalColumns[QueuedAt]" lineageId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].Columns[QueuedAt]" name="QueuedAt" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].Columns[RetryCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].ExternalColumns[RetryCount]" lineageId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].Columns[RetryCount]" name="RetryCount" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].ExternalColumns[QueueId]" dataType="i8" name="QueueId" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].ExternalColumns[DimensionName]" dataType="wstr" length="40" name="DimensionName" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].ExternalColumns[BusinessKey]" dataType="wstr" length="40" name="BusinessKey" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].ExternalColumns[PlaceholderKey]" dataType="i4" name="PlaceholderKey" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].ExternalColumns[SourcePackageName]" dataType="wstr" length="60" name="SourcePackageName" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].ExternalColumns[QueuedAt]" dataType="dbTimeStamp" name="QueuedAt" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output].ExternalColumns[RetryCount]" dataType="i4" name="RetryCount" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output].Columns[QueueId]" dataType="i8" lineageId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output].Columns[QueueId]" name="QueueId" />
+                  <outputColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output].Columns[DimensionName]" dataType="wstr" length="40" lineageId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output].Columns[DimensionName]" name="DimensionName" />
+                  <outputColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output].Columns[BusinessKey]" dataType="wstr" length="40" lineageId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output].Columns[BusinessKey]" name="BusinessKey" />
+                  <outputColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output].Columns[PlaceholderKey]" dataType="i4" lineageId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output].Columns[PlaceholderKey]" name="PlaceholderKey" />
+                  <outputColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output].Columns[SourcePackageName]" dataType="wstr" length="60" lineageId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output].Columns[SourcePackageName]" name="SourcePackageName" />
+                  <outputColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output].Columns[QueuedAt]" dataType="dbTimeStamp" lineageId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output].Columns[QueuedAt]" name="QueuedAt" />
+                  <outputColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output].Columns[RetryCount]" dataType="i4" lineageId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output].Columns[RetryCount]" name="RetryCount" />
+                  <outputColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Classify Late Arriving Queue\Derive Queue Age" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Queue Age" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Classify Late Arriving Queue\Derive Queue Age.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Classify Late Arriving Queue\Derive Queue Age.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Classify Late Arriving Queue\Derive Queue Age.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Classify Late Arriving Queue\Derive Queue Age.Outputs[Derived Column Output].Columns[QueueAgeDays]" dataType="i4" lineageId="Package\Classify Late Arriving Queue\Derive Queue Age.Outputs[Derived Column Output].Columns[QueueAgeDays]" name="QueueAgeDays">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">DATEDIFF("Day", QueuedAt, GETDATE())</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">DATEDIFF("Day", QueuedAt, GETDATE())</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Classify Late Arriving Queue\Derive Queue Age.Outputs[Derived Column Output].Columns[EscalationCode]" dataType="wstr" length="10" lineageId="Package\Classify Late Arriving Queue\Derive Queue Age.Outputs[Derived Column Output].Columns[EscalationCode]" name="EscalationCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">DATEDIFF("Day", QueuedAt, GETDATE()) &gt; @[$Package::MaxQueueAgeDays] ? "ESCALATE" : RetryCount &gt;= 5 ? "MANUAL" : "RETRY"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">DATEDIFF("Day", QueuedAt, GETDATE()) &gt; @[$Package::MaxQueueAgeDays] ? "ESCALATE" : RetryCount &gt;= 5 ? "MANUAL" : "RETRY"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Classify Late Arriving Queue\Derive Queue Age.Outputs[Derived Column Output].Columns[LineageKey]" dataType="i8" lineageId="Package\Classify Late Arriving Queue\Derive Queue Age.Outputs[Derived Column Output].Columns[LineageKey]" name="LineageKey">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Classify Late Arriving Queue\Route Queue Entry" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Route Queue Entry" version="1">
+            <inputs>
+              <input refId="Package\Classify Late Arriving Queue\Route Queue Entry.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Classify Late Arriving Queue\Route Queue Entry.Outputs[Escalate]" exclusionGroup="1" name="Escalate" synchronousInputId="Package\Classify Late Arriving Queue\Route Queue Entry.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">EscalationCode == "ESCALATE" || EscalationCode == "MANUAL"</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">EscalationCode == "ESCALATE" || EscalationCode == "MANUAL"</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Classify Late Arriving Queue\Route Queue Entry.Outputs[Customer Members]" exclusionGroup="1" name="Customer Members" synchronousInputId="Package\Classify Late Arriving Queue\Route Queue Entry.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">DimensionName == "Customer"</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">DimensionName == "Customer"</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Classify Late Arriving Queue\Route Queue Entry.Outputs[Stock Item Members]" exclusionGroup="1" name="Stock Item Members" synchronousInputId="Package\Classify Late Arriving Queue\Route Queue Entry.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">DimensionName == "Stock Item"</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">DimensionName == "Stock Item"</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">2</property>
+                </properties>
+              </output>
+              <output refId="Package\Classify Late Arriving Queue\Route Queue Entry.Outputs[City Members]" exclusionGroup="1" name="City Members" synchronousInputId="Package\Classify Late Arriving Queue\Route Queue Entry.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">DimensionName == "City"</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">DimensionName == "City"</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">3</property>
+                </properties>
+              </output>
+              <output refId="Package\Classify Late Arriving Queue\Route Queue Entry.Outputs[Other Dimensions]" exclusionGroup="1" isDefaultOut="true" name="Other Dimensions" synchronousInputId="Package\Classify Late Arriving Queue\Route Queue Entry.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Classify Late Arriving Queue\Queue Customer Rekey" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Queue Customer Rekey" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[FactRekeyQueue]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].Columns[QueueId]" cachedDataType="i8" cachedName="QueueId" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueueId]" name="QueueId" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].Columns[DimensionName]" cachedDataType="wstr" cachedLength="40" cachedName="DimensionName" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[DimensionName]" name="DimensionName" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].Columns[BusinessKey]" cachedDataType="wstr" cachedLength="40" cachedName="BusinessKey" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" name="BusinessKey" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].Columns[PlaceholderKey]" cachedDataType="i4" cachedName="PlaceholderKey" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[PlaceholderKey]" name="PlaceholderKey" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].Columns[SourcePackageName]" cachedDataType="wstr" cachedLength="60" cachedName="SourcePackageName" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[SourcePackageName]" name="SourcePackageName" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].Columns[QueuedAt]" cachedDataType="dbTimeStamp" cachedName="QueuedAt" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueuedAt]" name="QueuedAt" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].Columns[RetryCount]" cachedDataType="i4" cachedName="RetryCount" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" name="RetryCount" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].Columns[QueueAgeDays]" cachedDataType="i4" cachedName="QueueAgeDays" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueueAgeDays]" name="QueueAgeDays" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].Columns[EscalationCode]" cachedDataType="wstr" cachedLength="10" cachedName="EscalationCode" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[EscalationCode]" name="EscalationCode" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueueId]" dataType="i8" name="QueueId" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[DimensionName]" dataType="wstr" length="40" name="DimensionName" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" dataType="wstr" length="40" name="BusinessKey" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[PlaceholderKey]" dataType="i4" name="PlaceholderKey" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[SourcePackageName]" dataType="wstr" length="60" name="SourcePackageName" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueuedAt]" dataType="dbTimeStamp" name="QueuedAt" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" dataType="i4" name="RetryCount" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueueAgeDays]" dataType="i4" name="QueueAgeDays" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[EscalationCode]" dataType="wstr" length="10" name="EscalationCode" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Queue Stock Item Rekey" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[FactRekeyQueue]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].Columns[QueueId]" cachedDataType="i8" cachedName="QueueId" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueueId]" name="QueueId" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].Columns[DimensionName]" cachedDataType="wstr" cachedLength="40" cachedName="DimensionName" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[DimensionName]" name="DimensionName" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].Columns[BusinessKey]" cachedDataType="wstr" cachedLength="40" cachedName="BusinessKey" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" name="BusinessKey" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].Columns[PlaceholderKey]" cachedDataType="i4" cachedName="PlaceholderKey" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[PlaceholderKey]" name="PlaceholderKey" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].Columns[SourcePackageName]" cachedDataType="wstr" cachedLength="60" cachedName="SourcePackageName" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[SourcePackageName]" name="SourcePackageName" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].Columns[QueuedAt]" cachedDataType="dbTimeStamp" cachedName="QueuedAt" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueuedAt]" name="QueuedAt" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].Columns[RetryCount]" cachedDataType="i4" cachedName="RetryCount" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" name="RetryCount" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].Columns[QueueAgeDays]" cachedDataType="i4" cachedName="QueueAgeDays" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueueAgeDays]" name="QueueAgeDays" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].Columns[EscalationCode]" cachedDataType="wstr" cachedLength="10" cachedName="EscalationCode" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[EscalationCode]" name="EscalationCode" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueueId]" dataType="i8" name="QueueId" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[DimensionName]" dataType="wstr" length="40" name="DimensionName" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" dataType="wstr" length="40" name="BusinessKey" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[PlaceholderKey]" dataType="i4" name="PlaceholderKey" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[SourcePackageName]" dataType="wstr" length="60" name="SourcePackageName" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueuedAt]" dataType="dbTimeStamp" name="QueuedAt" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" dataType="i4" name="RetryCount" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueueAgeDays]" dataType="i4" name="QueueAgeDays" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[EscalationCode]" dataType="wstr" length="10" name="EscalationCode" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Classify Late Arriving Queue\Queue City Rekey" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Queue City Rekey" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[FactRekeyQueue]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Classify Late Arriving Queue\Queue City Rekey.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].Columns[QueueId]" cachedDataType="i8" cachedName="QueueId" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueueId]" name="QueueId" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].Columns[DimensionName]" cachedDataType="wstr" cachedLength="40" cachedName="DimensionName" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[DimensionName]" name="DimensionName" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].Columns[BusinessKey]" cachedDataType="wstr" cachedLength="40" cachedName="BusinessKey" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" name="BusinessKey" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].Columns[PlaceholderKey]" cachedDataType="i4" cachedName="PlaceholderKey" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[PlaceholderKey]" name="PlaceholderKey" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].Columns[SourcePackageName]" cachedDataType="wstr" cachedLength="60" cachedName="SourcePackageName" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[SourcePackageName]" name="SourcePackageName" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].Columns[QueuedAt]" cachedDataType="dbTimeStamp" cachedName="QueuedAt" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueuedAt]" name="QueuedAt" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].Columns[RetryCount]" cachedDataType="i4" cachedName="RetryCount" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" name="RetryCount" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].Columns[QueueAgeDays]" cachedDataType="i4" cachedName="QueueAgeDays" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueueAgeDays]" name="QueueAgeDays" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].Columns[EscalationCode]" cachedDataType="wstr" cachedLength="10" cachedName="EscalationCode" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[EscalationCode]" name="EscalationCode" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueueId]" dataType="i8" name="QueueId" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[DimensionName]" dataType="wstr" length="40" name="DimensionName" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" dataType="wstr" length="40" name="BusinessKey" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[PlaceholderKey]" dataType="i4" name="PlaceholderKey" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[SourcePackageName]" dataType="wstr" length="60" name="SourcePackageName" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueuedAt]" dataType="dbTimeStamp" name="QueuedAt" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" dataType="i4" name="RetryCount" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueueAgeDays]" dataType="i4" name="QueueAgeDays" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[EscalationCode]" dataType="wstr" length="10" name="EscalationCode" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Classify Late Arriving Queue\Queue City Rekey.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Classify Late Arriving Queue\Queue Other Rekey" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Queue Other Rekey" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[FactRekeyQueue]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].Columns[QueueId]" cachedDataType="i8" cachedName="QueueId" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueueId]" name="QueueId" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].Columns[DimensionName]" cachedDataType="wstr" cachedLength="40" cachedName="DimensionName" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[DimensionName]" name="DimensionName" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].Columns[BusinessKey]" cachedDataType="wstr" cachedLength="40" cachedName="BusinessKey" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" name="BusinessKey" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].Columns[PlaceholderKey]" cachedDataType="i4" cachedName="PlaceholderKey" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[PlaceholderKey]" name="PlaceholderKey" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].Columns[SourcePackageName]" cachedDataType="wstr" cachedLength="60" cachedName="SourcePackageName" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[SourcePackageName]" name="SourcePackageName" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].Columns[QueuedAt]" cachedDataType="dbTimeStamp" cachedName="QueuedAt" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueuedAt]" name="QueuedAt" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].Columns[RetryCount]" cachedDataType="i4" cachedName="RetryCount" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" name="RetryCount" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].Columns[QueueAgeDays]" cachedDataType="i4" cachedName="QueueAgeDays" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueueAgeDays]" name="QueueAgeDays" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].Columns[EscalationCode]" cachedDataType="wstr" cachedLength="10" cachedName="EscalationCode" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[EscalationCode]" name="EscalationCode" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueueId]" dataType="i8" name="QueueId" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[DimensionName]" dataType="wstr" length="40" name="DimensionName" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" dataType="wstr" length="40" name="BusinessKey" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[PlaceholderKey]" dataType="i4" name="PlaceholderKey" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[SourcePackageName]" dataType="wstr" length="60" name="SourcePackageName" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueuedAt]" dataType="dbTimeStamp" name="QueuedAt" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" dataType="i4" name="RetryCount" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[QueueAgeDays]" dataType="i4" name="QueueAgeDays" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[EscalationCode]" dataType="wstr" length="10" name="EscalationCode" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Classify Late Arriving Queue\Queue Other Rekey.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Escalate Stale Queue Entries" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedLookupFailure]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].Columns[QueueId]" cachedDataType="i8" cachedName="QueueId" externalMetadataColumnId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[QueueId]" name="QueueId" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].Columns[DimensionName]" cachedDataType="wstr" cachedLength="40" cachedName="DimensionName" externalMetadataColumnId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[DimensionName]" name="DimensionName" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].Columns[BusinessKey]" cachedDataType="wstr" cachedLength="40" cachedName="BusinessKey" externalMetadataColumnId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" name="BusinessKey" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].Columns[PlaceholderKey]" cachedDataType="i4" cachedName="PlaceholderKey" externalMetadataColumnId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[PlaceholderKey]" name="PlaceholderKey" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].Columns[SourcePackageName]" cachedDataType="wstr" cachedLength="60" cachedName="SourcePackageName" externalMetadataColumnId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[SourcePackageName]" name="SourcePackageName" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].Columns[QueuedAt]" cachedDataType="dbTimeStamp" cachedName="QueuedAt" externalMetadataColumnId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[QueuedAt]" name="QueuedAt" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].Columns[RetryCount]" cachedDataType="i4" cachedName="RetryCount" externalMetadataColumnId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" name="RetryCount" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].Columns[QueueAgeDays]" cachedDataType="i4" cachedName="QueueAgeDays" externalMetadataColumnId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[QueueAgeDays]" name="QueueAgeDays" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].Columns[EscalationCode]" cachedDataType="wstr" cachedLength="10" cachedName="EscalationCode" externalMetadataColumnId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[EscalationCode]" name="EscalationCode" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[QueueId]" dataType="i8" name="QueueId" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[DimensionName]" dataType="wstr" length="40" name="DimensionName" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" dataType="wstr" length="40" name="BusinessKey" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[PlaceholderKey]" dataType="i4" name="PlaceholderKey" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[SourcePackageName]" dataType="wstr" length="60" name="SourcePackageName" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[QueuedAt]" dataType="dbTimeStamp" name="QueuedAt" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" dataType="i4" name="RetryCount" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[QueueAgeDays]" dataType="i4" name="QueueAgeDays" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[EscalationCode]" dataType="wstr" length="10" name="EscalationCode" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Classify Late Arriving Queue\Reject Source Errors" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Source Errors" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedLookupFailure]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Classify Late Arriving Queue\Reject Source Errors.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[QueueId]" cachedDataType="i8" cachedName="QueueId" externalMetadataColumnId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QueueId]" name="QueueId" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[DimensionName]" cachedDataType="wstr" cachedLength="40" cachedName="DimensionName" externalMetadataColumnId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[DimensionName]" name="DimensionName" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[BusinessKey]" cachedDataType="wstr" cachedLength="40" cachedName="BusinessKey" externalMetadataColumnId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" name="BusinessKey" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PlaceholderKey]" cachedDataType="i4" cachedName="PlaceholderKey" externalMetadataColumnId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PlaceholderKey]" name="PlaceholderKey" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[SourcePackageName]" cachedDataType="wstr" cachedLength="60" cachedName="SourcePackageName" externalMetadataColumnId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SourcePackageName]" name="SourcePackageName" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[QueuedAt]" cachedDataType="dbTimeStamp" cachedName="QueuedAt" externalMetadataColumnId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QueuedAt]" name="QueuedAt" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[RetryCount]" cachedDataType="i4" cachedName="RetryCount" externalMetadataColumnId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" name="RetryCount" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[QueueAgeDays]" cachedDataType="i4" cachedName="QueueAgeDays" externalMetadataColumnId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QueueAgeDays]" name="QueueAgeDays" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[EscalationCode]" cachedDataType="wstr" cachedLength="10" cachedName="EscalationCode" externalMetadataColumnId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[EscalationCode]" name="EscalationCode" />
+                  <inputColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QueueId]" dataType="i8" name="QueueId" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[DimensionName]" dataType="wstr" length="40" name="DimensionName" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" dataType="wstr" length="40" name="BusinessKey" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PlaceholderKey]" dataType="i4" name="PlaceholderKey" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SourcePackageName]" dataType="wstr" length="60" name="SourcePackageName" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QueuedAt]" dataType="dbTimeStamp" name="QueuedAt" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" dataType="i4" name="RetryCount" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QueueAgeDays]" dataType="i4" name="QueueAgeDays" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[EscalationCode]" dataType="wstr" length="10" name="EscalationCode" />
+                  <externalMetadataColumn refId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Classify Late Arriving Queue\Reject Source Errors.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Classify Late Arriving Queue.Paths[OLE DB Source Output]" endId="Package\Classify Late Arriving Queue\Derive Queue Age.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Classify Late Arriving Queue.Paths[Derived Column Output 1]" endId="Package\Classify Late Arriving Queue\Route Queue Entry.Inputs[Conditional Split Input]" name="Derived Column Output 1" startId="Package\Classify Late Arriving Queue\Derive Queue Age.Outputs[Derived Column Output]" />
+          <path refId="Package\Classify Late Arriving Queue.Paths[Customer Members 2]" endId="Package\Classify Late Arriving Queue\Queue Customer Rekey.Inputs[OLE DB Destination Input]" name="Customer Members 2" startId="Package\Classify Late Arriving Queue\Route Queue Entry.Outputs[Customer Members]" />
+          <path refId="Package\Classify Late Arriving Queue.Paths[Stock Item Members 3]" endId="Package\Classify Late Arriving Queue\Queue Stock Item Rekey.Inputs[OLE DB Destination Input]" name="Stock Item Members 3" startId="Package\Classify Late Arriving Queue\Route Queue Entry.Outputs[Stock Item Members]" />
+          <path refId="Package\Classify Late Arriving Queue.Paths[City Members 4]" endId="Package\Classify Late Arriving Queue\Queue City Rekey.Inputs[OLE DB Destination Input]" name="City Members 4" startId="Package\Classify Late Arriving Queue\Route Queue Entry.Outputs[City Members]" />
+          <path refId="Package\Classify Late Arriving Queue.Paths[Other Dimensions 5]" endId="Package\Classify Late Arriving Queue\Queue Other Rekey.Inputs[OLE DB Destination Input]" name="Other Dimensions 5" startId="Package\Classify Late Arriving Queue\Route Queue Entry.Outputs[Other Dimensions]" />
+          <path refId="Package\Classify Late Arriving Queue.Paths[Escalate 6]" endId="Package\Classify Late Arriving Queue\Escalate Stale Queue Entries.Inputs[OLE DB Destination Input]" name="Escalate 6" startId="Package\Classify Late Arriving Queue\Route Queue Entry.Outputs[Escalate]" />
+          <path refId="Package\Classify Late Arriving Queue.Paths[OLE DB Source Error Output 7]" endId="Package\Classify Late Arriving Queue\Reject Source Errors.Inputs[OLE DB Destination Input]" name="OLE DB Source Error Output 7" startId="Package\Classify Late Arriving Queue\work LateArrivingDimensionQueue.Outputs[OLE DB Source Error Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Assign Surrogate Keys"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Per-dimension surrogate key assignment"
+      DTS:DTSID="{DE9BA9C4-B8D7-9C6E-423D-16E37B1DE647}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Assign Surrogate Keys">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Assign Surrogate Keys\Assign Surrogate Keys To Inferred Members"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{83AEDE92-0C79-4CF7-7345-8349140D8537}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Assign Surrogate Keys To Inferred Members"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+            SQLTask:SqlStatementSource="EXEC Integration.RekeyLateArrivingDimensions @Phase = N'ASSIGN', @LineageKey = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Assign Surrogate Keys\Repoint Facts At Assigned Keys"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{332D4BB9-9A1C-7C21-B46F-F66670B9109A}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Repoint Facts At Assigned Keys"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+            SQLTask:SqlStatementSource="EXEC Integration.RekeyLateArrivingDimensions @Phase = N'REPOINT', @LineageKey = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Assign Surrogate Keys\Count Remaining Unknown Member Facts"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{978E53B3-EE25-AFB6-DD3E-199C708C181F}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Count Remaining Unknown Member Facts"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+            SQLTask:SqlStatementSource="SELECT COUNT_BIG(*) AS RemainingUnknownFacts FROM [Fact].[Sale] WHERE [Customer Key] = 0 OR [Stock Item Key] = 0 OR [City Key] = 0;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::FactRowsRekeyed" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Assign Surrogate Keys.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{26FAC5D7-6404-3FFA-BE4C-568769A31C1B}"
+          DTS:From="Package\Assign Surrogate Keys\Assign Surrogate Keys To Inferred Members"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Assign Surrogate Keys\Repoint Facts At Assigned Keys" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Assign Surrogate Keys.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{1815E0EF-D253-743F-2D30-0FB69385F767}"
+          DTS:From="Package\Assign Surrogate Keys\Repoint Facts At Assigned Keys"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Assign Surrogate Keys\Count Remaining Unknown Member Facts" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Close Resolved Queue Entries"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F1910001-70CF-8472-FFE2-AFFEF1511703}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Close Resolved Queue Entries"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="UPDATE q SET q.ResolvedAt = GETDATE(), q.ResolvedByExecutionId = ? FROM work.LateArrivingDimensionQueue AS q INNER JOIN work.FactRekeyQueue AS r ON r.QueueId = q.QueueId WHERE q.ResolvedAt IS NULL AND r.AssignedSurrogateKey IS NOT NULL; UPDATE work.LateArrivingDimensionQueue SET RetryCount = RetryCount + 1 WHERE ResolvedAt IS NULL;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Rejected Records"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F451B37A-2258-F381-3E92-62232E0A51C1}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Rejected Records"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @ObjectName = N'work.LateArrivingDimensionQueue', @RejectReason = N'Routed by the package reject path', @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'work.LateArrivingDimensionQueue', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Batch Variables"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Measure Queue Depth" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Measure Queue Depth"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Clear Fact Rekey Queue" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Clear Fact Rekey Queue"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Classify Late Arriving Queue" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Classify Late Arriving Queue"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Assign Surrogate Keys" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Assign Surrogate Keys"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Close Resolved Queue Entries" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Close Resolved Queue Entries"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Rejected Records" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Log Rejected Records"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 8]"
+      DTS:CreationName=""
+      DTS:DTSID="{71A76C5F-1A20-5771-2776-7EF96FD96B90}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 8"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{6A79937C-E405-75A6-1B76-00497E5EC494}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

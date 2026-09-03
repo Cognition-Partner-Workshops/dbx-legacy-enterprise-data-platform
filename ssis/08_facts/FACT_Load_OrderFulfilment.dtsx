@@ -1,0 +1,1281 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{E1D2E16F-B5B7-CE5B-BEAA-E5AC75E3D04F}"
+  DTS:Description="Accumulating-snapshot load of Fact.Order Fulfilment - the order-to-cash pipeline. One row per order, with the ordered, allocated, picked, invoiced and cash-received milestones and the cycle-time measures between them maintained in place."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="FACT_Load_OrderFulfilment"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{6C05045C-FDF1-4470-D59A-DC8D24A7C5A1}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{F31CE188-B67A-B536-B4CB-58D24C23AB8A}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{D2FBFC39-C42A-DCF4-C515-B0CC07321020}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{6F0B4788-050B-21D0-0937-EA6D403EA4E2}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{375E4110-E9B4-CEEE-969C-EA4592710604}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">SQLSTG</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::StalledOrderDays]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Days without a milestone move before an order is flagged stalled."
+      DTS:DTSID="{B5EE3458-11C7-91BE-8B1A-274F81EB7EFF}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="StalledOrderDays"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">14</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{93082C8E-A1E6-F83E-D51D-2752FC48C4B7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{1274FB0C-735A-389F-E939-7D25A05EEB94}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{7672BF10-2FCB-8A4C-8A2B-A9BD18BFCC0C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{49D88FD7-6025-627E-0592-11F981973292}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{E0C7B674-6430-DE6A-9413-6F3121CD24D6}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{29746B21-3EA4-CE77-8770-CB7B2713E98A}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{673089AF-D9BE-FBFA-89F3-71DB6004907C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{8CF69797-9DF7-5305-2B9F-EB921F08DD13}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUnknownMember]"
+      DTS:CreationName=""
+      DTS:DTSID="{13B1DCAE-AA9C-4F22-99C5-573EE347E56B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUnknownMember">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsHeldForRetry]"
+      DTS:CreationName=""
+      DTS:DTSID="{7730766C-78BE-6344-152B-71DD29C953F9}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsHeldForRetry">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BusinessDateFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{02DAFA02-B7BD-A5B0-7653-6126B3A37299}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BusinessDateFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BusinessDateTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{B8307AD4-4992-91DA-5BAF-FAC278D8792F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BusinessDateTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::MilestoneUpdates]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B1DE0D5-8D79-5CE5-48AE-C4794D453888}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="MilestoneUpdates">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::StalledOrders]"
+      DTS:CreationName=""
+      DTS:DTSID="{F7E09C61-0115-835F-C547-4790E903A84F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="StalledOrders">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Batch Variables"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{647AE7A9-EE4E-0DAF-FBD6-04CEA9DB74E4}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Batch Variables"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::BusinessDateFrom] = (DT_WSTR, 10)(DT_DBDATE)@[User::WatermarkFrom]" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Get Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{AD8AAA26-E475-7A7A-5321-BEF0685AEC15}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Get Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_GetWatermark @SourceSystemCode = ?, @ObjectName = ?, @ReloadFullHistory = ?, @WatermarkFrom = ? OUTPUT, @WatermarkTo = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::ReloadFullHistory" SQLTask:ParameterDirection="Input" SQLTask:DataType="BYTE" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::WatermarkFrom" />
+        <SQLTask:ResultBinding SQLTask:ResultName="1" SQLTask:DtsVariableName="User::WatermarkTo" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Clear Fulfilment Work Table"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{6398B59D-79C4-B536-2140-B67AA4DD0AD7}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Clear Fulfilment Work Table"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE [work].[OrderLineEnriched];"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Load Fact Order Fulfilment"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{1F6CA232-CAAC-4DAF-31AF-B6B9768D8869}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Load Fact Order Fulfilment"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="stg OrderFulfilment" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">1800</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT ofm.OrderNumber, ofm.CustomerBusinessKey, ofm.OrderedAt, ofm.AllocatedAt, ofm.PickedAt, ofm.InvoicedAt, ofm.CashReceivedAt, ofm.OrderNetAmount, ofm.InvoicedAmount, ofm.CashReceivedAmount, ofm.TransactionCurrency, ofm.RegionCode FROM stg.OrderFulfilment AS ofm WHERE ofm.LastModifiedAt &gt; ? AND ofm.LastModifiedAt &lt;= ?;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[OrderNumber]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[OrderNumber]" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[OrderNumber]" name="OrderNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[CustomerBusinessKey]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[CustomerBusinessKey]" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[CustomerBusinessKey]" name="CustomerBusinessKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[OrderedAt]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[OrderedAt]" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[OrderedAt]" name="OrderedAt" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[AllocatedAt]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[AllocatedAt]" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[AllocatedAt]" name="AllocatedAt" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[PickedAt]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[PickedAt]" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[PickedAt]" name="PickedAt" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[InvoicedAt]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[InvoicedAt]" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[InvoicedAt]" name="InvoicedAt" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[CashReceivedAt]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[CashReceivedAt]" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[CashReceivedAt]" name="CashReceivedAt" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[OrderNetAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[OrderNetAmount]" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[OrderNetAmount]" name="OrderNetAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[InvoicedAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[InvoicedAmount]" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[InvoicedAmount]" name="InvoicedAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[CashReceivedAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[CashReceivedAmount]" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[CashReceivedAmount]" name="CashReceivedAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[TransactionCurrency]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[TransactionCurrency]" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[TransactionCurrency]" name="TransactionCurrency" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="6" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[OrderNumber]" dataType="wstr" length="20" name="OrderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[CustomerBusinessKey]" dataType="wstr" length="20" name="CustomerBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[OrderedAt]" dataType="dbTimeStamp" name="OrderedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[AllocatedAt]" dataType="dbTimeStamp" name="AllocatedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[PickedAt]" dataType="dbTimeStamp" name="PickedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[InvoicedAt]" dataType="dbTimeStamp" name="InvoicedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[CashReceivedAt]" dataType="dbTimeStamp" name="CashReceivedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[OrderNetAmount]" dataType="numeric" precision="18" scale="2" name="OrderNetAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[InvoicedAmount]" dataType="numeric" precision="18" scale="2" name="InvoicedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[CashReceivedAmount]" dataType="numeric" precision="18" scale="2" name="CashReceivedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[OrderNumber]" dataType="wstr" length="20" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[OrderNumber]" name="OrderNumber" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[CustomerBusinessKey]" dataType="wstr" length="20" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[CustomerBusinessKey]" name="CustomerBusinessKey" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[OrderedAt]" dataType="dbTimeStamp" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[OrderedAt]" name="OrderedAt" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[AllocatedAt]" dataType="dbTimeStamp" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[AllocatedAt]" name="AllocatedAt" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[PickedAt]" dataType="dbTimeStamp" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[PickedAt]" name="PickedAt" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[InvoicedAt]" dataType="dbTimeStamp" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[InvoicedAt]" name="InvoicedAt" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[CashReceivedAt]" dataType="dbTimeStamp" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[CashReceivedAt]" name="CashReceivedAt" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[OrderNetAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[OrderNetAmount]" name="OrderNetAmount" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[InvoicedAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[InvoicedAmount]" name="InvoicedAmount" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[CashReceivedAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[CashReceivedAmount]" name="CashReceivedAmount" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[TransactionCurrency]" dataType="wstr" length="3" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[TransactionCurrency]" name="TransactionCurrency" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="6" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order Fulfilment\Lookup Customer Key" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Customer Key" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [Customer Key] AS CustomerKey, [WWI Customer ID] AS CustomerBusinessKey FROM Dimension.Customer WHERE [Is Current Row] = 1;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">0</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order Fulfilment\Lookup Customer Key.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order Fulfilment\Lookup Customer Key.Inputs[Lookup Input]" errorRowDisposition="RedirectRow" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Lookup Customer Key.Inputs[Lookup Input].Columns[CustomerBusinessKey]" cachedName="CustomerBusinessKey" name="CustomerBusinessKey" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order Fulfilment\Lookup Customer Key.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Fact Order Fulfilment\Lookup Customer Key.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\Lookup Customer Key.Outputs[Lookup Match Output].Columns[CustomerKey]" dataType="i4" lineageId="Package\Load Fact Order Fulfilment\Lookup Customer Key.Outputs[Lookup Match Output].Columns[CustomerKey]" name="CustomerKey" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Fact Order Fulfilment\Lookup Customer Key.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Fact Order Fulfilment\Lookup Customer Key.Inputs[Lookup Input]" />
+              <output refId="Package\Load Fact Order Fulfilment\Lookup Customer Key.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Fact Order Fulfilment\Lookup Customer Key.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order Fulfilment\Lookup Ordered Date Key" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Ordered Date Key" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [Date] AS OrderedAt, [Date Key] AS OrderedDateKey FROM Dimension.Date;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">1</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order Fulfilment\Lookup Ordered Date Key.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order Fulfilment\Lookup Ordered Date Key.Inputs[Lookup Input]" errorRowDisposition="FailComponent" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Lookup Ordered Date Key.Inputs[Lookup Input].Columns[OrderedAt]" cachedName="OrderedAt" name="OrderedAt" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order Fulfilment\Lookup Ordered Date Key.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Fact Order Fulfilment\Lookup Ordered Date Key.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\Lookup Ordered Date Key.Outputs[Lookup Match Output].Columns[OrderedDateKey]" dataType="i4" lineageId="Package\Load Fact Order Fulfilment\Lookup Ordered Date Key.Outputs[Lookup Match Output].Columns[OrderedDateKey]" name="OrderedDateKey" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Fact Order Fulfilment\Lookup Ordered Date Key.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Fact Order Fulfilment\Lookup Ordered Date Key.Inputs[Lookup Input]" />
+              <output refId="Package\Load Fact Order Fulfilment\Lookup Ordered Date Key.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Fact Order Fulfilment\Lookup Ordered Date Key.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order Fulfilment\Lookup Invoiced Date Key" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Invoiced Date Key" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [Date] AS InvoicedAt, [Date Key] AS InvoicedDateKey FROM Dimension.Date;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">1</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order Fulfilment\Lookup Invoiced Date Key.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order Fulfilment\Lookup Invoiced Date Key.Inputs[Lookup Input]" errorRowDisposition="FailComponent" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Lookup Invoiced Date Key.Inputs[Lookup Input].Columns[InvoicedAt]" cachedName="InvoicedAt" name="InvoicedAt" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order Fulfilment\Lookup Invoiced Date Key.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Fact Order Fulfilment\Lookup Invoiced Date Key.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\Lookup Invoiced Date Key.Outputs[Lookup Match Output].Columns[InvoicedDateKey]" dataType="i4" lineageId="Package\Load Fact Order Fulfilment\Lookup Invoiced Date Key.Outputs[Lookup Match Output].Columns[InvoicedDateKey]" name="InvoicedDateKey" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Fact Order Fulfilment\Lookup Invoiced Date Key.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Fact Order Fulfilment\Lookup Invoiced Date Key.Inputs[Lookup Input]" />
+              <output refId="Package\Load Fact Order Fulfilment\Lookup Invoiced Date Key.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Fact Order Fulfilment\Lookup Invoiced Date Key.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order Fulfilment\Lookup Cash Received Date Key" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Cash Received Date Key" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [Date] AS CashReceivedAt, [Date Key] AS CashReceivedDateKey FROM Dimension.Date;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">1</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order Fulfilment\Lookup Cash Received Date Key.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order Fulfilment\Lookup Cash Received Date Key.Inputs[Lookup Input]" errorRowDisposition="FailComponent" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Lookup Cash Received Date Key.Inputs[Lookup Input].Columns[CashReceivedAt]" cachedName="CashReceivedAt" name="CashReceivedAt" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order Fulfilment\Lookup Cash Received Date Key.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Fact Order Fulfilment\Lookup Cash Received Date Key.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\Lookup Cash Received Date Key.Outputs[Lookup Match Output].Columns[CashReceivedDateKey]" dataType="i4" lineageId="Package\Load Fact Order Fulfilment\Lookup Cash Received Date Key.Outputs[Lookup Match Output].Columns[CashReceivedDateKey]" name="CashReceivedDateKey" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Fact Order Fulfilment\Lookup Cash Received Date Key.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Fact Order Fulfilment\Lookup Cash Received Date Key.Inputs[Lookup Input]" />
+              <output refId="Package\Load Fact Order Fulfilment\Lookup Cash Received Date Key.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Fact Order Fulfilment\Lookup Cash Received Date Key.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order Fulfilment\Lookup Existing Fulfilment Row" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Existing Fulfilment Row" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [Order Fulfilment Key] AS OrderFulfilmentKey, [Order Number] AS OrderNumber, [Milestone Status Code] AS ExistingMilestoneStatus FROM [Fact].[Order Fulfilment];</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">0</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order Fulfilment\Lookup Existing Fulfilment Row.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order Fulfilment\Lookup Existing Fulfilment Row.Inputs[Lookup Input]" errorRowDisposition="RedirectRow" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Lookup Existing Fulfilment Row.Inputs[Lookup Input].Columns[OrderNumber]" cachedName="OrderNumber" name="OrderNumber" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order Fulfilment\Lookup Existing Fulfilment Row.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Fact Order Fulfilment\Lookup Existing Fulfilment Row.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\Lookup Existing Fulfilment Row.Outputs[Lookup Match Output].Columns[OrderFulfilmentKey]" dataType="i8" lineageId="Package\Load Fact Order Fulfilment\Lookup Existing Fulfilment Row.Outputs[Lookup Match Output].Columns[OrderFulfilmentKey]" name="OrderFulfilmentKey" />
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\Lookup Existing Fulfilment Row.Outputs[Lookup Match Output].Columns[ExistingMilestoneStatus]" dataType="wstr" length="12" lineageId="Package\Load Fact Order Fulfilment\Lookup Existing Fulfilment Row.Outputs[Lookup Match Output].Columns[ExistingMilestoneStatus]" name="ExistingMilestoneStatus" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Fact Order Fulfilment\Lookup Existing Fulfilment Row.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Fact Order Fulfilment\Lookup Existing Fulfilment Row.Inputs[Lookup Input]" />
+              <output refId="Package\Load Fact Order Fulfilment\Lookup Existing Fulfilment Row.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Fact Order Fulfilment\Lookup Existing Fulfilment Row.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order Fulfilment\Derive Cycle Times" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Cycle Times" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[CustomerKeyResolved]" dataType="i4" lineageId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[CustomerKeyResolved]" name="CustomerKeyResolved">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(CustomerKey) ? 0 : CustomerKey</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(CustomerKey) ? 0 : CustomerKey</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[MilestoneStatusCode]" dataType="wstr" length="12" lineageId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[MilestoneStatusCode]" name="MilestoneStatusCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">!ISNULL(CashReceivedAt) ? "CASHED" : !ISNULL(InvoicedAt) ? "INVOICED" : !ISNULL(PickedAt) ? "PICKED" : !ISNULL(AllocatedAt) ? "ALLOCATED" : "ORDERED"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">!ISNULL(CashReceivedAt) ? "CASHED" : !ISNULL(InvoicedAt) ? "INVOICED" : !ISNULL(PickedAt) ? "PICKED" : !ISNULL(AllocatedAt) ? "ALLOCATED" : "ORDERED"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[OrderToAllocateHours]" dataType="i4" lineageId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[OrderToAllocateHours]" name="OrderToAllocateHours">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(AllocatedAt) ? -1 : DATEDIFF("Hour", OrderedAt, AllocatedAt)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(AllocatedAt) ? -1 : DATEDIFF("Hour", OrderedAt, AllocatedAt)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[OrderToInvoiceDays]" dataType="i4" lineageId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[OrderToInvoiceDays]" name="OrderToInvoiceDays">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(InvoicedAt) ? -1 : DATEDIFF("Day", OrderedAt, InvoicedAt)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(InvoicedAt) ? -1 : DATEDIFF("Day", OrderedAt, InvoicedAt)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[InvoiceToCashDays]" dataType="i4" lineageId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[InvoiceToCashDays]" name="InvoiceToCashDays">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(CashReceivedAt) || ISNULL(InvoicedAt) ? -1 : DATEDIFF("Day", InvoicedAt, CashReceivedAt)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(CashReceivedAt) || ISNULL(InvoicedAt) ? -1 : DATEDIFF("Day", InvoicedAt, CashReceivedAt)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[OrderToCashDays]" dataType="i4" lineageId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[OrderToCashDays]" name="OrderToCashDays">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(CashReceivedAt) ? -1 : DATEDIFF("Day", OrderedAt, CashReceivedAt)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(CashReceivedAt) ? -1 : DATEDIFF("Day", OrderedAt, CashReceivedAt)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[UninvoicedAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[UninvoicedAmount]" name="UninvoicedAmount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">OrderNetAmount - InvoicedAmount</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">OrderNetAmount - InvoicedAmount</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[UncollectedAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[UncollectedAmount]" name="UncollectedAmount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">InvoicedAmount - CashReceivedAmount</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">InvoicedAmount - CashReceivedAmount</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[IsStalled]" dataType="bool" lineageId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[IsStalled]" name="IsStalled">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(CashReceivedAt) &amp;&amp; DATEDIFF("Day", OrderedAt, GETDATE()) &gt; @[$Package::StalledOrderDays]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(CashReceivedAt) &amp;&amp; DATEDIFF("Day", OrderedAt, GETDATE()) &gt; @[$Package::StalledOrderDays]</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[OrderNumberDegenerate]" dataType="wstr" length="20" lineageId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[OrderNumberDegenerate]" name="OrderNumberDegenerate">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">OrderNumber</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">OrderNumber</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[LineageKey]" dataType="i8" lineageId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output].Columns[LineageKey]" name="LineageKey">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order Fulfilment\Route Fulfilment Rows" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Route Fulfilment Rows" version="1">
+            <inputs>
+              <input refId="Package\Load Fact Order Fulfilment\Route Fulfilment Rows.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order Fulfilment\Route Fulfilment Rows.Outputs[New Order]" exclusionGroup="1" name="New Order" synchronousInputId="Package\Load Fact Order Fulfilment\Route Fulfilment Rows.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">ISNULL(OrderFulfilmentKey)</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">ISNULL(OrderFulfilmentKey)</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Load Fact Order Fulfilment\Route Fulfilment Rows.Outputs[Stalled Orders]" exclusionGroup="1" name="Stalled Orders" synchronousInputId="Package\Load Fact Order Fulfilment\Route Fulfilment Rows.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">IsStalled</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">IsStalled</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Load Fact Order Fulfilment\Route Fulfilment Rows.Outputs[Milestone Update]" exclusionGroup="1" isDefaultOut="true" name="Milestone Update" synchronousInputId="Package\Load Fact Order Fulfilment\Route Fulfilment Rows.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order Fulfilment\Insert New Order" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert New Order" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Fact].[Order Fulfilment]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order Fulfilment\Insert New Order.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[OrderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumber" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" name="OrderNumber" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[CustomerBusinessKey]" cachedDataType="wstr" cachedLength="20" cachedName="CustomerBusinessKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" name="CustomerBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[OrderedAt]" cachedDataType="dbTimeStamp" cachedName="OrderedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[OrderedAt]" name="OrderedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[AllocatedAt]" cachedDataType="dbTimeStamp" cachedName="AllocatedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[AllocatedAt]" name="AllocatedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[PickedAt]" cachedDataType="dbTimeStamp" cachedName="PickedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[PickedAt]" name="PickedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[InvoicedAt]" cachedDataType="dbTimeStamp" cachedName="InvoicedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedAt]" name="InvoicedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[CashReceivedAt]" cachedDataType="dbTimeStamp" cachedName="CashReceivedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedAt]" name="CashReceivedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[OrderNetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrderNetAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[OrderNetAmount]" name="OrderNetAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[InvoicedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="InvoicedAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedAmount]" name="InvoicedAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[CashReceivedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CashReceivedAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedAmount]" name="CashReceivedAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="RegionCode" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[CustomerKey]" cachedDataType="i4" cachedName="CustomerKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" name="CustomerKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[OrderedDateKey]" cachedDataType="i4" cachedName="OrderedDateKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[OrderedDateKey]" name="OrderedDateKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[InvoicedDateKey]" cachedDataType="i4" cachedName="InvoicedDateKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedDateKey]" name="InvoicedDateKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[CashReceivedDateKey]" cachedDataType="i4" cachedName="CashReceivedDateKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedDateKey]" name="CashReceivedDateKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[OrderFulfilmentKey]" cachedDataType="i8" cachedName="OrderFulfilmentKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[OrderFulfilmentKey]" name="OrderFulfilmentKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[ExistingMilestoneStatus]" cachedDataType="wstr" cachedLength="12" cachedName="ExistingMilestoneStatus" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[ExistingMilestoneStatus]" name="ExistingMilestoneStatus" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[CustomerKeyResolved]" cachedDataType="i4" cachedName="CustomerKeyResolved" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" name="CustomerKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[MilestoneStatusCode]" cachedDataType="wstr" cachedLength="12" cachedName="MilestoneStatusCode" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[MilestoneStatusCode]" name="MilestoneStatusCode" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[OrderToAllocateHours]" cachedDataType="i4" cachedName="OrderToAllocateHours" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[OrderToAllocateHours]" name="OrderToAllocateHours" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[OrderToInvoiceDays]" cachedDataType="i4" cachedName="OrderToInvoiceDays" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[OrderToInvoiceDays]" name="OrderToInvoiceDays" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[InvoiceToCashDays]" cachedDataType="i4" cachedName="InvoiceToCashDays" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceToCashDays]" name="InvoiceToCashDays" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[OrderToCashDays]" cachedDataType="i4" cachedName="OrderToCashDays" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[OrderToCashDays]" name="OrderToCashDays" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[UninvoicedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UninvoicedAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[UninvoicedAmount]" name="UninvoicedAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[UncollectedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UncollectedAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[UncollectedAmount]" name="UncollectedAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[IsStalled]" cachedDataType="bool" cachedName="IsStalled" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[IsStalled]" name="IsStalled" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[OrderNumberDegenerate]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumberDegenerate" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" name="OrderNumberDegenerate" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" dataType="wstr" length="20" name="OrderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" dataType="wstr" length="20" name="CustomerBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[OrderedAt]" dataType="dbTimeStamp" name="OrderedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[AllocatedAt]" dataType="dbTimeStamp" name="AllocatedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[PickedAt]" dataType="dbTimeStamp" name="PickedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedAt]" dataType="dbTimeStamp" name="InvoicedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedAt]" dataType="dbTimeStamp" name="CashReceivedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[OrderNetAmount]" dataType="numeric" precision="18" scale="2" name="OrderNetAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedAmount]" dataType="numeric" precision="18" scale="2" name="InvoicedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedAmount]" dataType="numeric" precision="18" scale="2" name="CashReceivedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[OrderedDateKey]" dataType="i4" name="OrderedDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedDateKey]" dataType="i4" name="InvoicedDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedDateKey]" dataType="i4" name="CashReceivedDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[OrderFulfilmentKey]" dataType="i8" name="OrderFulfilmentKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[ExistingMilestoneStatus]" dataType="wstr" length="12" name="ExistingMilestoneStatus" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" dataType="i4" name="CustomerKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[MilestoneStatusCode]" dataType="wstr" length="12" name="MilestoneStatusCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[OrderToAllocateHours]" dataType="i4" name="OrderToAllocateHours" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[OrderToInvoiceDays]" dataType="i4" name="OrderToInvoiceDays" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceToCashDays]" dataType="i4" name="InvoiceToCashDays" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[OrderToCashDays]" dataType="i4" name="OrderToCashDays" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[UninvoicedAmount]" dataType="numeric" precision="18" scale="2" name="UninvoicedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[UncollectedAmount]" dataType="numeric" precision="18" scale="2" name="UncollectedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[IsStalled]" dataType="bool" name="IsStalled" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" dataType="wstr" length="20" name="OrderNumberDegenerate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order Fulfilment\Insert New Order.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order Fulfilment\Stage Milestone Update" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Stage Milestone Update" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[OrderLineEnriched]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[OrderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumber" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" name="OrderNumber" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[CustomerBusinessKey]" cachedDataType="wstr" cachedLength="20" cachedName="CustomerBusinessKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" name="CustomerBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[OrderedAt]" cachedDataType="dbTimeStamp" cachedName="OrderedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[OrderedAt]" name="OrderedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[AllocatedAt]" cachedDataType="dbTimeStamp" cachedName="AllocatedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[AllocatedAt]" name="AllocatedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[PickedAt]" cachedDataType="dbTimeStamp" cachedName="PickedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[PickedAt]" name="PickedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[InvoicedAt]" cachedDataType="dbTimeStamp" cachedName="InvoicedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedAt]" name="InvoicedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[CashReceivedAt]" cachedDataType="dbTimeStamp" cachedName="CashReceivedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedAt]" name="CashReceivedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[OrderNetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrderNetAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[OrderNetAmount]" name="OrderNetAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[InvoicedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="InvoicedAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedAmount]" name="InvoicedAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[CashReceivedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CashReceivedAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedAmount]" name="CashReceivedAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="RegionCode" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[CustomerKey]" cachedDataType="i4" cachedName="CustomerKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" name="CustomerKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[OrderedDateKey]" cachedDataType="i4" cachedName="OrderedDateKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[OrderedDateKey]" name="OrderedDateKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[InvoicedDateKey]" cachedDataType="i4" cachedName="InvoicedDateKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedDateKey]" name="InvoicedDateKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[CashReceivedDateKey]" cachedDataType="i4" cachedName="CashReceivedDateKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedDateKey]" name="CashReceivedDateKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[OrderFulfilmentKey]" cachedDataType="i8" cachedName="OrderFulfilmentKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[OrderFulfilmentKey]" name="OrderFulfilmentKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[ExistingMilestoneStatus]" cachedDataType="wstr" cachedLength="12" cachedName="ExistingMilestoneStatus" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[ExistingMilestoneStatus]" name="ExistingMilestoneStatus" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[CustomerKeyResolved]" cachedDataType="i4" cachedName="CustomerKeyResolved" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" name="CustomerKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[MilestoneStatusCode]" cachedDataType="wstr" cachedLength="12" cachedName="MilestoneStatusCode" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[MilestoneStatusCode]" name="MilestoneStatusCode" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[OrderToAllocateHours]" cachedDataType="i4" cachedName="OrderToAllocateHours" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[OrderToAllocateHours]" name="OrderToAllocateHours" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[OrderToInvoiceDays]" cachedDataType="i4" cachedName="OrderToInvoiceDays" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[OrderToInvoiceDays]" name="OrderToInvoiceDays" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[InvoiceToCashDays]" cachedDataType="i4" cachedName="InvoiceToCashDays" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceToCashDays]" name="InvoiceToCashDays" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[OrderToCashDays]" cachedDataType="i4" cachedName="OrderToCashDays" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[OrderToCashDays]" name="OrderToCashDays" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[UninvoicedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UninvoicedAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[UninvoicedAmount]" name="UninvoicedAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[UncollectedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UncollectedAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[UncollectedAmount]" name="UncollectedAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[IsStalled]" cachedDataType="bool" cachedName="IsStalled" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[IsStalled]" name="IsStalled" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[OrderNumberDegenerate]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumberDegenerate" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" name="OrderNumberDegenerate" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" dataType="wstr" length="20" name="OrderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" dataType="wstr" length="20" name="CustomerBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[OrderedAt]" dataType="dbTimeStamp" name="OrderedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[AllocatedAt]" dataType="dbTimeStamp" name="AllocatedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[PickedAt]" dataType="dbTimeStamp" name="PickedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedAt]" dataType="dbTimeStamp" name="InvoicedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedAt]" dataType="dbTimeStamp" name="CashReceivedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[OrderNetAmount]" dataType="numeric" precision="18" scale="2" name="OrderNetAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedAmount]" dataType="numeric" precision="18" scale="2" name="InvoicedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedAmount]" dataType="numeric" precision="18" scale="2" name="CashReceivedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[OrderedDateKey]" dataType="i4" name="OrderedDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedDateKey]" dataType="i4" name="InvoicedDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedDateKey]" dataType="i4" name="CashReceivedDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[OrderFulfilmentKey]" dataType="i8" name="OrderFulfilmentKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[ExistingMilestoneStatus]" dataType="wstr" length="12" name="ExistingMilestoneStatus" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" dataType="i4" name="CustomerKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[MilestoneStatusCode]" dataType="wstr" length="12" name="MilestoneStatusCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[OrderToAllocateHours]" dataType="i4" name="OrderToAllocateHours" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[OrderToInvoiceDays]" dataType="i4" name="OrderToInvoiceDays" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceToCashDays]" dataType="i4" name="InvoiceToCashDays" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[OrderToCashDays]" dataType="i4" name="OrderToCashDays" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[UninvoicedAmount]" dataType="numeric" precision="18" scale="2" name="UninvoicedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[UncollectedAmount]" dataType="numeric" precision="18" scale="2" name="UncollectedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[IsStalled]" dataType="bool" name="IsStalled" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" dataType="wstr" length="20" name="OrderNumberDegenerate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Stage Stalled Orders" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[OrderLineEnriched]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[OrderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumber" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" name="OrderNumber" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[CustomerBusinessKey]" cachedDataType="wstr" cachedLength="20" cachedName="CustomerBusinessKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" name="CustomerBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[OrderedAt]" cachedDataType="dbTimeStamp" cachedName="OrderedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[OrderedAt]" name="OrderedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[AllocatedAt]" cachedDataType="dbTimeStamp" cachedName="AllocatedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[AllocatedAt]" name="AllocatedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[PickedAt]" cachedDataType="dbTimeStamp" cachedName="PickedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[PickedAt]" name="PickedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[InvoicedAt]" cachedDataType="dbTimeStamp" cachedName="InvoicedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedAt]" name="InvoicedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[CashReceivedAt]" cachedDataType="dbTimeStamp" cachedName="CashReceivedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedAt]" name="CashReceivedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[OrderNetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrderNetAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[OrderNetAmount]" name="OrderNetAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[InvoicedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="InvoicedAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedAmount]" name="InvoicedAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[CashReceivedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CashReceivedAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedAmount]" name="CashReceivedAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="RegionCode" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[CustomerKey]" cachedDataType="i4" cachedName="CustomerKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" name="CustomerKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[OrderedDateKey]" cachedDataType="i4" cachedName="OrderedDateKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[OrderedDateKey]" name="OrderedDateKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[InvoicedDateKey]" cachedDataType="i4" cachedName="InvoicedDateKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedDateKey]" name="InvoicedDateKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[CashReceivedDateKey]" cachedDataType="i4" cachedName="CashReceivedDateKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedDateKey]" name="CashReceivedDateKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[OrderFulfilmentKey]" cachedDataType="i8" cachedName="OrderFulfilmentKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[OrderFulfilmentKey]" name="OrderFulfilmentKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[ExistingMilestoneStatus]" cachedDataType="wstr" cachedLength="12" cachedName="ExistingMilestoneStatus" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[ExistingMilestoneStatus]" name="ExistingMilestoneStatus" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[CustomerKeyResolved]" cachedDataType="i4" cachedName="CustomerKeyResolved" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" name="CustomerKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[MilestoneStatusCode]" cachedDataType="wstr" cachedLength="12" cachedName="MilestoneStatusCode" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[MilestoneStatusCode]" name="MilestoneStatusCode" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[OrderToAllocateHours]" cachedDataType="i4" cachedName="OrderToAllocateHours" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[OrderToAllocateHours]" name="OrderToAllocateHours" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[OrderToInvoiceDays]" cachedDataType="i4" cachedName="OrderToInvoiceDays" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[OrderToInvoiceDays]" name="OrderToInvoiceDays" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[InvoiceToCashDays]" cachedDataType="i4" cachedName="InvoiceToCashDays" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceToCashDays]" name="InvoiceToCashDays" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[OrderToCashDays]" cachedDataType="i4" cachedName="OrderToCashDays" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[OrderToCashDays]" name="OrderToCashDays" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[UninvoicedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UninvoicedAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[UninvoicedAmount]" name="UninvoicedAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[UncollectedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UncollectedAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[UncollectedAmount]" name="UncollectedAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[IsStalled]" cachedDataType="bool" cachedName="IsStalled" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[IsStalled]" name="IsStalled" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[OrderNumberDegenerate]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumberDegenerate" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" name="OrderNumberDegenerate" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" dataType="wstr" length="20" name="OrderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" dataType="wstr" length="20" name="CustomerBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[OrderedAt]" dataType="dbTimeStamp" name="OrderedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[AllocatedAt]" dataType="dbTimeStamp" name="AllocatedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[PickedAt]" dataType="dbTimeStamp" name="PickedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedAt]" dataType="dbTimeStamp" name="InvoicedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedAt]" dataType="dbTimeStamp" name="CashReceivedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[OrderNetAmount]" dataType="numeric" precision="18" scale="2" name="OrderNetAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedAmount]" dataType="numeric" precision="18" scale="2" name="InvoicedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedAmount]" dataType="numeric" precision="18" scale="2" name="CashReceivedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[OrderedDateKey]" dataType="i4" name="OrderedDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedDateKey]" dataType="i4" name="InvoicedDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedDateKey]" dataType="i4" name="CashReceivedDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[OrderFulfilmentKey]" dataType="i8" name="OrderFulfilmentKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[ExistingMilestoneStatus]" dataType="wstr" length="12" name="ExistingMilestoneStatus" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" dataType="i4" name="CustomerKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[MilestoneStatusCode]" dataType="wstr" length="12" name="MilestoneStatusCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[OrderToAllocateHours]" dataType="i4" name="OrderToAllocateHours" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[OrderToInvoiceDays]" dataType="i4" name="OrderToInvoiceDays" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceToCashDays]" dataType="i4" name="InvoiceToCashDays" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[OrderToCashDays]" dataType="i4" name="OrderToCashDays" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[UninvoicedAmount]" dataType="numeric" precision="18" scale="2" name="UninvoicedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[UncollectedAmount]" dataType="numeric" precision="18" scale="2" name="UncollectedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[IsStalled]" dataType="bool" name="IsStalled" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" dataType="wstr" length="20" name="OrderNumberDegenerate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order Fulfilment\Reject Source Errors" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Source Errors" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedOrderLine]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OrderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumber" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" name="OrderNumber" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CustomerBusinessKey]" cachedDataType="wstr" cachedLength="20" cachedName="CustomerBusinessKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" name="CustomerBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OrderedAt]" cachedDataType="dbTimeStamp" cachedName="OrderedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderedAt]" name="OrderedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[AllocatedAt]" cachedDataType="dbTimeStamp" cachedName="AllocatedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AllocatedAt]" name="AllocatedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PickedAt]" cachedDataType="dbTimeStamp" cachedName="PickedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PickedAt]" name="PickedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[InvoicedAt]" cachedDataType="dbTimeStamp" cachedName="InvoicedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedAt]" name="InvoicedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CashReceivedAt]" cachedDataType="dbTimeStamp" cachedName="CashReceivedAt" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedAt]" name="CashReceivedAt" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OrderNetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrderNetAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderNetAmount]" name="OrderNetAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[InvoicedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="InvoicedAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedAmount]" name="InvoicedAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CashReceivedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CashReceivedAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedAmount]" name="CashReceivedAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="RegionCode" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CustomerKey]" cachedDataType="i4" cachedName="CustomerKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" name="CustomerKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OrderedDateKey]" cachedDataType="i4" cachedName="OrderedDateKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderedDateKey]" name="OrderedDateKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[InvoicedDateKey]" cachedDataType="i4" cachedName="InvoicedDateKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedDateKey]" name="InvoicedDateKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CashReceivedDateKey]" cachedDataType="i4" cachedName="CashReceivedDateKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedDateKey]" name="CashReceivedDateKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OrderFulfilmentKey]" cachedDataType="i8" cachedName="OrderFulfilmentKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderFulfilmentKey]" name="OrderFulfilmentKey" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[ExistingMilestoneStatus]" cachedDataType="wstr" cachedLength="12" cachedName="ExistingMilestoneStatus" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ExistingMilestoneStatus]" name="ExistingMilestoneStatus" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CustomerKeyResolved]" cachedDataType="i4" cachedName="CustomerKeyResolved" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" name="CustomerKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[MilestoneStatusCode]" cachedDataType="wstr" cachedLength="12" cachedName="MilestoneStatusCode" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[MilestoneStatusCode]" name="MilestoneStatusCode" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OrderToAllocateHours]" cachedDataType="i4" cachedName="OrderToAllocateHours" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderToAllocateHours]" name="OrderToAllocateHours" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OrderToInvoiceDays]" cachedDataType="i4" cachedName="OrderToInvoiceDays" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderToInvoiceDays]" name="OrderToInvoiceDays" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[InvoiceToCashDays]" cachedDataType="i4" cachedName="InvoiceToCashDays" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceToCashDays]" name="InvoiceToCashDays" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OrderToCashDays]" cachedDataType="i4" cachedName="OrderToCashDays" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderToCashDays]" name="OrderToCashDays" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[UninvoicedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UninvoicedAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[UninvoicedAmount]" name="UninvoicedAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[UncollectedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UncollectedAmount" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[UncollectedAmount]" name="UncollectedAmount" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[IsStalled]" cachedDataType="bool" cachedName="IsStalled" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[IsStalled]" name="IsStalled" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OrderNumberDegenerate]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumberDegenerate" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" name="OrderNumberDegenerate" />
+                  <inputColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" dataType="wstr" length="20" name="OrderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" dataType="wstr" length="20" name="CustomerBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderedAt]" dataType="dbTimeStamp" name="OrderedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AllocatedAt]" dataType="dbTimeStamp" name="AllocatedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PickedAt]" dataType="dbTimeStamp" name="PickedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedAt]" dataType="dbTimeStamp" name="InvoicedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedAt]" dataType="dbTimeStamp" name="CashReceivedAt" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderNetAmount]" dataType="numeric" precision="18" scale="2" name="OrderNetAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedAmount]" dataType="numeric" precision="18" scale="2" name="InvoicedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedAmount]" dataType="numeric" precision="18" scale="2" name="CashReceivedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderedDateKey]" dataType="i4" name="OrderedDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[InvoicedDateKey]" dataType="i4" name="InvoicedDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CashReceivedDateKey]" dataType="i4" name="CashReceivedDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderFulfilmentKey]" dataType="i8" name="OrderFulfilmentKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ExistingMilestoneStatus]" dataType="wstr" length="12" name="ExistingMilestoneStatus" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" dataType="i4" name="CustomerKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[MilestoneStatusCode]" dataType="wstr" length="12" name="MilestoneStatusCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderToAllocateHours]" dataType="i4" name="OrderToAllocateHours" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderToInvoiceDays]" dataType="i4" name="OrderToInvoiceDays" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceToCashDays]" dataType="i4" name="InvoiceToCashDays" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderToCashDays]" dataType="i4" name="OrderToCashDays" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[UninvoicedAmount]" dataType="numeric" precision="18" scale="2" name="UninvoicedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[UncollectedAmount]" dataType="numeric" precision="18" scale="2" name="UncollectedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[IsStalled]" dataType="bool" name="IsStalled" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" dataType="wstr" length="20" name="OrderNumberDegenerate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order Fulfilment\Reject Source Errors.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Load Fact Order Fulfilment.Paths[OLE DB Source Output]" endId="Package\Load Fact Order Fulfilment\Lookup Customer Key.Inputs[Lookup Input]" name="OLE DB Source Output" startId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Load Fact Order Fulfilment.Paths[Lookup Match Output 1]" endId="Package\Load Fact Order Fulfilment\Lookup Ordered Date Key.Inputs[Lookup Input]" name="Lookup Match Output 1" startId="Package\Load Fact Order Fulfilment\Lookup Customer Key.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Fact Order Fulfilment.Paths[Lookup Match Output 2]" endId="Package\Load Fact Order Fulfilment\Lookup Invoiced Date Key.Inputs[Lookup Input]" name="Lookup Match Output 2" startId="Package\Load Fact Order Fulfilment\Lookup Ordered Date Key.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Fact Order Fulfilment.Paths[Lookup Match Output 3]" endId="Package\Load Fact Order Fulfilment\Lookup Cash Received Date Key.Inputs[Lookup Input]" name="Lookup Match Output 3" startId="Package\Load Fact Order Fulfilment\Lookup Invoiced Date Key.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Fact Order Fulfilment.Paths[Lookup Match Output 4]" endId="Package\Load Fact Order Fulfilment\Lookup Existing Fulfilment Row.Inputs[Lookup Input]" name="Lookup Match Output 4" startId="Package\Load Fact Order Fulfilment\Lookup Cash Received Date Key.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Fact Order Fulfilment.Paths[Lookup Match Output 5]" endId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Inputs[Derived Column Input]" name="Lookup Match Output 5" startId="Package\Load Fact Order Fulfilment\Lookup Existing Fulfilment Row.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Fact Order Fulfilment.Paths[Derived Column Output 6]" endId="Package\Load Fact Order Fulfilment\Route Fulfilment Rows.Inputs[Conditional Split Input]" name="Derived Column Output 6" startId="Package\Load Fact Order Fulfilment\Derive Cycle Times.Outputs[Derived Column Output]" />
+          <path refId="Package\Load Fact Order Fulfilment.Paths[New Order 7]" endId="Package\Load Fact Order Fulfilment\Insert New Order.Inputs[OLE DB Destination Input]" name="New Order 7" startId="Package\Load Fact Order Fulfilment\Route Fulfilment Rows.Outputs[New Order]" />
+          <path refId="Package\Load Fact Order Fulfilment.Paths[Milestone Update 8]" endId="Package\Load Fact Order Fulfilment\Stage Milestone Update.Inputs[OLE DB Destination Input]" name="Milestone Update 8" startId="Package\Load Fact Order Fulfilment\Route Fulfilment Rows.Outputs[Milestone Update]" />
+          <path refId="Package\Load Fact Order Fulfilment.Paths[Stalled Orders 9]" endId="Package\Load Fact Order Fulfilment\Stage Stalled Orders.Inputs[OLE DB Destination Input]" name="Stalled Orders 9" startId="Package\Load Fact Order Fulfilment\Route Fulfilment Rows.Outputs[Stalled Orders]" />
+          <path refId="Package\Load Fact Order Fulfilment.Paths[OLE DB Source Error Output 10]" endId="Package\Load Fact Order Fulfilment\Reject Source Errors.Inputs[OLE DB Destination Input]" name="OLE DB Source Error Output 10" startId="Package\Load Fact Order Fulfilment\stg OrderFulfilment.Outputs[OLE DB Source Error Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Update Fulfilment Milestones In Place"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{6308D41E-BEE8-DA28-702A-7A514FFD2995}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Update Fulfilment Milestones In Place"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="UPDATE f SET f.[Allocated At] = s.AllocatedAt, f.[Picked At] = s.PickedAt,     f.[Invoiced At] = s.InvoicedAt, f.[Cash Received At] = s.CashReceivedAt,     f.[Milestone Status Code] = s.MilestoneStatusCode,     f.[Order To Allocate Hours] = s.OrderToAllocateHours,     f.[Order To Invoice Days] = s.OrderToInvoiceDays,     f.[Invoice To Cash Days] = s.InvoiceToCashDays,     f.[Order To Cash Days] = s.OrderToCashDays,     f.[Uninvoiced Amount] = s.UninvoicedAmount,     f.[Uncollected Amount] = s.UncollectedAmount,     f.[Is Stalled] = s.IsStalled, f.[Lineage Key] = ? FROM [Fact].[Order Fulfilment] AS f INNER JOIN work.OrderLineEnriched AS s ON s.OrderNumber = f.[Order Number];"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Escalate Stalled Orders"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{47800842-48E3-F849-392C-3CD3A2997583}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Escalate Stalled Orders"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="EXEC Integration.LoadFactOrderFulfilment @EscalateStalled = 1, @StalledOrderDays = ?, @LineageKey = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::StalledOrderDays" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Set Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{C8D945C7-242C-76BA-65CC-8FF45D2E5210}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Set Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_SetWatermark @SourceSystemCode = ?, @ObjectName = N'Fact.Order Fulfilment', @WatermarkTo = ?, @PackageExecutionId = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::WatermarkTo" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Rejected Records"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F451B37A-2258-F381-3E92-62232E0A51C1}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Rejected Records"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @ObjectName = N'Fact.Order Fulfilment', @RejectReason = N'Routed by the package reject path', @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Fact.Order Fulfilment', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Batch Variables"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Get Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Get Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Clear Fulfilment Work Table" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Clear Fulfilment Work Table"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Load Fact Order Fulfilment" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Load Fact Order Fulfilment"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Update Fulfilment Milestones In Place" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Update Fulfilment Milestones In Place"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Escalate Stalled Orders" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Escalate Stalled Orders"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Set Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Set Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Log Rejected Records" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 8]"
+      DTS:CreationName=""
+      DTS:DTSID="{71A76C5F-1A20-5771-2776-7EF96FD96B90}"
+      DTS:From="Package\Log Rejected Records"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 8"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 9]"
+      DTS:CreationName=""
+      DTS:DTSID="{11D92538-705E-DF70-FE3B-5738B6CA45B1}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 9"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{AB25CCC1-2D33-B104-A735-C4158F9190D8}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

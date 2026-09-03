@@ -1,0 +1,1285 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{031BF4C4-62DF-0827-5197-D5DBC762B36F}"
+  DTS:Description="Incremental load of Fact.Payment (customer receipts). Payments are deduplicated on the bank reference because the cash-application file is re-sent whenever a bank rejects a batch, and unapplied cash is carried as its own measure."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="FACT_Load_Payment"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{83766647-3416-30F5-8ADC-4D9E5E5347B6}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{4FBB9D4E-7627-B843-A96D-327054FCF04A}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{8DF12C7C-F43A-639C-D30F-67DC705B9164}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{D2364D89-71E1-FDCA-56E1-A0B7715622C0}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{01E2AD00-457A-A472-F06D-D00AEE7174D1}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">SQLSTG</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{5A10ACE4-89C8-D2F2-6587-A8E2CA3E77C6}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{0E25F650-5DDF-260A-C080-2F5FB92212BD}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{990D57D9-A8FF-1D44-1E8E-DF5778AC4A15}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{B6558EC2-13B3-56F7-8256-3D248C693D9A}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{A4233905-457D-3B83-67D2-76B7728AEF38}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{089E5F6E-E7FA-CB88-E09B-E7BF2F66DF4A}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{3873BC3A-088B-4298-8181-9060769F1182}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{545DD67F-16EA-E2A2-092F-73923443CC0F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUnknownMember]"
+      DTS:CreationName=""
+      DTS:DTSID="{E2E4D181-8101-2809-AE75-114B35A5E566}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUnknownMember">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsHeldForRetry]"
+      DTS:CreationName=""
+      DTS:DTSID="{620EE0C5-8D8F-3BB6-82DB-952CF028B0C2}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsHeldForRetry">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BusinessDateFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{F841A19B-9E68-43DE-B7B9-2069FFEDDDD7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BusinessDateFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BusinessDateTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{4BE7AF75-5C34-6FC4-4D0B-A76FF74E6234}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BusinessDateTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::DuplicateReferences]"
+      DTS:CreationName=""
+      DTS:DTSID="{583A6B41-1567-969A-AC5E-61B344956F81}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="DuplicateReferences">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::UnappliedCashRows]"
+      DTS:CreationName=""
+      DTS:DTSID="{B77E67B7-203E-E942-721A-04A4F58E117A}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="UnappliedCashRows">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Batch Variables"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{647AE7A9-EE4E-0DAF-FBD6-04CEA9DB74E4}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Batch Variables"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::BusinessDateFrom] = (DT_WSTR, 10)(DT_DBDATE)@[User::WatermarkFrom]" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Get Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{AD8AAA26-E475-7A7A-5321-BEF0685AEC15}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Get Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_GetWatermark @SourceSystemCode = ?, @ObjectName = ?, @ReloadFullHistory = ?, @WatermarkFrom = ? OUTPUT, @WatermarkTo = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::ReloadFullHistory" SQLTask:ParameterDirection="Input" SQLTask:DataType="BYTE" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::WatermarkFrom" />
+        <SQLTask:ResultBinding SQLTask:ResultName="1" SQLTask:DtsVariableName="User::WatermarkTo" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Clear Payment Match Table"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{BF6E68DD-A74A-2E0D-32FC-15A20BB84293}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Clear Payment Match Table"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE [work].[PaymentMatched];"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Load Fact Payment"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{2473FB41-691B-CC9C-B779-C20ED04D4C43}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Load Fact Payment"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Load Fact Payment\stg Payment" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="stg Payment" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">1800</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT p.PaymentBusinessKey, p.BankReference, p.CustomerBusinessKey, p.PaymentDate, p.ValueDate, p.PaymentAmount, p.AllocatedAmount, p.TransactionCurrency, p.PaymentMethodCode, p.RemittanceAdviceNumber FROM stg.Payment AS p WHERE p.LastModifiedAt &gt; ? AND p.LastModifiedAt &lt;= ?;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Payment\stg Payment.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[PaymentBusinessKey]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[PaymentBusinessKey]" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[PaymentBusinessKey]" name="PaymentBusinessKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[BankReference]" dataType="wstr" length="40" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[BankReference]" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[BankReference]" name="BankReference" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[CustomerBusinessKey]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[CustomerBusinessKey]" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[CustomerBusinessKey]" name="CustomerBusinessKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[PaymentDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[PaymentDate]" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[PaymentDate]" name="PaymentDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[ValueDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[ValueDate]" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[ValueDate]" name="ValueDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[PaymentAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[PaymentAmount]" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[PaymentAmount]" name="PaymentAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[AllocatedAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[AllocatedAmount]" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[AllocatedAmount]" name="AllocatedAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[TransactionCurrency]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[TransactionCurrency]" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[TransactionCurrency]" name="TransactionCurrency" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[PaymentMethodCode]" dataType="wstr" length="8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[PaymentMethodCode]" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[PaymentMethodCode]" name="PaymentMethodCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[RemittanceAdviceNumber]" dataType="wstr" length="30" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[RemittanceAdviceNumber]" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].Columns[RemittanceAdviceNumber]" name="RemittanceAdviceNumber" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[PaymentBusinessKey]" dataType="i8" name="PaymentBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[BankReference]" dataType="wstr" length="40" name="BankReference" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[CustomerBusinessKey]" dataType="wstr" length="20" name="CustomerBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[PaymentDate]" dataType="dbTimeStamp" name="PaymentDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[ValueDate]" dataType="dbTimeStamp" name="ValueDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[PaymentAmount]" dataType="numeric" precision="18" scale="2" name="PaymentAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[AllocatedAmount]" dataType="numeric" precision="18" scale="2" name="AllocatedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[PaymentMethodCode]" dataType="wstr" length="8" name="PaymentMethodCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output].ExternalColumns[RemittanceAdviceNumber]" dataType="wstr" length="30" name="RemittanceAdviceNumber" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[PaymentBusinessKey]" dataType="i8" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[PaymentBusinessKey]" name="PaymentBusinessKey" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[BankReference]" dataType="wstr" length="40" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[BankReference]" name="BankReference" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[CustomerBusinessKey]" dataType="wstr" length="20" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[CustomerBusinessKey]" name="CustomerBusinessKey" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[PaymentDate]" dataType="dbTimeStamp" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[PaymentDate]" name="PaymentDate" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[ValueDate]" dataType="dbTimeStamp" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[ValueDate]" name="ValueDate" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[PaymentAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[PaymentAmount]" name="PaymentAmount" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[AllocatedAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[AllocatedAmount]" name="AllocatedAmount" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[TransactionCurrency]" dataType="wstr" length="3" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[TransactionCurrency]" name="TransactionCurrency" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[PaymentMethodCode]" dataType="wstr" length="8" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[PaymentMethodCode]" name="PaymentMethodCode" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[RemittanceAdviceNumber]" dataType="wstr" length="30" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[RemittanceAdviceNumber]" name="RemittanceAdviceNumber" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Payment\Sort By Bank Reference" componentClassID="Microsoft.Sort" description="Sort" name="Sort By Bank Reference" version="1">
+            <properties>
+              <property dataType="System.Boolean" description="Remove duplicate rows." name="EliminateDuplicates">true</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Load Fact Payment\Sort By Bank Reference.Inputs[Sort Input]" name="Sort Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Payment\Sort By Bank Reference.Inputs[Sort Input].Columns[BankReference]" cachedName="BankReference" name="BankReference">
+                    <properties>
+                      <property dataType="System.Int32" description="Sort key position." name="NewSortKeyPosition">1</property>
+                    </properties>
+                  </inputColumn>
+                  <inputColumn refId="Package\Load Fact Payment\Sort By Bank Reference.Inputs[Sort Input].Columns[PaymentDate]" cachedName="PaymentDate" name="PaymentDate">
+                    <properties>
+                      <property dataType="System.Int32" description="Sort key position." name="NewSortKeyPosition">2</property>
+                    </properties>
+                  </inputColumn>
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Payment\Sort By Bank Reference.Outputs[Sort Output]" name="Sort Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Payment\Lookup Customer Key" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Customer Key" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [Customer Key] AS CustomerKey, [WWI Customer ID] AS CustomerBusinessKey FROM Dimension.Customer WHERE [Is Current Row] = 1;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">0</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Payment\Lookup Customer Key.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Payment\Lookup Customer Key.Inputs[Lookup Input]" errorRowDisposition="RedirectRow" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Payment\Lookup Customer Key.Inputs[Lookup Input].Columns[CustomerBusinessKey]" cachedName="CustomerBusinessKey" name="CustomerBusinessKey" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Payment\Lookup Customer Key.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Fact Payment\Lookup Customer Key.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Payment\Lookup Customer Key.Outputs[Lookup Match Output].Columns[CustomerKey]" dataType="i4" lineageId="Package\Load Fact Payment\Lookup Customer Key.Outputs[Lookup Match Output].Columns[CustomerKey]" name="CustomerKey" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Fact Payment\Lookup Customer Key.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Fact Payment\Lookup Customer Key.Inputs[Lookup Input]" />
+              <output refId="Package\Load Fact Payment\Lookup Customer Key.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Fact Payment\Lookup Customer Key.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Payment\Lookup Payment Date Key" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Payment Date Key" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [Date] AS PaymentDate, [Date Key] AS PaymentDateKey FROM Dimension.Date;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">1</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Payment\Lookup Payment Date Key.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Payment\Lookup Payment Date Key.Inputs[Lookup Input]" errorRowDisposition="FailComponent" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Payment\Lookup Payment Date Key.Inputs[Lookup Input].Columns[PaymentDate]" cachedName="PaymentDate" name="PaymentDate" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Payment\Lookup Payment Date Key.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Fact Payment\Lookup Payment Date Key.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Payment\Lookup Payment Date Key.Outputs[Lookup Match Output].Columns[PaymentDateKey]" dataType="i4" lineageId="Package\Load Fact Payment\Lookup Payment Date Key.Outputs[Lookup Match Output].Columns[PaymentDateKey]" name="PaymentDateKey" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Fact Payment\Lookup Payment Date Key.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Fact Payment\Lookup Payment Date Key.Inputs[Lookup Input]" />
+              <output refId="Package\Load Fact Payment\Lookup Payment Date Key.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Fact Payment\Lookup Payment Date Key.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Payment\Lookup Value Date Key" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Value Date Key" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [Date] AS ValueDate, [Date Key] AS ValueDateKey FROM Dimension.Date;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">1</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Payment\Lookup Value Date Key.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Payment\Lookup Value Date Key.Inputs[Lookup Input]" errorRowDisposition="FailComponent" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Payment\Lookup Value Date Key.Inputs[Lookup Input].Columns[ValueDate]" cachedName="ValueDate" name="ValueDate" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Payment\Lookup Value Date Key.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Fact Payment\Lookup Value Date Key.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Payment\Lookup Value Date Key.Outputs[Lookup Match Output].Columns[ValueDateKey]" dataType="i4" lineageId="Package\Load Fact Payment\Lookup Value Date Key.Outputs[Lookup Match Output].Columns[ValueDateKey]" name="ValueDateKey" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Fact Payment\Lookup Value Date Key.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Fact Payment\Lookup Value Date Key.Inputs[Lookup Input]" />
+              <output refId="Package\Load Fact Payment\Lookup Value Date Key.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Fact Payment\Lookup Value Date Key.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Payment\Derive FX Rate Date" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive FX Rate Date" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Load Fact Payment\Derive FX Rate Date.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Payment\Derive FX Rate Date.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Load Fact Payment\Derive FX Rate Date.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Payment\Derive FX Rate Date.Outputs[Derived Column Output].Columns[FxRateDate]" dataType="dbTimeStamp" lineageId="Package\Load Fact Payment\Derive FX Rate Date.Outputs[Derived Column Output].Columns[FxRateDate]" name="FxRateDate">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_DBDATE)ValueDate</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_DBDATE)ValueDate</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Payment\Lookup Effective FX Rate" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Effective FX Rate" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT r.CurrencyCode AS TransactionCurrency, r.RateDate AS FxRateDate, r.RateToUsd AS FxRateToUsd, r.RateSourceCode AS FxRateSource FROM stg.CurrencyRate AS r WHERE r.RateTypeCode = N'CLOSE';</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">0</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Payment\Lookup Effective FX Rate.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Payment\Lookup Effective FX Rate.Inputs[Lookup Input]" errorRowDisposition="RedirectRow" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Payment\Lookup Effective FX Rate.Inputs[Lookup Input].Columns[TransactionCurrency]" cachedName="TransactionCurrency" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact Payment\Lookup Effective FX Rate.Inputs[Lookup Input].Columns[FxRateDate]" cachedName="FxRateDate" name="FxRateDate" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Payment\Lookup Effective FX Rate.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Fact Payment\Lookup Effective FX Rate.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Payment\Lookup Effective FX Rate.Outputs[Lookup Match Output].Columns[FxRateToUsd]" dataType="numeric" precision="18" scale="8" lineageId="Package\Load Fact Payment\Lookup Effective FX Rate.Outputs[Lookup Match Output].Columns[FxRateToUsd]" name="FxRateToUsd" />
+                  <outputColumn refId="Package\Load Fact Payment\Lookup Effective FX Rate.Outputs[Lookup Match Output].Columns[FxRateSource]" dataType="wstr" length="8" lineageId="Package\Load Fact Payment\Lookup Effective FX Rate.Outputs[Lookup Match Output].Columns[FxRateSource]" name="FxRateSource" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Fact Payment\Lookup Effective FX Rate.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Fact Payment\Lookup Effective FX Rate.Inputs[Lookup Input]" />
+              <output refId="Package\Load Fact Payment\Lookup Effective FX Rate.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Fact Payment\Lookup Effective FX Rate.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Payment\Derive Payment Measures" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Payment Measures" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Load Fact Payment\Derive Payment Measures.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Payment\Derive Payment Measures.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Load Fact Payment\Derive Payment Measures.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Payment\Derive Payment Measures.Outputs[Derived Column Output].Columns[CustomerKeyResolved]" dataType="i4" lineageId="Package\Load Fact Payment\Derive Payment Measures.Outputs[Derived Column Output].Columns[CustomerKeyResolved]" name="CustomerKeyResolved">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(CustomerKey) ? 0 : CustomerKey</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(CustomerKey) ? 0 : CustomerKey</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Payment\Derive Payment Measures.Outputs[Derived Column Output].Columns[UnappliedAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact Payment\Derive Payment Measures.Outputs[Derived Column Output].Columns[UnappliedAmount]" name="UnappliedAmount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">PaymentAmount - AllocatedAmount</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">PaymentAmount - AllocatedAmount</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Payment\Derive Payment Measures.Outputs[Derived Column Output].Columns[IsFullyApplied]" dataType="bool" lineageId="Package\Load Fact Payment\Derive Payment Measures.Outputs[Derived Column Output].Columns[IsFullyApplied]" name="IsFullyApplied">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">PaymentAmount == AllocatedAmount</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">PaymentAmount == AllocatedAmount</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Payment\Derive Payment Measures.Outputs[Derived Column Output].Columns[PaymentAmountReporting]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact Payment\Derive Payment Measures.Outputs[Derived Column Output].Columns[PaymentAmountReporting]" name="PaymentAmountReporting">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">PaymentAmount * (ISNULL(FxRateToUsd) ? (DT_NUMERIC,18,8)1 : FxRateToUsd)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">PaymentAmount * (ISNULL(FxRateToUsd) ? (DT_NUMERIC,18,8)1 : FxRateToUsd)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Payment\Derive Payment Measures.Outputs[Derived Column Output].Columns[SettlementLagDays]" dataType="i4" lineageId="Package\Load Fact Payment\Derive Payment Measures.Outputs[Derived Column Output].Columns[SettlementLagDays]" name="SettlementLagDays">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">DATEDIFF("Day", PaymentDate, ValueDate)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">DATEDIFF("Day", PaymentDate, ValueDate)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Payment\Derive Payment Measures.Outputs[Derived Column Output].Columns[PaymentChannelCode]" dataType="wstr" length="12" lineageId="Package\Load Fact Payment\Derive Payment Measures.Outputs[Derived Column Output].Columns[PaymentChannelCode]" name="PaymentChannelCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">PaymentMethodCode == "ACH" || PaymentMethodCode == "SEPA" ? "ELECTRONIC" : PaymentMethodCode == "CHQ" ? "PAPER" : PaymentMethodCode == "CARD" ? "CARD" : "OTHER"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">PaymentMethodCode == "ACH" || PaymentMethodCode == "SEPA" ? "ELECTRONIC" : PaymentMethodCode == "CHQ" ? "PAPER" : PaymentMethodCode == "CARD" ? "CARD" : "OTHER"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Payment\Derive Payment Measures.Outputs[Derived Column Output].Columns[LineageKey]" dataType="i8" lineageId="Package\Load Fact Payment\Derive Payment Measures.Outputs[Derived Column Output].Columns[LineageKey]" name="LineageKey">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Payment\Route Payments" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Route Payments" version="1">
+            <inputs>
+              <input refId="Package\Load Fact Payment\Route Payments.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Payment\Route Payments.Outputs[Unmatched Customer]" exclusionGroup="1" name="Unmatched Customer" synchronousInputId="Package\Load Fact Payment\Route Payments.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">ISNULL(CustomerKey)</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">ISNULL(CustomerKey)</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Load Fact Payment\Route Payments.Outputs[Unapplied Cash]" exclusionGroup="1" name="Unapplied Cash" synchronousInputId="Package\Load Fact Payment\Route Payments.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">AllocatedAmount == 0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">AllocatedAmount == 0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Load Fact Payment\Route Payments.Outputs[Partially Applied]" exclusionGroup="1" name="Partially Applied" synchronousInputId="Package\Load Fact Payment\Route Payments.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">AllocatedAmount &gt; 0 &amp;&amp; AllocatedAmount &lt; PaymentAmount</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">AllocatedAmount &gt; 0 &amp;&amp; AllocatedAmount &lt; PaymentAmount</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">2</property>
+                </properties>
+              </output>
+              <output refId="Package\Load Fact Payment\Route Payments.Outputs[Fully Applied]" exclusionGroup="1" isDefaultOut="true" name="Fully Applied" synchronousInputId="Package\Load Fact Payment\Route Payments.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Payment\Insert Fully Applied" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert Fully Applied" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Fact].[Payment]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Payment\Insert Fully Applied.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[PaymentBusinessKey]" cachedDataType="i8" cachedName="PaymentBusinessKey" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentBusinessKey]" name="PaymentBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[BankReference]" cachedDataType="wstr" cachedLength="40" cachedName="BankReference" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[BankReference]" name="BankReference" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[CustomerBusinessKey]" cachedDataType="wstr" cachedLength="20" cachedName="CustomerBusinessKey" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" name="CustomerBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[PaymentDate]" cachedDataType="dbTimeStamp" cachedName="PaymentDate" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDate]" name="PaymentDate" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[ValueDate]" cachedDataType="dbTimeStamp" cachedName="ValueDate" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[ValueDate]" name="ValueDate" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[PaymentAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PaymentAmount" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmount]" name="PaymentAmount" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[AllocatedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AllocatedAmount" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[AllocatedAmount]" name="AllocatedAmount" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[PaymentMethodCode]" cachedDataType="wstr" cachedLength="8" cachedName="PaymentMethodCode" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentMethodCode]" name="PaymentMethodCode" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[RemittanceAdviceNumber]" cachedDataType="wstr" cachedLength="30" cachedName="RemittanceAdviceNumber" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[RemittanceAdviceNumber]" name="RemittanceAdviceNumber" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[CustomerKey]" cachedDataType="i4" cachedName="CustomerKey" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" name="CustomerKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[PaymentDateKey]" cachedDataType="i4" cachedName="PaymentDateKey" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDateKey]" name="PaymentDateKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[ValueDateKey]" cachedDataType="i4" cachedName="ValueDateKey" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[ValueDateKey]" name="ValueDateKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[FxRateDate]" cachedDataType="dbTimeStamp" cachedName="FxRateDate" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[FxRateDate]" name="FxRateDate" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[FxRateToUsd]" cachedDataType="numeric" cachedPrecision="18" cachedScale="8" cachedName="FxRateToUsd" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[FxRateToUsd]" name="FxRateToUsd" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[FxRateSource]" cachedDataType="wstr" cachedLength="8" cachedName="FxRateSource" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[FxRateSource]" name="FxRateSource" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[CustomerKeyResolved]" cachedDataType="i4" cachedName="CustomerKeyResolved" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" name="CustomerKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[UnappliedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnappliedAmount" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[UnappliedAmount]" name="UnappliedAmount" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[IsFullyApplied]" cachedDataType="bool" cachedName="IsFullyApplied" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[IsFullyApplied]" name="IsFullyApplied" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[PaymentAmountReporting]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PaymentAmountReporting" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmountReporting]" name="PaymentAmountReporting" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[SettlementLagDays]" cachedDataType="i4" cachedName="SettlementLagDays" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[SettlementLagDays]" name="SettlementLagDays" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[PaymentChannelCode]" cachedDataType="wstr" cachedLength="12" cachedName="PaymentChannelCode" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentChannelCode]" name="PaymentChannelCode" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentBusinessKey]" dataType="i8" name="PaymentBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[BankReference]" dataType="wstr" length="40" name="BankReference" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" dataType="wstr" length="20" name="CustomerBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDate]" dataType="dbTimeStamp" name="PaymentDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[ValueDate]" dataType="dbTimeStamp" name="ValueDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmount]" dataType="numeric" precision="18" scale="2" name="PaymentAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[AllocatedAmount]" dataType="numeric" precision="18" scale="2" name="AllocatedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentMethodCode]" dataType="wstr" length="8" name="PaymentMethodCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[RemittanceAdviceNumber]" dataType="wstr" length="30" name="RemittanceAdviceNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDateKey]" dataType="i4" name="PaymentDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[ValueDateKey]" dataType="i4" name="ValueDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[FxRateDate]" dataType="dbTimeStamp" name="FxRateDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[FxRateToUsd]" dataType="numeric" precision="18" scale="8" name="FxRateToUsd" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[FxRateSource]" dataType="wstr" length="8" name="FxRateSource" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" dataType="i4" name="CustomerKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[UnappliedAmount]" dataType="numeric" precision="18" scale="2" name="UnappliedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[IsFullyApplied]" dataType="bool" name="IsFullyApplied" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmountReporting]" dataType="numeric" precision="18" scale="2" name="PaymentAmountReporting" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[SettlementLagDays]" dataType="i4" name="SettlementLagDays" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentChannelCode]" dataType="wstr" length="12" name="PaymentChannelCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Payment\Insert Fully Applied.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Payment\Insert Partially Applied" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert Partially Applied" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Fact].[Payment]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Payment\Insert Partially Applied.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[PaymentBusinessKey]" cachedDataType="i8" cachedName="PaymentBusinessKey" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentBusinessKey]" name="PaymentBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[BankReference]" cachedDataType="wstr" cachedLength="40" cachedName="BankReference" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[BankReference]" name="BankReference" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[CustomerBusinessKey]" cachedDataType="wstr" cachedLength="20" cachedName="CustomerBusinessKey" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" name="CustomerBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[PaymentDate]" cachedDataType="dbTimeStamp" cachedName="PaymentDate" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDate]" name="PaymentDate" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[ValueDate]" cachedDataType="dbTimeStamp" cachedName="ValueDate" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[ValueDate]" name="ValueDate" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[PaymentAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PaymentAmount" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmount]" name="PaymentAmount" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[AllocatedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AllocatedAmount" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[AllocatedAmount]" name="AllocatedAmount" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[PaymentMethodCode]" cachedDataType="wstr" cachedLength="8" cachedName="PaymentMethodCode" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentMethodCode]" name="PaymentMethodCode" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[RemittanceAdviceNumber]" cachedDataType="wstr" cachedLength="30" cachedName="RemittanceAdviceNumber" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[RemittanceAdviceNumber]" name="RemittanceAdviceNumber" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[CustomerKey]" cachedDataType="i4" cachedName="CustomerKey" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" name="CustomerKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[PaymentDateKey]" cachedDataType="i4" cachedName="PaymentDateKey" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDateKey]" name="PaymentDateKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[ValueDateKey]" cachedDataType="i4" cachedName="ValueDateKey" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[ValueDateKey]" name="ValueDateKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[FxRateDate]" cachedDataType="dbTimeStamp" cachedName="FxRateDate" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[FxRateDate]" name="FxRateDate" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[FxRateToUsd]" cachedDataType="numeric" cachedPrecision="18" cachedScale="8" cachedName="FxRateToUsd" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[FxRateToUsd]" name="FxRateToUsd" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[FxRateSource]" cachedDataType="wstr" cachedLength="8" cachedName="FxRateSource" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[FxRateSource]" name="FxRateSource" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[CustomerKeyResolved]" cachedDataType="i4" cachedName="CustomerKeyResolved" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" name="CustomerKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[UnappliedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnappliedAmount" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[UnappliedAmount]" name="UnappliedAmount" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[IsFullyApplied]" cachedDataType="bool" cachedName="IsFullyApplied" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[IsFullyApplied]" name="IsFullyApplied" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[PaymentAmountReporting]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PaymentAmountReporting" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmountReporting]" name="PaymentAmountReporting" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[SettlementLagDays]" cachedDataType="i4" cachedName="SettlementLagDays" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[SettlementLagDays]" name="SettlementLagDays" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[PaymentChannelCode]" cachedDataType="wstr" cachedLength="12" cachedName="PaymentChannelCode" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentChannelCode]" name="PaymentChannelCode" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentBusinessKey]" dataType="i8" name="PaymentBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[BankReference]" dataType="wstr" length="40" name="BankReference" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" dataType="wstr" length="20" name="CustomerBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDate]" dataType="dbTimeStamp" name="PaymentDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[ValueDate]" dataType="dbTimeStamp" name="ValueDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmount]" dataType="numeric" precision="18" scale="2" name="PaymentAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[AllocatedAmount]" dataType="numeric" precision="18" scale="2" name="AllocatedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentMethodCode]" dataType="wstr" length="8" name="PaymentMethodCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[RemittanceAdviceNumber]" dataType="wstr" length="30" name="RemittanceAdviceNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDateKey]" dataType="i4" name="PaymentDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[ValueDateKey]" dataType="i4" name="ValueDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[FxRateDate]" dataType="dbTimeStamp" name="FxRateDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[FxRateToUsd]" dataType="numeric" precision="18" scale="8" name="FxRateToUsd" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[FxRateSource]" dataType="wstr" length="8" name="FxRateSource" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" dataType="i4" name="CustomerKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[UnappliedAmount]" dataType="numeric" precision="18" scale="2" name="UnappliedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[IsFullyApplied]" dataType="bool" name="IsFullyApplied" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmountReporting]" dataType="numeric" precision="18" scale="2" name="PaymentAmountReporting" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[SettlementLagDays]" dataType="i4" name="SettlementLagDays" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[PaymentChannelCode]" dataType="wstr" length="12" name="PaymentChannelCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Payment\Insert Partially Applied.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Payment\Insert Unapplied Cash" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert Unapplied Cash" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Fact].[Payment]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Payment\Insert Unapplied Cash.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[PaymentBusinessKey]" cachedDataType="i8" cachedName="PaymentBusinessKey" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[PaymentBusinessKey]" name="PaymentBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[BankReference]" cachedDataType="wstr" cachedLength="40" cachedName="BankReference" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[BankReference]" name="BankReference" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[CustomerBusinessKey]" cachedDataType="wstr" cachedLength="20" cachedName="CustomerBusinessKey" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" name="CustomerBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[PaymentDate]" cachedDataType="dbTimeStamp" cachedName="PaymentDate" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDate]" name="PaymentDate" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[ValueDate]" cachedDataType="dbTimeStamp" cachedName="ValueDate" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[ValueDate]" name="ValueDate" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[PaymentAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PaymentAmount" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmount]" name="PaymentAmount" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[AllocatedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AllocatedAmount" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[AllocatedAmount]" name="AllocatedAmount" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[PaymentMethodCode]" cachedDataType="wstr" cachedLength="8" cachedName="PaymentMethodCode" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[PaymentMethodCode]" name="PaymentMethodCode" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[RemittanceAdviceNumber]" cachedDataType="wstr" cachedLength="30" cachedName="RemittanceAdviceNumber" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[RemittanceAdviceNumber]" name="RemittanceAdviceNumber" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[CustomerKey]" cachedDataType="i4" cachedName="CustomerKey" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" name="CustomerKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[PaymentDateKey]" cachedDataType="i4" cachedName="PaymentDateKey" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDateKey]" name="PaymentDateKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[ValueDateKey]" cachedDataType="i4" cachedName="ValueDateKey" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[ValueDateKey]" name="ValueDateKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[FxRateDate]" cachedDataType="dbTimeStamp" cachedName="FxRateDate" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[FxRateDate]" name="FxRateDate" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[FxRateToUsd]" cachedDataType="numeric" cachedPrecision="18" cachedScale="8" cachedName="FxRateToUsd" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[FxRateToUsd]" name="FxRateToUsd" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[FxRateSource]" cachedDataType="wstr" cachedLength="8" cachedName="FxRateSource" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[FxRateSource]" name="FxRateSource" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[CustomerKeyResolved]" cachedDataType="i4" cachedName="CustomerKeyResolved" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" name="CustomerKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[UnappliedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnappliedAmount" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[UnappliedAmount]" name="UnappliedAmount" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[IsFullyApplied]" cachedDataType="bool" cachedName="IsFullyApplied" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[IsFullyApplied]" name="IsFullyApplied" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[PaymentAmountReporting]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PaymentAmountReporting" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmountReporting]" name="PaymentAmountReporting" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[SettlementLagDays]" cachedDataType="i4" cachedName="SettlementLagDays" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[SettlementLagDays]" name="SettlementLagDays" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[PaymentChannelCode]" cachedDataType="wstr" cachedLength="12" cachedName="PaymentChannelCode" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[PaymentChannelCode]" name="PaymentChannelCode" />
+                  <inputColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[PaymentBusinessKey]" dataType="i8" name="PaymentBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[BankReference]" dataType="wstr" length="40" name="BankReference" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" dataType="wstr" length="20" name="CustomerBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDate]" dataType="dbTimeStamp" name="PaymentDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[ValueDate]" dataType="dbTimeStamp" name="ValueDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmount]" dataType="numeric" precision="18" scale="2" name="PaymentAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[AllocatedAmount]" dataType="numeric" precision="18" scale="2" name="AllocatedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[PaymentMethodCode]" dataType="wstr" length="8" name="PaymentMethodCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[RemittanceAdviceNumber]" dataType="wstr" length="30" name="RemittanceAdviceNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDateKey]" dataType="i4" name="PaymentDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[ValueDateKey]" dataType="i4" name="ValueDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[FxRateDate]" dataType="dbTimeStamp" name="FxRateDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[FxRateToUsd]" dataType="numeric" precision="18" scale="8" name="FxRateToUsd" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[FxRateSource]" dataType="wstr" length="8" name="FxRateSource" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" dataType="i4" name="CustomerKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[UnappliedAmount]" dataType="numeric" precision="18" scale="2" name="UnappliedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[IsFullyApplied]" dataType="bool" name="IsFullyApplied" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmountReporting]" dataType="numeric" precision="18" scale="2" name="PaymentAmountReporting" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[SettlementLagDays]" dataType="i4" name="SettlementLagDays" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[PaymentChannelCode]" dataType="wstr" length="12" name="PaymentChannelCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Payment\Insert Unapplied Cash.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Payment\Hold Unmatched Customer" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Hold Unmatched Customer" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[PaymentMatched]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Payment\Hold Unmatched Customer.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[PaymentBusinessKey]" cachedDataType="i8" cachedName="PaymentBusinessKey" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[PaymentBusinessKey]" name="PaymentBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[BankReference]" cachedDataType="wstr" cachedLength="40" cachedName="BankReference" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[BankReference]" name="BankReference" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[CustomerBusinessKey]" cachedDataType="wstr" cachedLength="20" cachedName="CustomerBusinessKey" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" name="CustomerBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[PaymentDate]" cachedDataType="dbTimeStamp" cachedName="PaymentDate" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDate]" name="PaymentDate" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[ValueDate]" cachedDataType="dbTimeStamp" cachedName="ValueDate" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[ValueDate]" name="ValueDate" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[PaymentAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PaymentAmount" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmount]" name="PaymentAmount" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[AllocatedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AllocatedAmount" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[AllocatedAmount]" name="AllocatedAmount" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[PaymentMethodCode]" cachedDataType="wstr" cachedLength="8" cachedName="PaymentMethodCode" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[PaymentMethodCode]" name="PaymentMethodCode" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[RemittanceAdviceNumber]" cachedDataType="wstr" cachedLength="30" cachedName="RemittanceAdviceNumber" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[RemittanceAdviceNumber]" name="RemittanceAdviceNumber" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[CustomerKey]" cachedDataType="i4" cachedName="CustomerKey" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" name="CustomerKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[PaymentDateKey]" cachedDataType="i4" cachedName="PaymentDateKey" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDateKey]" name="PaymentDateKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[ValueDateKey]" cachedDataType="i4" cachedName="ValueDateKey" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[ValueDateKey]" name="ValueDateKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[FxRateDate]" cachedDataType="dbTimeStamp" cachedName="FxRateDate" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[FxRateDate]" name="FxRateDate" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[FxRateToUsd]" cachedDataType="numeric" cachedPrecision="18" cachedScale="8" cachedName="FxRateToUsd" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[FxRateToUsd]" name="FxRateToUsd" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[FxRateSource]" cachedDataType="wstr" cachedLength="8" cachedName="FxRateSource" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[FxRateSource]" name="FxRateSource" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[CustomerKeyResolved]" cachedDataType="i4" cachedName="CustomerKeyResolved" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" name="CustomerKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[UnappliedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnappliedAmount" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[UnappliedAmount]" name="UnappliedAmount" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[IsFullyApplied]" cachedDataType="bool" cachedName="IsFullyApplied" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[IsFullyApplied]" name="IsFullyApplied" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[PaymentAmountReporting]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PaymentAmountReporting" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmountReporting]" name="PaymentAmountReporting" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[SettlementLagDays]" cachedDataType="i4" cachedName="SettlementLagDays" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[SettlementLagDays]" name="SettlementLagDays" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[PaymentChannelCode]" cachedDataType="wstr" cachedLength="12" cachedName="PaymentChannelCode" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[PaymentChannelCode]" name="PaymentChannelCode" />
+                  <inputColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[PaymentBusinessKey]" dataType="i8" name="PaymentBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[BankReference]" dataType="wstr" length="40" name="BankReference" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" dataType="wstr" length="20" name="CustomerBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDate]" dataType="dbTimeStamp" name="PaymentDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[ValueDate]" dataType="dbTimeStamp" name="ValueDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmount]" dataType="numeric" precision="18" scale="2" name="PaymentAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[AllocatedAmount]" dataType="numeric" precision="18" scale="2" name="AllocatedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[PaymentMethodCode]" dataType="wstr" length="8" name="PaymentMethodCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[RemittanceAdviceNumber]" dataType="wstr" length="30" name="RemittanceAdviceNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDateKey]" dataType="i4" name="PaymentDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[ValueDateKey]" dataType="i4" name="ValueDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[FxRateDate]" dataType="dbTimeStamp" name="FxRateDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[FxRateToUsd]" dataType="numeric" precision="18" scale="8" name="FxRateToUsd" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[FxRateSource]" dataType="wstr" length="8" name="FxRateSource" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" dataType="i4" name="CustomerKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[UnappliedAmount]" dataType="numeric" precision="18" scale="2" name="UnappliedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[IsFullyApplied]" dataType="bool" name="IsFullyApplied" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmountReporting]" dataType="numeric" precision="18" scale="2" name="PaymentAmountReporting" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[SettlementLagDays]" dataType="i4" name="SettlementLagDays" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[PaymentChannelCode]" dataType="wstr" length="12" name="PaymentChannelCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Payment\Hold Unmatched Customer.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Payment\Reject Source Errors" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Source Errors" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedPayment]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Payment\Reject Source Errors.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PaymentBusinessKey]" cachedDataType="i8" cachedName="PaymentBusinessKey" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PaymentBusinessKey]" name="PaymentBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[BankReference]" cachedDataType="wstr" cachedLength="40" cachedName="BankReference" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[BankReference]" name="BankReference" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CustomerBusinessKey]" cachedDataType="wstr" cachedLength="20" cachedName="CustomerBusinessKey" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" name="CustomerBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PaymentDate]" cachedDataType="dbTimeStamp" cachedName="PaymentDate" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDate]" name="PaymentDate" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[ValueDate]" cachedDataType="dbTimeStamp" cachedName="ValueDate" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ValueDate]" name="ValueDate" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PaymentAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PaymentAmount" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmount]" name="PaymentAmount" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[AllocatedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AllocatedAmount" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AllocatedAmount]" name="AllocatedAmount" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PaymentMethodCode]" cachedDataType="wstr" cachedLength="8" cachedName="PaymentMethodCode" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PaymentMethodCode]" name="PaymentMethodCode" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[RemittanceAdviceNumber]" cachedDataType="wstr" cachedLength="30" cachedName="RemittanceAdviceNumber" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RemittanceAdviceNumber]" name="RemittanceAdviceNumber" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CustomerKey]" cachedDataType="i4" cachedName="CustomerKey" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" name="CustomerKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PaymentDateKey]" cachedDataType="i4" cachedName="PaymentDateKey" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDateKey]" name="PaymentDateKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[ValueDateKey]" cachedDataType="i4" cachedName="ValueDateKey" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ValueDateKey]" name="ValueDateKey" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[FxRateDate]" cachedDataType="dbTimeStamp" cachedName="FxRateDate" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[FxRateDate]" name="FxRateDate" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[FxRateToUsd]" cachedDataType="numeric" cachedPrecision="18" cachedScale="8" cachedName="FxRateToUsd" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[FxRateToUsd]" name="FxRateToUsd" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[FxRateSource]" cachedDataType="wstr" cachedLength="8" cachedName="FxRateSource" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[FxRateSource]" name="FxRateSource" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CustomerKeyResolved]" cachedDataType="i4" cachedName="CustomerKeyResolved" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" name="CustomerKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[UnappliedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnappliedAmount" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[UnappliedAmount]" name="UnappliedAmount" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[IsFullyApplied]" cachedDataType="bool" cachedName="IsFullyApplied" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[IsFullyApplied]" name="IsFullyApplied" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PaymentAmountReporting]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PaymentAmountReporting" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmountReporting]" name="PaymentAmountReporting" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[SettlementLagDays]" cachedDataType="i4" cachedName="SettlementLagDays" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SettlementLagDays]" name="SettlementLagDays" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PaymentChannelCode]" cachedDataType="wstr" cachedLength="12" cachedName="PaymentChannelCode" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PaymentChannelCode]" name="PaymentChannelCode" />
+                  <inputColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PaymentBusinessKey]" dataType="i8" name="PaymentBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[BankReference]" dataType="wstr" length="40" name="BankReference" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" dataType="wstr" length="20" name="CustomerBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDate]" dataType="dbTimeStamp" name="PaymentDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ValueDate]" dataType="dbTimeStamp" name="ValueDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmount]" dataType="numeric" precision="18" scale="2" name="PaymentAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AllocatedAmount]" dataType="numeric" precision="18" scale="2" name="AllocatedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PaymentMethodCode]" dataType="wstr" length="8" name="PaymentMethodCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RemittanceAdviceNumber]" dataType="wstr" length="30" name="RemittanceAdviceNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PaymentDateKey]" dataType="i4" name="PaymentDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ValueDateKey]" dataType="i4" name="ValueDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[FxRateDate]" dataType="dbTimeStamp" name="FxRateDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[FxRateToUsd]" dataType="numeric" precision="18" scale="8" name="FxRateToUsd" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[FxRateSource]" dataType="wstr" length="8" name="FxRateSource" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" dataType="i4" name="CustomerKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[UnappliedAmount]" dataType="numeric" precision="18" scale="2" name="UnappliedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[IsFullyApplied]" dataType="bool" name="IsFullyApplied" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PaymentAmountReporting]" dataType="numeric" precision="18" scale="2" name="PaymentAmountReporting" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SettlementLagDays]" dataType="i4" name="SettlementLagDays" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PaymentChannelCode]" dataType="wstr" length="12" name="PaymentChannelCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Payment\Reject Source Errors.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Load Fact Payment.Paths[OLE DB Source Output]" endId="Package\Load Fact Payment\Sort By Bank Reference.Inputs[Sort Input]" name="OLE DB Source Output" startId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Load Fact Payment.Paths[Sort Output 1]" endId="Package\Load Fact Payment\Lookup Customer Key.Inputs[Lookup Input]" name="Sort Output 1" startId="Package\Load Fact Payment\Sort By Bank Reference.Outputs[Sort Output]" />
+          <path refId="Package\Load Fact Payment.Paths[Lookup Match Output 2]" endId="Package\Load Fact Payment\Lookup Payment Date Key.Inputs[Lookup Input]" name="Lookup Match Output 2" startId="Package\Load Fact Payment\Lookup Customer Key.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Fact Payment.Paths[Lookup Match Output 3]" endId="Package\Load Fact Payment\Lookup Value Date Key.Inputs[Lookup Input]" name="Lookup Match Output 3" startId="Package\Load Fact Payment\Lookup Payment Date Key.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Fact Payment.Paths[Lookup Match Output 4]" endId="Package\Load Fact Payment\Derive FX Rate Date.Inputs[Derived Column Input]" name="Lookup Match Output 4" startId="Package\Load Fact Payment\Lookup Value Date Key.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Fact Payment.Paths[Derived Column Output 5]" endId="Package\Load Fact Payment\Lookup Effective FX Rate.Inputs[Lookup Input]" name="Derived Column Output 5" startId="Package\Load Fact Payment\Derive FX Rate Date.Outputs[Derived Column Output]" />
+          <path refId="Package\Load Fact Payment.Paths[Lookup Match Output 6]" endId="Package\Load Fact Payment\Derive Payment Measures.Inputs[Derived Column Input]" name="Lookup Match Output 6" startId="Package\Load Fact Payment\Lookup Effective FX Rate.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Fact Payment.Paths[Derived Column Output 7]" endId="Package\Load Fact Payment\Route Payments.Inputs[Conditional Split Input]" name="Derived Column Output 7" startId="Package\Load Fact Payment\Derive Payment Measures.Outputs[Derived Column Output]" />
+          <path refId="Package\Load Fact Payment.Paths[Fully Applied 8]" endId="Package\Load Fact Payment\Insert Fully Applied.Inputs[OLE DB Destination Input]" name="Fully Applied 8" startId="Package\Load Fact Payment\Route Payments.Outputs[Fully Applied]" />
+          <path refId="Package\Load Fact Payment.Paths[Partially Applied 9]" endId="Package\Load Fact Payment\Insert Partially Applied.Inputs[OLE DB Destination Input]" name="Partially Applied 9" startId="Package\Load Fact Payment\Route Payments.Outputs[Partially Applied]" />
+          <path refId="Package\Load Fact Payment.Paths[Unapplied Cash 10]" endId="Package\Load Fact Payment\Insert Unapplied Cash.Inputs[OLE DB Destination Input]" name="Unapplied Cash 10" startId="Package\Load Fact Payment\Route Payments.Outputs[Unapplied Cash]" />
+          <path refId="Package\Load Fact Payment.Paths[Unmatched Customer 11]" endId="Package\Load Fact Payment\Hold Unmatched Customer.Inputs[OLE DB Destination Input]" name="Unmatched Customer 11" startId="Package\Load Fact Payment\Route Payments.Outputs[Unmatched Customer]" />
+          <path refId="Package\Load Fact Payment.Paths[OLE DB Source Error Output 12]" endId="Package\Load Fact Payment\Reject Source Errors.Inputs[OLE DB Destination Input]" name="OLE DB Source Error Output 12" startId="Package\Load Fact Payment\stg Payment.Outputs[OLE DB Source Error Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Remove Reprocessed Bank Batches"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{6FAB3601-5C5B-169F-BF39-E8E9CC9080C0}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Remove Reprocessed Bank Batches"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="WITH ranked AS (SELECT [Payment Key],   ROW_NUMBER() OVER (PARTITION BY [Bank Reference], [Payment Date]                      ORDER BY [Lineage Key] DESC) AS rn   FROM [Fact].[Payment] WHERE [Bank Reference] IS NOT NULL) DELETE FROM [Fact].[Payment] WHERE [Payment Key] IN (SELECT [Payment Key] FROM ranked WHERE rn &gt; 1);"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Match Held Payments By Remittance"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{17F5466F-E04A-3C1C-29E9-6EEBA6E3D2E6}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Match Held Payments By Remittance"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="EXEC Integration.LoadFactPayment @MatchHeldRows = 1, @LineageKey = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Set Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{C8D945C7-242C-76BA-65CC-8FF45D2E5210}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Set Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_SetWatermark @SourceSystemCode = ?, @ObjectName = N'Fact.Payment', @WatermarkTo = ?, @PackageExecutionId = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::WatermarkTo" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Rejected Records"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F451B37A-2258-F381-3E92-62232E0A51C1}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Rejected Records"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @ObjectName = N'Fact.Payment', @RejectReason = N'Routed by the package reject path', @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Fact.Payment', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Batch Variables"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Get Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Get Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Clear Payment Match Table" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Clear Payment Match Table"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Load Fact Payment" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Load Fact Payment"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Remove Reprocessed Bank Batches" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Remove Reprocessed Bank Batches"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Match Held Payments By Remittance" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Match Held Payments By Remittance"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Set Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Set Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Log Rejected Records" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 8]"
+      DTS:CreationName=""
+      DTS:DTSID="{71A76C5F-1A20-5771-2776-7EF96FD96B90}"
+      DTS:From="Package\Log Rejected Records"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 8"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 9]"
+      DTS:CreationName=""
+      DTS:DTSID="{11D92538-705E-DF70-FE3B-5738B6CA45B1}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 9"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{06B7E999-9C86-C61B-D794-736E3D69D8BC}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

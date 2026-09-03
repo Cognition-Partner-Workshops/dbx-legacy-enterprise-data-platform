@@ -1,0 +1,1428 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{F5DA9593-35CE-B0A3-FFCC-CED87A562C9D}"
+  DTS:Description="Incremental load of Fact.Order at order-line grain. Orders for customers that have not reached the warehouse yet are held in work.OrderLineEnriched and retried on the next run rather than being pinned to the unknown member."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="FACT_Load_Order"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{54F4E8E5-B19C-49A7-F121-2E502A073B6C}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{31C77B97-83E5-62C7-D1FA-D4EF2881F103}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{18169D5A-A3A3-245F-2E7E-EA1CF0CFEFAB}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{003097CA-CD74-C794-00D4-2D7BED4BD8E0}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{74F2C0F7-9BAC-5814-DF96-E0D89362BC30}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">SQLSTG</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::HoldRetryLimit]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Runs an order line may be held before it is loaded against the unknown member."
+      DTS:DTSID="{0DFE3565-284B-7AA9-74BE-BDA2602123FA}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="HoldRetryLimit"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">3</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{B8623DDB-27C9-5C27-47B6-BE49838804CB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{0A8A12B4-F129-D0EE-CB23-C53A6BD8DCE0}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{EA9CF046-A0AD-4533-E2E4-E1CC7A76171F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{F98757E6-EC51-7862-CFB1-80BC05360F9C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{ADCE6228-708B-26BE-ED68-3C6C2BE55DED}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{62077B5A-E171-D655-9559-C0F0D81CACC1}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{4F1657E8-10B4-548F-A55B-51264780E672}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{326D88F6-6CBC-D156-8274-F3150AA9E9B1}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUnknownMember]"
+      DTS:CreationName=""
+      DTS:DTSID="{6ACC57D2-2C3D-674E-939C-9CA7B13EFAEC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUnknownMember">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsHeldForRetry]"
+      DTS:CreationName=""
+      DTS:DTSID="{02C1AF66-3F6C-46C0-4035-0B4F9C5DAE49}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsHeldForRetry">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BusinessDateFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{F7CB0F1B-1539-5F29-54C9-5B8C031A6547}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BusinessDateFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BusinessDateTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{370E4BCD-605A-C6E4-8E6D-9C3AF1A88F89}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BusinessDateTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BackorderedLines]"
+      DTS:CreationName=""
+      DTS:DTSID="{AC8949BA-3B10-ACFB-5ED6-D07A107E119E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BackorderedLines">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Batch Variables"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{647AE7A9-EE4E-0DAF-FBD6-04CEA9DB74E4}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Batch Variables"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::BusinessDateFrom] = (DT_WSTR, 10)(DT_DBDATE)@[User::WatermarkFrom]" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Get Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{AD8AAA26-E475-7A7A-5321-BEF0685AEC15}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Get Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_GetWatermark @SourceSystemCode = ?, @ObjectName = ?, @ReloadFullHistory = ?, @WatermarkFrom = ? OUTPUT, @WatermarkTo = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::ReloadFullHistory" SQLTask:ParameterDirection="Input" SQLTask:DataType="BYTE" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::WatermarkFrom" />
+        <SQLTask:ResultBinding SQLTask:ResultName="1" SQLTask:DtsVariableName="User::WatermarkTo" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Load Fact Order"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{CC330582-BAD2-D6CD-4BAE-2D6571590FD4}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Load Fact Order"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Load Fact Order\stg Order" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="stg Order" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">3600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT o.OrderLineBusinessKey, o.OrderNumber, o.OrderLineNumber, o.CustomerBusinessKey, o.StockItemBusinessKey, o.SalespersonBusinessKey, o.OrderDate, o.ExpectedDeliveryDate, o.QuantityOrdered, o.QuantityPicked, o.UnitPrice, o.DiscountPercent, o.OrderStatusCode, o.BackorderNumber, o.TransactionCurrency FROM stg.[Order] AS o WHERE o.LastModifiedAt &gt; ? AND o.LastModifiedAt &lt;= ? ORDER BY o.OrderDate, o.OrderNumber, o.OrderLineNumber;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order\stg Order.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[OrderLineBusinessKey]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[OrderLineBusinessKey]" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[OrderLineBusinessKey]" name="OrderLineBusinessKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[OrderNumber]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[OrderNumber]" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[OrderNumber]" name="OrderNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[OrderLineNumber]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[OrderLineNumber]" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[OrderLineNumber]" name="OrderLineNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[CustomerBusinessKey]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[CustomerBusinessKey]" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[CustomerBusinessKey]" name="CustomerBusinessKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[StockItemBusinessKey]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[StockItemBusinessKey]" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[StockItemBusinessKey]" name="StockItemBusinessKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[SalespersonBusinessKey]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[SalespersonBusinessKey]" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[SalespersonBusinessKey]" name="SalespersonBusinessKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[OrderDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[OrderDate]" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[OrderDate]" name="OrderDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[ExpectedDeliveryDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[ExpectedDeliveryDate]" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[ExpectedDeliveryDate]" name="ExpectedDeliveryDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[QuantityOrdered]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[QuantityOrdered]" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[QuantityOrdered]" name="QuantityOrdered" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[QuantityPicked]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[QuantityPicked]" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[QuantityPicked]" name="QuantityPicked" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[UnitPrice]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[UnitPrice]" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[UnitPrice]" name="UnitPrice" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[DiscountPercent]" dataType="numeric" precision="5" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[DiscountPercent]" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[DiscountPercent]" name="DiscountPercent" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[OrderStatusCode]" dataType="wstr" length="8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[OrderStatusCode]" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[OrderStatusCode]" name="OrderStatusCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[BackorderNumber]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[BackorderNumber]" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[BackorderNumber]" name="BackorderNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[TransactionCurrency]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[TransactionCurrency]" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].Columns[TransactionCurrency]" name="TransactionCurrency" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[OrderLineBusinessKey]" dataType="i8" name="OrderLineBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[OrderNumber]" dataType="wstr" length="20" name="OrderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[OrderLineNumber]" dataType="i4" name="OrderLineNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[CustomerBusinessKey]" dataType="wstr" length="20" name="CustomerBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[StockItemBusinessKey]" dataType="i8" name="StockItemBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[SalespersonBusinessKey]" dataType="i4" name="SalespersonBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[OrderDate]" dataType="dbTimeStamp" name="OrderDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[ExpectedDeliveryDate]" dataType="dbTimeStamp" name="ExpectedDeliveryDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[QuantityOrdered]" dataType="i4" name="QuantityOrdered" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[QuantityPicked]" dataType="i4" name="QuantityPicked" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[UnitPrice]" dataType="numeric" precision="18" scale="2" name="UnitPrice" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[DiscountPercent]" dataType="numeric" precision="5" scale="2" name="DiscountPercent" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[OrderStatusCode]" dataType="wstr" length="8" name="OrderStatusCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[BackorderNumber]" dataType="wstr" length="20" name="BackorderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[OrderLineBusinessKey]" dataType="i8" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[OrderLineBusinessKey]" name="OrderLineBusinessKey" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[OrderNumber]" dataType="wstr" length="20" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[OrderNumber]" name="OrderNumber" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[OrderLineNumber]" dataType="i4" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[OrderLineNumber]" name="OrderLineNumber" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[CustomerBusinessKey]" dataType="wstr" length="20" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[CustomerBusinessKey]" name="CustomerBusinessKey" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[StockItemBusinessKey]" dataType="i8" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[StockItemBusinessKey]" name="StockItemBusinessKey" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[SalespersonBusinessKey]" dataType="i4" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[SalespersonBusinessKey]" name="SalespersonBusinessKey" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[OrderDate]" dataType="dbTimeStamp" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[OrderDate]" name="OrderDate" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[ExpectedDeliveryDate]" dataType="dbTimeStamp" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[ExpectedDeliveryDate]" name="ExpectedDeliveryDate" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[QuantityOrdered]" dataType="i4" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[QuantityOrdered]" name="QuantityOrdered" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[QuantityPicked]" dataType="i4" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[QuantityPicked]" name="QuantityPicked" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[UnitPrice]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[UnitPrice]" name="UnitPrice" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[DiscountPercent]" dataType="numeric" precision="5" scale="2" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[DiscountPercent]" name="DiscountPercent" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[OrderStatusCode]" dataType="wstr" length="8" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[OrderStatusCode]" name="OrderStatusCode" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[BackorderNumber]" dataType="wstr" length="20" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[BackorderNumber]" name="BackorderNumber" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[TransactionCurrency]" dataType="wstr" length="3" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[TransactionCurrency]" name="TransactionCurrency" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order\Lookup Customer Key" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Customer Key" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [Customer Key] AS CustomerKey, [WWI Customer ID] AS CustomerBusinessKey FROM Dimension.Customer WHERE [Is Current Row] = 1;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">0</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order\Lookup Customer Key.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order\Lookup Customer Key.Inputs[Lookup Input]" errorRowDisposition="RedirectRow" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order\Lookup Customer Key.Inputs[Lookup Input].Columns[CustomerBusinessKey]" cachedName="CustomerBusinessKey" name="CustomerBusinessKey" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order\Lookup Customer Key.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Fact Order\Lookup Customer Key.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Order\Lookup Customer Key.Outputs[Lookup Match Output].Columns[CustomerKey]" dataType="i4" lineageId="Package\Load Fact Order\Lookup Customer Key.Outputs[Lookup Match Output].Columns[CustomerKey]" name="CustomerKey" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Fact Order\Lookup Customer Key.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Fact Order\Lookup Customer Key.Inputs[Lookup Input]" />
+              <output refId="Package\Load Fact Order\Lookup Customer Key.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Fact Order\Lookup Customer Key.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order\Lookup Stock Item Key" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Stock Item Key" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [Stock Item Key] AS StockItemKey, [WWI Stock Item ID] AS StockItemBusinessKey FROM [Dimension].[Stock Item] WHERE [Is Current Row] = 1;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">0</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order\Lookup Stock Item Key.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order\Lookup Stock Item Key.Inputs[Lookup Input]" errorRowDisposition="RedirectRow" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order\Lookup Stock Item Key.Inputs[Lookup Input].Columns[StockItemBusinessKey]" cachedName="StockItemBusinessKey" name="StockItemBusinessKey" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order\Lookup Stock Item Key.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Fact Order\Lookup Stock Item Key.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Order\Lookup Stock Item Key.Outputs[Lookup Match Output].Columns[StockItemKey]" dataType="i4" lineageId="Package\Load Fact Order\Lookup Stock Item Key.Outputs[Lookup Match Output].Columns[StockItemKey]" name="StockItemKey" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Fact Order\Lookup Stock Item Key.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Fact Order\Lookup Stock Item Key.Inputs[Lookup Input]" />
+              <output refId="Package\Load Fact Order\Lookup Stock Item Key.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Fact Order\Lookup Stock Item Key.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order\Lookup Order Date Key" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Order Date Key" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [Date] AS OrderDate, [Date Key] AS OrderDateKey FROM Dimension.Date;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">1</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order\Lookup Order Date Key.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order\Lookup Order Date Key.Inputs[Lookup Input]" errorRowDisposition="FailComponent" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order\Lookup Order Date Key.Inputs[Lookup Input].Columns[OrderDate]" cachedName="OrderDate" name="OrderDate" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order\Lookup Order Date Key.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Fact Order\Lookup Order Date Key.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Order\Lookup Order Date Key.Outputs[Lookup Match Output].Columns[OrderDateKey]" dataType="i4" lineageId="Package\Load Fact Order\Lookup Order Date Key.Outputs[Lookup Match Output].Columns[OrderDateKey]" name="OrderDateKey" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Fact Order\Lookup Order Date Key.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Fact Order\Lookup Order Date Key.Inputs[Lookup Input]" />
+              <output refId="Package\Load Fact Order\Lookup Order Date Key.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Fact Order\Lookup Order Date Key.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order\Lookup Expected Delivery Date Key" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Expected Delivery Date Key" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [Date] AS ExpectedDeliveryDate, [Date Key] AS ExpectedDeliveryDateKey FROM Dimension.Date;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">1</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order\Lookup Expected Delivery Date Key.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order\Lookup Expected Delivery Date Key.Inputs[Lookup Input]" errorRowDisposition="FailComponent" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order\Lookup Expected Delivery Date Key.Inputs[Lookup Input].Columns[ExpectedDeliveryDate]" cachedName="ExpectedDeliveryDate" name="ExpectedDeliveryDate" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order\Lookup Expected Delivery Date Key.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Fact Order\Lookup Expected Delivery Date Key.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Order\Lookup Expected Delivery Date Key.Outputs[Lookup Match Output].Columns[ExpectedDeliveryDateKey]" dataType="i4" lineageId="Package\Load Fact Order\Lookup Expected Delivery Date Key.Outputs[Lookup Match Output].Columns[ExpectedDeliveryDateKey]" name="ExpectedDeliveryDateKey" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Fact Order\Lookup Expected Delivery Date Key.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Fact Order\Lookup Expected Delivery Date Key.Inputs[Lookup Input]" />
+              <output refId="Package\Load Fact Order\Lookup Expected Delivery Date Key.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Fact Order\Lookup Expected Delivery Date Key.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order\Derive Order Measures" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Order Measures" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Load Fact Order\Derive Order Measures.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Load Fact Order\Derive Order Measures.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[CustomerKeyResolved]" dataType="i4" lineageId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[CustomerKeyResolved]" name="CustomerKeyResolved">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(CustomerKey) ? 0 : CustomerKey</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(CustomerKey) ? 0 : CustomerKey</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[StockItemKeyResolved]" dataType="i4" lineageId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[StockItemKeyResolved]" name="StockItemKeyResolved">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(StockItemKey) ? 0 : StockItemKey</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(StockItemKey) ? 0 : StockItemKey</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[OrderedGrossAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[OrderedGrossAmount]" name="OrderedGrossAmount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_NUMERIC,18,2)QuantityOrdered * UnitPrice</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_NUMERIC,18,2)QuantityOrdered * UnitPrice</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[DiscountAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[DiscountAmount]" name="DiscountAmount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">((DT_NUMERIC,18,2)QuantityOrdered * UnitPrice) * (DiscountPercent / 100)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">((DT_NUMERIC,18,2)QuantityOrdered * UnitPrice) * (DiscountPercent / 100)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[OrderedNetAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[OrderedNetAmount]" name="OrderedNetAmount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">((DT_NUMERIC,18,2)QuantityOrdered * UnitPrice) - (((DT_NUMERIC,18,2)QuantityOrdered * UnitPrice) * (DiscountPercent / 100))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">((DT_NUMERIC,18,2)QuantityOrdered * UnitPrice) - (((DT_NUMERIC,18,2)QuantityOrdered * UnitPrice) * (DiscountPercent / 100))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[QuantityOutstanding]" dataType="i4" lineageId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[QuantityOutstanding]" name="QuantityOutstanding">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">QuantityOrdered - QuantityPicked</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">QuantityOrdered - QuantityPicked</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[IsBackordered]" dataType="bool" lineageId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[IsBackordered]" name="IsBackordered">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">QuantityPicked &lt; QuantityOrdered &amp;&amp; !ISNULL(BackorderNumber) &amp;&amp; LEN(TRIM(BackorderNumber)) &gt; 0</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">QuantityPicked &lt; QuantityOrdered &amp;&amp; !ISNULL(BackorderNumber) &amp;&amp; LEN(TRIM(BackorderNumber)) &gt; 0</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[FillRatePercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[FillRatePercent]" name="FillRatePercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">QuantityOrdered == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)QuantityPicked / (DT_NUMERIC,9,4)QuantityOrdered) * 100</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">QuantityOrdered == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)QuantityPicked / (DT_NUMERIC,9,4)QuantityOrdered) * 100</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[OrderNumberDegenerate]" dataType="wstr" length="20" lineageId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[OrderNumberDegenerate]" name="OrderNumberDegenerate">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">OrderNumber</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">OrderNumber</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[LineageKey]" dataType="i8" lineageId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output].Columns[LineageKey]" name="LineageKey">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order\Route Order Lines" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Route Order Lines" version="1">
+            <inputs>
+              <input refId="Package\Load Fact Order\Route Order Lines.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order\Route Order Lines.Outputs[Early Arriving Customer]" exclusionGroup="1" name="Early Arriving Customer" synchronousInputId="Package\Load Fact Order\Route Order Lines.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">ISNULL(CustomerKey)</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">ISNULL(CustomerKey)</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Load Fact Order\Route Order Lines.Outputs[Early Arriving Stock Item]" exclusionGroup="1" name="Early Arriving Stock Item" synchronousInputId="Package\Load Fact Order\Route Order Lines.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">ISNULL(StockItemKey)</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">ISNULL(StockItemKey)</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Load Fact Order\Route Order Lines.Outputs[Cancelled Lines]" exclusionGroup="1" name="Cancelled Lines" synchronousInputId="Package\Load Fact Order\Route Order Lines.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">OrderStatusCode == "CANC"</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">OrderStatusCode == "CANC"</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">2</property>
+                </properties>
+              </output>
+              <output refId="Package\Load Fact Order\Route Order Lines.Outputs[Backordered Lines]" exclusionGroup="1" name="Backordered Lines" synchronousInputId="Package\Load Fact Order\Route Order Lines.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">IsBackordered</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">IsBackordered</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">3</property>
+                </properties>
+              </output>
+              <output refId="Package\Load Fact Order\Route Order Lines.Outputs[Complete Lines]" exclusionGroup="1" isDefaultOut="true" name="Complete Lines" synchronousInputId="Package\Load Fact Order\Route Order Lines.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order\Insert Complete Lines" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert Complete Lines" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Fact].[Order]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order\Insert Complete Lines.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[OrderLineBusinessKey]" cachedDataType="i8" cachedName="OrderLineBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineBusinessKey]" name="OrderLineBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[OrderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumber" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" name="OrderNumber" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[OrderLineNumber]" cachedDataType="i4" cachedName="OrderLineNumber" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineNumber]" name="OrderLineNumber" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[CustomerBusinessKey]" cachedDataType="wstr" cachedLength="20" cachedName="CustomerBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" name="CustomerBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[StockItemBusinessKey]" cachedDataType="i8" cachedName="StockItemBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" name="StockItemBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[SalespersonBusinessKey]" cachedDataType="i4" cachedName="SalespersonBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[SalespersonBusinessKey]" name="SalespersonBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[OrderDate]" cachedDataType="dbTimeStamp" cachedName="OrderDate" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderDate]" name="OrderDate" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[ExpectedDeliveryDate]" cachedDataType="dbTimeStamp" cachedName="ExpectedDeliveryDate" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDate]" name="ExpectedDeliveryDate" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[QuantityOrdered]" cachedDataType="i4" cachedName="QuantityOrdered" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOrdered]" name="QuantityOrdered" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[QuantityPicked]" cachedDataType="i4" cachedName="QuantityPicked" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[QuantityPicked]" name="QuantityPicked" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[UnitPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitPrice" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[UnitPrice]" name="UnitPrice" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[DiscountPercent]" cachedDataType="numeric" cachedPrecision="5" cachedScale="2" cachedName="DiscountPercent" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" name="DiscountPercent" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[OrderStatusCode]" cachedDataType="wstr" cachedLength="8" cachedName="OrderStatusCode" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderStatusCode]" name="OrderStatusCode" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[BackorderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="BackorderNumber" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[BackorderNumber]" name="BackorderNumber" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[CustomerKey]" cachedDataType="i4" cachedName="CustomerKey" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" name="CustomerKey" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[StockItemKey]" cachedDataType="i4" cachedName="StockItemKey" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" name="StockItemKey" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[OrderDateKey]" cachedDataType="i4" cachedName="OrderDateKey" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderDateKey]" name="OrderDateKey" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[ExpectedDeliveryDateKey]" cachedDataType="i4" cachedName="ExpectedDeliveryDateKey" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDateKey]" name="ExpectedDeliveryDateKey" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[CustomerKeyResolved]" cachedDataType="i4" cachedName="CustomerKeyResolved" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" name="CustomerKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[StockItemKeyResolved]" cachedDataType="i4" cachedName="StockItemKeyResolved" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" name="StockItemKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[OrderedGrossAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrderedGrossAmount" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderedGrossAmount]" name="OrderedGrossAmount" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[DiscountAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DiscountAmount" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" name="DiscountAmount" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[OrderedNetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrderedNetAmount" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderedNetAmount]" name="OrderedNetAmount" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[QuantityOutstanding]" cachedDataType="i4" cachedName="QuantityOutstanding" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOutstanding]" name="QuantityOutstanding" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[IsBackordered]" cachedDataType="bool" cachedName="IsBackordered" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[IsBackordered]" name="IsBackordered" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[FillRatePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="FillRatePercent" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[FillRatePercent]" name="FillRatePercent" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[OrderNumberDegenerate]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumberDegenerate" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" name="OrderNumberDegenerate" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineBusinessKey]" dataType="i8" name="OrderLineBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" dataType="wstr" length="20" name="OrderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineNumber]" dataType="i4" name="OrderLineNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" dataType="wstr" length="20" name="CustomerBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" dataType="i8" name="StockItemBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[SalespersonBusinessKey]" dataType="i4" name="SalespersonBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderDate]" dataType="dbTimeStamp" name="OrderDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDate]" dataType="dbTimeStamp" name="ExpectedDeliveryDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOrdered]" dataType="i4" name="QuantityOrdered" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[QuantityPicked]" dataType="i4" name="QuantityPicked" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[UnitPrice]" dataType="numeric" precision="18" scale="2" name="UnitPrice" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" dataType="numeric" precision="5" scale="2" name="DiscountPercent" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderStatusCode]" dataType="wstr" length="8" name="OrderStatusCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[BackorderNumber]" dataType="wstr" length="20" name="BackorderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" dataType="i4" name="StockItemKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderDateKey]" dataType="i4" name="OrderDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDateKey]" dataType="i4" name="ExpectedDeliveryDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" dataType="i4" name="CustomerKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" dataType="i4" name="StockItemKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderedGrossAmount]" dataType="numeric" precision="18" scale="2" name="OrderedGrossAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" dataType="numeric" precision="18" scale="2" name="DiscountAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderedNetAmount]" dataType="numeric" precision="18" scale="2" name="OrderedNetAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOutstanding]" dataType="i4" name="QuantityOutstanding" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[IsBackordered]" dataType="bool" name="IsBackordered" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[FillRatePercent]" dataType="numeric" precision="9" scale="4" name="FillRatePercent" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" dataType="wstr" length="20" name="OrderNumberDegenerate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order\Insert Complete Lines.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order\Insert Backordered Lines" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert Backordered Lines" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Fact].[Order]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order\Insert Backordered Lines.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[OrderLineBusinessKey]" cachedDataType="i8" cachedName="OrderLineBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineBusinessKey]" name="OrderLineBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[OrderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumber" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" name="OrderNumber" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[OrderLineNumber]" cachedDataType="i4" cachedName="OrderLineNumber" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineNumber]" name="OrderLineNumber" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[CustomerBusinessKey]" cachedDataType="wstr" cachedLength="20" cachedName="CustomerBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" name="CustomerBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[StockItemBusinessKey]" cachedDataType="i8" cachedName="StockItemBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" name="StockItemBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[SalespersonBusinessKey]" cachedDataType="i4" cachedName="SalespersonBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[SalespersonBusinessKey]" name="SalespersonBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[OrderDate]" cachedDataType="dbTimeStamp" cachedName="OrderDate" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderDate]" name="OrderDate" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[ExpectedDeliveryDate]" cachedDataType="dbTimeStamp" cachedName="ExpectedDeliveryDate" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDate]" name="ExpectedDeliveryDate" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[QuantityOrdered]" cachedDataType="i4" cachedName="QuantityOrdered" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOrdered]" name="QuantityOrdered" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[QuantityPicked]" cachedDataType="i4" cachedName="QuantityPicked" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[QuantityPicked]" name="QuantityPicked" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[UnitPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitPrice" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[UnitPrice]" name="UnitPrice" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[DiscountPercent]" cachedDataType="numeric" cachedPrecision="5" cachedScale="2" cachedName="DiscountPercent" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" name="DiscountPercent" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[OrderStatusCode]" cachedDataType="wstr" cachedLength="8" cachedName="OrderStatusCode" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderStatusCode]" name="OrderStatusCode" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[BackorderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="BackorderNumber" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[BackorderNumber]" name="BackorderNumber" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[CustomerKey]" cachedDataType="i4" cachedName="CustomerKey" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" name="CustomerKey" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[StockItemKey]" cachedDataType="i4" cachedName="StockItemKey" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" name="StockItemKey" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[OrderDateKey]" cachedDataType="i4" cachedName="OrderDateKey" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderDateKey]" name="OrderDateKey" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[ExpectedDeliveryDateKey]" cachedDataType="i4" cachedName="ExpectedDeliveryDateKey" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDateKey]" name="ExpectedDeliveryDateKey" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[CustomerKeyResolved]" cachedDataType="i4" cachedName="CustomerKeyResolved" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" name="CustomerKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[StockItemKeyResolved]" cachedDataType="i4" cachedName="StockItemKeyResolved" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" name="StockItemKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[OrderedGrossAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrderedGrossAmount" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderedGrossAmount]" name="OrderedGrossAmount" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[DiscountAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DiscountAmount" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" name="DiscountAmount" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[OrderedNetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrderedNetAmount" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderedNetAmount]" name="OrderedNetAmount" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[QuantityOutstanding]" cachedDataType="i4" cachedName="QuantityOutstanding" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOutstanding]" name="QuantityOutstanding" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[IsBackordered]" cachedDataType="bool" cachedName="IsBackordered" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[IsBackordered]" name="IsBackordered" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[FillRatePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="FillRatePercent" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[FillRatePercent]" name="FillRatePercent" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[OrderNumberDegenerate]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumberDegenerate" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" name="OrderNumberDegenerate" />
+                  <inputColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineBusinessKey]" dataType="i8" name="OrderLineBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" dataType="wstr" length="20" name="OrderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineNumber]" dataType="i4" name="OrderLineNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" dataType="wstr" length="20" name="CustomerBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" dataType="i8" name="StockItemBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[SalespersonBusinessKey]" dataType="i4" name="SalespersonBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderDate]" dataType="dbTimeStamp" name="OrderDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDate]" dataType="dbTimeStamp" name="ExpectedDeliveryDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOrdered]" dataType="i4" name="QuantityOrdered" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[QuantityPicked]" dataType="i4" name="QuantityPicked" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[UnitPrice]" dataType="numeric" precision="18" scale="2" name="UnitPrice" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" dataType="numeric" precision="5" scale="2" name="DiscountPercent" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderStatusCode]" dataType="wstr" length="8" name="OrderStatusCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[BackorderNumber]" dataType="wstr" length="20" name="BackorderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" dataType="i4" name="StockItemKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderDateKey]" dataType="i4" name="OrderDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDateKey]" dataType="i4" name="ExpectedDeliveryDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" dataType="i4" name="CustomerKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" dataType="i4" name="StockItemKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderedGrossAmount]" dataType="numeric" precision="18" scale="2" name="OrderedGrossAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" dataType="numeric" precision="18" scale="2" name="DiscountAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderedNetAmount]" dataType="numeric" precision="18" scale="2" name="OrderedNetAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOutstanding]" dataType="i4" name="QuantityOutstanding" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[IsBackordered]" dataType="bool" name="IsBackordered" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[FillRatePercent]" dataType="numeric" precision="9" scale="4" name="FillRatePercent" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" dataType="wstr" length="20" name="OrderNumberDegenerate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order\Insert Backordered Lines.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order\Hold Early Arriving Customer" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Hold Early Arriving Customer" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[OrderLineEnriched]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order\Hold Early Arriving Customer.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[OrderLineBusinessKey]" cachedDataType="i8" cachedName="OrderLineBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineBusinessKey]" name="OrderLineBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[OrderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumber" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" name="OrderNumber" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[OrderLineNumber]" cachedDataType="i4" cachedName="OrderLineNumber" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineNumber]" name="OrderLineNumber" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[CustomerBusinessKey]" cachedDataType="wstr" cachedLength="20" cachedName="CustomerBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" name="CustomerBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[StockItemBusinessKey]" cachedDataType="i8" cachedName="StockItemBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" name="StockItemBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[SalespersonBusinessKey]" cachedDataType="i4" cachedName="SalespersonBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[SalespersonBusinessKey]" name="SalespersonBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[OrderDate]" cachedDataType="dbTimeStamp" cachedName="OrderDate" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[OrderDate]" name="OrderDate" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[ExpectedDeliveryDate]" cachedDataType="dbTimeStamp" cachedName="ExpectedDeliveryDate" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDate]" name="ExpectedDeliveryDate" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[QuantityOrdered]" cachedDataType="i4" cachedName="QuantityOrdered" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOrdered]" name="QuantityOrdered" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[QuantityPicked]" cachedDataType="i4" cachedName="QuantityPicked" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[QuantityPicked]" name="QuantityPicked" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[UnitPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitPrice" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[UnitPrice]" name="UnitPrice" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[DiscountPercent]" cachedDataType="numeric" cachedPrecision="5" cachedScale="2" cachedName="DiscountPercent" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" name="DiscountPercent" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[OrderStatusCode]" cachedDataType="wstr" cachedLength="8" cachedName="OrderStatusCode" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[OrderStatusCode]" name="OrderStatusCode" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[BackorderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="BackorderNumber" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[BackorderNumber]" name="BackorderNumber" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[CustomerKey]" cachedDataType="i4" cachedName="CustomerKey" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" name="CustomerKey" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[StockItemKey]" cachedDataType="i4" cachedName="StockItemKey" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" name="StockItemKey" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[OrderDateKey]" cachedDataType="i4" cachedName="OrderDateKey" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[OrderDateKey]" name="OrderDateKey" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[ExpectedDeliveryDateKey]" cachedDataType="i4" cachedName="ExpectedDeliveryDateKey" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDateKey]" name="ExpectedDeliveryDateKey" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[CustomerKeyResolved]" cachedDataType="i4" cachedName="CustomerKeyResolved" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" name="CustomerKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[StockItemKeyResolved]" cachedDataType="i4" cachedName="StockItemKeyResolved" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" name="StockItemKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[OrderedGrossAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrderedGrossAmount" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[OrderedGrossAmount]" name="OrderedGrossAmount" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[DiscountAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DiscountAmount" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" name="DiscountAmount" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[OrderedNetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrderedNetAmount" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[OrderedNetAmount]" name="OrderedNetAmount" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[QuantityOutstanding]" cachedDataType="i4" cachedName="QuantityOutstanding" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOutstanding]" name="QuantityOutstanding" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[IsBackordered]" cachedDataType="bool" cachedName="IsBackordered" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[IsBackordered]" name="IsBackordered" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[FillRatePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="FillRatePercent" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[FillRatePercent]" name="FillRatePercent" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[OrderNumberDegenerate]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumberDegenerate" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" name="OrderNumberDegenerate" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineBusinessKey]" dataType="i8" name="OrderLineBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" dataType="wstr" length="20" name="OrderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineNumber]" dataType="i4" name="OrderLineNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" dataType="wstr" length="20" name="CustomerBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" dataType="i8" name="StockItemBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[SalespersonBusinessKey]" dataType="i4" name="SalespersonBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[OrderDate]" dataType="dbTimeStamp" name="OrderDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDate]" dataType="dbTimeStamp" name="ExpectedDeliveryDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOrdered]" dataType="i4" name="QuantityOrdered" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[QuantityPicked]" dataType="i4" name="QuantityPicked" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[UnitPrice]" dataType="numeric" precision="18" scale="2" name="UnitPrice" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" dataType="numeric" precision="5" scale="2" name="DiscountPercent" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[OrderStatusCode]" dataType="wstr" length="8" name="OrderStatusCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[BackorderNumber]" dataType="wstr" length="20" name="BackorderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" dataType="i4" name="StockItemKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[OrderDateKey]" dataType="i4" name="OrderDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDateKey]" dataType="i4" name="ExpectedDeliveryDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" dataType="i4" name="CustomerKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" dataType="i4" name="StockItemKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[OrderedGrossAmount]" dataType="numeric" precision="18" scale="2" name="OrderedGrossAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" dataType="numeric" precision="18" scale="2" name="DiscountAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[OrderedNetAmount]" dataType="numeric" precision="18" scale="2" name="OrderedNetAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOutstanding]" dataType="i4" name="QuantityOutstanding" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[IsBackordered]" dataType="bool" name="IsBackordered" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[FillRatePercent]" dataType="numeric" precision="9" scale="4" name="FillRatePercent" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" dataType="wstr" length="20" name="OrderNumberDegenerate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order\Hold Early Arriving Customer.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order\Hold Early Arriving Stock Item" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Hold Early Arriving Stock Item" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[OrderLineEnriched]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[OrderLineBusinessKey]" cachedDataType="i8" cachedName="OrderLineBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineBusinessKey]" name="OrderLineBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[OrderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumber" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" name="OrderNumber" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[OrderLineNumber]" cachedDataType="i4" cachedName="OrderLineNumber" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineNumber]" name="OrderLineNumber" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[CustomerBusinessKey]" cachedDataType="wstr" cachedLength="20" cachedName="CustomerBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" name="CustomerBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[StockItemBusinessKey]" cachedDataType="i8" cachedName="StockItemBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" name="StockItemBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[SalespersonBusinessKey]" cachedDataType="i4" cachedName="SalespersonBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[SalespersonBusinessKey]" name="SalespersonBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[OrderDate]" cachedDataType="dbTimeStamp" cachedName="OrderDate" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[OrderDate]" name="OrderDate" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[ExpectedDeliveryDate]" cachedDataType="dbTimeStamp" cachedName="ExpectedDeliveryDate" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDate]" name="ExpectedDeliveryDate" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[QuantityOrdered]" cachedDataType="i4" cachedName="QuantityOrdered" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOrdered]" name="QuantityOrdered" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[QuantityPicked]" cachedDataType="i4" cachedName="QuantityPicked" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[QuantityPicked]" name="QuantityPicked" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[UnitPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitPrice" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[UnitPrice]" name="UnitPrice" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[DiscountPercent]" cachedDataType="numeric" cachedPrecision="5" cachedScale="2" cachedName="DiscountPercent" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" name="DiscountPercent" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[OrderStatusCode]" cachedDataType="wstr" cachedLength="8" cachedName="OrderStatusCode" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[OrderStatusCode]" name="OrderStatusCode" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[BackorderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="BackorderNumber" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[BackorderNumber]" name="BackorderNumber" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[CustomerKey]" cachedDataType="i4" cachedName="CustomerKey" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" name="CustomerKey" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[StockItemKey]" cachedDataType="i4" cachedName="StockItemKey" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" name="StockItemKey" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[OrderDateKey]" cachedDataType="i4" cachedName="OrderDateKey" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[OrderDateKey]" name="OrderDateKey" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[ExpectedDeliveryDateKey]" cachedDataType="i4" cachedName="ExpectedDeliveryDateKey" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDateKey]" name="ExpectedDeliveryDateKey" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[CustomerKeyResolved]" cachedDataType="i4" cachedName="CustomerKeyResolved" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" name="CustomerKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[StockItemKeyResolved]" cachedDataType="i4" cachedName="StockItemKeyResolved" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" name="StockItemKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[OrderedGrossAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrderedGrossAmount" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[OrderedGrossAmount]" name="OrderedGrossAmount" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[DiscountAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DiscountAmount" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" name="DiscountAmount" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[OrderedNetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrderedNetAmount" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[OrderedNetAmount]" name="OrderedNetAmount" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[QuantityOutstanding]" cachedDataType="i4" cachedName="QuantityOutstanding" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOutstanding]" name="QuantityOutstanding" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[IsBackordered]" cachedDataType="bool" cachedName="IsBackordered" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[IsBackordered]" name="IsBackordered" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[FillRatePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="FillRatePercent" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[FillRatePercent]" name="FillRatePercent" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[OrderNumberDegenerate]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumberDegenerate" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" name="OrderNumberDegenerate" />
+                  <inputColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineBusinessKey]" dataType="i8" name="OrderLineBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" dataType="wstr" length="20" name="OrderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineNumber]" dataType="i4" name="OrderLineNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" dataType="wstr" length="20" name="CustomerBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" dataType="i8" name="StockItemBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[SalespersonBusinessKey]" dataType="i4" name="SalespersonBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[OrderDate]" dataType="dbTimeStamp" name="OrderDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDate]" dataType="dbTimeStamp" name="ExpectedDeliveryDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOrdered]" dataType="i4" name="QuantityOrdered" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[QuantityPicked]" dataType="i4" name="QuantityPicked" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[UnitPrice]" dataType="numeric" precision="18" scale="2" name="UnitPrice" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" dataType="numeric" precision="5" scale="2" name="DiscountPercent" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[OrderStatusCode]" dataType="wstr" length="8" name="OrderStatusCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[BackorderNumber]" dataType="wstr" length="20" name="BackorderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" dataType="i4" name="StockItemKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[OrderDateKey]" dataType="i4" name="OrderDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDateKey]" dataType="i4" name="ExpectedDeliveryDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" dataType="i4" name="CustomerKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" dataType="i4" name="StockItemKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[OrderedGrossAmount]" dataType="numeric" precision="18" scale="2" name="OrderedGrossAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" dataType="numeric" precision="18" scale="2" name="DiscountAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[OrderedNetAmount]" dataType="numeric" precision="18" scale="2" name="OrderedNetAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOutstanding]" dataType="i4" name="QuantityOutstanding" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[IsBackordered]" dataType="bool" name="IsBackordered" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[FillRatePercent]" dataType="numeric" precision="9" scale="4" name="FillRatePercent" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" dataType="wstr" length="20" name="OrderNumberDegenerate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order\Hold Early Arriving Stock Item.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order\Reject Cancelled Lines" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Cancelled Lines" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedOrderLine]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order\Reject Cancelled Lines.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[OrderLineBusinessKey]" cachedDataType="i8" cachedName="OrderLineBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineBusinessKey]" name="OrderLineBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[OrderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumber" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" name="OrderNumber" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[OrderLineNumber]" cachedDataType="i4" cachedName="OrderLineNumber" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineNumber]" name="OrderLineNumber" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[CustomerBusinessKey]" cachedDataType="wstr" cachedLength="20" cachedName="CustomerBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" name="CustomerBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[StockItemBusinessKey]" cachedDataType="i8" cachedName="StockItemBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" name="StockItemBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[SalespersonBusinessKey]" cachedDataType="i4" cachedName="SalespersonBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[SalespersonBusinessKey]" name="SalespersonBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[OrderDate]" cachedDataType="dbTimeStamp" cachedName="OrderDate" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderDate]" name="OrderDate" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[ExpectedDeliveryDate]" cachedDataType="dbTimeStamp" cachedName="ExpectedDeliveryDate" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDate]" name="ExpectedDeliveryDate" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[QuantityOrdered]" cachedDataType="i4" cachedName="QuantityOrdered" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOrdered]" name="QuantityOrdered" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[QuantityPicked]" cachedDataType="i4" cachedName="QuantityPicked" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[QuantityPicked]" name="QuantityPicked" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[UnitPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitPrice" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[UnitPrice]" name="UnitPrice" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[DiscountPercent]" cachedDataType="numeric" cachedPrecision="5" cachedScale="2" cachedName="DiscountPercent" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" name="DiscountPercent" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[OrderStatusCode]" cachedDataType="wstr" cachedLength="8" cachedName="OrderStatusCode" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderStatusCode]" name="OrderStatusCode" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[BackorderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="BackorderNumber" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[BackorderNumber]" name="BackorderNumber" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[CustomerKey]" cachedDataType="i4" cachedName="CustomerKey" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" name="CustomerKey" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[StockItemKey]" cachedDataType="i4" cachedName="StockItemKey" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" name="StockItemKey" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[OrderDateKey]" cachedDataType="i4" cachedName="OrderDateKey" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderDateKey]" name="OrderDateKey" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[ExpectedDeliveryDateKey]" cachedDataType="i4" cachedName="ExpectedDeliveryDateKey" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDateKey]" name="ExpectedDeliveryDateKey" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[CustomerKeyResolved]" cachedDataType="i4" cachedName="CustomerKeyResolved" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" name="CustomerKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[StockItemKeyResolved]" cachedDataType="i4" cachedName="StockItemKeyResolved" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" name="StockItemKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[OrderedGrossAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrderedGrossAmount" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderedGrossAmount]" name="OrderedGrossAmount" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[DiscountAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DiscountAmount" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" name="DiscountAmount" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[OrderedNetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrderedNetAmount" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderedNetAmount]" name="OrderedNetAmount" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[QuantityOutstanding]" cachedDataType="i4" cachedName="QuantityOutstanding" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOutstanding]" name="QuantityOutstanding" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[IsBackordered]" cachedDataType="bool" cachedName="IsBackordered" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[IsBackordered]" name="IsBackordered" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[FillRatePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="FillRatePercent" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[FillRatePercent]" name="FillRatePercent" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[OrderNumberDegenerate]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumberDegenerate" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" name="OrderNumberDegenerate" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineBusinessKey]" dataType="i8" name="OrderLineBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" dataType="wstr" length="20" name="OrderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineNumber]" dataType="i4" name="OrderLineNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" dataType="wstr" length="20" name="CustomerBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" dataType="i8" name="StockItemBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[SalespersonBusinessKey]" dataType="i4" name="SalespersonBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderDate]" dataType="dbTimeStamp" name="OrderDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDate]" dataType="dbTimeStamp" name="ExpectedDeliveryDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOrdered]" dataType="i4" name="QuantityOrdered" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[QuantityPicked]" dataType="i4" name="QuantityPicked" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[UnitPrice]" dataType="numeric" precision="18" scale="2" name="UnitPrice" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" dataType="numeric" precision="5" scale="2" name="DiscountPercent" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderStatusCode]" dataType="wstr" length="8" name="OrderStatusCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[BackorderNumber]" dataType="wstr" length="20" name="BackorderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" dataType="i4" name="StockItemKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderDateKey]" dataType="i4" name="OrderDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDateKey]" dataType="i4" name="ExpectedDeliveryDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" dataType="i4" name="CustomerKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" dataType="i4" name="StockItemKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderedGrossAmount]" dataType="numeric" precision="18" scale="2" name="OrderedGrossAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" dataType="numeric" precision="18" scale="2" name="DiscountAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderedNetAmount]" dataType="numeric" precision="18" scale="2" name="OrderedNetAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOutstanding]" dataType="i4" name="QuantityOutstanding" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[IsBackordered]" dataType="bool" name="IsBackordered" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[FillRatePercent]" dataType="numeric" precision="9" scale="4" name="FillRatePercent" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" dataType="wstr" length="20" name="OrderNumberDegenerate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order\Reject Cancelled Lines.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Order\Reject Source Errors" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Source Errors" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedOrderLine]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Order\Reject Source Errors.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OrderLineBusinessKey]" cachedDataType="i8" cachedName="OrderLineBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineBusinessKey]" name="OrderLineBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OrderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumber" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" name="OrderNumber" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OrderLineNumber]" cachedDataType="i4" cachedName="OrderLineNumber" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineNumber]" name="OrderLineNumber" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CustomerBusinessKey]" cachedDataType="wstr" cachedLength="20" cachedName="CustomerBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" name="CustomerBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[StockItemBusinessKey]" cachedDataType="i8" cachedName="StockItemBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" name="StockItemBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[SalespersonBusinessKey]" cachedDataType="i4" cachedName="SalespersonBusinessKey" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SalespersonBusinessKey]" name="SalespersonBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OrderDate]" cachedDataType="dbTimeStamp" cachedName="OrderDate" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderDate]" name="OrderDate" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[ExpectedDeliveryDate]" cachedDataType="dbTimeStamp" cachedName="ExpectedDeliveryDate" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDate]" name="ExpectedDeliveryDate" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[QuantityOrdered]" cachedDataType="i4" cachedName="QuantityOrdered" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOrdered]" name="QuantityOrdered" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[QuantityPicked]" cachedDataType="i4" cachedName="QuantityPicked" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantityPicked]" name="QuantityPicked" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[UnitPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitPrice" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[UnitPrice]" name="UnitPrice" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[DiscountPercent]" cachedDataType="numeric" cachedPrecision="5" cachedScale="2" cachedName="DiscountPercent" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" name="DiscountPercent" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OrderStatusCode]" cachedDataType="wstr" cachedLength="8" cachedName="OrderStatusCode" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderStatusCode]" name="OrderStatusCode" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[BackorderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="BackorderNumber" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[BackorderNumber]" name="BackorderNumber" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CustomerKey]" cachedDataType="i4" cachedName="CustomerKey" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" name="CustomerKey" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[StockItemKey]" cachedDataType="i4" cachedName="StockItemKey" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" name="StockItemKey" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OrderDateKey]" cachedDataType="i4" cachedName="OrderDateKey" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderDateKey]" name="OrderDateKey" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[ExpectedDeliveryDateKey]" cachedDataType="i4" cachedName="ExpectedDeliveryDateKey" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDateKey]" name="ExpectedDeliveryDateKey" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CustomerKeyResolved]" cachedDataType="i4" cachedName="CustomerKeyResolved" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" name="CustomerKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[StockItemKeyResolved]" cachedDataType="i4" cachedName="StockItemKeyResolved" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" name="StockItemKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OrderedGrossAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrderedGrossAmount" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderedGrossAmount]" name="OrderedGrossAmount" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[DiscountAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DiscountAmount" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" name="DiscountAmount" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OrderedNetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrderedNetAmount" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderedNetAmount]" name="OrderedNetAmount" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[QuantityOutstanding]" cachedDataType="i4" cachedName="QuantityOutstanding" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOutstanding]" name="QuantityOutstanding" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[IsBackordered]" cachedDataType="bool" cachedName="IsBackordered" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[IsBackordered]" name="IsBackordered" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[FillRatePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="FillRatePercent" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[FillRatePercent]" name="FillRatePercent" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OrderNumberDegenerate]" cachedDataType="wstr" cachedLength="20" cachedName="OrderNumberDegenerate" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" name="OrderNumberDegenerate" />
+                  <inputColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineBusinessKey]" dataType="i8" name="OrderLineBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumber]" dataType="wstr" length="20" name="OrderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderLineNumber]" dataType="i4" name="OrderLineNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerBusinessKey]" dataType="wstr" length="20" name="CustomerBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" dataType="i8" name="StockItemBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SalespersonBusinessKey]" dataType="i4" name="SalespersonBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderDate]" dataType="dbTimeStamp" name="OrderDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDate]" dataType="dbTimeStamp" name="ExpectedDeliveryDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOrdered]" dataType="i4" name="QuantityOrdered" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantityPicked]" dataType="i4" name="QuantityPicked" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[UnitPrice]" dataType="numeric" precision="18" scale="2" name="UnitPrice" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" dataType="numeric" precision="5" scale="2" name="DiscountPercent" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderStatusCode]" dataType="wstr" length="8" name="OrderStatusCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[BackorderNumber]" dataType="wstr" length="20" name="BackorderNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKey]" dataType="i4" name="CustomerKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" dataType="i4" name="StockItemKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderDateKey]" dataType="i4" name="OrderDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedDeliveryDateKey]" dataType="i4" name="ExpectedDeliveryDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerKeyResolved]" dataType="i4" name="CustomerKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" dataType="i4" name="StockItemKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderedGrossAmount]" dataType="numeric" precision="18" scale="2" name="OrderedGrossAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[DiscountAmount]" dataType="numeric" precision="18" scale="2" name="DiscountAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderedNetAmount]" dataType="numeric" precision="18" scale="2" name="OrderedNetAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOutstanding]" dataType="i4" name="QuantityOutstanding" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[IsBackordered]" dataType="bool" name="IsBackordered" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[FillRatePercent]" dataType="numeric" precision="9" scale="4" name="FillRatePercent" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OrderNumberDegenerate]" dataType="wstr" length="20" name="OrderNumberDegenerate" />
+                  <externalMetadataColumn refId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Order\Reject Source Errors.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Load Fact Order.Paths[OLE DB Source Output]" endId="Package\Load Fact Order\Lookup Customer Key.Inputs[Lookup Input]" name="OLE DB Source Output" startId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Load Fact Order.Paths[Lookup Match Output 1]" endId="Package\Load Fact Order\Lookup Stock Item Key.Inputs[Lookup Input]" name="Lookup Match Output 1" startId="Package\Load Fact Order\Lookup Customer Key.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Fact Order.Paths[Lookup Match Output 2]" endId="Package\Load Fact Order\Lookup Order Date Key.Inputs[Lookup Input]" name="Lookup Match Output 2" startId="Package\Load Fact Order\Lookup Stock Item Key.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Fact Order.Paths[Lookup Match Output 3]" endId="Package\Load Fact Order\Lookup Expected Delivery Date Key.Inputs[Lookup Input]" name="Lookup Match Output 3" startId="Package\Load Fact Order\Lookup Order Date Key.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Fact Order.Paths[Lookup Match Output 4]" endId="Package\Load Fact Order\Derive Order Measures.Inputs[Derived Column Input]" name="Lookup Match Output 4" startId="Package\Load Fact Order\Lookup Expected Delivery Date Key.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Fact Order.Paths[Derived Column Output 5]" endId="Package\Load Fact Order\Route Order Lines.Inputs[Conditional Split Input]" name="Derived Column Output 5" startId="Package\Load Fact Order\Derive Order Measures.Outputs[Derived Column Output]" />
+          <path refId="Package\Load Fact Order.Paths[Complete Lines 6]" endId="Package\Load Fact Order\Insert Complete Lines.Inputs[OLE DB Destination Input]" name="Complete Lines 6" startId="Package\Load Fact Order\Route Order Lines.Outputs[Complete Lines]" />
+          <path refId="Package\Load Fact Order.Paths[Backordered Lines 7]" endId="Package\Load Fact Order\Insert Backordered Lines.Inputs[OLE DB Destination Input]" name="Backordered Lines 7" startId="Package\Load Fact Order\Route Order Lines.Outputs[Backordered Lines]" />
+          <path refId="Package\Load Fact Order.Paths[Early Arriving Customer 8]" endId="Package\Load Fact Order\Hold Early Arriving Customer.Inputs[OLE DB Destination Input]" name="Early Arriving Customer 8" startId="Package\Load Fact Order\Route Order Lines.Outputs[Early Arriving Customer]" />
+          <path refId="Package\Load Fact Order.Paths[Early Arriving Stock Item 9]" endId="Package\Load Fact Order\Hold Early Arriving Stock Item.Inputs[OLE DB Destination Input]" name="Early Arriving Stock Item 9" startId="Package\Load Fact Order\Route Order Lines.Outputs[Early Arriving Stock Item]" />
+          <path refId="Package\Load Fact Order.Paths[Cancelled Lines 10]" endId="Package\Load Fact Order\Reject Cancelled Lines.Inputs[OLE DB Destination Input]" name="Cancelled Lines 10" startId="Package\Load Fact Order\Route Order Lines.Outputs[Cancelled Lines]" />
+          <path refId="Package\Load Fact Order.Paths[OLE DB Source Error Output 11]" endId="Package\Load Fact Order\Reject Source Errors.Inputs[OLE DB Destination Input]" name="OLE DB Source Error Output 11" startId="Package\Load Fact Order\stg Order.Outputs[OLE DB Source Error Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Age Held Order Lines"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{3F9FEA6C-6437-4828-9C4B-F99F8C75DCE6}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Age Held Order Lines"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="UPDATE work.OrderLineEnriched SET HoldRetryCount = HoldRetryCount + 1, LastRetriedAt = GETDATE() WHERE LoadedAt IS NULL;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Queue Late Arriving Customer"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{3F36585E-BA3E-F664-3BB9-FF0AE81D8C77}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Queue Late Arriving Customer"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="INSERT INTO work.LateArrivingDimensionQueue     (DimensionName, BusinessKey, PlaceholderKey, SourcePackageName, QueuedAt, RetryCount) SELECT DISTINCT N'Customer', r.BusinessKey, 0, N'FACT_Load_Order', GETDATE(), 0 FROM err.RejectedLookupFailure AS r WHERE r.DimensionName = N'Customer' AND r.PackageExecutionId = ?   AND NOT EXISTS (SELECT 1 FROM work.LateArrivingDimensionQueue AS q                   WHERE q.DimensionName = r.DimensionName AND q.BusinessKey = r.BusinessKey                     AND q.ResolvedAt IS NULL);"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Release Held Lines Past Retry Limit"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{5CCC8768-B785-CB3D-AEE6-0A80B7BFC0A8}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Release Held Lines Past Retry Limit"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="EXEC Integration.LoadFactOrder @LoadHeldRows = 1, @HoldRetryLimit = ?, @LineageKey = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::HoldRetryLimit" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Set Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{C8D945C7-242C-76BA-65CC-8FF45D2E5210}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Set Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_SetWatermark @SourceSystemCode = ?, @ObjectName = N'Fact.Order', @WatermarkTo = ?, @PackageExecutionId = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::WatermarkTo" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Rejected Records"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F451B37A-2258-F381-3E92-62232E0A51C1}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Rejected Records"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @ObjectName = N'Fact.Order', @RejectReason = N'Routed by the package reject path', @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Fact.Order', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Batch Variables"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Get Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Get Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Load Fact Order" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Load Fact Order"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Age Held Order Lines" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Age Held Order Lines"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Queue Late Arriving Customer" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Queue Late Arriving Customer"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Release Held Lines Past Retry Limit" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Release Held Lines Past Retry Limit"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Set Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Set Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Log Rejected Records" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 8]"
+      DTS:CreationName=""
+      DTS:DTSID="{71A76C5F-1A20-5771-2776-7EF96FD96B90}"
+      DTS:From="Package\Log Rejected Records"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 8"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 9]"
+      DTS:CreationName=""
+      DTS:DTSID="{11D92538-705E-DF70-FE3B-5738B6CA45B1}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 9"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{0FB32DBE-A8D8-A2DA-2C0C-0F7A4A752A31}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

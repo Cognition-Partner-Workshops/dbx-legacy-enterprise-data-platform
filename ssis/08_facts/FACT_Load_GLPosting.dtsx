@@ -1,0 +1,1151 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{6B3F6FB5-371B-E25A-29F1-301F66348F8C}"
+  DTS:Description="Incremental load of Fact.GL Posting from the Oracle-sourced general ledger extract in staging. Journals must balance by batch before any row is loaded; an unbalanced batch is rejected whole, which is how the 2015 close was saved."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="FACT_Load_GLPosting"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{6C70DD89-2F19-025F-B158-1E21FB6A67B4}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{1168DA46-EC3B-F1AA-791C-B492A99D51D1}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{BE143903-FC1A-2FF2-C7FD-F0402EC4D1C7}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{4E3CE0D2-D62C-7722-4FCB-16662429C39E}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{955B0AF6-FBB2-92ED-E004-F2873EA88212}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">SQLSTG</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::AllowedRoundingVariance]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Cents of rounding tolerated per journal batch."
+      DTS:DTSID="{98818556-1728-2FD9-7D51-3998AED34DDC}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="AllowedRoundingVariance"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">1</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{305DBA3B-A847-0574-9BDC-F5C0DF433851}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{E192BB18-07A2-949F-5168-6F01055A143E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{1D45C760-2483-08DE-7408-3490FDBC2DEB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{A1D2C995-A0FE-E74F-1752-7665C45EDF75}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{4995842D-FE74-B6AC-99AD-91264A00BBE2}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{2EEA5FCC-00F3-226E-1931-60FF3AB70EBE}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{90A4AC9C-C3E0-943D-876F-90F8055BE4A3}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{F598624E-FC24-FC76-B3F3-42234BDF943A}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUnknownMember]"
+      DTS:CreationName=""
+      DTS:DTSID="{95C67422-A17A-43DE-A8DA-FA9C0305E087}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUnknownMember">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsHeldForRetry]"
+      DTS:CreationName=""
+      DTS:DTSID="{10920796-CCFF-CD69-A988-66AA8A941B8B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsHeldForRetry">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BusinessDateFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{2042B4BF-D844-A1A2-4127-854F0CD15D06}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BusinessDateFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BusinessDateTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{D2A47CCD-53C6-50B9-2AE8-ED614E2C0CCA}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BusinessDateTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::UnbalancedBatches]"
+      DTS:CreationName=""
+      DTS:DTSID="{1E889C31-E3FD-49B1-B6E4-468FE4AD88AB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="UnbalancedBatches">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Batch Variables"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{647AE7A9-EE4E-0DAF-FBD6-04CEA9DB74E4}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Batch Variables"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::BusinessDateFrom] = (DT_WSTR, 10)(DT_DBDATE)@[User::WatermarkFrom]" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Get Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{AD8AAA26-E475-7A7A-5321-BEF0685AEC15}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Get Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_GetWatermark @SourceSystemCode = ?, @ObjectName = ?, @ReloadFullHistory = ?, @WatermarkFrom = ? OUTPUT, @WatermarkTo = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::ReloadFullHistory" SQLTask:ParameterDirection="Input" SQLTask:DataType="BYTE" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::WatermarkFrom" />
+        <SQLTask:ResultBinding SQLTask:ResultName="1" SQLTask:DtsVariableName="User::WatermarkTo" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Quarantine Unbalanced Batches"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{85BBBE02-9118-25D2-23CC-26265C7F1B85}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Quarantine Unbalanced Batches"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="INSERT INTO err.RejectedConstraintViolation     (ObjectName, BusinessKey, RejectReason, RejectedAt, PackageExecutionId) SELECT N'stg.GLPosting', gl.JournalBatchNumber,        N'Journal batch does not balance', GETDATE(), ? FROM stg.GLPosting AS gl GROUP BY gl.JournalBatchNumber HAVING ABS(SUM(gl.DebitAmount) - SUM(gl.CreditAmount)) &gt; (CAST(? AS decimal(18,2)) / 100.0);"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::AllowedRoundingVariance" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Load Fact GL Posting"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{F034C246-656E-A2EA-C239-FAD74C78D0CA}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Load Fact GL Posting"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Load Fact GL Posting\stg GLPosting" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="stg GLPosting" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">2400</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT gl.GlPostingBusinessKey, gl.JournalBatchNumber, gl.JournalLineNumber, gl.GlAccountCode, gl.CostCentreCode, gl.LegalEntityCode, gl.PostingDate, gl.AccountingPeriodCode, gl.DebitAmount, gl.CreditAmount, gl.TransactionCurrency, gl.JournalSourceCode FROM stg.GLPosting AS gl WHERE gl.LastModifiedAt &gt; ? AND gl.LastModifiedAt &lt;= ? ORDER BY gl.JournalBatchNumber, gl.JournalLineNumber;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact GL Posting\stg GLPosting.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[GlPostingBusinessKey]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[GlPostingBusinessKey]" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[GlPostingBusinessKey]" name="GlPostingBusinessKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[JournalBatchNumber]" dataType="wstr" length="24" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[JournalBatchNumber]" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[JournalBatchNumber]" name="JournalBatchNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[JournalLineNumber]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[JournalLineNumber]" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[JournalLineNumber]" name="JournalLineNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[GlAccountCode]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[GlAccountCode]" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[GlAccountCode]" name="GlAccountCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[CostCentreCode]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[CostCentreCode]" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[CostCentreCode]" name="CostCentreCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[LegalEntityCode]" dataType="wstr" length="8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[LegalEntityCode]" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[LegalEntityCode]" name="LegalEntityCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[PostingDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[PostingDate]" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[PostingDate]" name="PostingDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[AccountingPeriodCode]" dataType="wstr" length="7" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[AccountingPeriodCode]" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[AccountingPeriodCode]" name="AccountingPeriodCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[DebitAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[DebitAmount]" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[DebitAmount]" name="DebitAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[CreditAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[CreditAmount]" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[CreditAmount]" name="CreditAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[TransactionCurrency]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[TransactionCurrency]" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[TransactionCurrency]" name="TransactionCurrency" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[JournalSourceCode]" dataType="wstr" length="8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[JournalSourceCode]" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].Columns[JournalSourceCode]" name="JournalSourceCode" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[GlPostingBusinessKey]" dataType="i8" name="GlPostingBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[JournalBatchNumber]" dataType="wstr" length="24" name="JournalBatchNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[JournalLineNumber]" dataType="i4" name="JournalLineNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[GlAccountCode]" dataType="wstr" length="20" name="GlAccountCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[CostCentreCode]" dataType="wstr" length="12" name="CostCentreCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[LegalEntityCode]" dataType="wstr" length="8" name="LegalEntityCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[PostingDate]" dataType="dbTimeStamp" name="PostingDate" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[DebitAmount]" dataType="numeric" precision="18" scale="2" name="DebitAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[CreditAmount]" dataType="numeric" precision="18" scale="2" name="CreditAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output].ExternalColumns[JournalSourceCode]" dataType="wstr" length="8" name="JournalSourceCode" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[GlPostingBusinessKey]" dataType="i8" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[GlPostingBusinessKey]" name="GlPostingBusinessKey" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[JournalBatchNumber]" dataType="wstr" length="24" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[JournalBatchNumber]" name="JournalBatchNumber" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[JournalLineNumber]" dataType="i4" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[JournalLineNumber]" name="JournalLineNumber" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[GlAccountCode]" dataType="wstr" length="20" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[GlAccountCode]" name="GlAccountCode" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[CostCentreCode]" dataType="wstr" length="12" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[CostCentreCode]" name="CostCentreCode" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[LegalEntityCode]" dataType="wstr" length="8" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[LegalEntityCode]" name="LegalEntityCode" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[PostingDate]" dataType="dbTimeStamp" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[PostingDate]" name="PostingDate" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[AccountingPeriodCode]" dataType="wstr" length="7" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[DebitAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[DebitAmount]" name="DebitAmount" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[CreditAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[CreditAmount]" name="CreditAmount" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[TransactionCurrency]" dataType="wstr" length="3" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[TransactionCurrency]" name="TransactionCurrency" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[JournalSourceCode]" dataType="wstr" length="8" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[JournalSourceCode]" name="JournalSourceCode" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact GL Posting\Lookup GL Account Key" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup GL Account Key" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [GL Account Key] AS GlAccountKey, [WWI GL Account ID] AS GlAccountCode, [Account Type Code] AS AccountTypeCode FROM [Dimension].[GL Account];</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">0</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact GL Posting\Lookup GL Account Key.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact GL Posting\Lookup GL Account Key.Inputs[Lookup Input]" errorRowDisposition="RedirectRow" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact GL Posting\Lookup GL Account Key.Inputs[Lookup Input].Columns[GlAccountCode]" cachedName="GlAccountCode" name="GlAccountCode" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact GL Posting\Lookup GL Account Key.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Fact GL Posting\Lookup GL Account Key.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact GL Posting\Lookup GL Account Key.Outputs[Lookup Match Output].Columns[GlAccountKey]" dataType="i4" lineageId="Package\Load Fact GL Posting\Lookup GL Account Key.Outputs[Lookup Match Output].Columns[GlAccountKey]" name="GlAccountKey" />
+                  <outputColumn refId="Package\Load Fact GL Posting\Lookup GL Account Key.Outputs[Lookup Match Output].Columns[AccountTypeCode]" dataType="wstr" length="8" lineageId="Package\Load Fact GL Posting\Lookup GL Account Key.Outputs[Lookup Match Output].Columns[AccountTypeCode]" name="AccountTypeCode" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Fact GL Posting\Lookup GL Account Key.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Fact GL Posting\Lookup GL Account Key.Inputs[Lookup Input]" />
+              <output refId="Package\Load Fact GL Posting\Lookup GL Account Key.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Fact GL Posting\Lookup GL Account Key.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact GL Posting\Lookup Posting Date Key" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Posting Date Key" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [Date] AS PostingDate, [Date Key] AS PostingDateKey FROM Dimension.Date;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">1</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact GL Posting\Lookup Posting Date Key.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact GL Posting\Lookup Posting Date Key.Inputs[Lookup Input]" errorRowDisposition="FailComponent" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact GL Posting\Lookup Posting Date Key.Inputs[Lookup Input].Columns[PostingDate]" cachedName="PostingDate" name="PostingDate" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact GL Posting\Lookup Posting Date Key.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Fact GL Posting\Lookup Posting Date Key.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact GL Posting\Lookup Posting Date Key.Outputs[Lookup Match Output].Columns[PostingDateKey]" dataType="i4" lineageId="Package\Load Fact GL Posting\Lookup Posting Date Key.Outputs[Lookup Match Output].Columns[PostingDateKey]" name="PostingDateKey" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Fact GL Posting\Lookup Posting Date Key.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Fact GL Posting\Lookup Posting Date Key.Inputs[Lookup Input]" />
+              <output refId="Package\Load Fact GL Posting\Lookup Posting Date Key.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Fact GL Posting\Lookup Posting Date Key.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact GL Posting\Derive FX Rate Date" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive FX Rate Date" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Load Fact GL Posting\Derive FX Rate Date.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact GL Posting\Derive FX Rate Date.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Load Fact GL Posting\Derive FX Rate Date.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact GL Posting\Derive FX Rate Date.Outputs[Derived Column Output].Columns[FxRateDate]" dataType="dbTimeStamp" lineageId="Package\Load Fact GL Posting\Derive FX Rate Date.Outputs[Derived Column Output].Columns[FxRateDate]" name="FxRateDate">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_DBDATE)PostingDate</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_DBDATE)PostingDate</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact GL Posting\Lookup Effective FX Rate" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Effective FX Rate" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT r.CurrencyCode AS TransactionCurrency, r.RateDate AS FxRateDate, r.RateToUsd AS FxRateToUsd, r.RateSourceCode AS FxRateSource FROM stg.CurrencyRate AS r WHERE r.RateTypeCode = N'CLOSE';</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">0</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact GL Posting\Lookup Effective FX Rate.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact GL Posting\Lookup Effective FX Rate.Inputs[Lookup Input]" errorRowDisposition="RedirectRow" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact GL Posting\Lookup Effective FX Rate.Inputs[Lookup Input].Columns[TransactionCurrency]" cachedName="TransactionCurrency" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Lookup Effective FX Rate.Inputs[Lookup Input].Columns[FxRateDate]" cachedName="FxRateDate" name="FxRateDate" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact GL Posting\Lookup Effective FX Rate.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Fact GL Posting\Lookup Effective FX Rate.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact GL Posting\Lookup Effective FX Rate.Outputs[Lookup Match Output].Columns[FxRateToUsd]" dataType="numeric" precision="18" scale="8" lineageId="Package\Load Fact GL Posting\Lookup Effective FX Rate.Outputs[Lookup Match Output].Columns[FxRateToUsd]" name="FxRateToUsd" />
+                  <outputColumn refId="Package\Load Fact GL Posting\Lookup Effective FX Rate.Outputs[Lookup Match Output].Columns[FxRateSource]" dataType="wstr" length="8" lineageId="Package\Load Fact GL Posting\Lookup Effective FX Rate.Outputs[Lookup Match Output].Columns[FxRateSource]" name="FxRateSource" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Fact GL Posting\Lookup Effective FX Rate.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Fact GL Posting\Lookup Effective FX Rate.Inputs[Lookup Input]" />
+              <output refId="Package\Load Fact GL Posting\Lookup Effective FX Rate.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Fact GL Posting\Lookup Effective FX Rate.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact GL Posting\Derive Posting Measures" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Posting Measures" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Load Fact GL Posting\Derive Posting Measures.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact GL Posting\Derive Posting Measures.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Load Fact GL Posting\Derive Posting Measures.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact GL Posting\Derive Posting Measures.Outputs[Derived Column Output].Columns[GlAccountKeyResolved]" dataType="i4" lineageId="Package\Load Fact GL Posting\Derive Posting Measures.Outputs[Derived Column Output].Columns[GlAccountKeyResolved]" name="GlAccountKeyResolved">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(GlAccountKey) ? 0 : GlAccountKey</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(GlAccountKey) ? 0 : GlAccountKey</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact GL Posting\Derive Posting Measures.Outputs[Derived Column Output].Columns[SignedAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact GL Posting\Derive Posting Measures.Outputs[Derived Column Output].Columns[SignedAmount]" name="SignedAmount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">DebitAmount - CreditAmount</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">DebitAmount - CreditAmount</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact GL Posting\Derive Posting Measures.Outputs[Derived Column Output].Columns[SignedAmountReporting]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact GL Posting\Derive Posting Measures.Outputs[Derived Column Output].Columns[SignedAmountReporting]" name="SignedAmountReporting">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DebitAmount - CreditAmount) * (ISNULL(FxRateToUsd) ? (DT_NUMERIC,18,8)1 : FxRateToUsd)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DebitAmount - CreditAmount) * (ISNULL(FxRateToUsd) ? (DT_NUMERIC,18,8)1 : FxRateToUsd)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact GL Posting\Derive Posting Measures.Outputs[Derived Column Output].Columns[PostingSideCode]" dataType="wstr" length="2" lineageId="Package\Load Fact GL Posting\Derive Posting Measures.Outputs[Derived Column Output].Columns[PostingSideCode]" name="PostingSideCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">DebitAmount &gt; 0 ? "DR" : "CR"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">DebitAmount &gt; 0 ? "DR" : "CR"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact GL Posting\Derive Posting Measures.Outputs[Derived Column Output].Columns[IsManualJournal]" dataType="bool" lineageId="Package\Load Fact GL Posting\Derive Posting Measures.Outputs[Derived Column Output].Columns[IsManualJournal]" name="IsManualJournal">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">JournalSourceCode == "MANUAL" || JournalSourceCode == "SPREAD"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">JournalSourceCode == "MANUAL" || JournalSourceCode == "SPREAD"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact GL Posting\Derive Posting Measures.Outputs[Derived Column Output].Columns[JournalBatchDegenerate]" dataType="wstr" length="24" lineageId="Package\Load Fact GL Posting\Derive Posting Measures.Outputs[Derived Column Output].Columns[JournalBatchDegenerate]" name="JournalBatchDegenerate">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">JournalBatchNumber</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">JournalBatchNumber</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact GL Posting\Derive Posting Measures.Outputs[Derived Column Output].Columns[LineageKey]" dataType="i8" lineageId="Package\Load Fact GL Posting\Derive Posting Measures.Outputs[Derived Column Output].Columns[LineageKey]" name="LineageKey">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact GL Posting\Route GL Postings" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Route GL Postings" version="1">
+            <inputs>
+              <input refId="Package\Load Fact GL Posting\Route GL Postings.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact GL Posting\Route GL Postings.Outputs[Unknown Account]" exclusionGroup="1" name="Unknown Account" synchronousInputId="Package\Load Fact GL Posting\Route GL Postings.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">ISNULL(GlAccountKey)</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">ISNULL(GlAccountKey)</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Load Fact GL Posting\Route GL Postings.Outputs[Manual Journals]" exclusionGroup="1" name="Manual Journals" synchronousInputId="Package\Load Fact GL Posting\Route GL Postings.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">IsManualJournal</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">IsManualJournal</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Load Fact GL Posting\Route GL Postings.Outputs[System Journals]" exclusionGroup="1" isDefaultOut="true" name="System Journals" synchronousInputId="Package\Load Fact GL Posting\Route GL Postings.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact GL Posting\Insert System Journals" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert System Journals" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Fact].[GL Posting]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact GL Posting\Insert System Journals.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[GlPostingBusinessKey]" cachedDataType="i8" cachedName="GlPostingBusinessKey" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[GlPostingBusinessKey]" name="GlPostingBusinessKey" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[JournalBatchNumber]" cachedDataType="wstr" cachedLength="24" cachedName="JournalBatchNumber" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[JournalBatchNumber]" name="JournalBatchNumber" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[JournalLineNumber]" cachedDataType="i4" cachedName="JournalLineNumber" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[JournalLineNumber]" name="JournalLineNumber" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[GlAccountCode]" cachedDataType="wstr" cachedLength="20" cachedName="GlAccountCode" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountCode]" name="GlAccountCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[CostCentreCode]" cachedDataType="wstr" cachedLength="12" cachedName="CostCentreCode" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[CostCentreCode]" name="CostCentreCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[LegalEntityCode]" cachedDataType="wstr" cachedLength="8" cachedName="LegalEntityCode" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[LegalEntityCode]" name="LegalEntityCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[PostingDate]" cachedDataType="dbTimeStamp" cachedName="PostingDate" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[PostingDate]" name="PostingDate" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[DebitAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DebitAmount" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[DebitAmount]" name="DebitAmount" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[CreditAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CreditAmount" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[CreditAmount]" name="CreditAmount" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[JournalSourceCode]" cachedDataType="wstr" cachedLength="8" cachedName="JournalSourceCode" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[JournalSourceCode]" name="JournalSourceCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[GlAccountKey]" cachedDataType="i4" cachedName="GlAccountKey" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountKey]" name="GlAccountKey" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[AccountTypeCode]" cachedDataType="wstr" cachedLength="8" cachedName="AccountTypeCode" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[AccountTypeCode]" name="AccountTypeCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[PostingDateKey]" cachedDataType="i4" cachedName="PostingDateKey" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[PostingDateKey]" name="PostingDateKey" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[FxRateDate]" cachedDataType="dbTimeStamp" cachedName="FxRateDate" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[FxRateDate]" name="FxRateDate" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[FxRateToUsd]" cachedDataType="numeric" cachedPrecision="18" cachedScale="8" cachedName="FxRateToUsd" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[FxRateToUsd]" name="FxRateToUsd" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[FxRateSource]" cachedDataType="wstr" cachedLength="8" cachedName="FxRateSource" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[FxRateSource]" name="FxRateSource" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[GlAccountKeyResolved]" cachedDataType="i4" cachedName="GlAccountKeyResolved" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountKeyResolved]" name="GlAccountKeyResolved" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[SignedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SignedAmount" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[SignedAmount]" name="SignedAmount" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[SignedAmountReporting]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SignedAmountReporting" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[SignedAmountReporting]" name="SignedAmountReporting" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[PostingSideCode]" cachedDataType="wstr" cachedLength="2" cachedName="PostingSideCode" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[PostingSideCode]" name="PostingSideCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[IsManualJournal]" cachedDataType="bool" cachedName="IsManualJournal" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[IsManualJournal]" name="IsManualJournal" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[JournalBatchDegenerate]" cachedDataType="wstr" cachedLength="24" cachedName="JournalBatchDegenerate" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[JournalBatchDegenerate]" name="JournalBatchDegenerate" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[GlPostingBusinessKey]" dataType="i8" name="GlPostingBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[JournalBatchNumber]" dataType="wstr" length="24" name="JournalBatchNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[JournalLineNumber]" dataType="i4" name="JournalLineNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountCode]" dataType="wstr" length="20" name="GlAccountCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[CostCentreCode]" dataType="wstr" length="12" name="CostCentreCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[LegalEntityCode]" dataType="wstr" length="8" name="LegalEntityCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[PostingDate]" dataType="dbTimeStamp" name="PostingDate" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[DebitAmount]" dataType="numeric" precision="18" scale="2" name="DebitAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[CreditAmount]" dataType="numeric" precision="18" scale="2" name="CreditAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[JournalSourceCode]" dataType="wstr" length="8" name="JournalSourceCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountKey]" dataType="i4" name="GlAccountKey" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[AccountTypeCode]" dataType="wstr" length="8" name="AccountTypeCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[PostingDateKey]" dataType="i4" name="PostingDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[FxRateDate]" dataType="dbTimeStamp" name="FxRateDate" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[FxRateToUsd]" dataType="numeric" precision="18" scale="8" name="FxRateToUsd" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[FxRateSource]" dataType="wstr" length="8" name="FxRateSource" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountKeyResolved]" dataType="i4" name="GlAccountKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[SignedAmount]" dataType="numeric" precision="18" scale="2" name="SignedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[SignedAmountReporting]" dataType="numeric" precision="18" scale="2" name="SignedAmountReporting" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[PostingSideCode]" dataType="wstr" length="2" name="PostingSideCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[IsManualJournal]" dataType="bool" name="IsManualJournal" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[JournalBatchDegenerate]" dataType="wstr" length="24" name="JournalBatchDegenerate" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact GL Posting\Insert System Journals.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact GL Posting\Insert Manual Journals" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert Manual Journals" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Fact].[GL Posting]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact GL Posting\Insert Manual Journals.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[GlPostingBusinessKey]" cachedDataType="i8" cachedName="GlPostingBusinessKey" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[GlPostingBusinessKey]" name="GlPostingBusinessKey" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[JournalBatchNumber]" cachedDataType="wstr" cachedLength="24" cachedName="JournalBatchNumber" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[JournalBatchNumber]" name="JournalBatchNumber" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[JournalLineNumber]" cachedDataType="i4" cachedName="JournalLineNumber" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[JournalLineNumber]" name="JournalLineNumber" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[GlAccountCode]" cachedDataType="wstr" cachedLength="20" cachedName="GlAccountCode" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountCode]" name="GlAccountCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[CostCentreCode]" cachedDataType="wstr" cachedLength="12" cachedName="CostCentreCode" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[CostCentreCode]" name="CostCentreCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[LegalEntityCode]" cachedDataType="wstr" cachedLength="8" cachedName="LegalEntityCode" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[LegalEntityCode]" name="LegalEntityCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[PostingDate]" cachedDataType="dbTimeStamp" cachedName="PostingDate" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[PostingDate]" name="PostingDate" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[DebitAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DebitAmount" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[DebitAmount]" name="DebitAmount" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[CreditAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CreditAmount" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[CreditAmount]" name="CreditAmount" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[JournalSourceCode]" cachedDataType="wstr" cachedLength="8" cachedName="JournalSourceCode" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[JournalSourceCode]" name="JournalSourceCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[GlAccountKey]" cachedDataType="i4" cachedName="GlAccountKey" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountKey]" name="GlAccountKey" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[AccountTypeCode]" cachedDataType="wstr" cachedLength="8" cachedName="AccountTypeCode" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[AccountTypeCode]" name="AccountTypeCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[PostingDateKey]" cachedDataType="i4" cachedName="PostingDateKey" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[PostingDateKey]" name="PostingDateKey" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[FxRateDate]" cachedDataType="dbTimeStamp" cachedName="FxRateDate" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[FxRateDate]" name="FxRateDate" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[FxRateToUsd]" cachedDataType="numeric" cachedPrecision="18" cachedScale="8" cachedName="FxRateToUsd" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[FxRateToUsd]" name="FxRateToUsd" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[FxRateSource]" cachedDataType="wstr" cachedLength="8" cachedName="FxRateSource" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[FxRateSource]" name="FxRateSource" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[GlAccountKeyResolved]" cachedDataType="i4" cachedName="GlAccountKeyResolved" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountKeyResolved]" name="GlAccountKeyResolved" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[SignedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SignedAmount" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[SignedAmount]" name="SignedAmount" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[SignedAmountReporting]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SignedAmountReporting" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[SignedAmountReporting]" name="SignedAmountReporting" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[PostingSideCode]" cachedDataType="wstr" cachedLength="2" cachedName="PostingSideCode" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[PostingSideCode]" name="PostingSideCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[IsManualJournal]" cachedDataType="bool" cachedName="IsManualJournal" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[IsManualJournal]" name="IsManualJournal" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[JournalBatchDegenerate]" cachedDataType="wstr" cachedLength="24" cachedName="JournalBatchDegenerate" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[JournalBatchDegenerate]" name="JournalBatchDegenerate" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[GlPostingBusinessKey]" dataType="i8" name="GlPostingBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[JournalBatchNumber]" dataType="wstr" length="24" name="JournalBatchNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[JournalLineNumber]" dataType="i4" name="JournalLineNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountCode]" dataType="wstr" length="20" name="GlAccountCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[CostCentreCode]" dataType="wstr" length="12" name="CostCentreCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[LegalEntityCode]" dataType="wstr" length="8" name="LegalEntityCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[PostingDate]" dataType="dbTimeStamp" name="PostingDate" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[DebitAmount]" dataType="numeric" precision="18" scale="2" name="DebitAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[CreditAmount]" dataType="numeric" precision="18" scale="2" name="CreditAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[JournalSourceCode]" dataType="wstr" length="8" name="JournalSourceCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountKey]" dataType="i4" name="GlAccountKey" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[AccountTypeCode]" dataType="wstr" length="8" name="AccountTypeCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[PostingDateKey]" dataType="i4" name="PostingDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[FxRateDate]" dataType="dbTimeStamp" name="FxRateDate" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[FxRateToUsd]" dataType="numeric" precision="18" scale="8" name="FxRateToUsd" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[FxRateSource]" dataType="wstr" length="8" name="FxRateSource" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountKeyResolved]" dataType="i4" name="GlAccountKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[SignedAmount]" dataType="numeric" precision="18" scale="2" name="SignedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[SignedAmountReporting]" dataType="numeric" precision="18" scale="2" name="SignedAmountReporting" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[PostingSideCode]" dataType="wstr" length="2" name="PostingSideCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[IsManualJournal]" dataType="bool" name="IsManualJournal" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[JournalBatchDegenerate]" dataType="wstr" length="24" name="JournalBatchDegenerate" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact GL Posting\Insert Manual Journals.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact GL Posting\Reject Unknown Account" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Unknown Account" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedLookupFailure]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact GL Posting\Reject Unknown Account.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[GlPostingBusinessKey]" cachedDataType="i8" cachedName="GlPostingBusinessKey" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[GlPostingBusinessKey]" name="GlPostingBusinessKey" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[JournalBatchNumber]" cachedDataType="wstr" cachedLength="24" cachedName="JournalBatchNumber" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[JournalBatchNumber]" name="JournalBatchNumber" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[JournalLineNumber]" cachedDataType="i4" cachedName="JournalLineNumber" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[JournalLineNumber]" name="JournalLineNumber" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[GlAccountCode]" cachedDataType="wstr" cachedLength="20" cachedName="GlAccountCode" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountCode]" name="GlAccountCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[CostCentreCode]" cachedDataType="wstr" cachedLength="12" cachedName="CostCentreCode" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[CostCentreCode]" name="CostCentreCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[LegalEntityCode]" cachedDataType="wstr" cachedLength="8" cachedName="LegalEntityCode" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[LegalEntityCode]" name="LegalEntityCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[PostingDate]" cachedDataType="dbTimeStamp" cachedName="PostingDate" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[PostingDate]" name="PostingDate" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[DebitAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DebitAmount" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[DebitAmount]" name="DebitAmount" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[CreditAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CreditAmount" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[CreditAmount]" name="CreditAmount" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[JournalSourceCode]" cachedDataType="wstr" cachedLength="8" cachedName="JournalSourceCode" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[JournalSourceCode]" name="JournalSourceCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[GlAccountKey]" cachedDataType="i4" cachedName="GlAccountKey" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountKey]" name="GlAccountKey" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[AccountTypeCode]" cachedDataType="wstr" cachedLength="8" cachedName="AccountTypeCode" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[AccountTypeCode]" name="AccountTypeCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[PostingDateKey]" cachedDataType="i4" cachedName="PostingDateKey" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[PostingDateKey]" name="PostingDateKey" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[FxRateDate]" cachedDataType="dbTimeStamp" cachedName="FxRateDate" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[FxRateDate]" name="FxRateDate" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[FxRateToUsd]" cachedDataType="numeric" cachedPrecision="18" cachedScale="8" cachedName="FxRateToUsd" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[FxRateToUsd]" name="FxRateToUsd" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[FxRateSource]" cachedDataType="wstr" cachedLength="8" cachedName="FxRateSource" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[FxRateSource]" name="FxRateSource" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[GlAccountKeyResolved]" cachedDataType="i4" cachedName="GlAccountKeyResolved" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountKeyResolved]" name="GlAccountKeyResolved" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[SignedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SignedAmount" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[SignedAmount]" name="SignedAmount" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[SignedAmountReporting]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SignedAmountReporting" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[SignedAmountReporting]" name="SignedAmountReporting" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[PostingSideCode]" cachedDataType="wstr" cachedLength="2" cachedName="PostingSideCode" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[PostingSideCode]" name="PostingSideCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[IsManualJournal]" cachedDataType="bool" cachedName="IsManualJournal" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[IsManualJournal]" name="IsManualJournal" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[JournalBatchDegenerate]" cachedDataType="wstr" cachedLength="24" cachedName="JournalBatchDegenerate" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[JournalBatchDegenerate]" name="JournalBatchDegenerate" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[GlPostingBusinessKey]" dataType="i8" name="GlPostingBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[JournalBatchNumber]" dataType="wstr" length="24" name="JournalBatchNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[JournalLineNumber]" dataType="i4" name="JournalLineNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountCode]" dataType="wstr" length="20" name="GlAccountCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[CostCentreCode]" dataType="wstr" length="12" name="CostCentreCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[LegalEntityCode]" dataType="wstr" length="8" name="LegalEntityCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[PostingDate]" dataType="dbTimeStamp" name="PostingDate" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[DebitAmount]" dataType="numeric" precision="18" scale="2" name="DebitAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[CreditAmount]" dataType="numeric" precision="18" scale="2" name="CreditAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[JournalSourceCode]" dataType="wstr" length="8" name="JournalSourceCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountKey]" dataType="i4" name="GlAccountKey" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[AccountTypeCode]" dataType="wstr" length="8" name="AccountTypeCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[PostingDateKey]" dataType="i4" name="PostingDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[FxRateDate]" dataType="dbTimeStamp" name="FxRateDate" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[FxRateToUsd]" dataType="numeric" precision="18" scale="8" name="FxRateToUsd" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[FxRateSource]" dataType="wstr" length="8" name="FxRateSource" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountKeyResolved]" dataType="i4" name="GlAccountKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[SignedAmount]" dataType="numeric" precision="18" scale="2" name="SignedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[SignedAmountReporting]" dataType="numeric" precision="18" scale="2" name="SignedAmountReporting" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[PostingSideCode]" dataType="wstr" length="2" name="PostingSideCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[IsManualJournal]" dataType="bool" name="IsManualJournal" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[JournalBatchDegenerate]" dataType="wstr" length="24" name="JournalBatchDegenerate" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact GL Posting\Reject Unknown Account.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact GL Posting\Reject Source Errors" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Source Errors" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact GL Posting\Reject Source Errors.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[GlPostingBusinessKey]" cachedDataType="i8" cachedName="GlPostingBusinessKey" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[GlPostingBusinessKey]" name="GlPostingBusinessKey" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[JournalBatchNumber]" cachedDataType="wstr" cachedLength="24" cachedName="JournalBatchNumber" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[JournalBatchNumber]" name="JournalBatchNumber" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[JournalLineNumber]" cachedDataType="i4" cachedName="JournalLineNumber" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[JournalLineNumber]" name="JournalLineNumber" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[GlAccountCode]" cachedDataType="wstr" cachedLength="20" cachedName="GlAccountCode" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountCode]" name="GlAccountCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CostCentreCode]" cachedDataType="wstr" cachedLength="12" cachedName="CostCentreCode" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CostCentreCode]" name="CostCentreCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[LegalEntityCode]" cachedDataType="wstr" cachedLength="8" cachedName="LegalEntityCode" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LegalEntityCode]" name="LegalEntityCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PostingDate]" cachedDataType="dbTimeStamp" cachedName="PostingDate" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PostingDate]" name="PostingDate" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[DebitAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="DebitAmount" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[DebitAmount]" name="DebitAmount" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CreditAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CreditAmount" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CreditAmount]" name="CreditAmount" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[TransactionCurrency]" cachedDataType="wstr" cachedLength="3" cachedName="TransactionCurrency" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" name="TransactionCurrency" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[JournalSourceCode]" cachedDataType="wstr" cachedLength="8" cachedName="JournalSourceCode" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[JournalSourceCode]" name="JournalSourceCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[GlAccountKey]" cachedDataType="i4" cachedName="GlAccountKey" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountKey]" name="GlAccountKey" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[AccountTypeCode]" cachedDataType="wstr" cachedLength="8" cachedName="AccountTypeCode" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AccountTypeCode]" name="AccountTypeCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PostingDateKey]" cachedDataType="i4" cachedName="PostingDateKey" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PostingDateKey]" name="PostingDateKey" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[FxRateDate]" cachedDataType="dbTimeStamp" cachedName="FxRateDate" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[FxRateDate]" name="FxRateDate" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[FxRateToUsd]" cachedDataType="numeric" cachedPrecision="18" cachedScale="8" cachedName="FxRateToUsd" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[FxRateToUsd]" name="FxRateToUsd" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[FxRateSource]" cachedDataType="wstr" cachedLength="8" cachedName="FxRateSource" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[FxRateSource]" name="FxRateSource" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[GlAccountKeyResolved]" cachedDataType="i4" cachedName="GlAccountKeyResolved" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountKeyResolved]" name="GlAccountKeyResolved" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[SignedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SignedAmount" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SignedAmount]" name="SignedAmount" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[SignedAmountReporting]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SignedAmountReporting" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SignedAmountReporting]" name="SignedAmountReporting" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PostingSideCode]" cachedDataType="wstr" cachedLength="2" cachedName="PostingSideCode" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PostingSideCode]" name="PostingSideCode" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[IsManualJournal]" cachedDataType="bool" cachedName="IsManualJournal" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[IsManualJournal]" name="IsManualJournal" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[JournalBatchDegenerate]" cachedDataType="wstr" cachedLength="24" cachedName="JournalBatchDegenerate" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[JournalBatchDegenerate]" name="JournalBatchDegenerate" />
+                  <inputColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[GlPostingBusinessKey]" dataType="i8" name="GlPostingBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[JournalBatchNumber]" dataType="wstr" length="24" name="JournalBatchNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[JournalLineNumber]" dataType="i4" name="JournalLineNumber" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountCode]" dataType="wstr" length="20" name="GlAccountCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CostCentreCode]" dataType="wstr" length="12" name="CostCentreCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LegalEntityCode]" dataType="wstr" length="8" name="LegalEntityCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PostingDate]" dataType="dbTimeStamp" name="PostingDate" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[DebitAmount]" dataType="numeric" precision="18" scale="2" name="DebitAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CreditAmount]" dataType="numeric" precision="18" scale="2" name="CreditAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[TransactionCurrency]" dataType="wstr" length="3" name="TransactionCurrency" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[JournalSourceCode]" dataType="wstr" length="8" name="JournalSourceCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountKey]" dataType="i4" name="GlAccountKey" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AccountTypeCode]" dataType="wstr" length="8" name="AccountTypeCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PostingDateKey]" dataType="i4" name="PostingDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[FxRateDate]" dataType="dbTimeStamp" name="FxRateDate" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[FxRateToUsd]" dataType="numeric" precision="18" scale="8" name="FxRateToUsd" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[FxRateSource]" dataType="wstr" length="8" name="FxRateSource" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[GlAccountKeyResolved]" dataType="i4" name="GlAccountKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SignedAmount]" dataType="numeric" precision="18" scale="2" name="SignedAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SignedAmountReporting]" dataType="numeric" precision="18" scale="2" name="SignedAmountReporting" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PostingSideCode]" dataType="wstr" length="2" name="PostingSideCode" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[IsManualJournal]" dataType="bool" name="IsManualJournal" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[JournalBatchDegenerate]" dataType="wstr" length="24" name="JournalBatchDegenerate" />
+                  <externalMetadataColumn refId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact GL Posting\Reject Source Errors.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Load Fact GL Posting.Paths[OLE DB Source Output]" endId="Package\Load Fact GL Posting\Lookup GL Account Key.Inputs[Lookup Input]" name="OLE DB Source Output" startId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Load Fact GL Posting.Paths[Lookup Match Output 1]" endId="Package\Load Fact GL Posting\Lookup Posting Date Key.Inputs[Lookup Input]" name="Lookup Match Output 1" startId="Package\Load Fact GL Posting\Lookup GL Account Key.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Fact GL Posting.Paths[Lookup Match Output 2]" endId="Package\Load Fact GL Posting\Derive FX Rate Date.Inputs[Derived Column Input]" name="Lookup Match Output 2" startId="Package\Load Fact GL Posting\Lookup Posting Date Key.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Fact GL Posting.Paths[Derived Column Output 3]" endId="Package\Load Fact GL Posting\Lookup Effective FX Rate.Inputs[Lookup Input]" name="Derived Column Output 3" startId="Package\Load Fact GL Posting\Derive FX Rate Date.Outputs[Derived Column Output]" />
+          <path refId="Package\Load Fact GL Posting.Paths[Lookup Match Output 4]" endId="Package\Load Fact GL Posting\Derive Posting Measures.Inputs[Derived Column Input]" name="Lookup Match Output 4" startId="Package\Load Fact GL Posting\Lookup Effective FX Rate.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Fact GL Posting.Paths[Derived Column Output 5]" endId="Package\Load Fact GL Posting\Route GL Postings.Inputs[Conditional Split Input]" name="Derived Column Output 5" startId="Package\Load Fact GL Posting\Derive Posting Measures.Outputs[Derived Column Output]" />
+          <path refId="Package\Load Fact GL Posting.Paths[System Journals 6]" endId="Package\Load Fact GL Posting\Insert System Journals.Inputs[OLE DB Destination Input]" name="System Journals 6" startId="Package\Load Fact GL Posting\Route GL Postings.Outputs[System Journals]" />
+          <path refId="Package\Load Fact GL Posting.Paths[Manual Journals 7]" endId="Package\Load Fact GL Posting\Insert Manual Journals.Inputs[OLE DB Destination Input]" name="Manual Journals 7" startId="Package\Load Fact GL Posting\Route GL Postings.Outputs[Manual Journals]" />
+          <path refId="Package\Load Fact GL Posting.Paths[Unknown Account 8]" endId="Package\Load Fact GL Posting\Reject Unknown Account.Inputs[OLE DB Destination Input]" name="Unknown Account 8" startId="Package\Load Fact GL Posting\Route GL Postings.Outputs[Unknown Account]" />
+          <path refId="Package\Load Fact GL Posting.Paths[OLE DB Source Error Output 9]" endId="Package\Load Fact GL Posting\Reject Source Errors.Inputs[OLE DB Destination Input]" name="OLE DB Source Error Output 9" startId="Package\Load Fact GL Posting\stg GLPosting.Outputs[OLE DB Source Error Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Flag Closed Period Postings"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{C890F885-66BD-9589-5901-F105C864149B}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Flag Closed Period Postings"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="EXEC Integration.LoadFactGLPosting @FlagClosedPeriods = 1, @LineageKey = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Set Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{C8D945C7-242C-76BA-65CC-8FF45D2E5210}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Set Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_SetWatermark @SourceSystemCode = ?, @ObjectName = N'Fact.GL Posting', @WatermarkTo = ?, @PackageExecutionId = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::WatermarkTo" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Rejected Records"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F451B37A-2258-F381-3E92-62232E0A51C1}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Rejected Records"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @ObjectName = N'Fact.GL Posting', @RejectReason = N'Routed by the package reject path', @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Fact.GL Posting', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Batch Variables"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Get Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Get Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Quarantine Unbalanced Batches" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Quarantine Unbalanced Batches"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Load Fact GL Posting" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Load Fact GL Posting"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Flag Closed Period Postings" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Flag Closed Period Postings"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Set Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Set Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Rejected Records" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Log Rejected Records"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 8]"
+      DTS:CreationName=""
+      DTS:DTSID="{71A76C5F-1A20-5771-2776-7EF96FD96B90}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 8"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{6D637661-3E51-4FA8-A356-C0425EE95948}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>
