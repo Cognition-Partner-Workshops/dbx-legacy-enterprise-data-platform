@@ -243,8 +243,8 @@ def build_inv_load_cyclecountvariance():
         "Queue Recounts",
         CONN_STAGING,
         "INSERT INTO etl.RejectedRecord "
-        "    (BatchId, ObjectName, RejectStage, RejectReasonCode, RejectReasonDescription, "
-        "     SourceKey, RejectedAtUtc, IsReprocessed) "
+        "    (BatchId, ObjectName, RejectStage, RejectReasonCode, RejectReason, "
+        "     BusinessKey, LoggedAtUtc, IsReprocessed) "
         "SELECT ?, N'stg.CycleCount', N'Fact', N'COUNT_VARIANCE_HELD', "
         "       N'Cycle-count variance above tolerance; supervisor recount required', "
         "       CAST(CycleCountId AS nvarchar(20)), SYSUTCDATETIME(), 0 "
@@ -507,8 +507,8 @@ def build_inv_load_stocktransfer():
         "Escalate Aged In Transit",
         CONN_STAGING,
         "INSERT INTO etl.RejectedRecord "
-        "    (BatchId, ObjectName, RejectStage, RejectReasonCode, RejectReasonDescription, "
-        "     SourceKey, RejectedAtUtc, IsReprocessed) "
+        "    (BatchId, ObjectName, RejectStage, RejectReasonCode, RejectReason, "
+        "     BusinessKey, LoggedAtUtc, IsReprocessed) "
         "SELECT ?, N'stg.StockMovement', N'Fact', N'TRANSFER_AGED_IN_TRANSIT', "
         "       N'Transfer despatched but not received within the alert window', "
         "       TransferReference, SYSUTCDATETIME(), 0 "
@@ -605,8 +605,8 @@ def build_inv_reconcile_onhand():
         "Escalate Genuine Differences",
         CONN_STAGING,
         "INSERT INTO etl.RejectedRecord "
-        "    (BatchId, ObjectName, RejectStage, RejectReasonCode, RejectReasonDescription, "
-        "     SourceKey, RejectedAtUtc, IsReprocessed) "
+        "    (BatchId, ObjectName, RejectStage, RejectReasonCode, RejectReason, "
+        "     BusinessKey, LoggedAtUtc, IsReprocessed) "
         "SELECT ?, N'Fact.Stock Holding', N'Fact', N'ONHAND_VARIANCE', "
         "       N'DW on-hand does not agree with the operational position', "
         "       SourceKey, SYSUTCDATETIME(), 0 "

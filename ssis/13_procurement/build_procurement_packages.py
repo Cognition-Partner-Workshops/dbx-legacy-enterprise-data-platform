@@ -292,8 +292,8 @@ def build_prc_load_receiptmatching():
         "Raise Match Exceptions",
         CONN_STAGING,
         "INSERT INTO etl.RejectedRecord "
-        "    (BatchId, ObjectName, RejectStage, RejectReasonCode, RejectReasonDescription, "
-        "     SourceKey, RejectedAtUtc, IsReprocessed) "
+        "    (BatchId, ObjectName, RejectStage, RejectReasonCode, RejectReason, "
+        "     BusinessKey, LoggedAtUtc, IsReprocessed) "
         "SELECT ?, N'stg.Receipt', N'Fact', MatchResultCode, "
         "       N'Three-way match exception outside the regional tolerance', "
         "       ReceiptNumber, SYSUTCDATETIME(), 0 "
@@ -551,8 +551,8 @@ def build_prc_load_contractcompliance():
         "Raise Non Compliant Lines",
         CONN_STAGING,
         "INSERT INTO etl.RejectedRecord "
-        "    (BatchId, ObjectName, RejectStage, RejectReasonCode, RejectReasonDescription, "
-        "     SourceKey, RejectedAtUtc, IsReprocessed) "
+        "    (BatchId, ObjectName, RejectStage, RejectReasonCode, RejectReason, "
+        "     BusinessKey, LoggedAtUtc, IsReprocessed) "
         "SELECT ?, N'stg.VendorContract', N'Fact', ComplianceStatusCode, "
         "       N'Purchase line failed contract compliance', "
         "       CONCAT(PurchaseOrderNumber, N'|', CAST(LineNumber AS nvarchar(10))), "

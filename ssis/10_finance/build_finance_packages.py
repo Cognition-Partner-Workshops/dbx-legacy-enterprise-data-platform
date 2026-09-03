@@ -276,8 +276,8 @@ def build_fin_load_glpostings():
         "EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @BatchId = ?, "
         "@ObjectName = N'stg.GlJournalLine', @RejectStage = N'Fact', "
         "@RejectReasonCode = N'PERIOD_NOT_OPEN', "
-        "@RejectReasonDescription = N'Journal line belongs to a period other than the one being posted.', "
-        "@SourceKey = N'batch', @RowPayload = NULL;",
+        "@RejectReason = N'Journal line belongs to a period other than the one being posted.', "
+        "@BusinessKey = N'batch', @RecordPayload = NULL;",
         parameter_bindings=[("User::PackageExecutionId", 0, "LONG"), ("$Package::BatchId", 1, "LONG")],
         is_stored_procedure=True,
     ))
@@ -384,8 +384,8 @@ def build_fin_reconcile_subledger_to_gl():
         "Raise Unexplained Variances",
         CONN_STAGING,
         "INSERT INTO etl.RejectedRecord "
-        "    (BatchId, ObjectName, RejectStage, RejectReasonCode, RejectReasonDescription, "
-        "     SourceKey, RejectedAtUtc, IsReprocessed) "
+        "    (BatchId, ObjectName, RejectStage, RejectReasonCode, RejectReason, "
+        "     BusinessKey, LoggedAtUtc, IsReprocessed) "
         "SELECT ?, N'etl.ReconciliationResult', N'Fact', N'SUBLEDGER_VARIANCE', "
         "       N'Subledger to GL variance outside tolerance', "
         "       LedgerCode + N'|' + AccountCode, SYSUTCDATETIME(), 0 "

@@ -761,7 +761,7 @@ def _oracle_extracts():
                 target_objects=[tgt],
                 load_type=load,
                 parent="Master_Daily_ETL",
-                procs=["etl.LogPackageStart", "etl.GetWatermark", "etl.SetWatermark", "etl.LogRowCount"],
+                procs=["etl.usp_LogPackageStart", "etl.usp_GetWatermark", "etl.usp_SetWatermark", "etl.usp_LogRowCount"],
                 criticality=crit,
             )
         )
@@ -806,7 +806,7 @@ def _sqlserver_extracts():
                 target_objects=[tgt],
                 load_type=load,
                 parent="Master_Daily_ETL",
-                procs=["etl.LogPackageStart", "etl.GetWatermark", "etl.SetWatermark", "etl.LogRowCount"],
+                procs=["etl.usp_LogPackageStart", "etl.usp_GetWatermark", "etl.usp_SetWatermark", "etl.usp_LogRowCount"],
                 criticality=crit,
             )
         )
@@ -837,7 +837,7 @@ def _file_ingestion():
                 target_objects=[tgt],
                 load_type="file_ingest",
                 parent="Master_Hourly_Incremental",
-                procs=["etl.LogPackageStart", "etl.LogRejectedRecord", "etl.LogRowCount"],
+                procs=["etl.usp_LogPackageStart", "etl.usp_LogRejectedRecord", "etl.usp_LogRowCount"],
                 criticality="medium" if region == "GLOBAL" else "low",
                 region=region,
             )
@@ -890,7 +890,7 @@ def _staging_packages():
                 target_objects=tgt,
                 load_type=load,
                 parent="Master_Daily_ETL",
-                procs=[proc, "etl.LogPackageStart", "etl.LogRowCount"],
+                procs=[proc, "etl.usp_LogPackageStart", "etl.usp_LogRowCount"],
                 criticality="high" if load == "incremental_append" else "medium",
             )
         )
@@ -924,7 +924,7 @@ def _quality_packages():
                 target_objects=tgt,
                 load_type="quality_screen",
                 parent="Master_Daily_ETL",
-                procs=["etl.EvaluateDataQualityRules", "etl.LogRejectedRecord", "etl.AssertRowCountTolerance"],
+                procs=["etl.usp_EvaluateDataQualityRules", "etl.usp_LogRejectedRecord", "etl.usp_AssertRowCountTolerance"],
                 criticality="high",
                 notes=note,
             )
@@ -947,7 +947,7 @@ def _reference_packages():
         ("REF_Load_Geography", "Dimension.Geography", "Integration.MigrateStagedGeographyData"),
         ("REF_Load_DateDimension", "Dimension.Date", "Integration.PopulateDateDimensionRange"),
         ("REF_Load_UnknownMembers", "Dimension.*", "Integration.EnsureUnknownMembers"),
-        ("REF_Load_CodeTranslation", "etl.Configuration", "etl.GetConfigurationValue"),
+        ("REF_Load_CodeTranslation", "etl.Configuration", "etl.ufn_GetConfigurationValue"),
     ]
     out = []
     for name, tgt, proc in specs:
@@ -963,7 +963,7 @@ def _reference_packages():
                 target_objects=[tgt],
                 load_type="full_refresh",
                 parent="Master_Weekly_Reference_Load",
-                procs=[proc, "etl.LogPackageStart", "etl.LogRowCount"],
+                procs=[proc, "etl.usp_LogPackageStart", "etl.usp_LogRowCount"],
                 criticality="high" if "Unknown" in name or "Date" in name else "medium",
             )
         )
@@ -995,7 +995,7 @@ def _dimension_packages():
                         target_objects=["Dimension.{}".format(dim)],
                         load_type=scd,
                         parent="Master_Daily_ETL",
-                        procs=[proc, "etl.LogPackageStart", "etl.LogRowCount"],
+                        procs=[proc, "etl.usp_LogPackageStart", "etl.usp_LogRowCount"],
                         criticality="high",
                         region=region,
                     )
@@ -1013,7 +1013,7 @@ def _dimension_packages():
                     target_objects=["Dimension.{}".format(dim)],
                     load_type=scd,
                     parent="Master_Daily_ETL",
-                    procs=[proc, "etl.LogPackageStart", "etl.LogRowCount"],
+                    procs=[proc, "etl.usp_LogPackageStart", "etl.usp_LogRowCount"],
                     criticality="high" if scd == "SCD2" else "medium",
                 )
             )
@@ -1056,7 +1056,7 @@ def _fact_packages():
                         target_objects=["Fact.{}".format(fact)],
                         load_type="incremental_fact",
                         parent="Master_Daily_ETL",
-                        procs=[proc, "etl.LogPackageStart", "etl.LogRowCount"],
+                        procs=[proc, "etl.usp_LogPackageStart", "etl.usp_LogRowCount"],
                         criticality="high",
                         region=region,
                         grain=grain,
@@ -1075,7 +1075,7 @@ def _fact_packages():
                     target_objects=["Fact.{}".format(fact)],
                     load_type="incremental_fact" if grain == "transaction" else "snapshot_fact",
                     parent="Master_Daily_ETL",
-                    procs=[proc, "etl.LogPackageStart", "etl.LogRowCount"],
+                    procs=[proc, "etl.usp_LogPackageStart", "etl.usp_LogRowCount"],
                     criticality="high" if grain == "transaction" else "medium",
                     grain=grain,
                 )
@@ -1145,7 +1145,7 @@ def _aggregate_packages():
                 target_objects=["Aggregate.{}".format(agg)],
                 load_type="aggregate_rebuild",
                 parent="Master_Daily_ETL" if agg.startswith("Daily") else "Master_Month_End",
-                procs=[proc_map[agg], "etl.LogPackageStart", "etl.LogRowCount"],
+                procs=[proc_map[agg], "etl.usp_LogPackageStart", "etl.usp_LogRowCount"],
                 criticality="medium",
             )
         )
@@ -1238,7 +1238,7 @@ def _domain_packages():
                 target_objects=tgt,
                 load_type="business_rule",
                 parent=parent,
-                procs=["etl.LogPackageStart", "etl.LogRowCount"],
+                procs=["etl.usp_LogPackageStart", "etl.usp_LogRowCount"],
                 criticality="high" if project == "WWI_Finance" else "medium",
                 notes=note,
             )
@@ -1278,7 +1278,7 @@ def _error_and_maintenance():
                 target_objects=["etl.ErrorLog", "file:errors"],
                 load_type="utility",
                 parent="Master_Daily_ETL",
-                procs=["etl.LogError", "etl.LogRejectedRecord"],
+                procs=["etl.usp_LogError", "etl.usp_LogRejectedRecord"],
                 criticality="high",
                 notes=note,
             )
@@ -1296,7 +1296,7 @@ def _error_and_maintenance():
                 target_objects=["etl.*"],
                 load_type="utility",
                 parent="Master_Weekly_Maintenance",
-                procs=["etl.PurgeControlHistory", "Integration.RebuildColumnstoreIndexes"],
+                procs=["etl.usp_PurgeControlHistory", "Integration.RebuildColumnstoreIndexes"],
                 criticality="low",
                 notes=note,
             )
@@ -1332,7 +1332,7 @@ def _master_packages():
                 target_objects=[],
                 load_type="orchestration",
                 parent=None,
-                procs=["etl.StartBatch", "etl.EndBatch", "etl.StartBatchStep", "etl.EndBatchStep"],
+                procs=["etl.usp_StartBatch", "etl.usp_EndBatch", "etl.usp_StartBatchStep", "etl.usp_EndBatchStep"],
                 criticality="high",
                 notes=note,
             )
