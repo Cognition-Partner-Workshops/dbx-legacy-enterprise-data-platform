@@ -20,6 +20,27 @@ graph is strict, Completion constraints where a phase is advisory, and
 expression-and-constraint precedence where the phase is conditional (restart
 from a named step, environment gating, reject thresholds, fiscal-period gating).
 
+Three producer/consumer pairs in the estate read an object that the other half
+of the pair writes, so the object graph loops. The loops used to be broken only
+by the two halves running in different windows - the nightly wrote and the
+four-hourly recovery job read. They are now declared here instead:
+
+  * Customer 360: the aggregate and profile builders produce
+    Aggregate.Customer 360, and C360_Publish_Segments consumes it and writes
+    Dimension.Customer Segment, which the aggregate reads on the next run. The
+    mart phase is split into a build container and a publish container joined
+    by a Success constraint, so the publish half can never run against the
+    aggregate it is itself feeding.
+  * The data-quality cluster: the screens produce the err reject tables and the
+    reject routing packages consume them. The screens run in the Data Quality
+    container and the consumers in a separate Reject Routing container behind a
+    Completion constraint.
+  * The referential screen and reject pair: DQ_Referential_Screen writes
+    err.RejectedLookupFailure and DQ_Reject_Reprocess pushes the resolved rows
+    back into stg.OrderLine, which the screen reads. The re-screen of the
+    reprocessed rows is an explicit third container after reject routing rather
+    than the next night's screen picking them up by accident.
+
 Run:  python3 ssis/00_orchestration/build_orchestration_packages.py
 """
 
@@ -270,9 +291,13 @@ STAGING_WORK = [
     "STG_Work_InventoryPosition",
 ]
 
+# Producing half of the data-quality cluster: these screens write the err reject
+# tables that the reject-routing phase consumes. DQ_Referential_Screen is held
+# out and run in its own container because it is one half of the referential
+# screen/reject pair.
 QUALITY_SCREENS = [
     "DQ_Rule_Engine", "DQ_Customer_Screen", "DQ_Supplier_Screen", "DQ_OrderLine_Screen",
-    "DQ_InvoiceLine_Screen", "DQ_Payment_Screen", "DQ_Referential_Screen", "DQ_Threshold_Gate",
+    "DQ_InvoiceLine_Screen", "DQ_Payment_Screen", "DQ_Threshold_Gate",
 ]
 
 DIMENSIONS = [
@@ -327,14 +352,47 @@ def build_master_daily_etl():
         "AND Status = N'Failed';",
         parameter_bindings=[("User::ExtractAttempt", 0, "LONG"), ("User::BatchId", 1, "LONG")],
     ))
+    # The retry driver re-drives the failed extract steps through the control
+    # framework before the phases themselves are re-run, and is bounded by the
+    # master's own attempt limit.
+    retry_driver = phase(pkg, "Extract Retry Driver", 12, GROUP_EXTRACT,
+                         ["ERR_Retry_FailedSteps"], serialise=True,
+                         parameter_assignments=[
+                             ("BatchId", "User::BatchId"),
+                             ("ReloadFullHistory", "$Package::ReloadFullHistory"),
+                             ("MaxRetryAttempts", "$Package::MaxExtractAttempts"),
+                         ])
     retry_oracle = phase(pkg, "Extract Oracle Retry", 11, GROUP_EXTRACT, ORACLE_EXTRACTS, streams=2)
     retry_sql = phase(pkg, "Extract SQL Server Retry", 21, GROUP_EXTRACT, SQL_EXTRACTS, streams=2)
 
+    # A restart-from-failed-step run reopens the retryable steps of the adopted
+    # batch before the first extract phase is attempted.
+    recover = phase(pkg, "Restart Recovery", 5, GROUP_EXTRACT, ["ERR_Retry_FailedSteps"],
+                    serialise=True,
+                    parameter_assignments=[
+                        ("BatchId", "User::BatchId"),
+                        ("ReloadFullHistory", "$Package::ReloadFullHistory"),
+                        ("MaxRetryAttempts", "$Package::MaxExtractAttempts"),
+                    ])
+
+    # File ingestion screening sits ahead of the file-borne staging loads;
+    # anything the screen rejects is quarantined off the failure path rather
+    # than being staged.
+    file_screen = phase(pkg, "File Screen", 25, GROUP_QUALITY, ["DQ_File_Screen"], serialise=True)
+    file_quarantine = phase(pkg, "File Quarantine", 26, GROUP_QUALITY,
+                            ["ERR_Quarantine_BadFiles"], serialise=True)
     stage = phase(pkg, "Stage Load", 30, GROUP_STAGE, STAGING_LOADS, streams=4)
     stage_work = phase(pkg, "Stage Work Tables", 35, GROUP_STAGE, STAGING_WORK, serialise=True)
     quality = phase(pkg, "Data Quality", 40, GROUP_QUALITY, QUALITY_SCREENS, streams=2)
+    # Referential screen (produce) -> reject routing (consume) -> re-screen of
+    # the rows the reprocess pushed back into staging. Declaring the third pass
+    # here is what keeps the screen/reject pair out of a loop.
+    referential = phase(pkg, "Referential Screen", 42, GROUP_QUALITY,
+                        ["DQ_Referential_Screen"], serialise=True)
     reject_route = phase(pkg, "Reject Routing", 45, GROUP_QUALITY,
                          ["DQ_Reject_Reprocess", "ERR_Route_RejectedRows"], serialise=True)
+    referential_rescreen = phase(pkg, "Referential Rescreen", 47, GROUP_QUALITY,
+                                 ["DQ_Referential_Screen"], serialise=True)
     reference = phase(pkg, "Reference Refresh", 50, GROUP_REFERENCE,
                       ["REF_Load_UnknownMembers", "REF_Load_CodeTranslation", "REF_Load_Currency"],
                       serialise=True)
@@ -354,10 +412,14 @@ def build_master_daily_etl():
                              ["PRC_Load_PurchaseSpend", "PRC_Load_ReceiptMatching",
                               "PRC_Load_ContractCompliance", "PRC_Load_SupplierScorecard",
                               "PRC_Export_SupplierStatement"], streams=2)
-    customer_mart = phase(pkg, "Customer 360", 93, GROUP_MART,
+    # Customer 360 produce/consume split: everything that writes the aggregate
+    # runs in the build container, and the publish that reads it runs behind a
+    # Success constraint in its own container.
+    customer_mart = phase(pkg, "Customer 360 Build", 93, GROUP_MART,
                           ["C360_Build_CustomerProfile", "C360_Build_RollingMetrics",
-                           "C360_Build_LoyaltyOverlay", "C360_Build_ChurnFlags",
-                           "C360_Publish_Segments"], serialise=True)
+                           "C360_Build_LoyaltyOverlay", "C360_Build_ChurnFlags"], serialise=True)
+    customer_publish = phase(pkg, "Customer 360 Publish", 94, GROUP_MART,
+                             ["C360_Publish_Segments"], serialise=True)
     publish = phase(pkg, "Publish Reporting Layer", 95, GROUP_AGGREGATE,
                     ["AGG_Publish_ReportingLayer"], serialise=True)
     failure_paths = phase(pkg, "Failure Handling", 98, GROUP_MAINTENANCE,
@@ -367,26 +429,40 @@ def build_master_daily_etl():
     reconcile = pkg.add(reconcile_row_counts())
     close = pkg.add(end_batch())
 
+    # A restart run reopens the failed steps first; a normal run goes straight
+    # into the extracts.
+    pkg.link(announce, recover, expression='@[$Package::RestartFromStep] != ""')
+    pkg.link(recover, oracle, value="Completion")
+
     # Extract phases: success continues, failure enters the bounded retry.
     pkg.link(announce, oracle, expression=skip_expression("Extract Oracle"))
     pkg.link(oracle, sqlsrc)
     pkg.link(oracle, bump, value="Failure")
     pkg.link(sqlsrc, bump, value="Failure")
     pkg.link(bump, record_attempt)
-    pkg.link(record_attempt, retry_oracle,
+    pkg.link(record_attempt, retry_driver,
              expression="@[User::ExtractAttempt] <= @[$Package::MaxExtractAttempts]")
+    pkg.link(record_attempt, failure_paths,
+             expression="@[User::ExtractAttempt] > @[$Package::MaxExtractAttempts]")
+    pkg.link(retry_driver, retry_oracle, value="Completion")
+    pkg.link(retry_driver, failure_paths, value="Failure")
     pkg.link(retry_oracle, retry_sql)
     pkg.link(retry_oracle, failure_paths, value="Failure")
-    pkg.link(retry_sql, stage)
+    pkg.link(retry_sql, file_screen)
     pkg.link(retry_sql, failure_paths, value="Failure")
 
-    pkg.link(sqlsrc, stage, expression=skip_expression("Stage Load"))
+    pkg.link(sqlsrc, file_screen, expression=skip_expression("File Screen"))
+    pkg.link(file_screen, file_quarantine, value="Failure")
+    pkg.link(file_screen, stage, expression=skip_expression("Stage Load"))
+    pkg.link(file_quarantine, stage, value="Completion")
     pkg.link(stage, stage_work)
     pkg.link(stage_work, quality)
     # The quality gate is advisory: rejects are routed and the load continues
     # unless DQ_Threshold_Gate raised, which fails the container.
-    pkg.link(quality, reject_route, value="Completion")
-    pkg.link(reject_route, reference, value="Completion")
+    pkg.link(quality, referential, value="Completion")
+    pkg.link(referential, reject_route, value="Completion")
+    pkg.link(reject_route, referential_rescreen, value="Completion")
+    pkg.link(referential_rescreen, reference, value="Completion")
     pkg.link(quality, failure_paths, value="Failure")
     pkg.link(reference, dimensions)
     pkg.link(dimensions, facts)
@@ -397,7 +473,8 @@ def build_master_daily_etl():
     pkg.link(sales_mart, customer_mart)
     pkg.link(inventory_mart, customer_mart)
     pkg.link(procurement_mart, customer_mart)
-    pkg.link(customer_mart, publish)
+    pkg.link(customer_mart, customer_publish)
+    pkg.link(customer_publish, publish)
     pkg.link(publish, reconcile)
     pkg.link(reconcile, close)
     pkg.link(failure_paths, close)
@@ -686,9 +763,13 @@ def build_master_month_end():
                                ["AGG_Refresh_FinanceCloseSummary"], serialise=True)
     customer = phase(pkg, "Customer Aggregates", 50, GROUP_AGGREGATE,
                      ["AGG_Refresh_CustomerRolling12Month", "AGG_Refresh_Customer360"], serialise=True)
+    # The customer aggregates are rebuilt first, then the mart builders, then
+    # the publish that consumes them; the segment publish is held in its own
+    # container so it cannot overlap the aggregate it feeds.
     mart = phase(pkg, "Customer Mart Refresh", 60, GROUP_MART,
-                 ["C360_Build_RollingMetrics", "C360_Build_ChurnFlags", "C360_Publish_Segments"],
-                 serialise=True)
+                 ["C360_Build_RollingMetrics", "C360_Build_ChurnFlags"], serialise=True)
+    mart_publish = phase(pkg, "Customer Segment Publish", 65, GROUP_MART,
+                         ["C360_Publish_Segments"], serialise=True)
     housekeeping = phase(pkg, "Month End Housekeeping", 80, GROUP_MAINTENANCE,
                          ["MNT_Update_Statistics", "MNT_Purge_ControlHistory"], serialise=True)
     escalate = phase(pkg, "Month End Escalation", 90, GROUP_MAINTENANCE,
@@ -706,7 +787,8 @@ def build_master_month_end():
     pkg.link(ops_aggregates, customer)
     pkg.link(finance_aggregates, customer)
     pkg.link(customer, mart)
-    pkg.link(mart, housekeeping, value="Completion")
+    pkg.link(mart, mart_publish)
+    pkg.link(mart_publish, housekeeping, value="Completion")
     pkg.link(housekeeping, reconcile)
     pkg.link(reconcile, close)
     pkg.link(escalate, close)
@@ -808,9 +890,13 @@ def build_master_customer_sync():
                        streams=3)
     support = phase(pkg, "Customer Support Dimensions", 55, GROUP_DIMENSION,
                     ["DIM_Load_CustomerCategory", "DIM_Load_CustomerSegment", "DIM_Load_City"], streams=2)
-    mart = phase(pkg, "Customer Mart", 60, GROUP_MART,
-                 ["C360_Build_CustomerProfile", "C360_Build_LoyaltyOverlay", "C360_Publish_Segments"],
-                 serialise=True)
+    # Same Customer 360 produce/consume split as the nightly master: the mart
+    # build writes Aggregate.Customer 360 and the publish, which reads it and
+    # writes Dimension.Customer Segment, runs behind it in its own container.
+    mart = phase(pkg, "Customer Mart Build", 60, GROUP_MART,
+                 ["C360_Build_CustomerProfile", "C360_Build_LoyaltyOverlay"], serialise=True)
+    mart_publish = phase(pkg, "Customer Mart Publish", 65, GROUP_MART,
+                         ["C360_Publish_Segments"], serialise=True)
     escalate = phase(pkg, "Customer Sync Escalation", 90, GROUP_MAINTENANCE,
                      ["ERR_Route_RejectedRows", "ERR_Notify_Operations"], serialise=True)
 
@@ -840,7 +926,8 @@ def build_master_customer_sync():
     pkg.link(screen, dimensions, value="Completion")
     pkg.link(dimensions, support)
     pkg.link(support, mart)
-    pkg.link(mart, close)
+    pkg.link(mart, mart_publish)
+    pkg.link(mart_publish, close)
     pkg.link(escalate, close)
     return pkg
 

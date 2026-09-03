@@ -6,6 +6,18 @@ households are assembled from a standardised address that differs per region,
 and the EU rows are subject to consent and retention rules that NA and APAC do
 not apply.
 
+The mart is also one half of a data-flow loop: the build packages write
+Aggregate.Customer 360 and C360_Publish_Segments reads it and writes
+Dimension.Customer Segment, which the aggregate refresh reads again. The loop
+used to be broken only by the two halves landing in different scheduling
+windows. The resolution is in the orchestration rather than in these packages:
+Master_Daily_ETL, Master_Customer_Sync and Master_Month_End each run the
+builders in one sequence container and C360_Publish_Segments in a second
+container behind a Success precedence constraint, so the consume half is
+declared to run after the produce half instead of by accident of the schedule.
+Nothing in the packages themselves changed - the split is a container boundary,
+not a rewrite of the mart.
+
 Run:  python3 ssis/14_customer_360/build_customer360_packages.py
 """
 
