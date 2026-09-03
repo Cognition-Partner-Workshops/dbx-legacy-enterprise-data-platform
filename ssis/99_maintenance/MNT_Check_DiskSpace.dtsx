@@ -1,0 +1,817 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{A379F5E8-52CF-5CB2-3A73-5FA9D3B2302F}"
+  DTS:Description="Pre-flight environment check before the nightly batch: free space on the data, log and tempdb volumes, the size of the inbound and archive shares, and the projected growth of the largest fact loads. The thresholds are the ones the operators set after the batch filled the log volume, and a shortfall is raised loudly enough to hold the batch."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="MNT_Check_DiskSpace"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{6AA2FDD4-73AC-4B1A-6B54-C1A4D9D1EBA3}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{CD9B47B4-6FEF-A930-07F7-5EE06C79D85D}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{DA77573C-4934-9C92-82AF-FCA07AE519A7}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{3B081A2F-D3A4-5A34-AD34-3833D39F5234}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::MinimumFreePercent]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Minimum free space on any database volume."
+      DTS:DTSID="{974D1BC8-020E-CC7D-1085-496671015811}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="MinimumFreePercent"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">15</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::MinimumFreeGbTempdb]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Minimum free space required for tempdb sorts."
+      DTS:DTSID="{D9657214-E931-5E4D-39D5-B6CFFA4A4881}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="MinimumFreeGbTempdb"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">50</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::HoldBatchOnShortfall]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="A shortfall raises a hold rather than letting the batch run."
+      DTS:DTSID="{41B839CD-D112-EF6F-A1AA-01F3BF21C0FC}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="HoldBatchOnShortfall"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">True</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{06F32882-2A27-3245-6C33-91C3204E95C6}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{85697FFA-56CA-EB51-BB90-11066E231C55}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{9928C3FF-4660-1B68-E8FE-4CA12A08B87B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{DB7617BB-4EBD-F98E-5CCA-AC2AD4624D90}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{B46ABD92-D28D-1B3A-17F3-1E8A11C3B99E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{E3CFD464-963B-A483-DD20-64C4F9259247}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{239A3DD1-940A-69B5-D0F4-45605CC59678}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{16F70120-B68E-01E1-A55B-AB74313FB3F5}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::LowVolumeCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{EF427BFF-4869-A78C-580C-A6F897719AD4}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="LowVolumeCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::SmallestFreePercent]"
+      DTS:CreationName=""
+      DTS:DTSID="{227568AB-D467-99FB-BEF8-891E71D0AF0B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="SmallestFreePercent">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">100</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PreflightStatus]"
+      DTS:CreationName=""
+      DTS:DTSID="{4626E1C8-ED82-3B9D-4FD7-E60D34D92F30}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PreflightStatus">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">UNKNOWN</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Truncate work.VolumeSpaceCheck"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{34BA390D-BA13-0B8A-55D1-667E00D64A05}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Truncate work.VolumeSpaceCheck"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE work.VolumeSpaceCheck;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Survey Volume Space"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{79E0B4A2-6820-ACF4-6151-FFB8EF522E17}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Survey Volume Space"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="INSERT INTO work.VolumeSpaceCheck&#10;    (VolumeMountPoint, TotalBytes, AvailableBytes, FreePercent, DatabaseName,&#10;     FileTypeCode, CheckedAtUtc)&#10;SELECT DISTINCT&#10;        vs.volume_mount_point&#10;,       vs.total_bytes&#10;,       vs.available_bytes&#10;,       CAST(vs.available_bytes * 100.0 / NULLIF(vs.total_bytes, 0) AS decimal(9, 2))&#10;,       DB_NAME(f.database_id)&#10;,       CASE WHEN f.type = 1 THEN N'LOG' ELSE N'DATA' END&#10;,       SYSUTCDATETIME()&#10;FROM    sys.master_files AS f&#10;CROSS APPLY sys.dm_os_volume_stats(f.database_id, f.file_id) AS vs;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="300"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Project Batch Growth"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{AA080B05-0E65-A829-2B59-C88BE8A2B331}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Project Batch Growth"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="INSERT INTO work.VolumeGrowthProjection&#10;    (VolumeMountPoint, ProjectedBytes, BasisDescription, CheckedAtUtc)&#10;SELECT  v.VolumeMountPoint&#10;,       CAST(AVG(CAST(g.BytesWritten AS bigint)) * 1.33 AS bigint)&#10;,       N'Average of the last ten nightly loads plus index maintenance headroom'&#10;,       SYSUTCDATETIME()&#10;FROM    work.VolumeSpaceCheck AS v&#10;INNER JOIN etl.LoadVolumeHistory AS g ON g.VolumeMountPoint = v.VolumeMountPoint&#10;WHERE   g.LoadDate &gt;= DATEADD(DAY, -14, CAST(SYSUTCDATETIME() AS date))&#10;GROUP BY v.VolumeMountPoint;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Evaluate Preflight"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{CC9DA25D-EFFC-DBE7-B131-65A7F0E421BF}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Evaluate Preflight"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Evaluate Preflight\work VolumeSpaceCheck" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="work VolumeSpaceCheck" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">300</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT  v.VolumeMountPoint
+,       CAST(v.FreePercent AS int) AS FreePercent
+,       CAST(v.AvailableBytes / 1073741824 AS int) AS AvailableGb
+,       v.DatabaseName
+,       v.FileTypeCode
+,       CAST(ISNULL(p.ProjectedBytes, 0) / 1073741824 AS int) AS ProjectedGb
+FROM    work.VolumeSpaceCheck AS v
+LEFT OUTER JOIN work.VolumeGrowthProjection AS p
+       ON p.VolumeMountPoint = v.VolumeMountPoint;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].Columns[VolumeMountPoint]" dataType="wstr" length="128" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].ExternalColumns[VolumeMountPoint]" lineageId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].Columns[VolumeMountPoint]" name="VolumeMountPoint" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].Columns[FreePercent]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].ExternalColumns[FreePercent]" lineageId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].Columns[FreePercent]" name="FreePercent" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].Columns[AvailableGb]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].ExternalColumns[AvailableGb]" lineageId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].Columns[AvailableGb]" name="AvailableGb" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].Columns[DatabaseName]" dataType="wstr" length="128" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].ExternalColumns[DatabaseName]" lineageId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].Columns[DatabaseName]" name="DatabaseName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].Columns[FileTypeCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].ExternalColumns[FileTypeCode]" lineageId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].Columns[FileTypeCode]" name="FileTypeCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].Columns[ProjectedGb]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].ExternalColumns[ProjectedGb]" lineageId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].Columns[ProjectedGb]" name="ProjectedGb" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].ExternalColumns[VolumeMountPoint]" dataType="wstr" length="128" name="VolumeMountPoint" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].ExternalColumns[FreePercent]" dataType="i4" name="FreePercent" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].ExternalColumns[AvailableGb]" dataType="i4" name="AvailableGb" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].ExternalColumns[DatabaseName]" dataType="wstr" length="128" name="DatabaseName" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].ExternalColumns[FileTypeCode]" dataType="wstr" length="10" name="FileTypeCode" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output].ExternalColumns[ProjectedGb]" dataType="i4" name="ProjectedGb" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Error Output].Columns[VolumeMountPoint]" dataType="wstr" length="128" lineageId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Error Output].Columns[VolumeMountPoint]" name="VolumeMountPoint" />
+                  <outputColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Error Output].Columns[FreePercent]" dataType="i4" lineageId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Error Output].Columns[FreePercent]" name="FreePercent" />
+                  <outputColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Error Output].Columns[AvailableGb]" dataType="i4" lineageId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Error Output].Columns[AvailableGb]" name="AvailableGb" />
+                  <outputColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Error Output].Columns[DatabaseName]" dataType="wstr" length="128" lineageId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Error Output].Columns[DatabaseName]" name="DatabaseName" />
+                  <outputColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Error Output].Columns[FileTypeCode]" dataType="wstr" length="10" lineageId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Error Output].Columns[FileTypeCode]" name="FileTypeCode" />
+                  <outputColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Error Output].Columns[ProjectedGb]" dataType="i4" lineageId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Error Output].Columns[ProjectedGb]" name="ProjectedGb" />
+                  <outputColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Evaluate Preflight\Evaluate Thresholds" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Evaluate Thresholds" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Evaluate Preflight\Evaluate Thresholds.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Evaluate Preflight\Evaluate Thresholds.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Evaluate Preflight\Evaluate Thresholds.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Evaluate Preflight\Evaluate Thresholds.Outputs[Derived Column Output].Columns[HasShortfall]" dataType="bool" lineageId="Package\Evaluate Preflight\Evaluate Thresholds.Outputs[Derived Column Output].Columns[HasShortfall]" name="HasShortfall">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">FreePercent &lt; @[$Package::MinimumFreePercent] || AvailableGb &lt; ProjectedGb ? (DT_BOOL)1 : (DT_BOOL)0</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">FreePercent &lt; @[$Package::MinimumFreePercent] || AvailableGb &lt; ProjectedGb ? (DT_BOOL)1 : (DT_BOOL)0</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Evaluate Preflight\Evaluate Thresholds.Outputs[Derived Column Output].Columns[SeverityCode]" dataType="wstr" length="10" lineageId="Package\Evaluate Preflight\Evaluate Thresholds.Outputs[Derived Column Output].Columns[SeverityCode]" name="SeverityCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">FreePercent &lt; (@[$Package::MinimumFreePercent] / 2) ? (DT_WSTR,10)"CRITICAL" : (FreePercent &lt; @[$Package::MinimumFreePercent] ? (DT_WSTR,10)"WARNING" : (DT_WSTR,10)"OK")</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">FreePercent &lt; (@[$Package::MinimumFreePercent] / 2) ? (DT_WSTR,10)"CRITICAL" : (FreePercent &lt; @[$Package::MinimumFreePercent] ? (DT_WSTR,10)"WARNING" : (DT_WSTR,10)"OK")</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Evaluate Preflight\Evaluate Thresholds.Outputs[Derived Column Output].Columns[HeadroomGb]" dataType="i4" lineageId="Package\Evaluate Preflight\Evaluate Thresholds.Outputs[Derived Column Output].Columns[HeadroomGb]" name="HeadroomGb">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">AvailableGb - ProjectedGb</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">AvailableGb - ProjectedGb</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Evaluate Preflight\Split Shortfalls" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Split Shortfalls" version="1">
+            <inputs>
+              <input refId="Package\Evaluate Preflight\Split Shortfalls.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Evaluate Preflight\Split Shortfalls.Outputs[Shortfall]" exclusionGroup="1" name="Shortfall" synchronousInputId="Package\Evaluate Preflight\Split Shortfalls.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">HasShortfall == (DT_BOOL)1</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">HasShortfall == (DT_BOOL)1</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Evaluate Preflight\Split Shortfalls.Outputs[Healthy]" exclusionGroup="1" name="Healthy" synchronousInputId="Package\Evaluate Preflight\Split Shortfalls.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">HasShortfall == (DT_BOOL)0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">HasShortfall == (DT_BOOL)0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Evaluate Preflight\Split Shortfalls.Outputs[Default]" exclusionGroup="1" isDefaultOut="true" name="Default" synchronousInputId="Package\Evaluate Preflight\Split Shortfalls.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Evaluate Preflight\Count Volumes" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Volumes" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Evaluate Preflight\Count Volumes.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Evaluate Preflight\Count Volumes.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Evaluate Preflight\Count Volumes.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Evaluate Preflight\etl PreflightResult" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="etl PreflightResult" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[etl].[PreflightResult]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">1000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Evaluate Preflight\etl PreflightResult.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].Columns[VolumeMountPoint]" cachedDataType="wstr" cachedLength="128" cachedName="VolumeMountPoint" externalMetadataColumnId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].ExternalColumns[VolumeMountPoint]" name="VolumeMountPoint" />
+                  <inputColumn refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].Columns[FreePercent]" cachedDataType="i4" cachedName="FreePercent" externalMetadataColumnId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].ExternalColumns[FreePercent]" name="FreePercent" />
+                  <inputColumn refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].Columns[AvailableGb]" cachedDataType="i4" cachedName="AvailableGb" externalMetadataColumnId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].ExternalColumns[AvailableGb]" name="AvailableGb" />
+                  <inputColumn refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].Columns[DatabaseName]" cachedDataType="wstr" cachedLength="128" cachedName="DatabaseName" externalMetadataColumnId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].ExternalColumns[DatabaseName]" name="DatabaseName" />
+                  <inputColumn refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].Columns[FileTypeCode]" cachedDataType="wstr" cachedLength="10" cachedName="FileTypeCode" externalMetadataColumnId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].ExternalColumns[FileTypeCode]" name="FileTypeCode" />
+                  <inputColumn refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].Columns[ProjectedGb]" cachedDataType="i4" cachedName="ProjectedGb" externalMetadataColumnId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].ExternalColumns[ProjectedGb]" name="ProjectedGb" />
+                  <inputColumn refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].Columns[HasShortfall]" cachedDataType="bool" cachedName="HasShortfall" externalMetadataColumnId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].ExternalColumns[HasShortfall]" name="HasShortfall" />
+                  <inputColumn refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].Columns[SeverityCode]" cachedDataType="wstr" cachedLength="10" cachedName="SeverityCode" externalMetadataColumnId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].ExternalColumns[SeverityCode]" name="SeverityCode" />
+                  <inputColumn refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].Columns[HeadroomGb]" cachedDataType="i4" cachedName="HeadroomGb" externalMetadataColumnId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].ExternalColumns[HeadroomGb]" name="HeadroomGb" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].ExternalColumns[VolumeMountPoint]" dataType="wstr" length="128" name="VolumeMountPoint" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].ExternalColumns[FreePercent]" dataType="i4" name="FreePercent" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].ExternalColumns[AvailableGb]" dataType="i4" name="AvailableGb" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].ExternalColumns[DatabaseName]" dataType="wstr" length="128" name="DatabaseName" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].ExternalColumns[FileTypeCode]" dataType="wstr" length="10" name="FileTypeCode" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].ExternalColumns[ProjectedGb]" dataType="i4" name="ProjectedGb" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].ExternalColumns[HasShortfall]" dataType="bool" name="HasShortfall" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].ExternalColumns[SeverityCode]" dataType="wstr" length="10" name="SeverityCode" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input].ExternalColumns[HeadroomGb]" dataType="i4" name="HeadroomGb" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Evaluate Preflight\etl PreflightResult.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Evaluate Preflight\work VolumeShortfall" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="work VolumeShortfall" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[VolumeShortfall]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Evaluate Preflight\work VolumeShortfall.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].Columns[VolumeMountPoint]" cachedDataType="wstr" cachedLength="128" cachedName="VolumeMountPoint" externalMetadataColumnId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].ExternalColumns[VolumeMountPoint]" name="VolumeMountPoint" />
+                  <inputColumn refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].Columns[FreePercent]" cachedDataType="i4" cachedName="FreePercent" externalMetadataColumnId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].ExternalColumns[FreePercent]" name="FreePercent" />
+                  <inputColumn refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].Columns[AvailableGb]" cachedDataType="i4" cachedName="AvailableGb" externalMetadataColumnId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].ExternalColumns[AvailableGb]" name="AvailableGb" />
+                  <inputColumn refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].Columns[DatabaseName]" cachedDataType="wstr" cachedLength="128" cachedName="DatabaseName" externalMetadataColumnId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].ExternalColumns[DatabaseName]" name="DatabaseName" />
+                  <inputColumn refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].Columns[FileTypeCode]" cachedDataType="wstr" cachedLength="10" cachedName="FileTypeCode" externalMetadataColumnId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].ExternalColumns[FileTypeCode]" name="FileTypeCode" />
+                  <inputColumn refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].Columns[ProjectedGb]" cachedDataType="i4" cachedName="ProjectedGb" externalMetadataColumnId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].ExternalColumns[ProjectedGb]" name="ProjectedGb" />
+                  <inputColumn refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].Columns[HasShortfall]" cachedDataType="bool" cachedName="HasShortfall" externalMetadataColumnId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].ExternalColumns[HasShortfall]" name="HasShortfall" />
+                  <inputColumn refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].Columns[SeverityCode]" cachedDataType="wstr" cachedLength="10" cachedName="SeverityCode" externalMetadataColumnId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].ExternalColumns[SeverityCode]" name="SeverityCode" />
+                  <inputColumn refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].Columns[HeadroomGb]" cachedDataType="i4" cachedName="HeadroomGb" externalMetadataColumnId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].ExternalColumns[HeadroomGb]" name="HeadroomGb" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].ExternalColumns[VolumeMountPoint]" dataType="wstr" length="128" name="VolumeMountPoint" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].ExternalColumns[FreePercent]" dataType="i4" name="FreePercent" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].ExternalColumns[AvailableGb]" dataType="i4" name="AvailableGb" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].ExternalColumns[DatabaseName]" dataType="wstr" length="128" name="DatabaseName" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].ExternalColumns[FileTypeCode]" dataType="wstr" length="10" name="FileTypeCode" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].ExternalColumns[ProjectedGb]" dataType="i4" name="ProjectedGb" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].ExternalColumns[HasShortfall]" dataType="bool" name="HasShortfall" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].ExternalColumns[SeverityCode]" dataType="wstr" length="10" name="SeverityCode" />
+                  <externalMetadataColumn refId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input].ExternalColumns[HeadroomGb]" dataType="i4" name="HeadroomGb" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Evaluate Preflight\work VolumeShortfall.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Evaluate Preflight.Paths[OLE DB Source Output]" endId="Package\Evaluate Preflight\Evaluate Thresholds.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Evaluate Preflight\work VolumeSpaceCheck.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Evaluate Preflight.Paths[Derived Column Output 1]" endId="Package\Evaluate Preflight\Split Shortfalls.Inputs[Conditional Split Input]" name="Derived Column Output 1" startId="Package\Evaluate Preflight\Evaluate Thresholds.Outputs[Derived Column Output]" />
+          <path refId="Package\Evaluate Preflight.Paths[Shortfall 2]" endId="Package\Evaluate Preflight\Count Volumes.Inputs[Row Count Input]" name="Shortfall 2" startId="Package\Evaluate Preflight\Split Shortfalls.Outputs[Shortfall]" />
+          <path refId="Package\Evaluate Preflight.Paths[Row Count Output 3]" endId="Package\Evaluate Preflight\etl PreflightResult.Inputs[OLE DB Destination Input]" name="Row Count Output 3" startId="Package\Evaluate Preflight\Count Volumes.Outputs[Row Count Output]" />
+          <path refId="Package\Evaluate Preflight.Paths[Shortfall 4]" endId="Package\Evaluate Preflight\work VolumeShortfall.Inputs[OLE DB Destination Input]" name="Shortfall 4" startId="Package\Evaluate Preflight\Split Shortfalls.Outputs[Shortfall]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Measure Shortfalls"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{D7F554F8-8A69-2659-0049-6D71DDC442E9}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Measure Shortfalls"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="SELECT COUNT(*) AS LowVolumes,        ISNULL(MIN(FreePercent), 100) AS SmallestFreePercent,        CASE WHEN COUNT(*) = 0 THEN N'OK'             WHEN MIN(FreePercent) &lt; 5 THEN N'CRITICAL' ELSE N'WARNING' END AS Status FROM   work.VolumeShortfall;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::LowVolumeCount" />
+        <SQLTask:ResultBinding SQLTask:ResultName="1" SQLTask:DtsVariableName="User::SmallestFreePercent" />
+        <SQLTask:ResultBinding SQLTask:ResultName="2" SQLTask:DtsVariableName="User::PreflightStatus" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Raise Batch Hold"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{207F5638-5AEE-B33A-FCF7-063E8748D87E}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Raise Batch Hold"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="INSERT INTO etl.BatchHold (HoldReasonCode, HoldDetail, RaisedAtUtc, IsCleared) SELECT N'DISK_SPACE',        CONCAT(N'Volumes below the free-space threshold: ', CAST(? AS nvarchar(10)),               N'; smallest free percent: ', CAST(? AS nvarchar(10))),        SYSUTCDATETIME(), 0;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::LowVolumeCount" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::SmallestFreePercent" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Check Tempdb Headroom"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{440FC3A2-F600-BC00-9516-15F3AACDA489}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Check Tempdb Headroom"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="INSERT INTO etl.PreflightResult (CheckName, CheckStatus, DetailText, CheckedAtUtc) SELECT N'TEMPDB_HEADROOM',        CASE WHEN SUM(vs.available_bytes) / 1073741824 &lt; ? THEN N'FAILED' ELSE N'OK' END,        CONCAT(N'Tempdb volume free GB: ',               CAST(SUM(vs.available_bytes) / 1073741824 AS nvarchar(20))),        SYSUTCDATETIME() FROM   sys.master_files AS f CROSS APPLY sys.dm_os_volume_stats(f.database_id, f.file_id) AS vs WHERE  f.database_id = DB_ID(N'tempdb');"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::MinimumFreeGbTempdb" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'work.VolumeSpaceCheck', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Truncate work.VolumeSpaceCheck" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Truncate work.VolumeSpaceCheck"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Survey Volume Space" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Survey Volume Space"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:Value="2"
+      DTS:To="Package\Project Batch Growth" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Project Batch Growth"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Evaluate Preflight" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Evaluate Preflight"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Measure Shortfalls" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Measure Shortfalls"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:EvalOp="2"
+      DTS:Expression="@[User::LowVolumeCount] &gt; 0 &amp;&amp; @[$Package::HoldBatchOnShortfall]"
+      DTS:To="Package\Raise Batch Hold" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Measure Shortfalls"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:EvalOp="2"
+      DTS:Expression="@[User::LowVolumeCount] == 0 || !@[$Package::HoldBatchOnShortfall]"
+      DTS:To="Package\Check Tempdb Headroom" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Raise Batch Hold"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:Value="2"
+      DTS:To="Package\Check Tempdb Headroom" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 8]"
+      DTS:CreationName=""
+      DTS:DTSID="{71A76C5F-1A20-5771-2776-7EF96FD96B90}"
+      DTS:From="Package\Check Tempdb Headroom"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 8"
+      DTS:Value="2"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 9]"
+      DTS:CreationName=""
+      DTS:DTSID="{11D92538-705E-DF70-FE3B-5738B6CA45B1}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 9"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{66DCD517-FFAB-8C7D-F90C-77FD2B9C16B5}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

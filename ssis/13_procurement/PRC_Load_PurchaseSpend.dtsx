@@ -1,0 +1,860 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{4CE72DBD-CD95-CCFE-60F9-FBD0C7F1D2F6}"
+  DTS:Description="Loads purchase order spend into the purchase fact with contract linkage. Contract resolution has to cope with two generations of contract reference, and spend is classified as on-contract, off-contract or maverick (no contract exists for the category at all) because the savings reporting is built on that split."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="PRC_Load_PurchaseSpend"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{27FD4F94-0B80-B3A0-7928-F2F471EC2792}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{D39B348D-9A8C-4B1C-0D3F-10FB9466AF47}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{EDF77ECB-A628-B31E-BD0F-9CF4595F7841}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{9C500FEF-25DF-29BC-5392-8D07D58BB77E}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{D9C97F78-9FAB-3BED-1DB6-2243AF9A7923}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">ORAERP</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SpendCategoryScope]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="ALL, or a single procurement category code."
+      DTS:DTSID="{E190666B-02F6-B6CF-9F60-23928B90ECE1}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SpendCategoryScope"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">ALL</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::PriceVarianceTolerancePercent]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Percentage above contract price still treated as on-contract."
+      DTS:DTSID="{96B33DA6-B9DB-97E9-ADDC-89B93468194E}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="PriceVarianceTolerancePercent"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">5</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{8926CF95-23AA-C26C-BD6D-47076524FD8B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{E3E45374-2909-B263-35F9-20710B91D960}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{822662D2-68EE-7BB7-4E5D-A6CA18D9CE47}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{A18F1F16-B4C3-C084-F505-5DD09FAFDE13}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{1C59652C-E7D4-5BB7-1DD9-B4686BCFF8A7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{BE43C136-8A30-DFE2-6385-BE38F2F20DF2}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{AFDD8DB8-EB3A-1700-2B37-71E2559B47CE}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{7F8DC92D-DFF6-9F04-5EA6-25D41DEB10B4}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::OffContractCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{1F9C9AF1-EBDF-252F-B20D-8B1FF6BB0760}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="OffContractCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::MaverickSpendAmount]"
+      DTS:CreationName=""
+      DTS:DTSID="{6285F959-0F7B-807C-2661-D7E90EA3F710}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="MaverickSpendAmount">
+      <DTS:VariableValue DTS:DataType="14" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Truncate work.PurchaseSpendLine"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{AECF6A6A-B0A4-3D07-D0C2-EFA98471B332}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Truncate work.PurchaseSpendLine"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE work.PurchaseSpendLine;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Load Purchase Spend"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{A3697E04-2002-DA6F-D808-E51663AB77E9}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Load Purchase Spend"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Load Purchase Spend\stg PurchaseOrderLine" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="stg PurchaseOrderLine" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">3600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT  pol.PurchaseOrderLineId
+,       pol.PurchaseOrderNumber
+,       pol.LineNumber
+,       poh.SupplierId
+,       poh.OrderDate
+,       poh.BuyerPersonId
+,       poh.RegionCode
+,       poh.CurrencyCode
+,       pol.StockItemId
+,       pol.OrderedOuters
+,       pol.ExpectedUnitPricePerOuter
+,       pol.OrderedOuters * pol.ExpectedUnitPricePerOuter       AS OrderedAmount
+,       pol.ReceivedOuters
+,       pol.IsOrderLineFinalized
+,       pol.CategoryCode
+,       vc.ContractNumber
+,       vc.ContractPricePerOuter
+,       vc.ContractStartDate
+,       vc.ContractEndDate
+        /* The ERP contract key changed format in 2013 but the old numbers were
+           never migrated, so both shapes have to be matched. */
+,       CASE
+            WHEN vc.ContractNumber IS NOT NULL              THEN vc.ContractNumber
+            WHEN pol.LegacyContractRef LIKE 'C-%'           THEN pol.LegacyContractRef
+            WHEN pol.LegacyContractRef LIKE '[0-9][0-9][0-9][0-9][0-9]'
+                THEN 'C-' + pol.LegacyContractRef
+            ELSE NULL
+        END                                                     AS ResolvedContractNumber
+FROM    stg.PurchaseOrderLine AS pol
+INNER JOIN stg.PurchaseOrderHeader AS poh
+        ON  poh.PurchaseOrderNumber = pol.PurchaseOrderNumber
+LEFT OUTER JOIN stg.VendorContract AS vc
+        ON  vc.SupplierId = poh.SupplierId
+        AND vc.CategoryCode = pol.CategoryCode
+        AND poh.OrderDate BETWEEN vc.ContractStartDate AND ISNULL(vc.ContractEndDate, '9999-12-31')
+WHERE   pol.LoadBatchId = ?
+AND     poh.OrderStatusCode NOT IN ('CANC', 'DRAFT')</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[PurchaseOrderLineId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[PurchaseOrderLineId]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[PurchaseOrderLineId]" name="PurchaseOrderLineId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[PurchaseOrderNumber]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[PurchaseOrderNumber]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[PurchaseOrderNumber]" name="PurchaseOrderNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[LineNumber]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[LineNumber]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[LineNumber]" name="LineNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[SupplierId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[SupplierId]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[SupplierId]" name="SupplierId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[OrderDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[OrderDate]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[OrderDate]" name="OrderDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[BuyerPersonId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[BuyerPersonId]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[BuyerPersonId]" name="BuyerPersonId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[CurrencyCode]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[CurrencyCode]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[CurrencyCode]" name="CurrencyCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[StockItemId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[StockItemId]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[StockItemId]" name="StockItemId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[OrderedOuters]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[OrderedOuters]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[OrderedOuters]" name="OrderedOuters" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[ExpectedUnitPricePerOuter]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[ExpectedUnitPricePerOuter]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[ExpectedUnitPricePerOuter]" name="ExpectedUnitPricePerOuter" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[OrderedAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[OrderedAmount]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[OrderedAmount]" name="OrderedAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[ReceivedOuters]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[ReceivedOuters]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[ReceivedOuters]" name="ReceivedOuters" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[IsOrderLineFinalized]" dataType="bool" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[IsOrderLineFinalized]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[IsOrderLineFinalized]" name="IsOrderLineFinalized" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[CategoryCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[CategoryCode]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[CategoryCode]" name="CategoryCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[ContractNumber]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[ContractNumber]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[ContractNumber]" name="ContractNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[ContractPricePerOuter]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[ContractPricePerOuter]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[ContractPricePerOuter]" name="ContractPricePerOuter" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[ContractStartDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[ContractStartDate]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[ContractStartDate]" name="ContractStartDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[ContractEndDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[ContractEndDate]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[ContractEndDate]" name="ContractEndDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[ResolvedContractNumber]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[ResolvedContractNumber]" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].Columns[ResolvedContractNumber]" name="ResolvedContractNumber" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[PurchaseOrderLineId]" dataType="i4" name="PurchaseOrderLineId" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[PurchaseOrderNumber]" dataType="wstr" length="20" name="PurchaseOrderNumber" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[LineNumber]" dataType="i4" name="LineNumber" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[SupplierId]" dataType="i4" name="SupplierId" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[OrderDate]" dataType="dbTimeStamp" name="OrderDate" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[BuyerPersonId]" dataType="i4" name="BuyerPersonId" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[CurrencyCode]" dataType="wstr" length="3" name="CurrencyCode" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[StockItemId]" dataType="i4" name="StockItemId" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[OrderedOuters]" dataType="i4" name="OrderedOuters" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[ExpectedUnitPricePerOuter]" dataType="numeric" precision="18" scale="2" name="ExpectedUnitPricePerOuter" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[OrderedAmount]" dataType="numeric" precision="18" scale="2" name="OrderedAmount" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[ReceivedOuters]" dataType="i4" name="ReceivedOuters" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[IsOrderLineFinalized]" dataType="bool" name="IsOrderLineFinalized" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[CategoryCode]" dataType="wstr" length="10" name="CategoryCode" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[ContractNumber]" dataType="wstr" length="20" name="ContractNumber" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[ContractPricePerOuter]" dataType="numeric" precision="18" scale="2" name="ContractPricePerOuter" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[ContractStartDate]" dataType="dbTimeStamp" name="ContractStartDate" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[ContractEndDate]" dataType="dbTimeStamp" name="ContractEndDate" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output].ExternalColumns[ResolvedContractNumber]" dataType="wstr" length="20" name="ResolvedContractNumber" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[PurchaseOrderLineId]" dataType="i4" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[PurchaseOrderLineId]" name="PurchaseOrderLineId" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[PurchaseOrderNumber]" dataType="wstr" length="20" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[PurchaseOrderNumber]" name="PurchaseOrderNumber" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[LineNumber]" dataType="i4" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[LineNumber]" name="LineNumber" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[SupplierId]" dataType="i4" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[SupplierId]" name="SupplierId" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[OrderDate]" dataType="dbTimeStamp" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[OrderDate]" name="OrderDate" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[BuyerPersonId]" dataType="i4" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[BuyerPersonId]" name="BuyerPersonId" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[CurrencyCode]" dataType="wstr" length="3" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[CurrencyCode]" name="CurrencyCode" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[StockItemId]" dataType="i4" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[StockItemId]" name="StockItemId" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[OrderedOuters]" dataType="i4" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[OrderedOuters]" name="OrderedOuters" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[ExpectedUnitPricePerOuter]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[ExpectedUnitPricePerOuter]" name="ExpectedUnitPricePerOuter" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[OrderedAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[OrderedAmount]" name="OrderedAmount" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[ReceivedOuters]" dataType="i4" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[ReceivedOuters]" name="ReceivedOuters" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[IsOrderLineFinalized]" dataType="bool" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[IsOrderLineFinalized]" name="IsOrderLineFinalized" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[CategoryCode]" dataType="wstr" length="10" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[CategoryCode]" name="CategoryCode" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[ContractNumber]" dataType="wstr" length="20" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[ContractNumber]" name="ContractNumber" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[ContractPricePerOuter]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[ContractPricePerOuter]" name="ContractPricePerOuter" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[ContractStartDate]" dataType="dbTimeStamp" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[ContractStartDate]" name="ContractStartDate" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[ContractEndDate]" dataType="dbTimeStamp" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[ContractEndDate]" name="ContractEndDate" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[ResolvedContractNumber]" dataType="wstr" length="20" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[ResolvedContractNumber]" name="ResolvedContractNumber" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Purchase Spend\Classify Spend" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Classify Spend" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Load Purchase Spend\Classify Spend.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Purchase Spend\Classify Spend.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Load Purchase Spend\Classify Spend.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Purchase Spend\Classify Spend.Outputs[Derived Column Output].Columns[PriceVariancePercent]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Purchase Spend\Classify Spend.Outputs[Derived Column Output].Columns[PriceVariancePercent]" name="PriceVariancePercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(ContractPricePerOuter) || ContractPricePerOuter == 0 ? (DT_NUMERIC,18,2)0 : (ExpectedUnitPricePerOuter - ContractPricePerOuter) * 100 / ContractPricePerOuter</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(ContractPricePerOuter) || ContractPricePerOuter == 0 ? (DT_NUMERIC,18,2)0 : (ExpectedUnitPricePerOuter - ContractPricePerOuter) * 100 / ContractPricePerOuter</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Purchase Spend\Classify Spend.Outputs[Derived Column Output].Columns[SpendClassCode]" dataType="wstr" length="12" lineageId="Package\Load Purchase Spend\Classify Spend.Outputs[Derived Column Output].Columns[SpendClassCode]" name="SpendClassCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(ResolvedContractNumber) ? (DT_WSTR,12)"MAVERICK" : (ISNULL(ContractPricePerOuter) ? (DT_WSTR,12)"OFFCONTRACT" : (DT_WSTR,12)"ONCONTRACT")</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(ResolvedContractNumber) ? (DT_WSTR,12)"MAVERICK" : (ISNULL(ContractPricePerOuter) ? (DT_WSTR,12)"OFFCONTRACT" : (DT_WSTR,12)"ONCONTRACT")</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Purchase Spend\Derive Savings" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Savings" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Load Purchase Spend\Derive Savings.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Purchase Spend\Derive Savings.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Load Purchase Spend\Derive Savings.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Purchase Spend\Derive Savings.Outputs[Derived Column Output].Columns[ContractedAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Purchase Spend\Derive Savings.Outputs[Derived Column Output].Columns[ContractedAmount]" name="ContractedAmount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(ContractPricePerOuter) ? OrderedAmount : OrderedOuters * ContractPricePerOuter</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(ContractPricePerOuter) ? OrderedAmount : OrderedOuters * ContractPricePerOuter</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Purchase Spend\Derive Savings.Outputs[Derived Column Output].Columns[SavingsAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Purchase Spend\Derive Savings.Outputs[Derived Column Output].Columns[SavingsAmount]" name="SavingsAmount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(ContractPricePerOuter) ? (DT_NUMERIC,18,2)0 : (OrderedOuters * ContractPricePerOuter) - OrderedAmount</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(ContractPricePerOuter) ? (DT_NUMERIC,18,2)0 : (OrderedOuters * ContractPricePerOuter) - OrderedAmount</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Purchase Spend\Lookup Supplier Key" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Supplier Key" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [Supplier Key] AS SupplierKey, [WWI Supplier ID] AS SupplierId FROM Dimension.Supplier WHERE [Valid To] &gt; SYSDATETIME();</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">0</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Purchase Spend\Lookup Supplier Key.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Purchase Spend\Lookup Supplier Key.Inputs[Lookup Input]" errorRowDisposition="RedirectRow" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Purchase Spend\Lookup Supplier Key.Inputs[Lookup Input].Columns[SupplierId]" cachedName="SupplierId" name="SupplierId" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Purchase Spend\Lookup Supplier Key.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Purchase Spend\Lookup Supplier Key.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Purchase Spend\Lookup Supplier Key.Outputs[Lookup Match Output].Columns[SupplierKey]" dataType="i4" lineageId="Package\Load Purchase Spend\Lookup Supplier Key.Outputs[Lookup Match Output].Columns[SupplierKey]" name="SupplierKey" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Purchase Spend\Lookup Supplier Key.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Purchase Spend\Lookup Supplier Key.Inputs[Lookup Input]" />
+              <output refId="Package\Load Purchase Spend\Lookup Supplier Key.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Purchase Spend\Lookup Supplier Key.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Purchase Spend\Count Spend Lines" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Spend Lines" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Load Purchase Spend\Count Spend Lines.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Purchase Spend\Count Spend Lines.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Load Purchase Spend\Count Spend Lines.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Purchase Spend\work PurchaseSpendLine" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="work PurchaseSpendLine" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[PurchaseSpendLine]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">100000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Purchase Spend\work PurchaseSpendLine.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[PurchaseOrderLineId]" cachedDataType="i4" cachedName="PurchaseOrderLineId" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[PurchaseOrderLineId]" name="PurchaseOrderLineId" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[PurchaseOrderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="PurchaseOrderNumber" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[PurchaseOrderNumber]" name="PurchaseOrderNumber" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[LineNumber]" cachedDataType="i4" cachedName="LineNumber" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[LineNumber]" name="LineNumber" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[SupplierId]" cachedDataType="i4" cachedName="SupplierId" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" name="SupplierId" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[OrderDate]" cachedDataType="dbTimeStamp" cachedName="OrderDate" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[OrderDate]" name="OrderDate" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[BuyerPersonId]" cachedDataType="i4" cachedName="BuyerPersonId" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[BuyerPersonId]" name="BuyerPersonId" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[CurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="CurrencyCode" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" name="CurrencyCode" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[StockItemId]" cachedDataType="i4" cachedName="StockItemId" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" name="StockItemId" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[OrderedOuters]" cachedDataType="i4" cachedName="OrderedOuters" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[OrderedOuters]" name="OrderedOuters" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[ExpectedUnitPricePerOuter]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ExpectedUnitPricePerOuter" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedUnitPricePerOuter]" name="ExpectedUnitPricePerOuter" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[OrderedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrderedAmount" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[OrderedAmount]" name="OrderedAmount" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[ReceivedOuters]" cachedDataType="i4" cachedName="ReceivedOuters" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedOuters]" name="ReceivedOuters" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[IsOrderLineFinalized]" cachedDataType="bool" cachedName="IsOrderLineFinalized" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[IsOrderLineFinalized]" name="IsOrderLineFinalized" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[CategoryCode]" cachedDataType="wstr" cachedLength="10" cachedName="CategoryCode" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[CategoryCode]" name="CategoryCode" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[ContractNumber]" cachedDataType="wstr" cachedLength="20" cachedName="ContractNumber" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[ContractNumber]" name="ContractNumber" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[ContractPricePerOuter]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ContractPricePerOuter" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[ContractPricePerOuter]" name="ContractPricePerOuter" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[ContractStartDate]" cachedDataType="dbTimeStamp" cachedName="ContractStartDate" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[ContractStartDate]" name="ContractStartDate" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[ContractEndDate]" cachedDataType="dbTimeStamp" cachedName="ContractEndDate" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[ContractEndDate]" name="ContractEndDate" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[ResolvedContractNumber]" cachedDataType="wstr" cachedLength="20" cachedName="ResolvedContractNumber" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[ResolvedContractNumber]" name="ResolvedContractNumber" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[PriceVariancePercent]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PriceVariancePercent" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[PriceVariancePercent]" name="PriceVariancePercent" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[SpendClassCode]" cachedDataType="wstr" cachedLength="12" cachedName="SpendClassCode" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[SpendClassCode]" name="SpendClassCode" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[ContractedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ContractedAmount" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[ContractedAmount]" name="ContractedAmount" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[SavingsAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SavingsAmount" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[SavingsAmount]" name="SavingsAmount" />
+                  <inputColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].Columns[SupplierKey]" cachedDataType="i4" cachedName="SupplierKey" externalMetadataColumnId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[SupplierKey]" name="SupplierKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[PurchaseOrderLineId]" dataType="i4" name="PurchaseOrderLineId" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[PurchaseOrderNumber]" dataType="wstr" length="20" name="PurchaseOrderNumber" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[LineNumber]" dataType="i4" name="LineNumber" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" dataType="i4" name="SupplierId" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[OrderDate]" dataType="dbTimeStamp" name="OrderDate" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[BuyerPersonId]" dataType="i4" name="BuyerPersonId" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" dataType="wstr" length="3" name="CurrencyCode" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" dataType="i4" name="StockItemId" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[OrderedOuters]" dataType="i4" name="OrderedOuters" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedUnitPricePerOuter]" dataType="numeric" precision="18" scale="2" name="ExpectedUnitPricePerOuter" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[OrderedAmount]" dataType="numeric" precision="18" scale="2" name="OrderedAmount" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedOuters]" dataType="i4" name="ReceivedOuters" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[IsOrderLineFinalized]" dataType="bool" name="IsOrderLineFinalized" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[CategoryCode]" dataType="wstr" length="10" name="CategoryCode" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[ContractNumber]" dataType="wstr" length="20" name="ContractNumber" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[ContractPricePerOuter]" dataType="numeric" precision="18" scale="2" name="ContractPricePerOuter" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[ContractStartDate]" dataType="dbTimeStamp" name="ContractStartDate" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[ContractEndDate]" dataType="dbTimeStamp" name="ContractEndDate" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[ResolvedContractNumber]" dataType="wstr" length="20" name="ResolvedContractNumber" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[PriceVariancePercent]" dataType="numeric" precision="18" scale="2" name="PriceVariancePercent" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[SpendClassCode]" dataType="wstr" length="12" name="SpendClassCode" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[ContractedAmount]" dataType="numeric" precision="18" scale="2" name="ContractedAmount" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[SavingsAmount]" dataType="numeric" precision="18" scale="2" name="SavingsAmount" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input].ExternalColumns[SupplierKey]" dataType="i4" name="SupplierKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Purchase Spend\work PurchaseSpendLine.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Purchase Spend\Reject Unknown Suppliers" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Unknown Suppliers" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[PurchaseSpendReject]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[PurchaseOrderLineId]" cachedDataType="i4" cachedName="PurchaseOrderLineId" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[PurchaseOrderLineId]" name="PurchaseOrderLineId" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[PurchaseOrderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="PurchaseOrderNumber" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[PurchaseOrderNumber]" name="PurchaseOrderNumber" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[LineNumber]" cachedDataType="i4" cachedName="LineNumber" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[LineNumber]" name="LineNumber" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[SupplierId]" cachedDataType="i4" cachedName="SupplierId" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" name="SupplierId" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[OrderDate]" cachedDataType="dbTimeStamp" cachedName="OrderDate" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[OrderDate]" name="OrderDate" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[BuyerPersonId]" cachedDataType="i4" cachedName="BuyerPersonId" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[BuyerPersonId]" name="BuyerPersonId" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[CurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="CurrencyCode" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" name="CurrencyCode" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[StockItemId]" cachedDataType="i4" cachedName="StockItemId" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" name="StockItemId" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[OrderedOuters]" cachedDataType="i4" cachedName="OrderedOuters" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[OrderedOuters]" name="OrderedOuters" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[ExpectedUnitPricePerOuter]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ExpectedUnitPricePerOuter" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedUnitPricePerOuter]" name="ExpectedUnitPricePerOuter" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[OrderedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OrderedAmount" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[OrderedAmount]" name="OrderedAmount" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[ReceivedOuters]" cachedDataType="i4" cachedName="ReceivedOuters" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedOuters]" name="ReceivedOuters" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[IsOrderLineFinalized]" cachedDataType="bool" cachedName="IsOrderLineFinalized" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[IsOrderLineFinalized]" name="IsOrderLineFinalized" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[CategoryCode]" cachedDataType="wstr" cachedLength="10" cachedName="CategoryCode" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[CategoryCode]" name="CategoryCode" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[ContractNumber]" cachedDataType="wstr" cachedLength="20" cachedName="ContractNumber" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[ContractNumber]" name="ContractNumber" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[ContractPricePerOuter]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ContractPricePerOuter" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[ContractPricePerOuter]" name="ContractPricePerOuter" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[ContractStartDate]" cachedDataType="dbTimeStamp" cachedName="ContractStartDate" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[ContractStartDate]" name="ContractStartDate" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[ContractEndDate]" cachedDataType="dbTimeStamp" cachedName="ContractEndDate" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[ContractEndDate]" name="ContractEndDate" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[ResolvedContractNumber]" cachedDataType="wstr" cachedLength="20" cachedName="ResolvedContractNumber" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[ResolvedContractNumber]" name="ResolvedContractNumber" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[PriceVariancePercent]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PriceVariancePercent" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[PriceVariancePercent]" name="PriceVariancePercent" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[SpendClassCode]" cachedDataType="wstr" cachedLength="12" cachedName="SpendClassCode" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[SpendClassCode]" name="SpendClassCode" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[ContractedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ContractedAmount" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[ContractedAmount]" name="ContractedAmount" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[SavingsAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SavingsAmount" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[SavingsAmount]" name="SavingsAmount" />
+                  <inputColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].Columns[SupplierKey]" cachedDataType="i4" cachedName="SupplierKey" externalMetadataColumnId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[SupplierKey]" name="SupplierKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[PurchaseOrderLineId]" dataType="i4" name="PurchaseOrderLineId" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[PurchaseOrderNumber]" dataType="wstr" length="20" name="PurchaseOrderNumber" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[LineNumber]" dataType="i4" name="LineNumber" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" dataType="i4" name="SupplierId" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[OrderDate]" dataType="dbTimeStamp" name="OrderDate" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[BuyerPersonId]" dataType="i4" name="BuyerPersonId" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" dataType="wstr" length="3" name="CurrencyCode" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" dataType="i4" name="StockItemId" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[OrderedOuters]" dataType="i4" name="OrderedOuters" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedUnitPricePerOuter]" dataType="numeric" precision="18" scale="2" name="ExpectedUnitPricePerOuter" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[OrderedAmount]" dataType="numeric" precision="18" scale="2" name="OrderedAmount" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedOuters]" dataType="i4" name="ReceivedOuters" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[IsOrderLineFinalized]" dataType="bool" name="IsOrderLineFinalized" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[CategoryCode]" dataType="wstr" length="10" name="CategoryCode" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[ContractNumber]" dataType="wstr" length="20" name="ContractNumber" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[ContractPricePerOuter]" dataType="numeric" precision="18" scale="2" name="ContractPricePerOuter" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[ContractStartDate]" dataType="dbTimeStamp" name="ContractStartDate" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[ContractEndDate]" dataType="dbTimeStamp" name="ContractEndDate" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[ResolvedContractNumber]" dataType="wstr" length="20" name="ResolvedContractNumber" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[PriceVariancePercent]" dataType="numeric" precision="18" scale="2" name="PriceVariancePercent" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[SpendClassCode]" dataType="wstr" length="12" name="SpendClassCode" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[ContractedAmount]" dataType="numeric" precision="18" scale="2" name="ContractedAmount" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[SavingsAmount]" dataType="numeric" precision="18" scale="2" name="SavingsAmount" />
+                  <externalMetadataColumn refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input].ExternalColumns[SupplierKey]" dataType="i4" name="SupplierKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Purchase Spend\Reject Unknown Suppliers.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Load Purchase Spend.Paths[OLE DB Source Output]" endId="Package\Load Purchase Spend\Classify Spend.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Load Purchase Spend\stg PurchaseOrderLine.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Load Purchase Spend.Paths[Derived Column Output 1]" endId="Package\Load Purchase Spend\Derive Savings.Inputs[Derived Column Input]" name="Derived Column Output 1" startId="Package\Load Purchase Spend\Classify Spend.Outputs[Derived Column Output]" />
+          <path refId="Package\Load Purchase Spend.Paths[Derived Column Output 2]" endId="Package\Load Purchase Spend\Lookup Supplier Key.Inputs[Lookup Input]" name="Derived Column Output 2" startId="Package\Load Purchase Spend\Derive Savings.Outputs[Derived Column Output]" />
+          <path refId="Package\Load Purchase Spend.Paths[Lookup Match Output 3]" endId="Package\Load Purchase Spend\Count Spend Lines.Inputs[Row Count Input]" name="Lookup Match Output 3" startId="Package\Load Purchase Spend\Lookup Supplier Key.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Purchase Spend.Paths[Row Count Output 4]" endId="Package\Load Purchase Spend\work PurchaseSpendLine.Inputs[OLE DB Destination Input]" name="Row Count Output 4" startId="Package\Load Purchase Spend\Count Spend Lines.Outputs[Row Count Output]" />
+          <path refId="Package\Load Purchase Spend.Paths[Lookup No Match Output 5]" endId="Package\Load Purchase Spend\Reject Unknown Suppliers.Inputs[OLE DB Destination Input]" name="Lookup No Match Output 5" startId="Package\Load Purchase Spend\Lookup Supplier Key.Outputs[Lookup No Match Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Post Purchase Fact"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{3ADE286E-59F9-7CBE-CFD8-9AF95C8E71EB}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Post Purchase Fact"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="EXEC Integration.usp_PostPurchaseSpend @BatchId = ?, @CategoryScope = ?, @RowsInserted = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::SpendCategoryScope" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Measure Maverick Spend"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{1477E803-E53E-C67D-8622-17A4FB3ED310}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Measure Maverick Spend"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="SELECT SUM(CASE WHEN SpendClassCode &lt;&gt; N'ONCONTRACT' THEN 1 ELSE 0 END) AS OffContractLines,        ISNULL(SUM(CASE WHEN SpendClassCode = N'MAVERICK' THEN OrderedAmount ELSE 0 END), 0)            AS MaverickAmount FROM work.PurchaseSpendLine;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::OffContractCount" />
+        <SQLTask:ResultBinding SQLTask:ResultName="1" SQLTask:DtsVariableName="User::MaverickSpendAmount" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Fact.Purchase', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Truncate work.PurchaseSpendLine" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Truncate work.PurchaseSpendLine"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Load Purchase Spend" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Load Purchase Spend"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Post Purchase Fact" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Post Purchase Fact"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:Value="2"
+      DTS:To="Package\Measure Maverick Spend" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Measure Maverick Spend"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{D881255C-68A5-429C-0991-812851E3C1F9}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

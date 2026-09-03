@@ -1,0 +1,1623 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{5A7EBA73-7750-C113-14C7-3C8742EE8CA7}"
+  DTS:Description="Intraday inventory movement refresh. Runs every two hours during warehouse operating hours, keeps the movement fact and the on-hand position current, and stands the replenishment suggestion refresh down outside the picking window."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="Master_Intraday_Inventory"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{9E69CB2B-3A4F-B36B-4375-B99376A87755}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{6213616E-7F24-55FE-E134-7BAEB265FEF3}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch id to adopt on a restart. Zero means start a new batch."
+      DTS:DTSID="{F501A2DB-128E-0E8F-FFD0-52B88E86C573}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BusinessDate]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="Business date the run is loading. Defaults to the previous day at schedule time."
+      DTS:DTSID="{73E21E0E-500F-1857-A718-DE98CEF6B2D6}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BusinessDate"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">1900-01-01</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::EnvironmentCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="DEV / TEST / PROD. Drives etl.Configuration lookups and notification routing."
+      DTS:DTSID="{34EEC171-3213-FA93-E00E-BCB01904D318}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="EnvironmentCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">DEV</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="Passed down to every child; ignores stored watermarks and reloads all history."
+      DTS:DTSID="{FA4DBEE0-E8E1-C2B4-4984-A67CBF06B6A2}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::MaxParallelStreams]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Upper bound on concurrent child streams inside a phase container."
+      DTS:DTSID="{C4092C7C-3F5E-7E27-096C-E23845851DBA}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="MaxParallelStreams"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">4</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::MaxExtractAttempts]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Bound on the retry loop around the failure-prone extract phases."
+      DTS:DTSID="{5EAF85C3-0299-9A5D-A04F-08DB12CB4AE6}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="MaxExtractAttempts"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">3</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::RestartFromStep]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="When set, phases before the named step are skipped so a failed batch can resume."
+      DTS:DTSID="{02F554B8-CF8C-7C99-60A8-58B93F1B1B92}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="RestartFromStep"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve"></DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::PickingWindowOpen]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="Replenishment only refreshes while the warehouse picking window is open."
+      DTS:DTSID="{CC0B2D30-5ABB-92E3-5405-D3ADE1ED0B1B}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="PickingWindowOpen"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">True</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::OnHandVarianceTolerance]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Units of DW-to-OLTP on-hand variance tolerated before operations is paged."
+      DTS:DTSID="{05942556-96DE-0EEB-A881-78DC314A4252}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="OnHandVarianceTolerance"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">25</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Source_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{6013BF6D-BE65-C752-81B9-00A20CDE3DE7}"
+      DTS:ObjectName="WWI_Source_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchId]"
+      DTS:CreationName=""
+      DTS:DTSID="{F06E77DF-93AD-7E04-19B4-68EFD3DC4E70}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ExtractAttempt]"
+      DTS:CreationName=""
+      DTS:DTSID="{9DD04A65-82B9-98C8-1874-269448CBE38E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ExtractAttempt">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">1</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::FailedObjectCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{D9A9BAA7-CE17-B2E1-3F42-3A6082657972}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="FailedObjectCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RejectedRowCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{56DF9730-F850-05B3-F39B-F6E6852D91AD}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RejectedRowCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{4F3800B7-5B99-5597-149D-7E616C8619DA}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::OnHandVariance]"
+      DTS:CreationName=""
+      DTS:DTSID="{4F098E10-07AC-D537-7D7E-8051D4254042}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="OnHandVariance">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::MovementRowCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{C6EEC02D-496D-063E-766B-A68763032AF5}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="MovementRowCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchStepIdInventoryExtract]"
+      DTS:CreationName=""
+      DTS:DTSID="{B6A735EB-EF60-CBDC-E431-2D3DA1A15316}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchStepIdInventoryExtract">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchStepIdInventoryExtractRetry]"
+      DTS:CreationName=""
+      DTS:DTSID="{F830D646-1CA7-1C06-32E4-F2D34B69F712}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchStepIdInventoryExtractRetry">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchStepIdInventoryStage]"
+      DTS:CreationName=""
+      DTS:DTSID="{703C29C1-05C0-3B53-FF30-7C2F9B34E1DB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchStepIdInventoryStage">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchStepIdInventoryFacts]"
+      DTS:CreationName=""
+      DTS:DTSID="{D847A861-32B3-CC12-E1A7-5B84DC787072}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchStepIdInventoryFacts">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchStepIdInventoryMarts]"
+      DTS:CreationName=""
+      DTS:DTSID="{EBE64C25-7C1E-7130-143F-DB76D4EC836C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchStepIdInventoryMarts">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchStepIdReplenishment]"
+      DTS:CreationName=""
+      DTS:DTSID="{F0AE38DB-1F1A-26E3-35C1-371ACF3751E9}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchStepIdReplenishment">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchStepIdInventoryHealth]"
+      DTS:CreationName=""
+      DTS:DTSID="{00CE851D-80E1-DEFC-90B3-754E066FBA8E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchStepIdInventoryHealth">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BatchStepIdOnHandVarianceEscalation]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D545B5B-141F-AFA1-C226-12716B3044BD}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchStepIdOnHandVarianceEscalation">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Start Batch"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{8338E990-657C-2BF4-677D-431A70C3CDAB}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Start Batch"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_StartBatch @BatchName = ?, @BatchType = N'Intraday', @BusinessDate = ?, @EnvironmentCode = ?, @AllowAdoptRunning = ?, @Notes = N'Intraday inventory refresh.', @BatchId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BusinessDate" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::EnvironmentCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Inventory Extract"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Phase: Inventory Extract"
+      DTS:DTSID="{EE842978-5F4D-0078-5D7A-75390C20602B}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Inventory Extract">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Extract\Start Step Inventory Extract"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{AD2D088F-379D-8CB1-ED9C-80512EA5FE3C}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Start Step Inventory Extract"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_StartBatchStep @BatchId = ?, @StepName = N'Inventory Extract', @StepSequence = 10, @StepGroup = N'Extract', @BatchStepId = ? OUTPUT;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchStepIdInventoryExtract" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Extract\Run EXT_SQL_StockItems"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{1689DC42-ABE1-3914-CF3F-C58F112CD550}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run EXT_SQL_StockItems"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>EXT_SQL_StockItems.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Extract\Run EXT_SQL_StockMovements"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{DF7D8059-DB5D-87D2-A6CD-FA36061A3896}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run EXT_SQL_StockMovements"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>EXT_SQL_StockMovements.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Extract\Run EXT_SQL_StockTransfers"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{A7F27EBE-050C-26E9-1FC1-7042D25D3E7D}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run EXT_SQL_StockTransfers"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>EXT_SQL_StockTransfers.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Extract\End Step Inventory Extract"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{76A1783F-3971-FCB2-EDB2-E017C401CD1D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="End Step Inventory Extract"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatchStep @BatchStepId = ?, @Status = N'Succeeded';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchStepIdInventoryExtract" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Extract.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{79C136FD-3EA1-E64E-A037-46B1012B9101}"
+          DTS:From="Package\Inventory Extract\Start Step Inventory Extract"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Inventory Extract\Run EXT_SQL_StockItems" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Extract.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{E2F276D0-E500-07DC-8EB4-3B8241D348E6}"
+          DTS:From="Package\Inventory Extract\Run EXT_SQL_StockItems"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Inventory Extract\End Step Inventory Extract" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Extract.PrecedenceConstraints[Constraint 2]"
+          DTS:CreationName=""
+          DTS:DTSID="{AF2C85BA-A0C6-A293-06CB-4C77E6BD118A}"
+          DTS:From="Package\Inventory Extract\Start Step Inventory Extract"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 2"
+          DTS:To="Package\Inventory Extract\Run EXT_SQL_StockMovements" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Extract.PrecedenceConstraints[Constraint 3]"
+          DTS:CreationName=""
+          DTS:DTSID="{BA7E5E40-98C5-F8E2-F731-C87C9B080BF1}"
+          DTS:From="Package\Inventory Extract\Run EXT_SQL_StockMovements"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 3"
+          DTS:To="Package\Inventory Extract\End Step Inventory Extract" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Extract.PrecedenceConstraints[Constraint 4]"
+          DTS:CreationName=""
+          DTS:DTSID="{E397921F-9E51-AC93-00EB-4B1D3F36AC29}"
+          DTS:From="Package\Inventory Extract\Start Step Inventory Extract"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 4"
+          DTS:To="Package\Inventory Extract\Run EXT_SQL_StockTransfers" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Extract.PrecedenceConstraints[Constraint 5]"
+          DTS:CreationName=""
+          DTS:DTSID="{D1EE6191-F561-8A12-D6AA-9BBD7CB8B535}"
+          DTS:From="Package\Inventory Extract\Run EXT_SQL_StockTransfers"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 5"
+          DTS:To="Package\Inventory Extract\End Step Inventory Extract" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Inventory Extract Retry"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Phase: Inventory Extract Retry"
+      DTS:DTSID="{34D50E96-C008-EC26-C3BD-23E3EE861729}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Inventory Extract Retry">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Extract Retry\Start Step Inventory Extract Retry"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{E6B397E2-00C9-5259-21C7-B47FD6AB2477}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Start Step Inventory Extract Retry"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_StartBatchStep @BatchId = ?, @StepName = N'Inventory Extract Retry', @StepSequence = 11, @StepGroup = N'Extract', @BatchStepId = ? OUTPUT;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchStepIdInventoryExtractRetry" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Extract Retry\Run EXT_SQL_StockMovements"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{7CB9E51D-6338-9514-04EA-1CD0FAB40294}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run EXT_SQL_StockMovements"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>EXT_SQL_StockMovements.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Extract Retry\End Step Inventory Extract Retry"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{4745A8C1-93F2-A127-98A4-C414B30A37B8}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="End Step Inventory Extract Retry"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatchStep @BatchStepId = ?, @Status = N'Succeeded';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchStepIdInventoryExtractRetry" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Extract Retry.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{EE6B2AAC-B863-5F2F-4A8C-8D7AA88E19B0}"
+          DTS:From="Package\Inventory Extract Retry\Start Step Inventory Extract Retry"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Inventory Extract Retry\Run EXT_SQL_StockMovements" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Extract Retry.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{F73C3D57-7A28-120F-74B9-71C2A9CC8A4C}"
+          DTS:From="Package\Inventory Extract Retry\Run EXT_SQL_StockMovements"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Inventory Extract Retry\End Step Inventory Extract Retry" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Increment Extract Attempt"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{8D00FEE8-F44D-4F9A-4C48-38FA2DA10BEF}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Increment Extract Attempt"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::ExtractAttempt] = @[User::ExtractAttempt] + 1" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Inventory Stage"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Phase: Inventory Stage"
+      DTS:DTSID="{9EEAAFAA-F18F-166F-C8DD-D06EA1267D68}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Inventory Stage">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Stage\Start Step Inventory Stage"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{11E12E36-89EA-1B28-1162-953D0CC64BA8}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Start Step Inventory Stage"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_StartBatchStep @BatchId = ?, @StepName = N'Inventory Stage', @StepSequence = 20, @StepGroup = N'Stage', @BatchStepId = ? OUTPUT;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchStepIdInventoryStage" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Stage\Run STG_Load_StockItem"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{711BA180-DAD9-20B3-470D-FA04019D6901}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run STG_Load_StockItem"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>STG_Load_StockItem.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Stage\Run STG_Load_StockMovement"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{8F54AD21-B315-D2EB-ABE3-133855F2CB04}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run STG_Load_StockMovement"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>STG_Load_StockMovement.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Stage\Run STG_Work_InventoryPosition"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{EE2A0110-DA88-7559-B50F-AB2E09E97E6B}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run STG_Work_InventoryPosition"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>STG_Work_InventoryPosition.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Stage\End Step Inventory Stage"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{A23D71CA-A1EB-81C2-8464-83AB450E4506}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="End Step Inventory Stage"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatchStep @BatchStepId = ?, @Status = N'Succeeded';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchStepIdInventoryStage" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Stage.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{2B6C6A7F-AEB8-0E62-0FA5-84D1E3B07901}"
+          DTS:From="Package\Inventory Stage\Start Step Inventory Stage"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Inventory Stage\Run STG_Load_StockItem" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Stage.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{323CC113-4936-764E-20C3-A80D965A96A5}"
+          DTS:From="Package\Inventory Stage\Run STG_Load_StockItem"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Inventory Stage\Run STG_Load_StockMovement" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Stage.PrecedenceConstraints[Constraint 2]"
+          DTS:CreationName=""
+          DTS:DTSID="{DEDD87FE-7DA3-7152-BC97-223B83DB6F68}"
+          DTS:From="Package\Inventory Stage\Run STG_Load_StockMovement"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 2"
+          DTS:To="Package\Inventory Stage\Run STG_Work_InventoryPosition" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Stage.PrecedenceConstraints[Constraint 3]"
+          DTS:CreationName=""
+          DTS:DTSID="{54942ADC-EF0E-EA51-004E-155686FC9850}"
+          DTS:From="Package\Inventory Stage\Run STG_Work_InventoryPosition"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 3"
+          DTS:To="Package\Inventory Stage\End Step Inventory Stage" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Inventory Facts"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Phase: Inventory Facts"
+      DTS:DTSID="{1CD31E15-D418-ED12-01F8-70EFF4A80ABD}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Inventory Facts">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Facts\Start Step Inventory Facts"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{483E25A6-B4EC-539F-7BE3-1B650E49C5CD}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Start Step Inventory Facts"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_StartBatchStep @BatchId = ?, @StepName = N'Inventory Facts', @StepSequence = 30, @StepGroup = N'Fact', @BatchStepId = ? OUTPUT;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchStepIdInventoryFacts" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Facts\Run FACT_Load_Movement"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{0DFE2E98-232D-C64A-1848-74D3E50F132A}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run FACT_Load_Movement"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>FACT_Load_Movement.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Facts\Run FACT_Load_StockHolding"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{82CFD1D8-C6D6-44B1-B8F4-A61FDC2E2B9E}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run FACT_Load_StockHolding"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>FACT_Load_StockHolding.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Facts\End Step Inventory Facts"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{38C3C862-D975-DD2F-DE02-F39237ACCF6D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="End Step Inventory Facts"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatchStep @BatchStepId = ?, @Status = N'Succeeded';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchStepIdInventoryFacts" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Facts.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{7083C032-62DF-0ADB-FCB4-BC54181084D9}"
+          DTS:From="Package\Inventory Facts\Start Step Inventory Facts"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Inventory Facts\Run FACT_Load_Movement" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Facts.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{0BC6A448-0761-4D80-9748-6E80A91D1AB3}"
+          DTS:From="Package\Inventory Facts\Run FACT_Load_Movement"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Inventory Facts\Run FACT_Load_StockHolding" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Facts.PrecedenceConstraints[Constraint 2]"
+          DTS:CreationName=""
+          DTS:DTSID="{22793433-0484-6113-83CA-46B4FED4177B}"
+          DTS:From="Package\Inventory Facts\Run FACT_Load_StockHolding"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 2"
+          DTS:To="Package\Inventory Facts\End Step Inventory Facts" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Inventory Marts"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Phase: Inventory Marts"
+      DTS:DTSID="{8FABEE6D-0C54-0EA8-9156-42C01D36DD13}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Inventory Marts">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Marts\Start Step Inventory Marts"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{E60F3503-E354-61B2-2513-88DB902514AF}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Start Step Inventory Marts"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_StartBatchStep @BatchId = ?, @StepName = N'Inventory Marts', @StepSequence = 40, @StepGroup = N'Mart', @BatchStepId = ? OUTPUT;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchStepIdInventoryMarts" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Marts\Run INV_Load_StockTransfer"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{300E08EA-AA74-12EC-B825-D1A1C02DA897}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run INV_Load_StockTransfer"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>INV_Load_StockTransfer.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Marts\Run INV_Load_CycleCountVariance"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{C4EF4A90-9948-7C44-529C-19A79A5B36C7}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run INV_Load_CycleCountVariance"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>INV_Load_CycleCountVariance.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Marts\Run INV_Reconcile_OnHand"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{190F9D31-3D36-9B33-4640-1FF1A9A0824D}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run INV_Reconcile_OnHand"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>INV_Reconcile_OnHand.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Marts\End Step Inventory Marts"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{2725D0B0-F6C7-02FE-786A-72969F81A6B7}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="End Step Inventory Marts"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatchStep @BatchStepId = ?, @Status = N'Succeeded';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchStepIdInventoryMarts" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Marts.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{2E0A2094-5EC1-90AD-CA3F-77F11B207763}"
+          DTS:From="Package\Inventory Marts\Start Step Inventory Marts"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Inventory Marts\Run INV_Load_StockTransfer" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Marts.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{CC353E29-28D9-71BF-4F6A-E34C9409CD16}"
+          DTS:From="Package\Inventory Marts\Run INV_Load_StockTransfer"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Inventory Marts\Run INV_Reconcile_OnHand" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Marts.PrecedenceConstraints[Constraint 2]"
+          DTS:CreationName=""
+          DTS:DTSID="{64DAADDF-CDB2-33D5-AD67-EFC5E09333F2}"
+          DTS:From="Package\Inventory Marts\Run INV_Reconcile_OnHand"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 2"
+          DTS:To="Package\Inventory Marts\End Step Inventory Marts" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Marts.PrecedenceConstraints[Constraint 3]"
+          DTS:CreationName=""
+          DTS:DTSID="{6071F871-F6C1-16D5-12D4-7716350B6F67}"
+          DTS:From="Package\Inventory Marts\Start Step Inventory Marts"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 3"
+          DTS:To="Package\Inventory Marts\Run INV_Load_CycleCountVariance" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Marts.PrecedenceConstraints[Constraint 4]"
+          DTS:CreationName=""
+          DTS:DTSID="{DBD50172-DE8C-9AE9-478D-ABB68C83D6CF}"
+          DTS:From="Package\Inventory Marts\Run INV_Load_CycleCountVariance"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 4"
+          DTS:To="Package\Inventory Marts\End Step Inventory Marts" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Replenishment"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Phase: Replenishment"
+      DTS:DTSID="{B42A5C3C-693A-C9D6-A9B5-C890120A4BA3}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Replenishment">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Replenishment\Start Step Replenishment"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{BAC4C109-CA9D-8555-DE5E-4EA0E75DB5DB}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Start Step Replenishment"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_StartBatchStep @BatchId = ?, @StepName = N'Replenishment', @StepSequence = 50, @StepGroup = N'Mart', @BatchStepId = ? OUTPUT;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchStepIdReplenishment" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Replenishment\Run INV_Load_Replenishment"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{3ED21BE5-5D7C-45C3-42C3-FF67D24D4426}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run INV_Load_Replenishment"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>INV_Load_Replenishment.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Replenishment\End Step Replenishment"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{5D0C31E5-FEAA-38D7-8194-10D6F4469690}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="End Step Replenishment"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatchStep @BatchStepId = ?, @Status = N'Succeeded';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchStepIdReplenishment" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Replenishment.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{F14DD2B4-7338-23E3-3F6F-038237AC93F4}"
+          DTS:From="Package\Replenishment\Start Step Replenishment"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Replenishment\Run INV_Load_Replenishment" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Replenishment.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{21A9AE76-733B-F78A-2BD3-83F484042B3D}"
+          DTS:From="Package\Replenishment\Run INV_Load_Replenishment"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Replenishment\End Step Replenishment" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Inventory Health"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Phase: Inventory Health"
+      DTS:DTSID="{0D6AC244-400A-60C9-8935-02EE60DBF540}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Inventory Health">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Health\Start Step Inventory Health"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{80C69093-516D-FC86-8715-A55C0119CDDA}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Start Step Inventory Health"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_StartBatchStep @BatchId = ?, @StepName = N'Inventory Health', @StepSequence = 60, @StepGroup = N'Aggregate', @BatchStepId = ? OUTPUT;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchStepIdInventoryHealth" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Health\Run AGG_Refresh_DailyInventoryHealth"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{38DC60D6-7124-82EA-67C8-85DE762A3598}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run AGG_Refresh_DailyInventoryHealth"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>AGG_Refresh_DailyInventoryHealth.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Inventory Health\End Step Inventory Health"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{E0B3E8A9-4AEB-7534-7715-197EA97B6E82}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="End Step Inventory Health"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatchStep @BatchStepId = ?, @Status = N'Succeeded';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchStepIdInventoryHealth" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Health.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{19653B21-6046-3246-95A3-66196BA1BB52}"
+          DTS:From="Package\Inventory Health\Start Step Inventory Health"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Inventory Health\Run AGG_Refresh_DailyInventoryHealth" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Inventory Health.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{763C87C2-97B6-7545-571D-D0AE263904F3}"
+          DTS:From="Package\Inventory Health\Run AGG_Refresh_DailyInventoryHealth"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Inventory Health\End Step Inventory Health" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\On Hand Variance Escalation"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Phase: On Hand Variance Escalation"
+      DTS:DTSID="{6EB0B4DB-279D-7B41-C767-407B6FD06484}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="On Hand Variance Escalation">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\On Hand Variance Escalation\Start Step On Hand Variance Escalation"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{2D22C87F-C1B7-489D-D842-DB4BFB2762B9}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Start Step On Hand Variance Escalation"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_StartBatchStep @BatchId = ?, @StepName = N'On Hand Variance Escalation', @StepSequence = 90, @StepGroup = N'Maintenance', @BatchStepId = ? OUTPUT;"
+            SQLTask:ResultType="ResultSetType_SingleRow"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::BatchStepIdOnHandVarianceEscalation" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\On Hand Variance Escalation\Run ERR_Reconcile_RowCounts"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{AB7E46E0-9D15-64B0-388F-11D1A87D769A}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run ERR_Reconcile_RowCounts"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>ERR_Reconcile_RowCounts.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\On Hand Variance Escalation\Run ERR_Notify_Operations"
+          DTS:CreationName="Microsoft.ExecutePackageTask"
+          DTS:Description="Execute Package Task"
+          DTS:DTSID="{889DFAE4-B41C-940C-2271-BAD59BEE292A}"
+          DTS:ExecutableType="Microsoft.ExecutePackageTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Run ERR_Notify_Operations"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <ExecutePackageTask>
+            <UseProjectReference>True</UseProjectReference>
+            <PackageName>ERR_Notify_Operations.dtsx</PackageName>
+            <ParameterAssignment ParameterName="BatchId" BindedVariableOrParameterName="User::BatchId" />
+            <ParameterAssignment ParameterName="ReloadFullHistory" BindedVariableOrParameterName="$Package::ReloadFullHistory" />
+          </ExecutePackageTask>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\On Hand Variance Escalation\End Step On Hand Variance Escalation"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{4BA7B708-59D8-1CDC-04AE-1ADAA034433A}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="End Step On Hand Variance Escalation"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatchStep @BatchStepId = ?, @Status = N'Succeeded';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchStepIdOnHandVarianceEscalation" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\On Hand Variance Escalation.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{493C1C04-FD72-55D4-3F96-D8B0A0D5DC36}"
+          DTS:From="Package\On Hand Variance Escalation\Start Step On Hand Variance Escalation"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\On Hand Variance Escalation\Run ERR_Reconcile_RowCounts" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\On Hand Variance Escalation.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{84035C74-F9AE-1CC1-544E-626ACD94136E}"
+          DTS:From="Package\On Hand Variance Escalation\Run ERR_Reconcile_RowCounts"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\On Hand Variance Escalation\Run ERR_Notify_Operations" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\On Hand Variance Escalation.PrecedenceConstraints[Constraint 2]"
+          DTS:CreationName=""
+          DTS:DTSID="{0EACDB96-281F-A2EB-A907-3A68C7F935B5}"
+          DTS:From="Package\On Hand Variance Escalation\Run ERR_Notify_Operations"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 2"
+          DTS:To="Package\On Hand Variance Escalation\End Step On Hand Variance Escalation" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Read On Hand Variance"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{12052ED4-40FA-BB47-C834-BDE4ABBA95BE}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Read On Hand Variance"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="SELECT ISNULL(MAX(ABS(ra.SourceRowCount - ra.TargetRowCount)), 0) AS OnHandVariance FROM etl.RowCountAudit AS ra INNER JOIN etl.PackageExecution AS pe ON pe.PackageExecutionId = ra.PackageExecutionId WHERE pe.BatchId = ? AND ra.ObjectName = N'Fact.Stock Holding';"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::OnHandVariance" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\End Batch"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{D8D39397-8629-64ED-C63F-AD8D08853DDA}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="End Batch"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_EndBatch @BatchId = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Start Batch"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Inventory Extract" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Inventory Extract"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:Value="1"
+      DTS:To="Package\Increment Extract Attempt" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Increment Extract Attempt"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:EvalOp="2"
+      DTS:Expression="@[User::ExtractAttempt] &lt;= @[$Package::MaxExtractAttempts]"
+      DTS:To="Package\Inventory Extract Retry" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Inventory Extract Retry"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Inventory Stage" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Inventory Extract Retry"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:Value="1"
+      DTS:To="Package\On Hand Variance Escalation" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Inventory Extract"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Inventory Stage" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Inventory Stage"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Inventory Facts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Inventory Facts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Inventory Marts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 8]"
+      DTS:CreationName=""
+      DTS:DTSID="{71A76C5F-1A20-5771-2776-7EF96FD96B90}"
+      DTS:From="Package\Inventory Marts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 8"
+      DTS:Value="2"
+      DTS:To="Package\Read On Hand Variance" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 9]"
+      DTS:CreationName=""
+      DTS:DTSID="{11D92538-705E-DF70-FE3B-5738B6CA45B1}"
+      DTS:From="Package\Read On Hand Variance"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 9"
+      DTS:EvalOp="2"
+      DTS:Expression="@[$Package::PickingWindowOpen] &amp;&amp; @[User::OnHandVariance] &lt;= @[$Package::OnHandVarianceTolerance]"
+      DTS:To="Package\Replenishment" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 10]"
+      DTS:CreationName=""
+      DTS:DTSID="{1B15C648-32B6-CECC-4942-4F005EB650A1}"
+      DTS:From="Package\Read On Hand Variance"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 10"
+      DTS:EvalOp="2"
+      DTS:Expression="@[User::OnHandVariance] &gt; @[$Package::OnHandVarianceTolerance]"
+      DTS:To="Package\On Hand Variance Escalation" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 11]"
+      DTS:CreationName=""
+      DTS:DTSID="{4DBDE44E-0824-968C-691C-D986A703C959}"
+      DTS:From="Package\Replenishment"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 11"
+      DTS:To="Package\Inventory Health" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 12]"
+      DTS:CreationName=""
+      DTS:DTSID="{FA586833-5603-9809-CDE9-DB911E055329}"
+      DTS:From="Package\Inventory Health"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 12"
+      DTS:To="Package\End Batch" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 13]"
+      DTS:CreationName=""
+      DTS:DTSID="{8E6F2DDB-0F9C-9EC8-E0DB-8891DBDB8ECB}"
+      DTS:From="Package\On Hand Variance Escalation"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 13"
+      DTS:To="Package\End Batch" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{27648126-60B5-0BE1-1141-0E8E51CCDD73}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Master Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{24DAD06D-13C6-632A-F2A8-976F35F64AAA}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Master Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @BatchId = ?, @ErrorSeverity = N'Critical', @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?, @ProcedureName = N'master orchestration';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Fail Open Batch Step"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{C9D44964-CDF8-C8DF-8C3A-E413C0AAA195}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Fail Open Batch Step"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="UPDATE etl.BatchStep SET Status = N'Failed', CompletedAtUtc = SYSUTCDATETIME() WHERE BatchId = ? AND Status = N'Running';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Batch Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{A0AB7430-E95B-CE0B-1B66-57309B414CCB}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Batch Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_EndBatch @BatchId = ?, @ForceStatus = N'Failed';"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Master Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Fail Open Batch Step" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{4ADAB473-CEF0-AC81-9586-7D4A595E09C8}"
+          DTS:From="Package.EventHandlers[OnError]\Fail Open Batch Step"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Batch Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

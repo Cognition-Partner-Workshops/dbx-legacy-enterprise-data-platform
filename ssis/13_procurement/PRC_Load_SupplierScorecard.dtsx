@@ -1,0 +1,718 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{3FA57A21-35C1-97E5-0365-38CC3A664AFC}"
+  DTS:Description="Rebuilds the supplier scorecard: on-time delivery, quantity accuracy, price adherence, quality rejections and invoice accuracy, weighted into a single score band. The weights live in etl.Configuration because procurement changes them every couple of years, and suppliers with too few orders in the window are scored as 'insufficient data' rather than badly."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="PRC_Load_SupplierScorecard"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{D57B580D-C82E-45DD-421E-44E3FA4D0676}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{E8F3F62D-DBE4-7F06-C092-F979E5EE3D1A}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{26C12346-D210-DF48-12C2-56B7F1E87232}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{33499822-C61E-1293-AB93-7ED386587FCA}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{F3FC03DC-995F-70B0-EAEC-B745EF46730C}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">ORAERP</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ScoringWindowDays]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Rolling window the scorecard is measured over."
+      DTS:DTSID="{95FDCEDF-E42A-9315-6DCB-451540C7BECC}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ScoringWindowDays"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">90</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::MinimumOrdersForScore]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Below this order count the supplier is not scored."
+      DTS:DTSID="{4EA9953D-477A-BF71-C646-8BAACE92FFB8}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="MinimumOrdersForScore"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">5</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{138F9C95-42CB-7954-E118-4F2FD9390541}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{764F920D-728C-729C-1BF4-0A2E7C86EC59}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{117694E9-B04C-A4E3-84E1-2C31F335AE32}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{0C77B4CC-98F0-10D9-9974-5CFACCCE9808}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{C6E766D8-713B-37C7-3B2E-0BAC0192CCCB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{6F77397C-09BE-037B-2D65-B9F504AA6F96}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{00B78C7E-3BDB-E8EB-795D-C2129ABBE53B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{F27974D6-2DC1-2C69-A225-49E455352CE0}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ScoredSupplierCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{033FB484-2872-470C-A4C9-93819C4BE265}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ScoredSupplierCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::InsufficientDataCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{A4293596-D221-122C-2FDA-FBB7EB7DADA5}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="InsufficientDataCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Truncate work.SupplierScorecard"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F410CBB6-03C9-DC45-9C37-0B54A57D86F7}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Truncate work.SupplierScorecard"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE work.SupplierScorecard;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Build Scorecard Measures"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{B42E5C70-DDD5-0609-7D60-F08B2CDC28F4}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Build Scorecard Measures"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="INSERT INTO work.SupplierScorecard&#10;    (SupplierId, RegionCode, OrderCount, OnTimeCount, QuantityAccurateCount,&#10;     PriceAdherentCount, QualityRejectCount, InvoiceExceptionCount, WindowDays)&#10;SELECT  s.SupplierId&#10;,       s.RegionCode&#10;,       COUNT(DISTINCT r.PurchaseOrderNumber)&#10;,       SUM(CASE WHEN r.ReceivedAtUtc &lt;= pol.PromisedDate THEN 1 ELSE 0 END)&#10;,       SUM(CASE WHEN r.ReceivedOuters = pol.OrderedOuters THEN 1 ELSE 0 END)&#10;,       SUM(CASE WHEN ABS(ISNULL(ail.InvoicedUnitPrice, pol.ExpectedUnitPricePerOuter)&#10;                          - pol.ExpectedUnitPricePerOuter) &lt; 0.005 THEN 1 ELSE 0 END)&#10;,       SUM(CASE WHEN r.QualityStatusCode = N'REJECT' THEN 1 ELSE 0 END)&#10;,       SUM(CASE WHEN ail.ApInvoiceNumber IS NULL THEN 1 ELSE 0 END)&#10;,       ?&#10;FROM    stg.Supplier AS s&#10;INNER JOIN stg.PurchaseOrderHeader AS poh ON poh.SupplierId = s.SupplierId&#10;INNER JOIN stg.PurchaseOrderLine AS pol&#10;        ON  pol.PurchaseOrderNumber = poh.PurchaseOrderNumber&#10;LEFT OUTER JOIN stg.Receipt AS r&#10;        ON  r.PurchaseOrderNumber = pol.PurchaseOrderNumber&#10;        AND r.LineNumber = pol.LineNumber&#10;LEFT OUTER JOIN stg.ApInvoiceLine AS ail&#10;        ON  ail.PurchaseOrderNumber = pol.PurchaseOrderNumber&#10;        AND ail.PurchaseOrderLineNumber = pol.LineNumber&#10;WHERE   poh.OrderDate &gt;= DATEADD(DAY, -?, CAST(SYSDATETIME() AS date))&#10;GROUP BY s.SupplierId, s.RegionCode;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::ScoringWindowDays" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::ScoringWindowDays" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Score Suppliers"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{854FA3BA-46EA-3178-546A-CA634A56FB90}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Score Suppliers"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Score Suppliers\work SupplierScorecard" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="work SupplierScorecard" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">900</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT SupplierId, RegionCode, OrderCount, OnTimeCount, QuantityAccurateCount, PriceAdherentCount, QualityRejectCount, InvoiceExceptionCount, WindowDays FROM work.SupplierScorecard;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Score Suppliers\work SupplierScorecard.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].Columns[SupplierId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].ExternalColumns[SupplierId]" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].Columns[SupplierId]" name="SupplierId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].Columns[OrderCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].ExternalColumns[OrderCount]" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].Columns[OrderCount]" name="OrderCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].Columns[OnTimeCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].ExternalColumns[OnTimeCount]" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].Columns[OnTimeCount]" name="OnTimeCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].Columns[QuantityAccurateCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].ExternalColumns[QuantityAccurateCount]" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].Columns[QuantityAccurateCount]" name="QuantityAccurateCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].Columns[PriceAdherentCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].ExternalColumns[PriceAdherentCount]" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].Columns[PriceAdherentCount]" name="PriceAdherentCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].Columns[QualityRejectCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].ExternalColumns[QualityRejectCount]" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].Columns[QualityRejectCount]" name="QualityRejectCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].Columns[InvoiceExceptionCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].ExternalColumns[InvoiceExceptionCount]" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].Columns[InvoiceExceptionCount]" name="InvoiceExceptionCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].Columns[WindowDays]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].ExternalColumns[WindowDays]" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].Columns[WindowDays]" name="WindowDays" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].ExternalColumns[SupplierId]" dataType="i4" name="SupplierId" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].ExternalColumns[OrderCount]" dataType="i4" name="OrderCount" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].ExternalColumns[OnTimeCount]" dataType="i4" name="OnTimeCount" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].ExternalColumns[QuantityAccurateCount]" dataType="i4" name="QuantityAccurateCount" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].ExternalColumns[PriceAdherentCount]" dataType="i4" name="PriceAdherentCount" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].ExternalColumns[QualityRejectCount]" dataType="i4" name="QualityRejectCount" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].ExternalColumns[InvoiceExceptionCount]" dataType="i4" name="InvoiceExceptionCount" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output].ExternalColumns[WindowDays]" dataType="i4" name="WindowDays" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[SupplierId]" dataType="i4" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[SupplierId]" name="SupplierId" />
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[OrderCount]" dataType="i4" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[OrderCount]" name="OrderCount" />
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[OnTimeCount]" dataType="i4" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[OnTimeCount]" name="OnTimeCount" />
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[QuantityAccurateCount]" dataType="i4" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[QuantityAccurateCount]" name="QuantityAccurateCount" />
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[PriceAdherentCount]" dataType="i4" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[PriceAdherentCount]" name="PriceAdherentCount" />
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[QualityRejectCount]" dataType="i4" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[QualityRejectCount]" name="QualityRejectCount" />
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[InvoiceExceptionCount]" dataType="i4" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[InvoiceExceptionCount]" name="InvoiceExceptionCount" />
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[WindowDays]" dataType="i4" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[WindowDays]" name="WindowDays" />
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Score Suppliers\Lookup Scoring Weights" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Scoring Weights" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT RegionCode, OnTimeWeight, AccuracyWeight, PriceWeight, QualityWeight FROM etl.SupplierScoringWeight;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">1</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Score Suppliers\Lookup Scoring Weights.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Score Suppliers\Lookup Scoring Weights.Inputs[Lookup Input]" errorRowDisposition="FailComponent" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Score Suppliers\Lookup Scoring Weights.Inputs[Lookup Input].Columns[RegionCode]" cachedName="RegionCode" name="RegionCode" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Score Suppliers\Lookup Scoring Weights.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Score Suppliers\Lookup Scoring Weights.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Score Suppliers\Lookup Scoring Weights.Outputs[Lookup Match Output].Columns[OnTimeWeight]" dataType="numeric" precision="18" scale="2" lineageId="Package\Score Suppliers\Lookup Scoring Weights.Outputs[Lookup Match Output].Columns[OnTimeWeight]" name="OnTimeWeight" />
+                  <outputColumn refId="Package\Score Suppliers\Lookup Scoring Weights.Outputs[Lookup Match Output].Columns[AccuracyWeight]" dataType="numeric" precision="18" scale="2" lineageId="Package\Score Suppliers\Lookup Scoring Weights.Outputs[Lookup Match Output].Columns[AccuracyWeight]" name="AccuracyWeight" />
+                  <outputColumn refId="Package\Score Suppliers\Lookup Scoring Weights.Outputs[Lookup Match Output].Columns[PriceWeight]" dataType="numeric" precision="18" scale="2" lineageId="Package\Score Suppliers\Lookup Scoring Weights.Outputs[Lookup Match Output].Columns[PriceWeight]" name="PriceWeight" />
+                  <outputColumn refId="Package\Score Suppliers\Lookup Scoring Weights.Outputs[Lookup Match Output].Columns[QualityWeight]" dataType="numeric" precision="18" scale="2" lineageId="Package\Score Suppliers\Lookup Scoring Weights.Outputs[Lookup Match Output].Columns[QualityWeight]" name="QualityWeight" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Score Suppliers\Lookup Scoring Weights.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Score Suppliers\Lookup Scoring Weights.Inputs[Lookup Input]" />
+              <output refId="Package\Score Suppliers\Lookup Scoring Weights.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Score Suppliers\Lookup Scoring Weights.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Score Suppliers\Derive Component Scores" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Component Scores" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Score Suppliers\Derive Component Scores.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Score Suppliers\Derive Component Scores.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Score Suppliers\Derive Component Scores.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Score Suppliers\Derive Component Scores.Outputs[Derived Column Output].Columns[OnTimePercent]" dataType="numeric" precision="18" scale="2" lineageId="Package\Score Suppliers\Derive Component Scores.Outputs[Derived Column Output].Columns[OnTimePercent]" name="OnTimePercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">OrderCount == 0 ? (DT_NUMERIC,18,2)0 : OnTimeCount * 100 / OrderCount</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">OrderCount == 0 ? (DT_NUMERIC,18,2)0 : OnTimeCount * 100 / OrderCount</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Score Suppliers\Derive Component Scores.Outputs[Derived Column Output].Columns[AccuracyPercent]" dataType="numeric" precision="18" scale="2" lineageId="Package\Score Suppliers\Derive Component Scores.Outputs[Derived Column Output].Columns[AccuracyPercent]" name="AccuracyPercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">OrderCount == 0 ? (DT_NUMERIC,18,2)0 : QuantityAccurateCount * 100 / OrderCount</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">OrderCount == 0 ? (DT_NUMERIC,18,2)0 : QuantityAccurateCount * 100 / OrderCount</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Score Suppliers\Derive Component Scores.Outputs[Derived Column Output].Columns[PricePercent]" dataType="numeric" precision="18" scale="2" lineageId="Package\Score Suppliers\Derive Component Scores.Outputs[Derived Column Output].Columns[PricePercent]" name="PricePercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">OrderCount == 0 ? (DT_NUMERIC,18,2)0 : PriceAdherentCount * 100 / OrderCount</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">OrderCount == 0 ? (DT_NUMERIC,18,2)0 : PriceAdherentCount * 100 / OrderCount</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Score Suppliers\Derive Component Scores.Outputs[Derived Column Output].Columns[QualityPercent]" dataType="numeric" precision="18" scale="2" lineageId="Package\Score Suppliers\Derive Component Scores.Outputs[Derived Column Output].Columns[QualityPercent]" name="QualityPercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">OrderCount == 0 ? (DT_NUMERIC,18,2)0 : (OrderCount - QualityRejectCount) * 100 / OrderCount</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">OrderCount == 0 ? (DT_NUMERIC,18,2)0 : (OrderCount - QualityRejectCount) * 100 / OrderCount</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Score Suppliers\Derive Weighted Score" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Weighted Score" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Score Suppliers\Derive Weighted Score.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Score Suppliers\Derive Weighted Score.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Score Suppliers\Derive Weighted Score.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Score Suppliers\Derive Weighted Score.Outputs[Derived Column Output].Columns[SupplierScore]" dataType="numeric" precision="18" scale="2" lineageId="Package\Score Suppliers\Derive Weighted Score.Outputs[Derived Column Output].Columns[SupplierScore]" name="SupplierScore">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">(OnTimePercent * ISNULL(OnTimeWeight) ? 0.4 : OnTimeWeight) + (AccuracyPercent * (ISNULL(AccuracyWeight) ? 0.2 : AccuracyWeight)) + (PricePercent * (ISNULL(PriceWeight) ? 0.2 : PriceWeight)) + (QualityPercent * (ISNULL(QualityWeight) ? 0.2 : QualityWeight))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(OnTimePercent * ISNULL(OnTimeWeight) ? 0.4 : OnTimeWeight) + (AccuracyPercent * (ISNULL(AccuracyWeight) ? 0.2 : AccuracyWeight)) + (PricePercent * (ISNULL(PriceWeight) ? 0.2 : PriceWeight)) + (QualityPercent * (ISNULL(QualityWeight) ? 0.2 : QualityWeight))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Score Suppliers\Derive Weighted Score.Outputs[Derived Column Output].Columns[ScoreBandCode]" dataType="wstr" length="8" lineageId="Package\Score Suppliers\Derive Weighted Score.Outputs[Derived Column Output].Columns[ScoreBandCode]" name="ScoreBandCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">OrderCount &lt; @[$Package::MinimumOrdersForScore] ? (DT_WSTR,8)"NODATA" : (OnTimePercent &gt;= 95 ? (DT_WSTR,8)"A" : (OnTimePercent &gt;= 85 ? (DT_WSTR,8)"B" : (OnTimePercent &gt;= 70 ? (DT_WSTR,8)"C" : (DT_WSTR,8)"D")))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">OrderCount &lt; @[$Package::MinimumOrdersForScore] ? (DT_WSTR,8)"NODATA" : (OnTimePercent &gt;= 95 ? (DT_WSTR,8)"A" : (OnTimePercent &gt;= 85 ? (DT_WSTR,8)"B" : (OnTimePercent &gt;= 70 ? (DT_WSTR,8)"C" : (DT_WSTR,8)"D")))</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Score Suppliers\Count Scored Suppliers" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Scored Suppliers" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsInserted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Score Suppliers\Count Scored Suppliers.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Score Suppliers\Count Scored Suppliers.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Score Suppliers\Count Scored Suppliers.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Score Suppliers\Aggregate Supplier Performance" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Aggregate Supplier Performance" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Aggregate].[Supplier Performance]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">20000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Score Suppliers\Aggregate Supplier Performance.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[SupplierId]" cachedDataType="i4" cachedName="SupplierId" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" name="SupplierId" />
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[OrderCount]" cachedDataType="i4" cachedName="OrderCount" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[OrderCount]" name="OrderCount" />
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[OnTimeCount]" cachedDataType="i4" cachedName="OnTimeCount" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[OnTimeCount]" name="OnTimeCount" />
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[QuantityAccurateCount]" cachedDataType="i4" cachedName="QuantityAccurateCount" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAccurateCount]" name="QuantityAccurateCount" />
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[PriceAdherentCount]" cachedDataType="i4" cachedName="PriceAdherentCount" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[PriceAdherentCount]" name="PriceAdherentCount" />
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[QualityRejectCount]" cachedDataType="i4" cachedName="QualityRejectCount" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[QualityRejectCount]" name="QualityRejectCount" />
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[InvoiceExceptionCount]" cachedDataType="i4" cachedName="InvoiceExceptionCount" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceExceptionCount]" name="InvoiceExceptionCount" />
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[WindowDays]" cachedDataType="i4" cachedName="WindowDays" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[WindowDays]" name="WindowDays" />
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[OnTimeWeight]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OnTimeWeight" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[OnTimeWeight]" name="OnTimeWeight" />
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[AccuracyWeight]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AccuracyWeight" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[AccuracyWeight]" name="AccuracyWeight" />
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[PriceWeight]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PriceWeight" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[PriceWeight]" name="PriceWeight" />
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[QualityWeight]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="QualityWeight" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[QualityWeight]" name="QualityWeight" />
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[OnTimePercent]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="OnTimePercent" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[OnTimePercent]" name="OnTimePercent" />
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[AccuracyPercent]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AccuracyPercent" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[AccuracyPercent]" name="AccuracyPercent" />
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[PricePercent]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PricePercent" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[PricePercent]" name="PricePercent" />
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[QualityPercent]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="QualityPercent" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[QualityPercent]" name="QualityPercent" />
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[SupplierScore]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SupplierScore" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[SupplierScore]" name="SupplierScore" />
+                  <inputColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].Columns[ScoreBandCode]" cachedDataType="wstr" cachedLength="8" cachedName="ScoreBandCode" externalMetadataColumnId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[ScoreBandCode]" name="ScoreBandCode" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" dataType="i4" name="SupplierId" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[OrderCount]" dataType="i4" name="OrderCount" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[OnTimeCount]" dataType="i4" name="OnTimeCount" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAccurateCount]" dataType="i4" name="QuantityAccurateCount" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[PriceAdherentCount]" dataType="i4" name="PriceAdherentCount" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[QualityRejectCount]" dataType="i4" name="QualityRejectCount" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceExceptionCount]" dataType="i4" name="InvoiceExceptionCount" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[WindowDays]" dataType="i4" name="WindowDays" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[OnTimeWeight]" dataType="numeric" precision="18" scale="2" name="OnTimeWeight" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[AccuracyWeight]" dataType="numeric" precision="18" scale="2" name="AccuracyWeight" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[PriceWeight]" dataType="numeric" precision="18" scale="2" name="PriceWeight" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[QualityWeight]" dataType="numeric" precision="18" scale="2" name="QualityWeight" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[OnTimePercent]" dataType="numeric" precision="18" scale="2" name="OnTimePercent" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[AccuracyPercent]" dataType="numeric" precision="18" scale="2" name="AccuracyPercent" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[PricePercent]" dataType="numeric" precision="18" scale="2" name="PricePercent" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[QualityPercent]" dataType="numeric" precision="18" scale="2" name="QualityPercent" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[SupplierScore]" dataType="numeric" precision="18" scale="2" name="SupplierScore" />
+                  <externalMetadataColumn refId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input].ExternalColumns[ScoreBandCode]" dataType="wstr" length="8" name="ScoreBandCode" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Score Suppliers\Aggregate Supplier Performance.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Score Suppliers.Paths[OLE DB Source Output]" endId="Package\Score Suppliers\Lookup Scoring Weights.Inputs[Lookup Input]" name="OLE DB Source Output" startId="Package\Score Suppliers\work SupplierScorecard.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Score Suppliers.Paths[Lookup Match Output 1]" endId="Package\Score Suppliers\Derive Component Scores.Inputs[Derived Column Input]" name="Lookup Match Output 1" startId="Package\Score Suppliers\Lookup Scoring Weights.Outputs[Lookup Match Output]" />
+          <path refId="Package\Score Suppliers.Paths[Derived Column Output 2]" endId="Package\Score Suppliers\Derive Weighted Score.Inputs[Derived Column Input]" name="Derived Column Output 2" startId="Package\Score Suppliers\Derive Component Scores.Outputs[Derived Column Output]" />
+          <path refId="Package\Score Suppliers.Paths[Derived Column Output 3]" endId="Package\Score Suppliers\Count Scored Suppliers.Inputs[Row Count Input]" name="Derived Column Output 3" startId="Package\Score Suppliers\Derive Weighted Score.Outputs[Derived Column Output]" />
+          <path refId="Package\Score Suppliers.Paths[Row Count Output 4]" endId="Package\Score Suppliers\Aggregate Supplier Performance.Inputs[OLE DB Destination Input]" name="Row Count Output 4" startId="Package\Score Suppliers\Count Scored Suppliers.Outputs[Row Count Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Count Unscored Suppliers"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{C3502BE1-3AFE-BCBC-574C-5C2E94E6F061}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Count Unscored Suppliers"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="SELECT COUNT(*) AS InsufficientData FROM work.SupplierScorecard WHERE OrderCount &lt; ?;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::MinimumOrdersForScore" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::InsufficientDataCount" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Aggregate.Supplier Performance', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Truncate work.SupplierScorecard" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Truncate work.SupplierScorecard"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Build Scorecard Measures" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Build Scorecard Measures"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Score Suppliers" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Score Suppliers"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:Value="2"
+      DTS:To="Package\Count Unscored Suppliers" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Count Unscored Suppliers"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{33BF17E6-2866-93FE-6562-3BC7AEB98977}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

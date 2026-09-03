@@ -1,0 +1,702 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{7D385A82-CB8C-E5B6-D318-B06B4CA8C850}"
+  DTS:Description="Produces the monthly supplier statement extract from the supplier transaction fact: opening balance, invoices, credits, payments and closing balance per supplier. Suppliers on self-billing terms are excluded, and EU suppliers receive a VAT summary block that the NA and APAC statements do not carry."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="PRC_Export_SupplierStatement"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{218F5C65-341F-9840-CC2C-866E9375AC12}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{4E290CCF-442C-FC4F-474A-297BE00BF85D}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{8B80BC75-409E-A4F2-9468-3445C30B6F63}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{696D58B6-2C45-9412-CC96-7F80263C3115}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{D3E69B3B-962A-A120-9358-62E9136122A2}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">ORAERP</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::StatementPeriod]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="Statement period, YYYY-MM."
+      DTS:DTSID="{0136F47C-9031-43ED-2C6E-0339C2B86AA6}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="StatementPeriod"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">1900-01</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ExcludeSelfBilling]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="Self-billing suppliers do not receive a statement."
+      DTS:DTSID="{FCF387C1-E154-0E70-D633-A7A074F53BBA}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ExcludeSelfBilling"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">True</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Inbound_Files]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{5B9B814D-2D49-C9BB-A7CD-36353A6059BF}"
+      DTS:ObjectName="WWI_Inbound_Files"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{1CF5D76C-E638-0B04-A814-080DB0FDB150}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{AF9C9FED-1AAA-338A-94AF-C961374D096B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{9B9BBA48-C914-7987-7072-D3BD4C1E1D3F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{F9281445-FF38-3F94-D240-77F14BC88FB1}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3A434D1-ED7A-675F-13D7-8B3BF9C3D1DF}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{6A2D5DBC-BE5E-DFE9-0952-073AB3FDFC4C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{7002167E-83B3-817F-CE9A-15142F0AE0B7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{4EB95A2D-46B0-8627-6A3B-035D5DEA7623}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::StatementCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{9DA3A096-5030-D57A-2D93-4A82A6102738}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="StatementCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::StatementFileName]"
+      DTS:CreationName=""
+      DTS:DTSID="{32B0103F-E21B-157F-B476-EEDB60C85074}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="StatementFileName">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">supplier_statement.csv</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Truncate work.SupplierStatementLine"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{308F64E0-8E84-4005-94D8-20F26A0360A6}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Truncate work.SupplierStatementLine"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE work.SupplierStatementLine;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Build Statement Lines"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{CD5E8783-A761-8A3D-E17B-D47D3A48B9DC}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Build Statement Lines"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="INSERT INTO work.SupplierStatementLine&#10;    (SupplierId, SupplierName, RegionCode, StatementPeriod, TransactionTypeCode,&#10;     TransactionDate, TransactionReference, TransactionAmount, CurrencyCode, VatAmount)&#10;SELECT  s.[WWI Supplier ID]&#10;,       s.[Supplier Name]&#10;,       s.[Region Code]&#10;,       ?&#10;,       t.[Transaction Type Code]&#10;,       t.[Transaction Date]&#10;,       t.[Transaction Reference]&#10;,       t.[Transaction Amount]&#10;,       t.[Currency Code]&#10;,       CASE WHEN s.[Region Code] = N'EU' THEN t.[Tax Amount] ELSE NULL END&#10;FROM    Fact.[Supplier Transaction] AS t&#10;INNER JOIN Dimension.Supplier AS s ON s.[Supplier Key] = t.[Supplier Key]&#10;WHERE   CONVERT(char(7), t.[Transaction Date], 126) = ?&#10;AND     (? = 0 OR ISNULL(s.[Is Self Billing], 0) = 0);"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::StatementPeriod" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::StatementPeriod" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::ExcludeSelfBilling" SQLTask:ParameterDirection="Input" SQLTask:DataType="BYTE" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Compute Statement Balances"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{5285F37C-F1BB-DA11-A318-BD6EBA117F70}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Compute Statement Balances"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="UPDATE l&#10;SET    l.RunningBalance = b.RunningBalance&#10;FROM   work.SupplierStatementLine AS l&#10;INNER JOIN (SELECT SupplierStatementLineId,&#10;                   SUM(TransactionAmount) OVER (PARTITION BY SupplierId&#10;                                                ORDER BY TransactionDate,&#10;                                                         SupplierStatementLineId&#10;                                                ROWS UNBOUNDED PRECEDING) AS RunningBalance&#10;            FROM   work.SupplierStatementLine) AS b&#10;        ON b.SupplierStatementLineId = l.SupplierStatementLineId;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Build Statement File Name"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{1504E7CD-C587-80DE-7988-9AE3C3074DC9}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Build Statement File Name"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression='@[User::StatementFileName] = "supplier_statement_" + @[$Package::StatementPeriod] + ".csv"' />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Write Supplier Statement"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{D1C39BCD-1FC8-1B62-4653-3D8DEBC2965E}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Write Supplier Statement"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Write Supplier Statement\work SupplierStatementLine" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="work SupplierStatementLine" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">900</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT SupplierId, SupplierName, RegionCode, StatementPeriod, TransactionTypeCode, TransactionDate, TransactionReference, TransactionAmount, CurrencyCode, VatAmount, RunningBalance FROM work.SupplierStatementLine ORDER BY SupplierId, TransactionDate;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Write Supplier Statement\work SupplierStatementLine.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[SupplierId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[SupplierId]" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[SupplierId]" name="SupplierId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[SupplierName]" dataType="wstr" length="100" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[SupplierName]" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[SupplierName]" name="SupplierName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[StatementPeriod]" dataType="wstr" length="7" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[StatementPeriod]" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[StatementPeriod]" name="StatementPeriod" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[TransactionTypeCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[TransactionTypeCode]" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[TransactionTypeCode]" name="TransactionTypeCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[TransactionDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[TransactionDate]" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[TransactionDate]" name="TransactionDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[TransactionReference]" dataType="wstr" length="30" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[TransactionReference]" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[TransactionReference]" name="TransactionReference" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[TransactionAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[TransactionAmount]" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[TransactionAmount]" name="TransactionAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[CurrencyCode]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[CurrencyCode]" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[CurrencyCode]" name="CurrencyCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[VatAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[VatAmount]" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[VatAmount]" name="VatAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[RunningBalance]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[RunningBalance]" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].Columns[RunningBalance]" name="RunningBalance" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[SupplierId]" dataType="i4" name="SupplierId" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[SupplierName]" dataType="wstr" length="100" name="SupplierName" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[StatementPeriod]" dataType="wstr" length="7" name="StatementPeriod" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[TransactionTypeCode]" dataType="wstr" length="10" name="TransactionTypeCode" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[TransactionDate]" dataType="dbTimeStamp" name="TransactionDate" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[TransactionReference]" dataType="wstr" length="30" name="TransactionReference" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[TransactionAmount]" dataType="numeric" precision="18" scale="2" name="TransactionAmount" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[CurrencyCode]" dataType="wstr" length="3" name="CurrencyCode" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[VatAmount]" dataType="numeric" precision="18" scale="2" name="VatAmount" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output].ExternalColumns[RunningBalance]" dataType="numeric" precision="18" scale="2" name="RunningBalance" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[SupplierId]" dataType="i4" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[SupplierId]" name="SupplierId" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[SupplierName]" dataType="wstr" length="100" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[SupplierName]" name="SupplierName" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[StatementPeriod]" dataType="wstr" length="7" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[StatementPeriod]" name="StatementPeriod" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[TransactionTypeCode]" dataType="wstr" length="10" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[TransactionTypeCode]" name="TransactionTypeCode" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[TransactionDate]" dataType="dbTimeStamp" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[TransactionDate]" name="TransactionDate" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[TransactionReference]" dataType="wstr" length="30" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[TransactionReference]" name="TransactionReference" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[TransactionAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[TransactionAmount]" name="TransactionAmount" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[CurrencyCode]" dataType="wstr" length="3" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[CurrencyCode]" name="CurrencyCode" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[VatAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[VatAmount]" name="VatAmount" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[RunningBalance]" dataType="numeric" precision="18" scale="2" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[RunningBalance]" name="RunningBalance" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Write Supplier Statement\Format Statement Row" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Format Statement Row" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Write Supplier Statement\Format Statement Row.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Write Supplier Statement\Format Statement Row.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Write Supplier Statement\Format Statement Row.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Write Supplier Statement\Format Statement Row.Outputs[Derived Column Output].Columns[StatementLineText]" dataType="wstr" length="60" lineageId="Package\Write Supplier Statement\Format Statement Row.Outputs[Derived Column Output].Columns[StatementLineText]" name="StatementLineText">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">RIGHT("0000000000" + (DT_WSTR,10)SupplierId, 10) + (DT_WSTR,10)TransactionTypeCode + (DT_WSTR,30)TransactionReference</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">RIGHT("0000000000" + (DT_WSTR,10)SupplierId, 10) + (DT_WSTR,10)TransactionTypeCode + (DT_WSTR,30)TransactionReference</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Write Supplier Statement\Format Statement Row.Outputs[Derived Column Output].Columns[IncludesVatBlock]" dataType="bool" lineageId="Package\Write Supplier Statement\Format Statement Row.Outputs[Derived Column Output].Columns[IncludesVatBlock]" name="IncludesVatBlock">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">RegionCode == "EU" ? (DT_BOOL)1 : (DT_BOOL)0</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">RegionCode == "EU" ? (DT_BOOL)1 : (DT_BOOL)0</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Write Supplier Statement\Count Statement Rows" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Statement Rows" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Write Supplier Statement\Count Statement Rows.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Write Supplier Statement\Count Statement Rows.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Write Supplier Statement\Count Statement Rows.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Write Supplier Statement\work SupplierStatementArchive" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="work SupplierStatementArchive" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[SupplierStatementArchive]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">20000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Write Supplier Statement\work SupplierStatementArchive.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].Columns[SupplierId]" cachedDataType="i4" cachedName="SupplierId" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" name="SupplierId" />
+                  <inputColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].Columns[SupplierName]" cachedDataType="wstr" cachedLength="100" cachedName="SupplierName" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[SupplierName]" name="SupplierName" />
+                  <inputColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].Columns[StatementPeriod]" cachedDataType="wstr" cachedLength="7" cachedName="StatementPeriod" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[StatementPeriod]" name="StatementPeriod" />
+                  <inputColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].Columns[TransactionTypeCode]" cachedDataType="wstr" cachedLength="10" cachedName="TransactionTypeCode" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[TransactionTypeCode]" name="TransactionTypeCode" />
+                  <inputColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].Columns[TransactionDate]" cachedDataType="dbTimeStamp" cachedName="TransactionDate" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[TransactionDate]" name="TransactionDate" />
+                  <inputColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].Columns[TransactionReference]" cachedDataType="wstr" cachedLength="30" cachedName="TransactionReference" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[TransactionReference]" name="TransactionReference" />
+                  <inputColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].Columns[TransactionAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="TransactionAmount" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[TransactionAmount]" name="TransactionAmount" />
+                  <inputColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].Columns[CurrencyCode]" cachedDataType="wstr" cachedLength="3" cachedName="CurrencyCode" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" name="CurrencyCode" />
+                  <inputColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].Columns[VatAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="VatAmount" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[VatAmount]" name="VatAmount" />
+                  <inputColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].Columns[RunningBalance]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="RunningBalance" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[RunningBalance]" name="RunningBalance" />
+                  <inputColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].Columns[StatementLineText]" cachedDataType="wstr" cachedLength="60" cachedName="StatementLineText" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[StatementLineText]" name="StatementLineText" />
+                  <inputColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].Columns[IncludesVatBlock]" cachedDataType="bool" cachedName="IncludesVatBlock" externalMetadataColumnId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[IncludesVatBlock]" name="IncludesVatBlock" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[SupplierId]" dataType="i4" name="SupplierId" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[SupplierName]" dataType="wstr" length="100" name="SupplierName" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[StatementPeriod]" dataType="wstr" length="7" name="StatementPeriod" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[TransactionTypeCode]" dataType="wstr" length="10" name="TransactionTypeCode" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[TransactionDate]" dataType="dbTimeStamp" name="TransactionDate" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[TransactionReference]" dataType="wstr" length="30" name="TransactionReference" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[TransactionAmount]" dataType="numeric" precision="18" scale="2" name="TransactionAmount" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[CurrencyCode]" dataType="wstr" length="3" name="CurrencyCode" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[VatAmount]" dataType="numeric" precision="18" scale="2" name="VatAmount" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[RunningBalance]" dataType="numeric" precision="18" scale="2" name="RunningBalance" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[StatementLineText]" dataType="wstr" length="60" name="StatementLineText" />
+                  <externalMetadataColumn refId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input].ExternalColumns[IncludesVatBlock]" dataType="bool" name="IncludesVatBlock" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Write Supplier Statement\work SupplierStatementArchive.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Write Supplier Statement.Paths[OLE DB Source Output]" endId="Package\Write Supplier Statement\Format Statement Row.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Write Supplier Statement\work SupplierStatementLine.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Write Supplier Statement.Paths[Derived Column Output 1]" endId="Package\Write Supplier Statement\Count Statement Rows.Inputs[Row Count Input]" name="Derived Column Output 1" startId="Package\Write Supplier Statement\Format Statement Row.Outputs[Derived Column Output]" />
+          <path refId="Package\Write Supplier Statement.Paths[Row Count Output 2]" endId="Package\Write Supplier Statement\work SupplierStatementArchive.Inputs[OLE DB Destination Input]" name="Row Count Output 2" startId="Package\Write Supplier Statement\Count Statement Rows.Outputs[Row Count Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Count Statements"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{32E6893C-66FA-7E62-D73D-9B7294ED855F}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Count Statements"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="SELECT COUNT(DISTINCT SupplierId) AS Statements FROM work.SupplierStatementLine;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::StatementCount" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'file:supplier_statement.csv', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Truncate work.SupplierStatementLine" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Truncate work.SupplierStatementLine"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Build Statement Lines" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Build Statement Lines"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Compute Statement Balances" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Compute Statement Balances"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Build Statement File Name" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Build Statement File Name"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Write Supplier Statement" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Write Supplier Statement"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Count Statements" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Count Statements"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{E8161E5A-F517-0E2A-F099-5FAF4D3AAE61}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

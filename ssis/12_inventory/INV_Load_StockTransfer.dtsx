@@ -1,0 +1,792 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{1BCCBA29-0BBF-CB56-3F97-DCF4E04EC874}"
+  DTS:Description="Loads inter-site stock transfer movements. A transfer produces two movement rows - an issue at the sending site and a receipt at the receiving site - and cross-region transfers are valued at the intercompany transfer price rather than standard cost. Transfers still in transit are carried forward so the in-transit balance ties out."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="INV_Load_StockTransfer"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{93D61F6C-5B4A-2D33-3491-28026098A2E1}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{66E1229B-A34E-03D8-67F6-655690AD9E63}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{0F967019-89F5-A1FC-E842-3406E20FEA83}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{7DC2AB32-237B-3140-D837-E3FD1530903A}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{1C785452-DFF6-133C-4DE6-9CA3B92566A0}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWIOLTP</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::InTransitAgeAlertDays]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Transfers older than this without a receipt are escalated."
+      DTS:DTSID="{8C0C90AF-B71C-0A82-4C66-3FCDB499BBC3}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="InTransitAgeAlertDays"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">10</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{5ADE4D54-1CFF-0645-3798-0CA5267D4E43}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{F5123C61-B5E7-69C3-6F9B-8412ED59F462}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{EA83ECBA-33F1-5ADD-34F3-DA0CD8E62B19}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{192C0575-17CF-A0CE-5CC5-73578AA91204}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{A931E06B-6E25-6B32-C237-777DB7E1E500}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{48992997-7968-7826-6484-455E442B7467}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{BB17125F-FC35-4F20-EE1E-09E4B8EC9FA4}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{B06519B4-B487-ECAE-2167-5E83F3BAC746}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::InTransitCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{7A515002-373D-469D-5C7D-FD5C16555669}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="InTransitCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::CrossRegionCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{298DA478-C85C-D035-299E-C753C8F2E3AA}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="CrossRegionCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Truncate work.StockTransferMovement"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{B3BD2DFE-F3E5-83BE-AFC4-32367DAFBD24}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Truncate work.StockTransferMovement"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE work.StockTransferMovement;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Load Transfer Movements"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{00853C60-CB34-CF87-C590-B90FA9B1E6BF}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Load Transfer Movements"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Load Transfer Movements\stg StockMovement Transfers" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="stg StockMovement Transfers" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">1800</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT  t.StockTransferId
+,       t.TransferReference
+,       t.StockItemId
+,       t.FromWarehouseSiteCode
+,       t.ToWarehouseSiteCode
+,       t.DespatchedAtUtc
+,       t.ReceivedAtUtc
+,       t.QuantityDespatched
+,       t.QuantityReceived
+,       t.QuantityDespatched - ISNULL(t.QuantityReceived, 0) AS QuantityInTransit
+,       t.TransferStatusCode
+,       t.CarrierCode
+,       si.UnitCost
+,       fw.RegionCode                                   AS FromRegionCode
+,       tw.RegionCode                                   AS ToRegionCode
+        /* Cross-region transfers are treated as an intercompany sale in the
+           finance mart, so the movement carries the transfer price rather than
+           standard cost. */
+,       CASE WHEN fw.RegionCode &lt;&gt; tw.RegionCode
+             THEN ISNULL(tp.TransferPrice, si.UnitCost * 1.08)
+             ELSE si.UnitCost
+        END                                             AS MovementUnitValue
+FROM    stg.StockMovement AS t
+INNER JOIN stg.StockItem AS si ON si.StockItemId = t.StockItemId
+INNER JOIN stg.WarehouseSite AS fw ON fw.WarehouseSiteCode = t.FromWarehouseSiteCode
+INNER JOIN stg.WarehouseSite AS tw ON tw.WarehouseSiteCode = t.ToWarehouseSiteCode
+LEFT OUTER JOIN stg.TransferPrice AS tp
+        ON  tp.StockItemId = t.StockItemId
+        AND tp.FromRegionCode = fw.RegionCode
+        AND tp.ToRegionCode = tw.RegionCode
+WHERE   t.MovementTypeCode = 'TRANSFER'
+AND     t.LoadBatchId = ?</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Transfer Movements\stg StockMovement Transfers.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[StockTransferId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[StockTransferId]" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[StockTransferId]" name="StockTransferId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[TransferReference]" dataType="wstr" length="30" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[TransferReference]" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[TransferReference]" name="TransferReference" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[StockItemId]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[StockItemId]" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[StockItemId]" name="StockItemId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[FromWarehouseSiteCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[FromWarehouseSiteCode]" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[FromWarehouseSiteCode]" name="FromWarehouseSiteCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[ToWarehouseSiteCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[ToWarehouseSiteCode]" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[ToWarehouseSiteCode]" name="ToWarehouseSiteCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[DespatchedAtUtc]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[DespatchedAtUtc]" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[DespatchedAtUtc]" name="DespatchedAtUtc" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[ReceivedAtUtc]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[ReceivedAtUtc]" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[ReceivedAtUtc]" name="ReceivedAtUtc" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[QuantityDespatched]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[QuantityDespatched]" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[QuantityDespatched]" name="QuantityDespatched" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[QuantityReceived]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[QuantityReceived]" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[QuantityReceived]" name="QuantityReceived" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[QuantityInTransit]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[QuantityInTransit]" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[QuantityInTransit]" name="QuantityInTransit" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[TransferStatusCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[TransferStatusCode]" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[TransferStatusCode]" name="TransferStatusCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[CarrierCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[CarrierCode]" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[CarrierCode]" name="CarrierCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[UnitCost]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[UnitCost]" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[UnitCost]" name="UnitCost" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[FromRegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[FromRegionCode]" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[FromRegionCode]" name="FromRegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[ToRegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[ToRegionCode]" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[ToRegionCode]" name="ToRegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[MovementUnitValue]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[MovementUnitValue]" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].Columns[MovementUnitValue]" name="MovementUnitValue" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[StockTransferId]" dataType="i4" name="StockTransferId" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[TransferReference]" dataType="wstr" length="30" name="TransferReference" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[StockItemId]" dataType="i4" name="StockItemId" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[FromWarehouseSiteCode]" dataType="wstr" length="10" name="FromWarehouseSiteCode" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[ToWarehouseSiteCode]" dataType="wstr" length="10" name="ToWarehouseSiteCode" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[DespatchedAtUtc]" dataType="dbTimeStamp" name="DespatchedAtUtc" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[ReceivedAtUtc]" dataType="dbTimeStamp" name="ReceivedAtUtc" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[QuantityDespatched]" dataType="i4" name="QuantityDespatched" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[QuantityReceived]" dataType="i4" name="QuantityReceived" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[QuantityInTransit]" dataType="i4" name="QuantityInTransit" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[TransferStatusCode]" dataType="wstr" length="10" name="TransferStatusCode" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[CarrierCode]" dataType="wstr" length="10" name="CarrierCode" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[UnitCost]" dataType="numeric" precision="18" scale="2" name="UnitCost" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[FromRegionCode]" dataType="wstr" length="4" name="FromRegionCode" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[ToRegionCode]" dataType="wstr" length="4" name="ToRegionCode" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output].ExternalColumns[MovementUnitValue]" dataType="numeric" precision="18" scale="2" name="MovementUnitValue" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[StockTransferId]" dataType="i4" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[StockTransferId]" name="StockTransferId" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[TransferReference]" dataType="wstr" length="30" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[TransferReference]" name="TransferReference" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[StockItemId]" dataType="i4" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[StockItemId]" name="StockItemId" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[FromWarehouseSiteCode]" dataType="wstr" length="10" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[FromWarehouseSiteCode]" name="FromWarehouseSiteCode" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[ToWarehouseSiteCode]" dataType="wstr" length="10" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[ToWarehouseSiteCode]" name="ToWarehouseSiteCode" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[DespatchedAtUtc]" dataType="dbTimeStamp" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[DespatchedAtUtc]" name="DespatchedAtUtc" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[ReceivedAtUtc]" dataType="dbTimeStamp" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[ReceivedAtUtc]" name="ReceivedAtUtc" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[QuantityDespatched]" dataType="i4" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[QuantityDespatched]" name="QuantityDespatched" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[QuantityReceived]" dataType="i4" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[QuantityReceived]" name="QuantityReceived" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[QuantityInTransit]" dataType="i4" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[QuantityInTransit]" name="QuantityInTransit" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[TransferStatusCode]" dataType="wstr" length="10" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[TransferStatusCode]" name="TransferStatusCode" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[CarrierCode]" dataType="wstr" length="10" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[CarrierCode]" name="CarrierCode" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[UnitCost]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[UnitCost]" name="UnitCost" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[FromRegionCode]" dataType="wstr" length="4" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[FromRegionCode]" name="FromRegionCode" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[ToRegionCode]" dataType="wstr" length="4" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[ToRegionCode]" name="ToRegionCode" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[MovementUnitValue]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[MovementUnitValue]" name="MovementUnitValue" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Transfer Movements\Derive Movement Attributes" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Movement Attributes" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Load Transfer Movements\Derive Movement Attributes.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Transfer Movements\Derive Movement Attributes.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Load Transfer Movements\Derive Movement Attributes.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Transfer Movements\Derive Movement Attributes.Outputs[Derived Column Output].Columns[IsCrossRegion]" dataType="bool" lineageId="Package\Load Transfer Movements\Derive Movement Attributes.Outputs[Derived Column Output].Columns[IsCrossRegion]" name="IsCrossRegion">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">FromRegionCode != ToRegionCode ? (DT_BOOL)1 : (DT_BOOL)0</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">FromRegionCode != ToRegionCode ? (DT_BOOL)1 : (DT_BOOL)0</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Transfer Movements\Derive Movement Attributes.Outputs[Derived Column Output].Columns[IssueValue]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Transfer Movements\Derive Movement Attributes.Outputs[Derived Column Output].Columns[IssueValue]" name="IssueValue">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">QuantityDespatched * MovementUnitValue * -1</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">QuantityDespatched * MovementUnitValue * -1</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Transfer Movements\Derive Movement Attributes.Outputs[Derived Column Output].Columns[ReceiptValue]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Transfer Movements\Derive Movement Attributes.Outputs[Derived Column Output].Columns[ReceiptValue]" name="ReceiptValue">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">QuantityReceived * MovementUnitValue</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">QuantityReceived * MovementUnitValue</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Transfer Movements\Derive Movement Attributes.Outputs[Derived Column Output].Columns[TransitDays]" dataType="i4" lineageId="Package\Load Transfer Movements\Derive Movement Attributes.Outputs[Derived Column Output].Columns[TransitDays]" name="TransitDays">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(ReceivedAtUtc) ? DATEDIFF("Dy", DespatchedAtUtc, GETDATE()) : DATEDIFF("Dy", DespatchedAtUtc, ReceivedAtUtc)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(ReceivedAtUtc) ? DATEDIFF("Dy", DespatchedAtUtc, GETDATE()) : DATEDIFF("Dy", DespatchedAtUtc, ReceivedAtUtc)</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Transfer Movements\Split Transfer Legs" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Split Transfer Legs" version="1">
+            <inputs>
+              <input refId="Package\Load Transfer Movements\Split Transfer Legs.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Transfer Movements\Split Transfer Legs.Outputs[Despatched]" exclusionGroup="1" name="Despatched" synchronousInputId="Package\Load Transfer Movements\Split Transfer Legs.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">QuantityDespatched &gt; 0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">QuantityDespatched &gt; 0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Load Transfer Movements\Split Transfer Legs.Outputs[ReceiptOnly]" exclusionGroup="1" name="ReceiptOnly" synchronousInputId="Package\Load Transfer Movements\Split Transfer Legs.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">QuantityDespatched == 0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">QuantityDespatched == 0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Load Transfer Movements\Split Transfer Legs.Outputs[Default]" exclusionGroup="1" isDefaultOut="true" name="Default" synchronousInputId="Package\Load Transfer Movements\Split Transfer Legs.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Transfer Movements\Count Transfer Rows" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Transfer Rows" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Load Transfer Movements\Count Transfer Rows.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Transfer Movements\Count Transfer Rows.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Load Transfer Movements\Count Transfer Rows.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Transfer Movements\work StockTransferMovement" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="work StockTransferMovement" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[StockTransferMovement]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">50000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Transfer Movements\work StockTransferMovement.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[StockTransferId]" cachedDataType="i4" cachedName="StockTransferId" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[StockTransferId]" name="StockTransferId" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[TransferReference]" cachedDataType="wstr" cachedLength="30" cachedName="TransferReference" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[TransferReference]" name="TransferReference" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[StockItemId]" cachedDataType="i4" cachedName="StockItemId" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" name="StockItemId" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[FromWarehouseSiteCode]" cachedDataType="wstr" cachedLength="10" cachedName="FromWarehouseSiteCode" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[FromWarehouseSiteCode]" name="FromWarehouseSiteCode" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[ToWarehouseSiteCode]" cachedDataType="wstr" cachedLength="10" cachedName="ToWarehouseSiteCode" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[ToWarehouseSiteCode]" name="ToWarehouseSiteCode" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[DespatchedAtUtc]" cachedDataType="dbTimeStamp" cachedName="DespatchedAtUtc" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[DespatchedAtUtc]" name="DespatchedAtUtc" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[ReceivedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ReceivedAtUtc" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedAtUtc]" name="ReceivedAtUtc" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[QuantityDespatched]" cachedDataType="i4" cachedName="QuantityDespatched" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[QuantityDespatched]" name="QuantityDespatched" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[QuantityReceived]" cachedDataType="i4" cachedName="QuantityReceived" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[QuantityReceived]" name="QuantityReceived" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[QuantityInTransit]" cachedDataType="i4" cachedName="QuantityInTransit" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[QuantityInTransit]" name="QuantityInTransit" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[TransferStatusCode]" cachedDataType="wstr" cachedLength="10" cachedName="TransferStatusCode" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[TransferStatusCode]" name="TransferStatusCode" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[CarrierCode]" cachedDataType="wstr" cachedLength="10" cachedName="CarrierCode" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[CarrierCode]" name="CarrierCode" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[UnitCost]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitCost" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[UnitCost]" name="UnitCost" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[FromRegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="FromRegionCode" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[FromRegionCode]" name="FromRegionCode" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[ToRegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="ToRegionCode" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[ToRegionCode]" name="ToRegionCode" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[MovementUnitValue]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MovementUnitValue" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[MovementUnitValue]" name="MovementUnitValue" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[IsCrossRegion]" cachedDataType="bool" cachedName="IsCrossRegion" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[IsCrossRegion]" name="IsCrossRegion" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[IssueValue]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="IssueValue" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[IssueValue]" name="IssueValue" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[ReceiptValue]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ReceiptValue" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptValue]" name="ReceiptValue" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].Columns[TransitDays]" cachedDataType="i4" cachedName="TransitDays" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[TransitDays]" name="TransitDays" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[StockTransferId]" dataType="i4" name="StockTransferId" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[TransferReference]" dataType="wstr" length="30" name="TransferReference" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" dataType="i4" name="StockItemId" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[FromWarehouseSiteCode]" dataType="wstr" length="10" name="FromWarehouseSiteCode" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[ToWarehouseSiteCode]" dataType="wstr" length="10" name="ToWarehouseSiteCode" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[DespatchedAtUtc]" dataType="dbTimeStamp" name="DespatchedAtUtc" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedAtUtc]" dataType="dbTimeStamp" name="ReceivedAtUtc" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[QuantityDespatched]" dataType="i4" name="QuantityDespatched" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[QuantityReceived]" dataType="i4" name="QuantityReceived" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[QuantityInTransit]" dataType="i4" name="QuantityInTransit" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[TransferStatusCode]" dataType="wstr" length="10" name="TransferStatusCode" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[CarrierCode]" dataType="wstr" length="10" name="CarrierCode" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[UnitCost]" dataType="numeric" precision="18" scale="2" name="UnitCost" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[FromRegionCode]" dataType="wstr" length="4" name="FromRegionCode" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[ToRegionCode]" dataType="wstr" length="4" name="ToRegionCode" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[MovementUnitValue]" dataType="numeric" precision="18" scale="2" name="MovementUnitValue" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[IsCrossRegion]" dataType="bool" name="IsCrossRegion" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[IssueValue]" dataType="numeric" precision="18" scale="2" name="IssueValue" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptValue]" dataType="numeric" precision="18" scale="2" name="ReceiptValue" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input].ExternalColumns[TransitDays]" dataType="i4" name="TransitDays" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Transfer Movements\work StockTransferMovement.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Transfer Movements\work StockTransferReceiptOnly" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="work StockTransferReceiptOnly" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[StockTransferReceiptOnly]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[StockTransferId]" cachedDataType="i4" cachedName="StockTransferId" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[StockTransferId]" name="StockTransferId" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[TransferReference]" cachedDataType="wstr" cachedLength="30" cachedName="TransferReference" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[TransferReference]" name="TransferReference" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[StockItemId]" cachedDataType="i4" cachedName="StockItemId" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" name="StockItemId" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[FromWarehouseSiteCode]" cachedDataType="wstr" cachedLength="10" cachedName="FromWarehouseSiteCode" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[FromWarehouseSiteCode]" name="FromWarehouseSiteCode" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[ToWarehouseSiteCode]" cachedDataType="wstr" cachedLength="10" cachedName="ToWarehouseSiteCode" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[ToWarehouseSiteCode]" name="ToWarehouseSiteCode" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[DespatchedAtUtc]" cachedDataType="dbTimeStamp" cachedName="DespatchedAtUtc" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[DespatchedAtUtc]" name="DespatchedAtUtc" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[ReceivedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ReceivedAtUtc" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedAtUtc]" name="ReceivedAtUtc" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[QuantityDespatched]" cachedDataType="i4" cachedName="QuantityDespatched" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[QuantityDespatched]" name="QuantityDespatched" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[QuantityReceived]" cachedDataType="i4" cachedName="QuantityReceived" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[QuantityReceived]" name="QuantityReceived" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[QuantityInTransit]" cachedDataType="i4" cachedName="QuantityInTransit" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[QuantityInTransit]" name="QuantityInTransit" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[TransferStatusCode]" cachedDataType="wstr" cachedLength="10" cachedName="TransferStatusCode" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[TransferStatusCode]" name="TransferStatusCode" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[CarrierCode]" cachedDataType="wstr" cachedLength="10" cachedName="CarrierCode" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[CarrierCode]" name="CarrierCode" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[UnitCost]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitCost" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[UnitCost]" name="UnitCost" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[FromRegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="FromRegionCode" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[FromRegionCode]" name="FromRegionCode" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[ToRegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="ToRegionCode" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[ToRegionCode]" name="ToRegionCode" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[MovementUnitValue]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MovementUnitValue" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[MovementUnitValue]" name="MovementUnitValue" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[IsCrossRegion]" cachedDataType="bool" cachedName="IsCrossRegion" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[IsCrossRegion]" name="IsCrossRegion" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[IssueValue]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="IssueValue" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[IssueValue]" name="IssueValue" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[ReceiptValue]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ReceiptValue" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptValue]" name="ReceiptValue" />
+                  <inputColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].Columns[TransitDays]" cachedDataType="i4" cachedName="TransitDays" externalMetadataColumnId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[TransitDays]" name="TransitDays" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[StockTransferId]" dataType="i4" name="StockTransferId" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[TransferReference]" dataType="wstr" length="30" name="TransferReference" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" dataType="i4" name="StockItemId" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[FromWarehouseSiteCode]" dataType="wstr" length="10" name="FromWarehouseSiteCode" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[ToWarehouseSiteCode]" dataType="wstr" length="10" name="ToWarehouseSiteCode" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[DespatchedAtUtc]" dataType="dbTimeStamp" name="DespatchedAtUtc" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedAtUtc]" dataType="dbTimeStamp" name="ReceivedAtUtc" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[QuantityDespatched]" dataType="i4" name="QuantityDespatched" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[QuantityReceived]" dataType="i4" name="QuantityReceived" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[QuantityInTransit]" dataType="i4" name="QuantityInTransit" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[TransferStatusCode]" dataType="wstr" length="10" name="TransferStatusCode" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[CarrierCode]" dataType="wstr" length="10" name="CarrierCode" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[UnitCost]" dataType="numeric" precision="18" scale="2" name="UnitCost" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[FromRegionCode]" dataType="wstr" length="4" name="FromRegionCode" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[ToRegionCode]" dataType="wstr" length="4" name="ToRegionCode" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[MovementUnitValue]" dataType="numeric" precision="18" scale="2" name="MovementUnitValue" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[IsCrossRegion]" dataType="bool" name="IsCrossRegion" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[IssueValue]" dataType="numeric" precision="18" scale="2" name="IssueValue" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptValue]" dataType="numeric" precision="18" scale="2" name="ReceiptValue" />
+                  <externalMetadataColumn refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input].ExternalColumns[TransitDays]" dataType="i4" name="TransitDays" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Load Transfer Movements.Paths[OLE DB Source Output]" endId="Package\Load Transfer Movements\Derive Movement Attributes.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Load Transfer Movements\stg StockMovement Transfers.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Load Transfer Movements.Paths[Derived Column Output 1]" endId="Package\Load Transfer Movements\Split Transfer Legs.Inputs[Conditional Split Input]" name="Derived Column Output 1" startId="Package\Load Transfer Movements\Derive Movement Attributes.Outputs[Derived Column Output]" />
+          <path refId="Package\Load Transfer Movements.Paths[Despatched 2]" endId="Package\Load Transfer Movements\Count Transfer Rows.Inputs[Row Count Input]" name="Despatched 2" startId="Package\Load Transfer Movements\Split Transfer Legs.Outputs[Despatched]" />
+          <path refId="Package\Load Transfer Movements.Paths[Row Count Output 3]" endId="Package\Load Transfer Movements\work StockTransferMovement.Inputs[OLE DB Destination Input]" name="Row Count Output 3" startId="Package\Load Transfer Movements\Count Transfer Rows.Outputs[Row Count Output]" />
+          <path refId="Package\Load Transfer Movements.Paths[ReceiptOnly 4]" endId="Package\Load Transfer Movements\work StockTransferReceiptOnly.Inputs[OLE DB Destination Input]" name="ReceiptOnly 4" startId="Package\Load Transfer Movements\Split Transfer Legs.Outputs[ReceiptOnly]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Post Transfer Movements"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{D633D82E-BB75-4207-9DA8-4C06A96453F4}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Post Transfer Movements"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="EXEC Integration.usp_PostTransferMovements @BatchId = ?, @RowsInserted = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Escalate Aged In Transit"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{1FC060B9-CC95-C22A-30E6-35974B4DF17E}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Escalate Aged In Transit"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="INSERT INTO etl.RejectedRecord     (BatchId, ObjectName, RejectStage, RejectReasonCode, RejectReasonDescription,      SourceKey, RejectedAtUtc, IsReprocessed) SELECT ?, N'stg.StockMovement', N'Fact', N'TRANSFER_AGED_IN_TRANSIT',        N'Transfer despatched but not received within the alert window',        TransferReference, SYSUTCDATETIME(), 0 FROM   work.StockTransferMovement WHERE  QuantityInTransit &gt; 0 AND TransitDays &gt; ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::InTransitAgeAlertDays" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Fact.Movement', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Truncate work.StockTransferMovement" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Truncate work.StockTransferMovement"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Load Transfer Movements" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Load Transfer Movements"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Post Transfer Movements" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Post Transfer Movements"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:Value="2"
+      DTS:To="Package\Escalate Aged In Transit" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Escalate Aged In Transit"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{2A8B7648-25EF-B6FE-4128-A138A32F39E8}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>
