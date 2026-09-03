@@ -1,0 +1,969 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{31DBD0A4-DF14-1ED2-42C6-F165BA5BA75D}"
+  DTS:Description="Timestamp-watermark incremental over Warehouse.StockItems using the temporal ValidFrom column with a lookback window for late-arriving edits, joined to the stock holding and replenishment rule. Deletions are picked up from change tracking."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="EXT_SQL_StockItems"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{EF524621-DE82-846B-8604-9196C241BF6D}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{619CCBC5-44D4-41D7-3233-8FEDE1C6984F}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{A20C10F3-47F1-B36C-0517-22C7E8DA446D}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{CF299331-F1A7-37F7-5108-C4B8EF83F113}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{D35DC1C2-4E58-7B7A-7C56-0EE13A9915A2}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWI_OLTP</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Source_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{6013BF6D-BE65-C752-81B9-00A20CDE3DE7}"
+      DTS:ObjectName="WWI_Source_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{4D53C342-9DB5-4C3D-D645-7C87297E2439}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{710205C8-1D6A-FE5D-FCD4-2F80FC67CBE7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{CA0E5D2E-EB3C-4027-A34A-DC47D91EF6F7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{8068D9DE-86B0-45AB-EC52-988A22460B9F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{32329C8D-68E9-5665-EAA7-7DE635964B62}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{6A5D909C-EC7E-B3F7-8AAD-B6B1CB1D6413}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{216412D7-BE0B-B686-8785-6BB6C491A8BD}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{059602FD-75D6-6089-5381-0BACC1DD0F69}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::LookbackMinutes]"
+      DTS:CreationName=""
+      DTS:DTSID="{C7A49E62-C3AB-6A8C-2ACA-FF0A05549890}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="LookbackMinutes">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">240</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsDeleted]"
+      DTS:CreationName=""
+      DTS:DTSID="{886982EF-3FA7-A665-34A4-3E01D717D946}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsDeleted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Batch Variables"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{647AE7A9-EE4E-0DAF-FBD6-04CEA9DB74E4}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Batch Variables"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::RowsDeleted] = 0" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Get Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{AD8AAA26-E475-7A7A-5321-BEF0685AEC15}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Get Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_GetWatermark @SourceSystemCode = ?, @ObjectName = ?, @ReloadFullHistory = ?, @WatermarkFrom = ? OUTPUT, @WatermarkTo = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::ReloadFullHistory" SQLTask:ParameterDirection="Input" SQLTask:DataType="BYTE" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::WatermarkFrom" />
+        <SQLTask:ResultBinding SQLTask:ResultName="1" SQLTask:DtsVariableName="User::WatermarkTo" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Extract Stock Items"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{1F5274D0-4AAD-637D-64CD-661F36F1F8BE}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Extract Stock Items"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Extract Stock Items\OLTP Warehouse.StockItems" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="OLTP Warehouse.StockItems" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">2400</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT  si.StockItemID,
+        si.StockItemName,
+        si.SupplierID,
+        si.ColorID,
+        si.UnitPackageID,
+        si.OuterPackageID,
+        si.Brand,
+        si.Size,
+        si.LeadTimeDays,
+        si.QuantityPerOuter,
+        si.IsChillerStock,
+        si.Barcode,
+        si.TaxRate,
+        si.UnitPrice,
+        si.RecommendedRetailPrice,
+        si.TypicalWeightPerUnit,
+        sh.QuantityOnHand,
+        sh.ReorderLevel,
+        sh.TargetStockLevel,
+        rr.ReplenishmentRuleCode,
+        si.ValidFrom,
+        si.LastEditedWhen
+FROM    Warehouse.StockItems AS si WITH (NOLOCK)
+        LEFT OUTER JOIN Warehouse.StockItemHoldings AS sh WITH (NOLOCK)
+            ON sh.StockItemID = si.StockItemID
+        LEFT OUTER JOIN Warehouse.ReplenishmentRules AS rr WITH (NOLOCK)
+            ON rr.StockItemID = si.StockItemID
+           AND rr.IsCurrent = 1
+WHERE   si.ValidFrom &gt;= DATEADD(minute, -240, CAST(? AS datetime2(7)))
+  AND   si.ValidFrom &lt;  CAST(? AS datetime2(7));</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Connections[OleDbConnection]" connectionManagerID="{6013BF6D-BE65-C752-81B9-00A20CDE3DE7}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Source_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[StockItemID]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[StockItemID]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[StockItemID]" name="StockItemID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[StockItemName]" dataType="wstr" length="100" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[StockItemName]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[StockItemName]" name="StockItemName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[SupplierID]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[SupplierID]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[SupplierID]" name="SupplierID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[ColorID]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[ColorID]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[ColorID]" name="ColorID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[UnitPackageID]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[UnitPackageID]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[UnitPackageID]" name="UnitPackageID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[OuterPackageID]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[OuterPackageID]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[OuterPackageID]" name="OuterPackageID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[Brand]" dataType="wstr" length="50" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[Brand]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[Brand]" name="Brand" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[Size]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[Size]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[Size]" name="Size" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[LeadTimeDays]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[LeadTimeDays]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[LeadTimeDays]" name="LeadTimeDays" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[QuantityPerOuter]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[QuantityPerOuter]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[QuantityPerOuter]" name="QuantityPerOuter" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[IsChillerStock]" dataType="bool" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[IsChillerStock]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[IsChillerStock]" name="IsChillerStock" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[Barcode]" dataType="wstr" length="50" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[Barcode]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[Barcode]" name="Barcode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[TaxRate]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[TaxRate]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[TaxRate]" name="TaxRate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[UnitPrice]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[UnitPrice]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[UnitPrice]" name="UnitPrice" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[RecommendedRetailPrice]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[RecommendedRetailPrice]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[RecommendedRetailPrice]" name="RecommendedRetailPrice" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[TypicalWeightPerUnit]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[TypicalWeightPerUnit]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[TypicalWeightPerUnit]" name="TypicalWeightPerUnit" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[QuantityOnHand]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[QuantityOnHand]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[QuantityOnHand]" name="QuantityOnHand" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[ReorderLevel]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[ReorderLevel]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[ReorderLevel]" name="ReorderLevel" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[TargetStockLevel]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[TargetStockLevel]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[TargetStockLevel]" name="TargetStockLevel" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[ReplenishmentRuleCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[ReplenishmentRuleCode]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[ReplenishmentRuleCode]" name="ReplenishmentRuleCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[ValidFrom]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[ValidFrom]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[ValidFrom]" name="ValidFrom" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[LastEditedWhen]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[LastEditedWhen]" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].Columns[LastEditedWhen]" name="LastEditedWhen" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[StockItemID]" dataType="i4" name="StockItemID" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[StockItemName]" dataType="wstr" length="100" name="StockItemName" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[SupplierID]" dataType="i4" name="SupplierID" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[ColorID]" dataType="i4" name="ColorID" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[UnitPackageID]" dataType="i4" name="UnitPackageID" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[OuterPackageID]" dataType="i4" name="OuterPackageID" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[Brand]" dataType="wstr" length="50" name="Brand" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[Size]" dataType="wstr" length="20" name="Size" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[LeadTimeDays]" dataType="i4" name="LeadTimeDays" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[QuantityPerOuter]" dataType="i4" name="QuantityPerOuter" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[IsChillerStock]" dataType="bool" name="IsChillerStock" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[Barcode]" dataType="wstr" length="50" name="Barcode" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[TaxRate]" dataType="numeric" precision="18" scale="2" name="TaxRate" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[UnitPrice]" dataType="numeric" precision="18" scale="2" name="UnitPrice" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[RecommendedRetailPrice]" dataType="numeric" precision="18" scale="2" name="RecommendedRetailPrice" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[TypicalWeightPerUnit]" dataType="numeric" precision="18" scale="2" name="TypicalWeightPerUnit" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[QuantityOnHand]" dataType="i4" name="QuantityOnHand" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[ReorderLevel]" dataType="i4" name="ReorderLevel" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[TargetStockLevel]" dataType="i4" name="TargetStockLevel" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[ReplenishmentRuleCode]" dataType="wstr" length="10" name="ReplenishmentRuleCode" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[ValidFrom]" dataType="dbTimeStamp" name="ValidFrom" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output].ExternalColumns[LastEditedWhen]" dataType="dbTimeStamp" name="LastEditedWhen" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[StockItemID]" dataType="i4" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[StockItemID]" name="StockItemID" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[StockItemName]" dataType="wstr" length="100" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[StockItemName]" name="StockItemName" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[SupplierID]" dataType="i4" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[SupplierID]" name="SupplierID" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[ColorID]" dataType="i4" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[ColorID]" name="ColorID" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[UnitPackageID]" dataType="i4" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[UnitPackageID]" name="UnitPackageID" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[OuterPackageID]" dataType="i4" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[OuterPackageID]" name="OuterPackageID" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[Brand]" dataType="wstr" length="50" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[Brand]" name="Brand" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[Size]" dataType="wstr" length="20" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[Size]" name="Size" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[LeadTimeDays]" dataType="i4" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[LeadTimeDays]" name="LeadTimeDays" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[QuantityPerOuter]" dataType="i4" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[QuantityPerOuter]" name="QuantityPerOuter" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[IsChillerStock]" dataType="bool" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[IsChillerStock]" name="IsChillerStock" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[Barcode]" dataType="wstr" length="50" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[Barcode]" name="Barcode" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[TaxRate]" dataType="numeric" precision="18" scale="2" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[TaxRate]" name="TaxRate" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[UnitPrice]" dataType="numeric" precision="18" scale="2" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[UnitPrice]" name="UnitPrice" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[RecommendedRetailPrice]" dataType="numeric" precision="18" scale="2" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[RecommendedRetailPrice]" name="RecommendedRetailPrice" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[TypicalWeightPerUnit]" dataType="numeric" precision="18" scale="2" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[TypicalWeightPerUnit]" name="TypicalWeightPerUnit" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[QuantityOnHand]" dataType="i4" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[QuantityOnHand]" name="QuantityOnHand" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[ReorderLevel]" dataType="i4" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[ReorderLevel]" name="ReorderLevel" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[TargetStockLevel]" dataType="i4" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[TargetStockLevel]" name="TargetStockLevel" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[ReplenishmentRuleCode]" dataType="wstr" length="10" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[ReplenishmentRuleCode]" name="ReplenishmentRuleCode" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[ValidFrom]" dataType="dbTimeStamp" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[ValidFrom]" name="ValidFrom" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[LastEditedWhen]" dataType="dbTimeStamp" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[LastEditedWhen]" name="LastEditedWhen" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Extract Stock Items\Derive Stock Flags" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Stock Flags" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Extract Stock Items\Derive Stock Flags.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Stock Items\Derive Stock Flags.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Extract Stock Items\Derive Stock Flags.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Stock Items\Derive Stock Flags.Outputs[Derived Column Output].Columns[BelowReorderFlag]" dataType="wstr" length="1" lineageId="Package\Extract Stock Items\Derive Stock Flags.Outputs[Derived Column Output].Columns[BelowReorderFlag]" name="BelowReorderFlag">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">QuantityOnHand &lt; ReorderLevel ? "Y" : "N"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">QuantityOnHand &lt; ReorderLevel ? "Y" : "N"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Stock Items\Derive Stock Flags.Outputs[Derived Column Output].Columns[HandlingClass]" dataType="wstr" length="5" lineageId="Package\Extract Stock Items\Derive Stock Flags.Outputs[Derived Column Output].Columns[HandlingClass]" name="HandlingClass">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">IsChillerStock ? "CHILL" : "AMB"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">IsChillerStock ? "CHILL" : "AMB"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Stock Items\Derive Stock Flags.Outputs[Derived Column Output].Columns[DeleteFlag]" dataType="wstr" length="1" lineageId="Package\Extract Stock Items\Derive Stock Flags.Outputs[Derived Column Output].Columns[DeleteFlag]" name="DeleteFlag">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"N"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"N"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Stock Items\Derive Stock Flags.Outputs[Derived Column Output].Columns[SourceSystemCode]" dataType="wstr" length="20" lineageId="Package\Extract Stock Items\Derive Stock Flags.Outputs[Derived Column Output].Columns[SourceSystemCode]" name="SourceSystemCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"WWI_OLTP"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"WWI_OLTP"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Stock Items\Derive Stock Flags.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" dataType="dbTimeStamp" lineageId="Package\Extract Stock Items\Derive Stock Flags.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" name="ExtractedAtUtc">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">GETUTCDATE()</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">GETUTCDATE()</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Stock Items\Derive Stock Flags.Outputs[Derived Column Output].Columns[PackageExecutionId]" dataType="i8" lineageId="Package\Extract Stock Items\Derive Stock Flags.Outputs[Derived Column Output].Columns[PackageExecutionId]" name="PackageExecutionId">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Extract Stock Items\Count Stock Items" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Stock Items" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Extract Stock Items\Count Stock Items.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Stock Items\Count Stock Items.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Extract Stock Items\Count Stock Items.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Extract Stock Items\raw SqlStockItem" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="raw SqlStockItem" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">raw.SqlStockItem</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">50000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Extract Stock Items\raw SqlStockItem.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="RedirectRow" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[StockItemID]" cachedDataType="i4" cachedName="StockItemID" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[StockItemID]" name="StockItemID" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[StockItemName]" cachedDataType="wstr" cachedLength="100" cachedName="StockItemName" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[StockItemName]" name="StockItemName" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[SupplierID]" cachedDataType="i4" cachedName="SupplierID" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[SupplierID]" name="SupplierID" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[ColorID]" cachedDataType="i4" cachedName="ColorID" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[ColorID]" name="ColorID" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[UnitPackageID]" cachedDataType="i4" cachedName="UnitPackageID" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[UnitPackageID]" name="UnitPackageID" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[OuterPackageID]" cachedDataType="i4" cachedName="OuterPackageID" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[OuterPackageID]" name="OuterPackageID" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[Brand]" cachedDataType="wstr" cachedLength="50" cachedName="Brand" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[Brand]" name="Brand" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[Size]" cachedDataType="wstr" cachedLength="20" cachedName="Size" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[Size]" name="Size" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[LeadTimeDays]" cachedDataType="i4" cachedName="LeadTimeDays" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[LeadTimeDays]" name="LeadTimeDays" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[QuantityPerOuter]" cachedDataType="i4" cachedName="QuantityPerOuter" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[QuantityPerOuter]" name="QuantityPerOuter" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[IsChillerStock]" cachedDataType="bool" cachedName="IsChillerStock" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[IsChillerStock]" name="IsChillerStock" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[Barcode]" cachedDataType="wstr" cachedLength="50" cachedName="Barcode" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[Barcode]" name="Barcode" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[TaxRate]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="TaxRate" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[TaxRate]" name="TaxRate" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[UnitPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitPrice" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[UnitPrice]" name="UnitPrice" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[RecommendedRetailPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="RecommendedRetailPrice" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[RecommendedRetailPrice]" name="RecommendedRetailPrice" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[TypicalWeightPerUnit]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="TypicalWeightPerUnit" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[TypicalWeightPerUnit]" name="TypicalWeightPerUnit" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[QuantityOnHand]" cachedDataType="i4" cachedName="QuantityOnHand" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnHand]" name="QuantityOnHand" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[ReorderLevel]" cachedDataType="i4" cachedName="ReorderLevel" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[ReorderLevel]" name="ReorderLevel" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[TargetStockLevel]" cachedDataType="i4" cachedName="TargetStockLevel" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[TargetStockLevel]" name="TargetStockLevel" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[ReplenishmentRuleCode]" cachedDataType="wstr" cachedLength="10" cachedName="ReplenishmentRuleCode" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[ReplenishmentRuleCode]" name="ReplenishmentRuleCode" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[ValidFrom]" cachedDataType="dbTimeStamp" cachedName="ValidFrom" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[ValidFrom]" name="ValidFrom" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[LastEditedWhen]" cachedDataType="dbTimeStamp" cachedName="LastEditedWhen" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[LastEditedWhen]" name="LastEditedWhen" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[BelowReorderFlag]" cachedDataType="wstr" cachedLength="1" cachedName="BelowReorderFlag" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[BelowReorderFlag]" name="BelowReorderFlag" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[HandlingClass]" cachedDataType="wstr" cachedLength="5" cachedName="HandlingClass" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[HandlingClass]" name="HandlingClass" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[DeleteFlag]" cachedDataType="wstr" cachedLength="1" cachedName="DeleteFlag" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" name="DeleteFlag" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                  <inputColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[StockItemID]" dataType="i4" name="StockItemID" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[StockItemName]" dataType="wstr" length="100" name="StockItemName" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[SupplierID]" dataType="i4" name="SupplierID" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[ColorID]" dataType="i4" name="ColorID" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[UnitPackageID]" dataType="i4" name="UnitPackageID" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[OuterPackageID]" dataType="i4" name="OuterPackageID" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[Brand]" dataType="wstr" length="50" name="Brand" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[Size]" dataType="wstr" length="20" name="Size" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[LeadTimeDays]" dataType="i4" name="LeadTimeDays" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[QuantityPerOuter]" dataType="i4" name="QuantityPerOuter" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[IsChillerStock]" dataType="bool" name="IsChillerStock" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[Barcode]" dataType="wstr" length="50" name="Barcode" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[TaxRate]" dataType="numeric" precision="18" scale="2" name="TaxRate" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[UnitPrice]" dataType="numeric" precision="18" scale="2" name="UnitPrice" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[RecommendedRetailPrice]" dataType="numeric" precision="18" scale="2" name="RecommendedRetailPrice" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[TypicalWeightPerUnit]" dataType="numeric" precision="18" scale="2" name="TypicalWeightPerUnit" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnHand]" dataType="i4" name="QuantityOnHand" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[ReorderLevel]" dataType="i4" name="ReorderLevel" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[TargetStockLevel]" dataType="i4" name="TargetStockLevel" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[ReplenishmentRuleCode]" dataType="wstr" length="10" name="ReplenishmentRuleCode" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[ValidFrom]" dataType="dbTimeStamp" name="ValidFrom" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[LastEditedWhen]" dataType="dbTimeStamp" name="LastEditedWhen" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[BelowReorderFlag]" dataType="wstr" length="1" name="BelowReorderFlag" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[HandlingClass]" dataType="wstr" length="5" name="HandlingClass" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" dataType="wstr" length="1" name="DeleteFlag" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Stock Items\raw SqlStockItem.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Extract Stock Items\err RejectedProduct" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="err RejectedProduct" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">err.RejectedProduct</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Extract Stock Items\err RejectedProduct.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[StockItemID]" cachedDataType="i4" cachedName="StockItemID" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[StockItemID]" name="StockItemID" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[StockItemName]" cachedDataType="wstr" cachedLength="100" cachedName="StockItemName" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[StockItemName]" name="StockItemName" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[SupplierID]" cachedDataType="i4" cachedName="SupplierID" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[SupplierID]" name="SupplierID" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[ColorID]" cachedDataType="i4" cachedName="ColorID" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[ColorID]" name="ColorID" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[UnitPackageID]" cachedDataType="i4" cachedName="UnitPackageID" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[UnitPackageID]" name="UnitPackageID" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[OuterPackageID]" cachedDataType="i4" cachedName="OuterPackageID" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[OuterPackageID]" name="OuterPackageID" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[Brand]" cachedDataType="wstr" cachedLength="50" cachedName="Brand" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[Brand]" name="Brand" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[Size]" cachedDataType="wstr" cachedLength="20" cachedName="Size" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[Size]" name="Size" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[LeadTimeDays]" cachedDataType="i4" cachedName="LeadTimeDays" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[LeadTimeDays]" name="LeadTimeDays" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[QuantityPerOuter]" cachedDataType="i4" cachedName="QuantityPerOuter" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[QuantityPerOuter]" name="QuantityPerOuter" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[IsChillerStock]" cachedDataType="bool" cachedName="IsChillerStock" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[IsChillerStock]" name="IsChillerStock" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[Barcode]" cachedDataType="wstr" cachedLength="50" cachedName="Barcode" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[Barcode]" name="Barcode" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[TaxRate]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="TaxRate" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[TaxRate]" name="TaxRate" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[UnitPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitPrice" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[UnitPrice]" name="UnitPrice" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[RecommendedRetailPrice]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="RecommendedRetailPrice" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[RecommendedRetailPrice]" name="RecommendedRetailPrice" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[TypicalWeightPerUnit]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="TypicalWeightPerUnit" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[TypicalWeightPerUnit]" name="TypicalWeightPerUnit" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[QuantityOnHand]" cachedDataType="i4" cachedName="QuantityOnHand" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnHand]" name="QuantityOnHand" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[ReorderLevel]" cachedDataType="i4" cachedName="ReorderLevel" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[ReorderLevel]" name="ReorderLevel" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[TargetStockLevel]" cachedDataType="i4" cachedName="TargetStockLevel" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[TargetStockLevel]" name="TargetStockLevel" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[ReplenishmentRuleCode]" cachedDataType="wstr" cachedLength="10" cachedName="ReplenishmentRuleCode" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[ReplenishmentRuleCode]" name="ReplenishmentRuleCode" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[ValidFrom]" cachedDataType="dbTimeStamp" cachedName="ValidFrom" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[ValidFrom]" name="ValidFrom" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[LastEditedWhen]" cachedDataType="dbTimeStamp" cachedName="LastEditedWhen" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[LastEditedWhen]" name="LastEditedWhen" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[BelowReorderFlag]" cachedDataType="wstr" cachedLength="1" cachedName="BelowReorderFlag" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[BelowReorderFlag]" name="BelowReorderFlag" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[HandlingClass]" cachedDataType="wstr" cachedLength="5" cachedName="HandlingClass" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[HandlingClass]" name="HandlingClass" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[DeleteFlag]" cachedDataType="wstr" cachedLength="1" cachedName="DeleteFlag" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" name="DeleteFlag" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                  <inputColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[StockItemID]" dataType="i4" name="StockItemID" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[StockItemName]" dataType="wstr" length="100" name="StockItemName" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[SupplierID]" dataType="i4" name="SupplierID" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[ColorID]" dataType="i4" name="ColorID" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[UnitPackageID]" dataType="i4" name="UnitPackageID" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[OuterPackageID]" dataType="i4" name="OuterPackageID" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[Brand]" dataType="wstr" length="50" name="Brand" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[Size]" dataType="wstr" length="20" name="Size" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[LeadTimeDays]" dataType="i4" name="LeadTimeDays" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[QuantityPerOuter]" dataType="i4" name="QuantityPerOuter" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[IsChillerStock]" dataType="bool" name="IsChillerStock" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[Barcode]" dataType="wstr" length="50" name="Barcode" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[TaxRate]" dataType="numeric" precision="18" scale="2" name="TaxRate" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[UnitPrice]" dataType="numeric" precision="18" scale="2" name="UnitPrice" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[RecommendedRetailPrice]" dataType="numeric" precision="18" scale="2" name="RecommendedRetailPrice" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[TypicalWeightPerUnit]" dataType="numeric" precision="18" scale="2" name="TypicalWeightPerUnit" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnHand]" dataType="i4" name="QuantityOnHand" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[ReorderLevel]" dataType="i4" name="ReorderLevel" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[TargetStockLevel]" dataType="i4" name="TargetStockLevel" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[ReplenishmentRuleCode]" dataType="wstr" length="10" name="ReplenishmentRuleCode" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[ValidFrom]" dataType="dbTimeStamp" name="ValidFrom" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[LastEditedWhen]" dataType="dbTimeStamp" name="LastEditedWhen" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[BelowReorderFlag]" dataType="wstr" length="1" name="BelowReorderFlag" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[HandlingClass]" dataType="wstr" length="5" name="HandlingClass" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" dataType="wstr" length="1" name="DeleteFlag" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                  <externalMetadataColumn refId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Stock Items\err RejectedProduct.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Extract Stock Items.Paths[OLE DB Source Output]" endId="Package\Extract Stock Items\Derive Stock Flags.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Extract Stock Items.Paths[Derived Column Output 1]" endId="Package\Extract Stock Items\Count Stock Items.Inputs[Row Count Input]" name="Derived Column Output 1" startId="Package\Extract Stock Items\Derive Stock Flags.Outputs[Derived Column Output]" />
+          <path refId="Package\Extract Stock Items.Paths[Row Count Output 2]" endId="Package\Extract Stock Items\raw SqlStockItem.Inputs[OLE DB Destination Input]" name="Row Count Output 2" startId="Package\Extract Stock Items\Count Stock Items.Outputs[Row Count Output]" />
+          <path refId="Package\Extract Stock Items.Paths[OLE DB Source Error Output 3]" endId="Package\Extract Stock Items\err RejectedProduct.Inputs[OLE DB Destination Input]" name="OLE DB Source Error Output 3" startId="Package\Extract Stock Items\OLTP Warehouse.StockItems.Outputs[OLE DB Source Error Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Detect Deleted Stock Items"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{27014B28-9F34-1EA3-CFF3-13E586E88F7B}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Detect Deleted Stock Items"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="OLTP Stock Item Change Tracking" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT  ct.StockItemID,
+        ct.SYS_CHANGE_OPERATION  AS ChangeOperation,
+        ct.SYS_CHANGE_VERSION    AS ChangeVersion
+FROM    CHANGETABLE(CHANGES Warehouse.StockItems, ?) AS ct
+WHERE   ct.SYS_CHANGE_OPERATION = 'D';</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Connections[OleDbConnection]" connectionManagerID="{6013BF6D-BE65-C752-81B9-00A20CDE3DE7}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Source_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Output].Columns[StockItemID]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Output].ExternalColumns[StockItemID]" lineageId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Output].Columns[StockItemID]" name="StockItemID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Output].Columns[ChangeOperation]" dataType="wstr" length="1" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Output].ExternalColumns[ChangeOperation]" lineageId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Output].Columns[ChangeOperation]" name="ChangeOperation" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Output].Columns[ChangeVersion]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Output].ExternalColumns[ChangeVersion]" lineageId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Output].Columns[ChangeVersion]" name="ChangeVersion" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Output].ExternalColumns[StockItemID]" dataType="i4" name="StockItemID" />
+                  <externalMetadataColumn refId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Output].ExternalColumns[ChangeOperation]" dataType="wstr" length="1" name="ChangeOperation" />
+                  <externalMetadataColumn refId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Output].ExternalColumns[ChangeVersion]" dataType="i8" name="ChangeVersion" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Error Output].Columns[StockItemID]" dataType="i4" lineageId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Error Output].Columns[StockItemID]" name="StockItemID" />
+                  <outputColumn refId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Error Output].Columns[ChangeOperation]" dataType="wstr" length="1" lineageId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Error Output].Columns[ChangeOperation]" name="ChangeOperation" />
+                  <outputColumn refId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Error Output].Columns[ChangeVersion]" dataType="i8" lineageId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Error Output].Columns[ChangeVersion]" name="ChangeVersion" />
+                  <outputColumn refId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Detect Deleted Stock Items\Flag Deleted Stock Items" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Flag Deleted Stock Items" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Detect Deleted Stock Items\Flag Deleted Stock Items.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Detect Deleted Stock Items\Flag Deleted Stock Items.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Detect Deleted Stock Items\Flag Deleted Stock Items.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Detect Deleted Stock Items\Flag Deleted Stock Items.Outputs[Derived Column Output].Columns[SourceSystemCode]" dataType="wstr" length="20" lineageId="Package\Detect Deleted Stock Items\Flag Deleted Stock Items.Outputs[Derived Column Output].Columns[SourceSystemCode]" name="SourceSystemCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"WWI_OLTP"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"WWI_OLTP"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Detect Deleted Stock Items\Flag Deleted Stock Items.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" dataType="dbTimeStamp" lineageId="Package\Detect Deleted Stock Items\Flag Deleted Stock Items.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" name="ExtractedAtUtc">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">GETUTCDATE()</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">GETUTCDATE()</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Detect Deleted Stock Items\Flag Deleted Stock Items.Outputs[Derived Column Output].Columns[PackageExecutionId]" dataType="i8" lineageId="Package\Detect Deleted Stock Items\Flag Deleted Stock Items.Outputs[Derived Column Output].Columns[PackageExecutionId]" name="PackageExecutionId">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Detect Deleted Stock Items\Flag Deleted Stock Items.Outputs[Derived Column Output].Columns[DeleteFlag]" dataType="wstr" length="1" lineageId="Package\Detect Deleted Stock Items\Flag Deleted Stock Items.Outputs[Derived Column Output].Columns[DeleteFlag]" name="DeleteFlag">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"Y"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"Y"</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Detect Deleted Stock Items\Count Deleted Stock Items" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Deleted Stock Items" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsDeleted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Detect Deleted Stock Items\Count Deleted Stock Items.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Detect Deleted Stock Items\Count Deleted Stock Items.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Detect Deleted Stock Items\Count Deleted Stock Items.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="raw SqlStockItem Deletes" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">raw.SqlStockItem</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">2000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].Columns[StockItemID]" cachedDataType="i4" cachedName="StockItemID" externalMetadataColumnId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].ExternalColumns[StockItemID]" name="StockItemID" />
+                  <inputColumn refId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].Columns[ChangeOperation]" cachedDataType="wstr" cachedLength="1" cachedName="ChangeOperation" externalMetadataColumnId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].ExternalColumns[ChangeOperation]" name="ChangeOperation" />
+                  <inputColumn refId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].Columns[ChangeVersion]" cachedDataType="i8" cachedName="ChangeVersion" externalMetadataColumnId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].ExternalColumns[ChangeVersion]" name="ChangeVersion" />
+                  <inputColumn refId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                  <inputColumn refId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                  <inputColumn refId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                  <inputColumn refId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].Columns[DeleteFlag]" cachedDataType="wstr" cachedLength="1" cachedName="DeleteFlag" externalMetadataColumnId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" name="DeleteFlag" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].ExternalColumns[StockItemID]" dataType="i4" name="StockItemID" />
+                  <externalMetadataColumn refId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].ExternalColumns[ChangeOperation]" dataType="wstr" length="1" name="ChangeOperation" />
+                  <externalMetadataColumn refId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].ExternalColumns[ChangeVersion]" dataType="i8" name="ChangeVersion" />
+                  <externalMetadataColumn refId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                  <externalMetadataColumn refId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                  <externalMetadataColumn refId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                  <externalMetadataColumn refId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input].ExternalColumns[DeleteFlag]" dataType="wstr" length="1" name="DeleteFlag" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Detect Deleted Stock Items.Paths[OLE DB Source Output]" endId="Package\Detect Deleted Stock Items\Flag Deleted Stock Items.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Detect Deleted Stock Items\OLTP Stock Item Change Tracking.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Detect Deleted Stock Items.Paths[Derived Column Output 1]" endId="Package\Detect Deleted Stock Items\Count Deleted Stock Items.Inputs[Row Count Input]" name="Derived Column Output 1" startId="Package\Detect Deleted Stock Items\Flag Deleted Stock Items.Outputs[Derived Column Output]" />
+          <path refId="Package\Detect Deleted Stock Items.Paths[Row Count Output 2]" endId="Package\Detect Deleted Stock Items\raw SqlStockItem Deletes.Inputs[OLE DB Destination Input]" name="Row Count Output 2" startId="Package\Detect Deleted Stock Items\Count Deleted Stock Items.Outputs[Row Count Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Set Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{C8D945C7-242C-76BA-65CC-8FF45D2E5210}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Set Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_SetWatermark @SourceSystemCode = ?, @ObjectName = N'Warehouse.StockItems', @WatermarkTo = ?, @PackageExecutionId = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::WatermarkTo" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'raw.SqlStockItem', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Batch Variables"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Get Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Get Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Extract Stock Items" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Extract Stock Items"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Detect Deleted Stock Items" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Detect Deleted Stock Items"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Set Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Set Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{D70C9ACA-15B3-FD18-1CC9-37F13090CC42}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

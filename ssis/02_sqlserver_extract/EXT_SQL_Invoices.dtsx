@@ -1,0 +1,819 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{90B87E2A-0887-2ACF-5FB5-6F2C89EB0CC1}"
+  DTS:Description="Numeric-key incremental invoice header extract over Sales.vw_InvoiceExtract. The tax treatment is resolved from the delivery geography - sales tax for NA, VAT with the customer registration number for EU, GST for APAC - because the OLTP schema stores one TaxRate column for all three."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="EXT_SQL_Invoices"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{0C55B5CE-8318-F175-6564-F01AE3D025D2}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{12FAA4EC-F457-29F3-1F79-30DD38E17BAD}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{187BF003-D095-02D3-E194-C9F4EDA4FC9A}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{A3C4BEB0-7F83-DD0E-EA2D-1BFD26550CC2}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{69B2BB2F-50F8-3561-90A9-BC03BFA57DB6}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWI_OLTP</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Source_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{6013BF6D-BE65-C752-81B9-00A20CDE3DE7}"
+      DTS:ObjectName="WWI_Source_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{3BC521C7-BFF3-61C1-A7D9-5108D3A11A59}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{3803BC28-733D-830E-5F91-5EF7D4A6EF73}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{CB7CEB0D-EE43-0F26-DFDC-E6E429BF29E6}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{8AD0E126-89AB-5C30-8723-ED9798EBE9D9}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{B8290D3A-403E-9D12-F3E8-D9BA92AB07FE}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{5F2FBBF0-B18F-98FD-6D65-65138FE8E3C6}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{12C8DAAE-C3E9-C2AD-E992-7C3CCCA1D1C3}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{2D4E6A71-7684-3108-5B3F-AF9637A166F3}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::CreditNoteCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{C8AA4136-D9BE-BB31-69AB-18AD4FF798F7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="CreditNoteCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Batch Variables"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{647AE7A9-EE4E-0DAF-FBD6-04CEA9DB74E4}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Batch Variables"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::CreditNoteCount] = 0" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Get Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{AD8AAA26-E475-7A7A-5321-BEF0685AEC15}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Get Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_GetWatermark @SourceSystemCode = ?, @ObjectName = ?, @ReloadFullHistory = ?, @WatermarkFrom = ? OUTPUT, @WatermarkTo = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::ReloadFullHistory" SQLTask:ParameterDirection="Input" SQLTask:DataType="BYTE" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::WatermarkFrom" />
+        <SQLTask:ResultBinding SQLTask:ResultName="1" SQLTask:DtsVariableName="User::WatermarkTo" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Read Source Max InvoiceID"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{C37D980B-D04E-998E-16F8-3D771C543AEB}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Read Source Max InvoiceID"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{6013BF6D-BE65-C752-81B9-00A20CDE3DE7}"
+        SQLTask:SqlStatementSource="SELECT ISNULL(MAX(InvoiceID), 0) AS MaxKey FROM Sales.Invoices WITH (NOLOCK);"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="300"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::WatermarkTo" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Extract Invoices"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{2F4787CE-A949-B69D-3082-BC5BD620780D}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Extract Invoices"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Extract Invoices\OLTP vw_InvoiceExtract" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="OLTP vw_InvoiceExtract" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">3600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT  i.InvoiceID,
+        i.CustomerID,
+        i.BillToCustomerID,
+        i.OrderID,
+        i.DeliveryMethodID,
+        i.ContactPersonID,
+        i.SalespersonPersonID,
+        i.InvoiceDate,
+        i.CustomerPurchaseOrderNumber,
+        i.IsCreditNote,
+        i.CreditNoteReason,
+        i.TotalExcludingTax,
+        i.TotalTaxAmount,
+        i.TotalIncludingTax,
+        i.RegionCode,
+        CASE i.RegionCode
+            WHEN N'NA'   THEN N'SALESTAX'
+            WHEN N'EU'   THEN N'VAT'
+            WHEN N'APAC' THEN N'GST'
+            ELSE N'NONE'
+        END                                     AS TaxTreatmentCode,
+        CASE WHEN i.RegionCode = N'EU' THEN i.CustomerTaxRegistrationNumber ELSE NULL END
+                                                AS CustomerTaxRegistrationNumber,
+        i.ConfirmedDeliveryTime,
+        i.LastEditedWhen
+FROM    Sales.vw_InvoiceExtract AS i WITH (NOLOCK)
+WHERE   i.InvoiceID &gt; ?
+  AND   i.InvoiceID &lt;= ?
+ORDER BY i.InvoiceID;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Connections[OleDbConnection]" connectionManagerID="{6013BF6D-BE65-C752-81B9-00A20CDE3DE7}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Source_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[InvoiceID]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[InvoiceID]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[InvoiceID]" name="InvoiceID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[CustomerID]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[CustomerID]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[CustomerID]" name="CustomerID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[BillToCustomerID]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[BillToCustomerID]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[BillToCustomerID]" name="BillToCustomerID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[OrderID]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[OrderID]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[OrderID]" name="OrderID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[DeliveryMethodID]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[DeliveryMethodID]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[DeliveryMethodID]" name="DeliveryMethodID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[ContactPersonID]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[ContactPersonID]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[ContactPersonID]" name="ContactPersonID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[SalespersonPersonID]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[SalespersonPersonID]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[SalespersonPersonID]" name="SalespersonPersonID" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[InvoiceDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[InvoiceDate]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[InvoiceDate]" name="InvoiceDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[CustomerPurchaseOrderNumber]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[CustomerPurchaseOrderNumber]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[CustomerPurchaseOrderNumber]" name="CustomerPurchaseOrderNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[IsCreditNote]" dataType="bool" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[IsCreditNote]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[IsCreditNote]" name="IsCreditNote" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[CreditNoteReason]" dataType="wstr" length="200" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[CreditNoteReason]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[CreditNoteReason]" name="CreditNoteReason" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[TotalExcludingTax]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[TotalExcludingTax]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[TotalExcludingTax]" name="TotalExcludingTax" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[TotalTaxAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[TotalTaxAmount]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[TotalTaxAmount]" name="TotalTaxAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[TotalIncludingTax]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[TotalIncludingTax]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[TotalIncludingTax]" name="TotalIncludingTax" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[TaxTreatmentCode]" dataType="wstr" length="8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[TaxTreatmentCode]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[TaxTreatmentCode]" name="TaxTreatmentCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[CustomerTaxRegistrationNumber]" dataType="wstr" length="30" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[CustomerTaxRegistrationNumber]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[CustomerTaxRegistrationNumber]" name="CustomerTaxRegistrationNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[ConfirmedDeliveryTime]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[ConfirmedDeliveryTime]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[ConfirmedDeliveryTime]" name="ConfirmedDeliveryTime" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[LastEditedWhen]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[LastEditedWhen]" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].Columns[LastEditedWhen]" name="LastEditedWhen" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[InvoiceID]" dataType="i4" name="InvoiceID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[CustomerID]" dataType="i4" name="CustomerID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[BillToCustomerID]" dataType="i4" name="BillToCustomerID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[OrderID]" dataType="i4" name="OrderID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[DeliveryMethodID]" dataType="i4" name="DeliveryMethodID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[ContactPersonID]" dataType="i4" name="ContactPersonID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[SalespersonPersonID]" dataType="i4" name="SalespersonPersonID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[InvoiceDate]" dataType="dbTimeStamp" name="InvoiceDate" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[CustomerPurchaseOrderNumber]" dataType="wstr" length="20" name="CustomerPurchaseOrderNumber" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[IsCreditNote]" dataType="bool" name="IsCreditNote" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[CreditNoteReason]" dataType="wstr" length="200" name="CreditNoteReason" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[TotalExcludingTax]" dataType="numeric" precision="18" scale="2" name="TotalExcludingTax" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[TotalTaxAmount]" dataType="numeric" precision="18" scale="2" name="TotalTaxAmount" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[TotalIncludingTax]" dataType="numeric" precision="18" scale="2" name="TotalIncludingTax" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="8" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[TaxTreatmentCode]" dataType="wstr" length="8" name="TaxTreatmentCode" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[CustomerTaxRegistrationNumber]" dataType="wstr" length="30" name="CustomerTaxRegistrationNumber" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[ConfirmedDeliveryTime]" dataType="dbTimeStamp" name="ConfirmedDeliveryTime" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output].ExternalColumns[LastEditedWhen]" dataType="dbTimeStamp" name="LastEditedWhen" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[InvoiceID]" dataType="i4" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[InvoiceID]" name="InvoiceID" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[CustomerID]" dataType="i4" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[CustomerID]" name="CustomerID" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[BillToCustomerID]" dataType="i4" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[BillToCustomerID]" name="BillToCustomerID" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[OrderID]" dataType="i4" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[OrderID]" name="OrderID" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[DeliveryMethodID]" dataType="i4" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[DeliveryMethodID]" name="DeliveryMethodID" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[ContactPersonID]" dataType="i4" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[ContactPersonID]" name="ContactPersonID" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[SalespersonPersonID]" dataType="i4" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[SalespersonPersonID]" name="SalespersonPersonID" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[InvoiceDate]" dataType="dbTimeStamp" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[InvoiceDate]" name="InvoiceDate" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[CustomerPurchaseOrderNumber]" dataType="wstr" length="20" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[CustomerPurchaseOrderNumber]" name="CustomerPurchaseOrderNumber" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[IsCreditNote]" dataType="bool" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[IsCreditNote]" name="IsCreditNote" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[CreditNoteReason]" dataType="wstr" length="200" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[CreditNoteReason]" name="CreditNoteReason" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[TotalExcludingTax]" dataType="numeric" precision="18" scale="2" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[TotalExcludingTax]" name="TotalExcludingTax" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[TotalTaxAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[TotalTaxAmount]" name="TotalTaxAmount" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[TotalIncludingTax]" dataType="numeric" precision="18" scale="2" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[TotalIncludingTax]" name="TotalIncludingTax" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="8" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[TaxTreatmentCode]" dataType="wstr" length="8" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[TaxTreatmentCode]" name="TaxTreatmentCode" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[CustomerTaxRegistrationNumber]" dataType="wstr" length="30" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[CustomerTaxRegistrationNumber]" name="CustomerTaxRegistrationNumber" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[ConfirmedDeliveryTime]" dataType="dbTimeStamp" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[ConfirmedDeliveryTime]" name="ConfirmedDeliveryTime" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[LastEditedWhen]" dataType="dbTimeStamp" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[LastEditedWhen]" name="LastEditedWhen" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Extract Invoices\Derive Tax Attributes" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Tax Attributes" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Extract Invoices\Derive Tax Attributes.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Invoices\Derive Tax Attributes.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Extract Invoices\Derive Tax Attributes.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Extract Invoices\Derive Tax Attributes.Outputs[Derived Column Output].Columns[EffectiveTaxRate]" dataType="numeric" precision="9" scale="4" lineageId="Package\Extract Invoices\Derive Tax Attributes.Outputs[Derived Column Output].Columns[EffectiveTaxRate]" name="EffectiveTaxRate">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">TotalExcludingTax == 0 ? (DT_NUMERIC,9,4)0 : (DT_NUMERIC,9,4)(TotalTaxAmount / TotalExcludingTax)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">TotalExcludingTax == 0 ? (DT_NUMERIC,9,4)0 : (DT_NUMERIC,9,4)(TotalTaxAmount / TotalExcludingTax)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Invoices\Derive Tax Attributes.Outputs[Derived Column Output].Columns[SignedTotalIncludingTax]" dataType="numeric" precision="18" scale="2" lineageId="Package\Extract Invoices\Derive Tax Attributes.Outputs[Derived Column Output].Columns[SignedTotalIncludingTax]" name="SignedTotalIncludingTax">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">IsCreditNote ? -TotalIncludingTax : TotalIncludingTax</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">IsCreditNote ? -TotalIncludingTax : TotalIncludingTax</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Invoices\Derive Tax Attributes.Outputs[Derived Column Output].Columns[SourceSystemCode]" dataType="wstr" length="20" lineageId="Package\Extract Invoices\Derive Tax Attributes.Outputs[Derived Column Output].Columns[SourceSystemCode]" name="SourceSystemCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"WWI_OLTP"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"WWI_OLTP"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Invoices\Derive Tax Attributes.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" dataType="dbTimeStamp" lineageId="Package\Extract Invoices\Derive Tax Attributes.Outputs[Derived Column Output].Columns[ExtractedAtUtc]" name="ExtractedAtUtc">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">GETUTCDATE()</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">GETUTCDATE()</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Extract Invoices\Derive Tax Attributes.Outputs[Derived Column Output].Columns[PackageExecutionId]" dataType="i8" lineageId="Package\Extract Invoices\Derive Tax Attributes.Outputs[Derived Column Output].Columns[PackageExecutionId]" name="PackageExecutionId">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Extract Invoices\Count Invoices Read" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Invoices Read" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\Extract Invoices\Count Invoices Read.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Invoices\Count Invoices Read.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\Extract Invoices\Count Invoices Read.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Extract Invoices\Split Credit Notes" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Split Credit Notes" version="1">
+            <inputs>
+              <input refId="Package\Extract Invoices\Split Credit Notes.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Invoices\Split Credit Notes.Outputs[Invoices]" exclusionGroup="1" name="Invoices" synchronousInputId="Package\Extract Invoices\Split Credit Notes.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">IsCreditNote == FALSE</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">IsCreditNote == FALSE</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Extract Invoices\Split Credit Notes.Outputs[Credit Notes]" exclusionGroup="1" isDefaultOut="true" name="Credit Notes" synchronousInputId="Package\Extract Invoices\Split Credit Notes.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Extract Invoices\raw SqlInvoice" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="raw SqlInvoice" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">raw.SqlInvoice</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">100000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Extract Invoices\raw SqlInvoice.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="RedirectRow" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[InvoiceID]" cachedDataType="i4" cachedName="InvoiceID" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceID]" name="InvoiceID" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[CustomerID]" cachedDataType="i4" cachedName="CustomerID" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[CustomerID]" name="CustomerID" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[BillToCustomerID]" cachedDataType="i4" cachedName="BillToCustomerID" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[BillToCustomerID]" name="BillToCustomerID" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[OrderID]" cachedDataType="i4" cachedName="OrderID" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[OrderID]" name="OrderID" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[DeliveryMethodID]" cachedDataType="i4" cachedName="DeliveryMethodID" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[DeliveryMethodID]" name="DeliveryMethodID" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[ContactPersonID]" cachedDataType="i4" cachedName="ContactPersonID" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[ContactPersonID]" name="ContactPersonID" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[SalespersonPersonID]" cachedDataType="i4" cachedName="SalespersonPersonID" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[SalespersonPersonID]" name="SalespersonPersonID" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[InvoiceDate]" cachedDataType="dbTimeStamp" cachedName="InvoiceDate" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceDate]" name="InvoiceDate" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[CustomerPurchaseOrderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="CustomerPurchaseOrderNumber" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[CustomerPurchaseOrderNumber]" name="CustomerPurchaseOrderNumber" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[IsCreditNote]" cachedDataType="bool" cachedName="IsCreditNote" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[IsCreditNote]" name="IsCreditNote" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[CreditNoteReason]" cachedDataType="wstr" cachedLength="200" cachedName="CreditNoteReason" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[CreditNoteReason]" name="CreditNoteReason" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[TotalExcludingTax]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="TotalExcludingTax" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[TotalExcludingTax]" name="TotalExcludingTax" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[TotalTaxAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="TotalTaxAmount" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[TotalTaxAmount]" name="TotalTaxAmount" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[TotalIncludingTax]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="TotalIncludingTax" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[TotalIncludingTax]" name="TotalIncludingTax" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="8" cachedName="RegionCode" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[TaxTreatmentCode]" cachedDataType="wstr" cachedLength="8" cachedName="TaxTreatmentCode" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[TaxTreatmentCode]" name="TaxTreatmentCode" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[CustomerTaxRegistrationNumber]" cachedDataType="wstr" cachedLength="30" cachedName="CustomerTaxRegistrationNumber" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[CustomerTaxRegistrationNumber]" name="CustomerTaxRegistrationNumber" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[ConfirmedDeliveryTime]" cachedDataType="dbTimeStamp" cachedName="ConfirmedDeliveryTime" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[ConfirmedDeliveryTime]" name="ConfirmedDeliveryTime" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[LastEditedWhen]" cachedDataType="dbTimeStamp" cachedName="LastEditedWhen" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[LastEditedWhen]" name="LastEditedWhen" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[EffectiveTaxRate]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="EffectiveTaxRate" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveTaxRate]" name="EffectiveTaxRate" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[SignedTotalIncludingTax]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SignedTotalIncludingTax" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[SignedTotalIncludingTax]" name="SignedTotalIncludingTax" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceID]" dataType="i4" name="InvoiceID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[CustomerID]" dataType="i4" name="CustomerID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[BillToCustomerID]" dataType="i4" name="BillToCustomerID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[OrderID]" dataType="i4" name="OrderID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[DeliveryMethodID]" dataType="i4" name="DeliveryMethodID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[ContactPersonID]" dataType="i4" name="ContactPersonID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[SalespersonPersonID]" dataType="i4" name="SalespersonPersonID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceDate]" dataType="dbTimeStamp" name="InvoiceDate" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[CustomerPurchaseOrderNumber]" dataType="wstr" length="20" name="CustomerPurchaseOrderNumber" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[IsCreditNote]" dataType="bool" name="IsCreditNote" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[CreditNoteReason]" dataType="wstr" length="200" name="CreditNoteReason" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[TotalExcludingTax]" dataType="numeric" precision="18" scale="2" name="TotalExcludingTax" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[TotalTaxAmount]" dataType="numeric" precision="18" scale="2" name="TotalTaxAmount" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[TotalIncludingTax]" dataType="numeric" precision="18" scale="2" name="TotalIncludingTax" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="8" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[TaxTreatmentCode]" dataType="wstr" length="8" name="TaxTreatmentCode" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[CustomerTaxRegistrationNumber]" dataType="wstr" length="30" name="CustomerTaxRegistrationNumber" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[ConfirmedDeliveryTime]" dataType="dbTimeStamp" name="ConfirmedDeliveryTime" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[LastEditedWhen]" dataType="dbTimeStamp" name="LastEditedWhen" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveTaxRate]" dataType="numeric" precision="9" scale="4" name="EffectiveTaxRate" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[SignedTotalIncludingTax]" dataType="numeric" precision="18" scale="2" name="SignedTotalIncludingTax" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Invoices\raw SqlInvoice.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Extract Invoices\raw SqlInvoice Credit Notes" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="raw SqlInvoice Credit Notes" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">raw.SqlInvoice</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[InvoiceID]" cachedDataType="i4" cachedName="InvoiceID" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceID]" name="InvoiceID" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[CustomerID]" cachedDataType="i4" cachedName="CustomerID" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[CustomerID]" name="CustomerID" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[BillToCustomerID]" cachedDataType="i4" cachedName="BillToCustomerID" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[BillToCustomerID]" name="BillToCustomerID" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[OrderID]" cachedDataType="i4" cachedName="OrderID" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[OrderID]" name="OrderID" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[DeliveryMethodID]" cachedDataType="i4" cachedName="DeliveryMethodID" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[DeliveryMethodID]" name="DeliveryMethodID" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[ContactPersonID]" cachedDataType="i4" cachedName="ContactPersonID" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[ContactPersonID]" name="ContactPersonID" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[SalespersonPersonID]" cachedDataType="i4" cachedName="SalespersonPersonID" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[SalespersonPersonID]" name="SalespersonPersonID" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[InvoiceDate]" cachedDataType="dbTimeStamp" cachedName="InvoiceDate" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceDate]" name="InvoiceDate" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[CustomerPurchaseOrderNumber]" cachedDataType="wstr" cachedLength="20" cachedName="CustomerPurchaseOrderNumber" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[CustomerPurchaseOrderNumber]" name="CustomerPurchaseOrderNumber" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[IsCreditNote]" cachedDataType="bool" cachedName="IsCreditNote" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[IsCreditNote]" name="IsCreditNote" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[CreditNoteReason]" cachedDataType="wstr" cachedLength="200" cachedName="CreditNoteReason" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[CreditNoteReason]" name="CreditNoteReason" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[TotalExcludingTax]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="TotalExcludingTax" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[TotalExcludingTax]" name="TotalExcludingTax" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[TotalTaxAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="TotalTaxAmount" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[TotalTaxAmount]" name="TotalTaxAmount" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[TotalIncludingTax]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="TotalIncludingTax" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[TotalIncludingTax]" name="TotalIncludingTax" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="8" cachedName="RegionCode" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[TaxTreatmentCode]" cachedDataType="wstr" cachedLength="8" cachedName="TaxTreatmentCode" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[TaxTreatmentCode]" name="TaxTreatmentCode" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[CustomerTaxRegistrationNumber]" cachedDataType="wstr" cachedLength="30" cachedName="CustomerTaxRegistrationNumber" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[CustomerTaxRegistrationNumber]" name="CustomerTaxRegistrationNumber" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[ConfirmedDeliveryTime]" cachedDataType="dbTimeStamp" cachedName="ConfirmedDeliveryTime" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[ConfirmedDeliveryTime]" name="ConfirmedDeliveryTime" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[LastEditedWhen]" cachedDataType="dbTimeStamp" cachedName="LastEditedWhen" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[LastEditedWhen]" name="LastEditedWhen" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[EffectiveTaxRate]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="EffectiveTaxRate" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveTaxRate]" name="EffectiveTaxRate" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[SignedTotalIncludingTax]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SignedTotalIncludingTax" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[SignedTotalIncludingTax]" name="SignedTotalIncludingTax" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[SourceSystemCode]" cachedDataType="wstr" cachedLength="20" cachedName="SourceSystemCode" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" name="SourceSystemCode" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[ExtractedAtUtc]" cachedDataType="dbTimeStamp" cachedName="ExtractedAtUtc" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" name="ExtractedAtUtc" />
+                  <inputColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" name="PackageExecutionId" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceID]" dataType="i4" name="InvoiceID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[CustomerID]" dataType="i4" name="CustomerID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[BillToCustomerID]" dataType="i4" name="BillToCustomerID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[OrderID]" dataType="i4" name="OrderID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[DeliveryMethodID]" dataType="i4" name="DeliveryMethodID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[ContactPersonID]" dataType="i4" name="ContactPersonID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[SalespersonPersonID]" dataType="i4" name="SalespersonPersonID" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[InvoiceDate]" dataType="dbTimeStamp" name="InvoiceDate" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[CustomerPurchaseOrderNumber]" dataType="wstr" length="20" name="CustomerPurchaseOrderNumber" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[IsCreditNote]" dataType="bool" name="IsCreditNote" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[CreditNoteReason]" dataType="wstr" length="200" name="CreditNoteReason" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[TotalExcludingTax]" dataType="numeric" precision="18" scale="2" name="TotalExcludingTax" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[TotalTaxAmount]" dataType="numeric" precision="18" scale="2" name="TotalTaxAmount" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[TotalIncludingTax]" dataType="numeric" precision="18" scale="2" name="TotalIncludingTax" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="8" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[TaxTreatmentCode]" dataType="wstr" length="8" name="TaxTreatmentCode" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[CustomerTaxRegistrationNumber]" dataType="wstr" length="30" name="CustomerTaxRegistrationNumber" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[ConfirmedDeliveryTime]" dataType="dbTimeStamp" name="ConfirmedDeliveryTime" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[LastEditedWhen]" dataType="dbTimeStamp" name="LastEditedWhen" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[EffectiveTaxRate]" dataType="numeric" precision="9" scale="4" name="EffectiveTaxRate" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[SignedTotalIncludingTax]" dataType="numeric" precision="18" scale="2" name="SignedTotalIncludingTax" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[ExtractedAtUtc]" dataType="dbTimeStamp" name="ExtractedAtUtc" />
+                  <externalMetadataColumn refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Extract Invoices.Paths[OLE DB Source Output]" endId="Package\Extract Invoices\Derive Tax Attributes.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Extract Invoices\OLTP vw_InvoiceExtract.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Extract Invoices.Paths[Derived Column Output 1]" endId="Package\Extract Invoices\Count Invoices Read.Inputs[Row Count Input]" name="Derived Column Output 1" startId="Package\Extract Invoices\Derive Tax Attributes.Outputs[Derived Column Output]" />
+          <path refId="Package\Extract Invoices.Paths[Row Count Output 2]" endId="Package\Extract Invoices\Split Credit Notes.Inputs[Conditional Split Input]" name="Row Count Output 2" startId="Package\Extract Invoices\Count Invoices Read.Outputs[Row Count Output]" />
+          <path refId="Package\Extract Invoices.Paths[Invoices 3]" endId="Package\Extract Invoices\raw SqlInvoice.Inputs[OLE DB Destination Input]" name="Invoices 3" startId="Package\Extract Invoices\Split Credit Notes.Outputs[Invoices]" />
+          <path refId="Package\Extract Invoices.Paths[Credit Notes 4]" endId="Package\Extract Invoices\raw SqlInvoice Credit Notes.Inputs[OLE DB Destination Input]" name="Credit Notes 4" startId="Package\Extract Invoices\Split Credit Notes.Outputs[Credit Notes]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Set Watermark"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{C8D945C7-242C-76BA-65CC-8FF45D2E5210}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Set Watermark"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_SetWatermark @SourceSystemCode = ?, @ObjectName = N'Sales.Invoices', @WatermarkTo = ?, @PackageExecutionId = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::WatermarkTo" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'raw.SqlInvoice', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Batch Variables"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Get Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Get Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Read Source Max InvoiceID" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Read Source Max InvoiceID"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Extract Invoices" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Extract Invoices"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Set Watermark" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Set Watermark"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{F195827B-27E0-500B-9AB9-BD7AA2512477}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>
