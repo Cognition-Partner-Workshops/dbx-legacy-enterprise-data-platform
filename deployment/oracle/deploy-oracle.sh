@@ -63,16 +63,45 @@ SCHEMA_SECRET_VARIABLES=(
     "WWI_EXTRACT_SECRET"
 )
 
-ORACLE_STAGE_DIRS=(
-    "ddl"
-    "tables"
-    "views"
-    "functions"
-    "procedures"
-    "packages"
-    "reference"
-    "seed"
+# 05_grant_privileges.sql and 07_create_synonyms.sql name the objects in
+# oracle/tables one by one, so they run as their own "grants" stage after those
+# exist and before the views and packages that compile against them. Each entry
+# is "stage name:directory".
+LATE_DDL_FILES=("05_grant_privileges.sql" "07_create_synonyms.sql")
+
+# ZZ_add_future_partitions.sql is the December runbook script, run by hand
+# against a populated estate; it is not part of creating the objects.
+HAND_RUN_FILES=("ZZ_add_future_partitions.sql")
+
+ORACLE_STAGES=(
+    "ddl:ddl"
+    "tables:tables"
+    "grants:ddl"
+    "views:views"
+    "functions:functions"
+    "procedures:procedures"
+    "packages:packages"
+    "reference:reference"
+    "seed:seed"
 )
+
+file_is_in() {
+    local candidate="$1"; shift
+    local name
+    for name in "$@"; do
+        [[ "$(basename "${candidate}")" == "${name}" ]] && return 0
+    done
+    return 1
+}
+
+# Every generated artifact stamps "Deploy order : <n>" in its header. File names
+# sort alphabetically, which is not dependency order: WWI_FIN tables carry
+# foreign keys into WWI_MDM tables that sort after them.
+deploy_order() {
+    local order
+    order="$(head -n 15 "$1" | sed -n 's/.*Deploy order[[:space:]]*:[[:space:]]*\([0-9]\{1,\}\).*/\1/p' | head -n 1)"
+    printf '%s' "${order:-999999}"
+}
 
 run_sql_file() {
     local file="$1"
@@ -102,6 +131,7 @@ WHENEVER SQLERROR EXIT SQL.SQLCODE
 WHENEVER OSERROR EXIT 9
 CONNECT ${ORACLE_USER}/${ORACLE_PASSWORD}@${ORACLE_HOST}:${ORACLE_PORT}/${ORACLE_SERVICE}
 SET DEFINE ON
+SET VERIFY OFF
 ${defines}SET ECHO OFF
 SET FEEDBACK ON
 SET SERVEROUTPUT ON SIZE UNLIMITED
@@ -116,9 +146,11 @@ SQLPLUS
 STAGE_INDEX=0
 FILE_COUNT=0
 
-for dir in "${ORACLE_STAGE_DIRS[@]}"; do
+for stage in "${ORACLE_STAGES[@]}"; do
+    stage_name="${stage%%:*}"
+    dir="${stage#*:}"
     STAGE_INDEX=$(( STAGE_INDEX + 1 ))
-    [[ -n "${ONLY_DIR}" && "${ONLY_DIR}" != "${dir}" ]] && continue
+    [[ -n "${ONLY_DIR}" && "${ONLY_DIR}" != "${stage_name}" ]] && continue
     (( STAGE_INDEX < START_AT )) && continue
 
     stage_path="${ORACLE_ROOT}/${dir}"
@@ -127,12 +159,24 @@ for dir in "${ORACLE_STAGE_DIRS[@]}"; do
         continue
     fi
 
-    wwi_log "--- stage ${STAGE_INDEX}: oracle/${dir} ---"
-    # Files are ordered by name; the estate's convention is a numeric prefix.
+    wwi_log "--- stage ${STAGE_INDEX}: ${stage_name} ---"
+    # Files run in declared deploy order, name breaking ties.
     while IFS= read -r -d '' sql_file; do
+        if [[ "${dir}" == "ddl" ]]; then
+            if [[ "${stage_name}" == "grants" ]]; then
+                file_is_in "${sql_file}" "${LATE_DDL_FILES[@]}" || continue
+            else
+                file_is_in "${sql_file}" "${LATE_DDL_FILES[@]}" && continue
+            fi
+        fi
+        if [[ "${dir}" == "tables" ]] && file_is_in "${sql_file}" "${HAND_RUN_FILES[@]}"; then
+            continue
+        fi
         run_sql_file "${sql_file}"
         FILE_COUNT=$(( FILE_COUNT + 1 ))
-    done < <(find "${stage_path}" -maxdepth 2 -type f -name '*.sql' -print0 | sort -z)
+    done < <(find "${stage_path}" -maxdepth 2 -type f -name '*.sql' |
+        while IFS= read -r found; do printf '%06d\t%s\n' "$(deploy_order "${found}")" "${found}"; done |
+        sort -t$'\t' -k1,1n -k2,2 | cut -f2- | tr '\n' '\0')
 done
 
 # Invalid objects are expected mid-run and recompiled at the end; the estate has
@@ -143,8 +187,15 @@ if ! wwi_is_dry_run; then
 WHENEVER SQLERROR EXIT SQL.SQLCODE
 CONNECT ${ORACLE_USER}/${ORACLE_PASSWORD}@${ORACLE_HOST}:${ORACLE_PORT}/${ORACLE_SERVICE}
 SET SERVEROUTPUT ON
-EXEC DBMS_UTILITY.COMPILE_SCHEMA(schema => USER, compile_all => FALSE);
-SELECT object_type, object_name FROM user_objects WHERE status = 'INVALID' ORDER BY object_type, object_name;
+BEGIN
+    FOR s IN (SELECT username FROM dba_users WHERE username LIKE 'WWI\_%' ESCAPE '\') LOOP
+        DBMS_UTILITY.COMPILE_SCHEMA(schema => s.username, compile_all => FALSE);
+    END LOOP;
+END;
+/
+SELECT owner, object_type, object_name FROM dba_objects
+ WHERE owner LIKE 'WWI\_%' ESCAPE '\' AND status = 'INVALID'
+ ORDER BY owner, object_type, object_name;
 EXIT SQL.SQLCODE
 SQLPLUS
 else

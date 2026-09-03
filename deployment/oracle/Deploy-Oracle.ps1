@@ -44,7 +44,36 @@ $schemaSecretVariables = @('WWI_MDM_SECRET', 'WWI_PROC_SECRET', 'WWI_FIN_SECRET'
                            'WWI_REF_SECRET', 'WWI_AUDIT_SECRET', 'WWI_EXTRACT_SECRET')
 
 # Same dependency order as the shell variant. Keep the two in step.
-$stages = @('ddl', 'tables', 'views', 'functions', 'procedures', 'packages', 'reference', 'seed')
+# 05_grant_privileges.sql and 07_create_synonyms.sql name the objects in
+# oracle/tables one by one, so they run as their own stage after those exist
+# and before the views and packages that compile against them.
+$lateDdl = @('05_grant_privileges.sql', '07_create_synonyms.sql')
+# ZZ_add_future_partitions.sql is the December runbook script, run by hand
+# against a populated estate; it is not part of creating the objects.
+$handRun = @('ZZ_add_future_partitions.sql')
+$stages  = [ordered]@{
+    ddl        = @{ Directory = 'ddl'; Exclude = $lateDdl }
+    tables     = @{ Directory = 'tables'; Exclude = $handRun }
+    grants     = @{ Directory = 'ddl'; Include = $lateDdl }
+    views      = @{ Directory = 'views' }
+    functions  = @{ Directory = 'functions' }
+    procedures = @{ Directory = 'procedures' }
+    packages   = @{ Directory = 'packages' }
+    reference  = @{ Directory = 'reference' }
+    seed       = @{ Directory = 'seed' }
+}
+
+function Get-DeployOrder {
+    # Every generated artifact stamps "Deploy order : <n>" in its header. File
+    # names sort alphabetically, which is not dependency order: WWI_FIN tables
+    # carry foreign keys into WWI_MDM tables that sort after them.
+    param([Parameter(Mandatory)][string] $Path)
+
+    $header = (Get-Content -Path $Path -TotalCount 15) -join "`n"
+    $match  = [regex]::Match($header, 'Deploy order\s*:\s*(\d+)')
+    if ($match.Success) { return [int] $match.Groups[1].Value }
+    return [int]::MaxValue
+}
 
 function Invoke-OracleScript {
     param([Parameter(Mandatory)][string] $Path)
@@ -67,6 +96,7 @@ WHENEVER SQLERROR EXIT SQL.SQLCODE
 WHENEVER OSERROR EXIT 9
 CONNECT $($env:ORACLE_USER)/$($env:ORACLE_PASSWORD)@$($env:ORACLE_HOST):$($env:ORACLE_PORT)/$($env:ORACLE_SERVICE)
 SET DEFINE ON
+SET VERIFY OFF
 $defines
 SET ECHO OFF
 SET SERVEROUTPUT ON SIZE UNLIMITED
@@ -86,21 +116,25 @@ EXIT SQL.SQLCODE
 $stageIndex = 0
 $fileCount  = 0
 
-foreach ($stage in $stages) {
+foreach ($stage in $stages.Keys) {
     $stageIndex++
     if ($Only -and $Only -ne $stage) { continue }
     if ($stageIndex -lt $FromStage) { continue }
 
-    $stagePath = Join-Path $oracleRoot $stage
+    $spec      = $stages[$stage]
+    $stagePath = Join-Path $oracleRoot $spec.Directory
     if (-not (Test-Path $stagePath)) {
-        Write-WwiLog "oracle/$stage is not present; skipping stage $stageIndex." 'WARN'
+        Write-WwiLog "oracle/$($spec.Directory) is not present; skipping stage $stageIndex." 'WARN'
         continue
     }
 
-    Write-WwiLog "--- stage ${stageIndex}: oracle/$stage ---"
-    Get-ChildItem -Path $stagePath -Filter '*.sql' -Recurse -File |
-        Sort-Object FullName |
-        ForEach-Object { Invoke-OracleScript -Path $_.FullName; $fileCount++ }
+    $files = Get-ChildItem -Path $stagePath -Filter '*.sql' -Recurse -File |
+        Sort-Object @{ Expression = { Get-DeployOrder -Path $_.FullName } }, FullName
+    if ($spec.ContainsKey('Include')) { $files = $files | Where-Object { $spec.Include -contains $_.Name } }
+    if ($spec.ContainsKey('Exclude')) { $files = $files | Where-Object { $spec.Exclude -notcontains $_.Name } }
+
+    Write-WwiLog "--- stage ${stageIndex}: $stage ---"
+    $files | ForEach-Object { Invoke-OracleScript -Path $_.FullName; $fileCount++ }
 }
 
 if (-not $DryRun) {
@@ -108,8 +142,15 @@ if (-not $DryRun) {
     $recompile = @"
 CONNECT $($env:ORACLE_USER)/$($env:ORACLE_PASSWORD)@$($env:ORACLE_HOST):$($env:ORACLE_PORT)/$($env:ORACLE_SERVICE)
 SET SERVEROUTPUT ON
-EXEC DBMS_UTILITY.COMPILE_SCHEMA(schema => USER, compile_all => FALSE);
-SELECT object_type, object_name FROM user_objects WHERE status = 'INVALID' ORDER BY 1, 2;
+BEGIN
+    FOR s IN (SELECT username FROM dba_users WHERE username LIKE 'WWI\_%' ESCAPE '\') LOOP
+        DBMS_UTILITY.COMPILE_SCHEMA(schema => s.username, compile_all => FALSE);
+    END LOOP;
+END;
+/
+SELECT owner, object_type, object_name FROM dba_objects
+ WHERE owner LIKE 'WWI\_%' ESCAPE '\' AND status = 'INVALID'
+ ORDER BY 1, 2, 3;
 EXIT SQL.SQLCODE
 "@
     $recompile | & $client -S -L /nolog
