@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Spec module for the SQL Server OLTP extract packages (ssis/02_sqlserver_extract).
 
-Twenty-one packages pull the WideWorldImporters OLTP database - the original
+Twenty-two packages pull the WideWorldImporters OLTP database - the original
 Sales/Warehouse/Application schemas plus the Shipping, Returns, Ecommerce and
 Integration schemas the estate grew later - into the ``raw`` schema of the
 staging database.
@@ -2252,6 +2252,104 @@ FROM    Application.TransactionTypes AS tt WITH (NOLOCK);"""
     return pkg
 
 
+# ---------------------------------------------------------------------------
+# Loyalty
+# ---------------------------------------------------------------------------
+
+
+def ext_sql_loyalty_ledger():
+    """Numeric-key incremental over the loyalty points ledger.
+
+    The ledger is append-only apart from the expiry sweep, which back-fills
+    ExpiredWhen on rows already landed, so the extract also re-reads the rows
+    that expired since the last run rather than relying on the key watermark
+    alone. APAC runs its own expiry calendar, which is why the lookback is a
+    parameter rather than a constant.
+    """
+    pkg = new_package(
+        "EXT_SQL_LoyaltyLedger",
+        "Numeric-key incremental over Loyalty.LoyaltyPointsLedger into "
+        "raw.SqlLoyaltyLedger, plus a lookback re-read of rows the expiry sweep "
+        "touched since the previous run. Points expiry rules differ by region, so "
+        "the region code travels with every ledger entry.",
+        source_system=SRC_OLTP,
+        connections=(CONN_OLTP, CONN_STAGING),
+        extra_variables=[("ExpiryLookbackDays", 7, "int"), ("SourceMaxLedgerId", 0, "int")],
+    )
+
+    cols = [
+        str_col("LoyaltyLedgerID", 50),
+        str_col("LoyaltyMemberID", 50),
+        str_col("CustomerID", 50),
+        str_col("ProgramCode", 30),
+        str_col("TierCode", 20),
+        str_col("EntryTypeCode", 20),
+        str_col("PointsDelta", 50),
+        str_col("PointsBalanceAfter", 50),
+        str_col("SourceInvoiceID", 50),
+        str_col("RedemptionReference", 50),
+        str_col("EntryWhen", 40),
+        str_col("ExpiryDate", 40),
+        str_col("RegionCode", 10),
+        str_col("LastEditedWhen", 40),
+    ]
+
+    sql = """SELECT  CONVERT(nvarchar(50), l.LoyaltyLedgerID)          AS LoyaltyLedgerID,
+        CONVERT(nvarchar(50), l.LoyaltyMemberID)          AS LoyaltyMemberID,
+        CONVERT(nvarchar(50), m.CustomerID)               AS CustomerID,
+        p.ProgramCode,
+        m.TierCode,
+        l.EntryTypeCode,
+        CONVERT(nvarchar(50), l.PointsDelta)              AS PointsDelta,
+        CONVERT(nvarchar(50), l.PointsRemaining)          AS PointsBalanceAfter,
+        CONVERT(nvarchar(50), l.SourceInvoiceID)          AS SourceInvoiceID,
+        l.SourceReference                                 AS RedemptionReference,
+        CONVERT(nvarchar(40), l.EntryWhen, 126)           AS EntryWhen,
+        CONVERT(nvarchar(40), l.ExpiresOnDate, 23)        AS ExpiryDate,
+        m.RegionCode,
+        CONVERT(nvarchar(40), ISNULL(l.ExpiredWhen, l.EntryWhen), 126) AS LastEditedWhen
+FROM    Loyalty.LoyaltyPointsLedger AS l WITH (NOLOCK)
+        INNER JOIN Loyalty.LoyaltyMembers AS m WITH (NOLOCK)
+            ON m.LoyaltyMemberID = l.LoyaltyMemberID
+        INNER JOIN Loyalty.LoyaltyPrograms AS p WITH (NOLOCK)
+            ON p.LoyaltyProgramID = m.LoyaltyProgramID
+WHERE   l.LoyaltyLedgerID > CAST(? AS bigint)
+   OR   l.ExpiredWhen >= DATEADD(day, -1 * CAST(? AS int), SYSDATETIME());"""
+
+    df = DataFlow("Extract Loyalty Ledger")
+    df.oledb_source("OLTP Loyalty.LoyaltyPointsLedger", CONN_OLTP, sql, cols, timeout=3600)
+    df.derived_column("Derive Audit Columns", audit_derivations(SRC_OLTP))
+    df.row_count("Count Ledger Entries", "User::RowsRead")
+    df.oledb_destination(
+        "raw SqlLoyaltyLedger",
+        CONN_STAGING,
+        "raw.SqlLoyaltyLedger",
+        batch_size=100000,
+    )
+
+    init = pkg.add(init_variables("@[User::RowsRead] = 0"))
+    start = pkg.add(log_package_start(pkg))
+    wm = pkg.add(get_watermark(object_name="Loyalty.LoyaltyPointsLedger"))
+    clear_lookback = pkg.add(
+        ExecuteSql(
+            "Clear Reread Window",
+            CONN_STAGING,
+            "DELETE FROM raw.SqlLoyaltyLedger "
+            "WHERE TRY_CONVERT(bigint, LoyaltyLedgerID) IN "
+            "      (SELECT TRY_CONVERT(bigint, LoyaltyLedgerID) FROM raw.SqlLoyaltyLedger "
+            "       WHERE TRY_CONVERT(datetime2(3), LastEditedWhen) >= "
+            "             DATEADD(day, -1 * ?, SYSUTCDATETIME()));",
+            parameter_bindings=[("User::ExpiryLookbackDays", 0, "LONG")],
+        )
+    )
+    extract = pkg.add(DataFlowTask(df))
+    setwm = pkg.add(set_watermark("Loyalty.LoyaltyPointsLedger"))
+    rows = pkg.add(log_row_count("raw.SqlLoyaltyLedger"))
+    done = pkg.add(log_package_success())
+    pkg.chain(init, start, wm, clear_lookback, extract, setwm, rows, done)
+    return pkg
+
+
 PACKAGE_BUILDERS = [
     ext_sql_orders,
     ext_sql_order_lines,
@@ -2268,6 +2366,7 @@ PACKAGE_BUILDERS = [
     ext_sql_returns,
     ext_sql_credit_notes,
     ext_sql_web_sessions,
+    ext_sql_loyalty_ledger,
     ext_sql_customer_transactions,
     ext_sql_supplier_transactions,
     ext_sql_people,

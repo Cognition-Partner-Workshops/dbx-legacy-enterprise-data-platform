@@ -147,95 +147,78 @@ checks *did* find and that remain open in the merged tree.
 
 ## 2. Static findings in the merged estate
 
-These were found by the checks and are open. They belong to the work packages
-that own the files, and WP13 records them rather than editing sibling-owned
-paths to make a check go green.
+The twelve build packages were merged, the deep checks were run over the whole
+tree, and a second pass closed what they found. All four deep checks
+(`source-to-target coverage`, `staging and warehouse orphans`, `package
+dependency graph`, `control-framework integration`) and
+`validation/static/run_all_checks.py` now report zero errors. What follows is
+what was closed, and what remains open as warnings.
 
-### Duplicate object definition (WP05 / WP06) - resolved during integration
+### Closed during integration
 
-The dimension and fact work packages each created
-`Integration.usp_EnsureUnknownMembers`, with different reserved-key
-conventions. The fact package's copy was removed at merge time and the
-dimension package's copy kept, because it is the one driven by
-`Integration.DimensionKeyRegistry` and it agrees with the reserved keys the
-dimension tables are seeded with (`-1` Unknown, `-2` Not Applicable). Neither
-body has been executed.
-
-### Unresolved source and target objects (18, WP08 / WP09)
-
-`check_source_to_target_coverage.py` reports 18 object references that resolve
-to nothing - not in the catalog, not created by any SQL file in the tree, not
-part of the Microsoft sample:
-
-- `stg.City`, `stg.CustomerCategory`, `stg.CustomerSegment`,
-  `stg.ProductCategory` - sources of four dimension loads.
-- `stg.CustomerTransaction`, `stg.DailyInventorySnapshot`,
-  `stg.DailySalesSnapshot`, `stg.GLPosting`, `stg.LoyaltyPoints`,
-  `stg.Movement`, `stg.OrderFulfilment`, `stg.Purchase`, `stg.PurchaseReceipt`,
-  `stg.StockHolding`, `stg.SupplierPayment`, `stg.SupplierTransaction`,
-  `stg.Transaction` - sources of thirteen fact loads.
-- `Aggregate.Inventory Health` - target of `INV_Load_Replenishment`, where the
-  catalog aggregate is named `Daily Inventory Health`.
-
-The fact and dimension packages name staging tables the staging work package
-did not create. Either the staging layer is missing seventeen tables or the
-packages are naming them wrongly; the two sides were built independently and
-never reconciled.
-
-### Staging objects with no writer or no reader (18 errors, 17 warnings, WP04 / WP08)
-
-`check_orphan_objects.py` over 196 staging and warehouse objects:
-
-- Read but never written: `ref.CodeCrosswalk`, `ref.Country`, `ref.Currency`,
-  `ref.FxRateDaily`, `ref.PostalFormatRule`, `ref.ReasonCode`, `ref.Region`,
-  `ref.TaxJurisdiction`, `ref.UnitOfMeasure`, `ref.UomConversion`,
-  `stg.Receipt`, `work.OrderLineEnriched`, `work.PurchaseLineEnriched`,
-  `work.SaleLineEnriched`, `raw.SqlLoyaltyLedger`,
-  `err.RejectedConstraintViolation`.
-- Never referenced at all: `ref.StatusCode`, `work.SupplierDedup`.
-
-The `ref.*` cluster is the significant one: ten reference tables that fifteen,
-twelve, nine and seven files respectively read from, and that no load in the
-tree populates. The weekly reference packages write into `Dimension.*` and the
-Oracle `raw` tables directly, so the `ref` snapshot layer was defined and then
-bypassed.
-
-Some of these may be populated by dynamic SQL that the checks cannot see. That
-possibility does not clear them; it means they need a human to look.
-
-### Control-framework gaps (5 errors, 92 warnings, WP04 / WP08 / WP10)
-
-`check_control_framework_integration.py`:
-
-- Five procedures are referenced but created nowhere under
-  `sqlserver/control/procedures`: `etl.usp_AssertRowCountTolerance`,
+- **Duplicate object definition (WP05 / WP06).** The dimension and fact packages
+  each created `Integration.usp_EnsureUnknownMembers` with different reserved-key
+  conventions. The fact package's copy was removed and the dimension package's
+  kept, because it is driven by `Integration.DimensionKeyRegistry` and agrees
+  with the reserved keys the dimension tables are seeded with (`-1` Unknown,
+  `-2` Not Applicable). Neither body has been executed.
+- **Seventeen missing staging tables (RP01).** The four dimension sources
+  (`stg.City`, `stg.CustomerCategory`, `stg.CustomerSegment`,
+  `stg.ProductCategory`) and thirteen fact sources (`stg.CustomerTransaction`
+  through `stg.Transaction`) that the loads read now exist in
+  `sqlserver/staging/`, each with a load procedure in the staging layer's style.
+- **The conformed reference layer (RP02).** The eleven `ref.*` tables that dozens
+  of files read had no writer; `sqlserver/reference/` now holds one
+  `ref.usp_Load<Object>` procedure per table, the effective-dated FX, tax and
+  postal rules, and the `ref.CodeCrosswalk` mapping with its unmapped-code
+  report. The weekly reference packages land through those procedures instead of
+  writing `Dimension.*` directly.
+- **Orphan staging and work objects (RP01).** `stg.Receipt`,
+  `work.SupplierDedup`, `err.RejectedConstraintViolation`, the three
+  `work.*Enriched` tables and `raw.SqlLoyaltyLedger` are now wired into the loads
+  that populate or consume them. `raw.SqlLoyaltyLedger` gained the extract that
+  lands it, `EXT_SQL_LoyaltyLedger`.
+- **Missing control procedures.** The five procedures packages referenced but
+  nothing created - `etl.usp_AssertRowCountTolerance`,
   `etl.usp_EvaluateDataQualityRules`, `etl.usp_LogReject`,
-  `etl.usp_LogRejectedRecordSet`, `etl.usp_PurgeControlHistory`. Some are
-  near-misses for procedures that do exist (`etl.usp_LogRejectedRecord`,
-  `etl.usp_AssertRowCountReconciliation`), which is how they got past review.
-- Catalog declarations disagree with the packages on disk: 30 extract packages
-  declare `etl.GetWatermark`/`etl.SetWatermark` that their `.dtsx` does not
-  reference, six maintenance packages declare `etl.PurgeControlHistory` they do
-  not reference, and `REF_Load_CodeTranslation` declares
-  `etl.GetConfigurationValue` it does not reference. The catalog's procedure
-  names also use a different convention (`etl.GetWatermark`) from the deployed
-  ones (`etl.usp_GetWatermark`).
-- 35 load procedures make no call into the `etl` control schema at all,
-  including all of the `Integration.usp_MigrateStaged*Data` family and
-  `Integration.usp_EnsureUnknownMembers`. Work they do is invisible to
-  `etl.PackageExecution` and to every operational view.
+  `etl.usp_LogRejectedRecordSet`, `etl.usp_PurgeControlHistory` - are defined in
+  `sqlserver/control/procedures/`, alongside the data-quality rule engine
+  (`04_tables_data_quality.sql`, `05_seed_data_quality_rules.sql`), the
+  reconciliation results table (`06_tables_reconciliation.sql`) and the
+  nineteen operational tables the error-handling, maintenance and file-ingestion
+  packages write (`07_tables_operations.sql`).
+- **Control naming and reject columns.** The catalog declared `etl.GetWatermark`
+  where the deployed name is `etl.usp_GetWatermark`; the catalog now carries the
+  deployed names. Four package spec modules wrote `etl.RejectedRecord` columns
+  that the table does not have (`RejectReasonDescription`, `SourceKey`,
+  `RejectedAtUtc`) and were corrected to `RejectReason`, `BusinessKey`,
+  `LoggedAtUtc`. `validation/checks/check_control_object_columns.py` was added so
+  this class of drift fails a check rather than surviving a review.
+- **Orchestration reachability (RP03).** `DQ_File_Screen`,
+  `ERR_Quarantine_BadFiles` and `ERR_Retry_FailedSteps` are now executed by the
+  masters that declare them as children, on the phases and failure paths where
+  they belong, and the three data-flow cycles have their intended ordering
+  declared in the orchestration rather than left to the schedule.
+- **`Aggregate.Inventory Health`.** `INV_Load_Replenishment` targeted a name the
+  warehouse does not define; the aggregate is `Aggregate.Daily Inventory Health`
+  and the package, catalog and reconciliation seed now agree.
 
-### Orchestration disagreements (WP10)
+### Open as warnings
 
-`extract_package_dependency_graph.py`:
+- **554 control-framework warnings.** Most are catalog declarations that a
+  package's `.dtsx` does not textually reference, and 35 load procedures - the
+  `Integration.usp_MigrateStaged*Data` family among them - that make no call into
+  the `etl` schema at all, so their work is invisible to `etl.PackageExecution`
+  and the operational views. That is legacy-realistic and deliberately left.
+- **29 source-to-target warnings.** Extract packages reading Microsoft
+  WideWorldImporters base-sample objects, which are outside the estate inventory
+  by design.
+- **17 orphan warnings and 5 package-graph warnings.** Objects consumed outside
+  this repository or through dynamic SQL the checks cannot see, and cross-window
+  data edges. Each needs a human, not a checker.
 
-- `ERR_Retry_FailedSteps` is executed by no master package.
-- `DQ_File_Screen`, `ERR_Quarantine_BadFiles` and `ERR_Retry_FailedSteps`
-  declare `parent: Master_Daily_ETL` in the catalog, but `Master_Daily_ETL`
-  contains no Execute Package Task that references them.
-- Three data-flow cycles exist (Customer 360, the data-quality cluster of 16
-  packages, and the referential screen/reject pair). None is an execute cycle;
-  all three are broken only by running the two halves in different windows.
+None of the closures above is evidence that anything runs. They mean the tree no
+longer contradicts itself.
 
 ---
 

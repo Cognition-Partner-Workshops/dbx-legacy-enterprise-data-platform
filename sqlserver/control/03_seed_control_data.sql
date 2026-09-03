@@ -87,7 +87,7 @@ USING (VALUES
     (N'Dimension.Supplier',            N'SCD Type 2 expands one source row into multiple versions.'),
     (N'Aggregate.Sales Daily',         N'Aggregation reduces the row count by design.'),
     (N'Aggregate.Sales Monthly',       N'Aggregation reduces the row count by design.'),
-    (N'Aggregate.Inventory Health',    N'Aggregation reduces the row count by design.'),
+    (N'Aggregate.Daily Inventory Health',    N'Aggregation reduces the row count by design.'),
     (N'Aggregate.Customer 360',        N'Aggregation reduces the row count by design.'),
     (N'Fact.Stock Holding',            N'Periodic snapshot generates rows independent of the source count.'),
     (N'Fact.Order Fulfilment',         N'Accumulating snapshot updates existing rows rather than inserting.')

@@ -785,6 +785,7 @@ def _sqlserver_extracts():
         ("EXT_SQL_Returns", "Returns.ReturnLines", "raw.SqlReturnLine", "incremental_key", "medium"),
         ("EXT_SQL_CreditNotes", "Returns.CreditNoteLines", "raw.SqlCreditNote", "incremental_key", "medium"),
         ("EXT_SQL_WebSessions", "Ecommerce.WebSessions", "raw.SqlWebSession", "date_window", "low"),
+        ("EXT_SQL_LoyaltyLedger", "Loyalty.LoyaltyPointsLedger", "raw.SqlLoyaltyLedger", "incremental_key", "medium"),
         ("EXT_SQL_CustomerTransactions", "Sales.CustomerTransactions", "raw.SqlInvoice", "incremental_key", "high"),
         ("EXT_SQL_SupplierTransactions", "Purchasing.SupplierTransactions", "raw.SqlInvoice", "incremental_key", "medium"),
         ("EXT_SQL_People", "Application.People", "raw.SqlOrder", "full", "medium"),
@@ -1197,7 +1198,7 @@ def _domain_packages():
     inventory = [
         ("INV_Load_DailySnapshot", ["work.InventoryPositionDaily"], ["Fact.Daily Inventory Snapshot"], "Daily stock position snapshot"),
         ("INV_Load_CycleCountVariance", ["stg.StockMovement"], ["Fact.Movement"], "Cycle-count variance posting"),
-        ("INV_Load_Replenishment", ["stg.StockItem"], ["Aggregate.Inventory Health"], "Replenishment suggestion refresh"),
+        ("INV_Load_Replenishment", ["stg.StockItem"], ["Aggregate.Daily Inventory Health"], "Replenishment suggestion refresh"),
         ("INV_Load_StockTransfer", ["stg.StockMovement"], ["Fact.Movement"], "Inter-site transfer movements"),
         ("INV_Reconcile_OnHand", ["Fact.Stock Holding"], ["etl.ReconciliationResult"], "DW on-hand vs OLTP on-hand tie-out"),
     ]

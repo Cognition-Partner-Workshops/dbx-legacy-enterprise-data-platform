@@ -40,6 +40,7 @@ SQL_LAYERS = (
     ("sqlserver/control", "control"),
     ("sqlserver/oltp", "oltp"),
     ("sqlserver/staging", "staging"),
+    ("sqlserver/reference", "reference"),
     ("sqlserver/warehouse/dimensions", "dw-dimension"),
     ("sqlserver/warehouse/facts", "dw-fact"),
     ("sqlserver/warehouse/aggregates", "dw-aggregate"),

@@ -371,7 +371,7 @@ def build_inv_load_replenishment():
     publish = pkg.add(ExecuteSql(
         "Publish Inventory Health",
         CONN_DW,
-        "MERGE Aggregate.[Inventory Health] AS target\n"
+        "MERGE Aggregate.[Daily Inventory Health] AS target\n"
         "USING (SELECT WarehouseSiteCode, RegionCode,\n"
         "              COUNT(*) AS SuggestionCount,\n"
         "              SUM(CASE WHEN IsStockoutRisk = 1 THEN 1 ELSE 0 END) AS StockoutRiskCount,\n"
@@ -395,7 +395,7 @@ def build_inv_load_replenishment():
         result_type="ResultSetType_SingleRow",
         result_bindings=[("0", "User::StockoutRiskCount")],
     ))
-    counts = pkg.add(log_row_count("Aggregate.Inventory Health"))
+    counts = pkg.add(log_row_count("Aggregate.Daily Inventory Health"))
     done = pkg.add(log_package_success())
 
     pkg.link(start, clear)
