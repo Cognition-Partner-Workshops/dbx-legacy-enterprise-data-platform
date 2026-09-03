@@ -14,7 +14,7 @@
     was agreed with the customer to stay put.
 */
 IF COL_LENGTH(N'Sales.OrderLines', N'PriceListLineID') IS NULL
-    ALTER TABLE [Sales].[OrderLines] ADD [PriceListLineID] INT NULL;
+    ALTER TABLE [Sales].[OrderLines] ADD [PriceListLineID] BIGINT NULL;
 GO
 
 IF COL_LENGTH(N'Sales.OrderLines', N'ListUnitPrice') IS NULL

@@ -108,12 +108,18 @@ BEGIN
         AND @DaysSinceSale > rr.[ReturnWindowDays]
         AND @OverrideWindow = 0;
 
+    -- The function returns the fee in currency; the line carries the percent it
+    -- works out to, which is what the credit note and the customer letter quote.
     UPDATE rl
-    SET rl.[RestockingPercent] = [Returns].[ufn_RestockingFee](rl.[ReturnReasonID], @RegionCode, @DaysSinceSale),
+    SET rl.[RestockingPercent] = CASE WHEN rl.[GrossCreditAmount] > 0
+                                      THEN CONVERT(DECIMAL (5, 2), ROUND(fee.[Amount] * 100.0 / rl.[GrossCreditAmount], 2))
+                                      ELSE 0 END,
         rl.[LineStatus] = N'AUTHORIZED',
         rl.[LastEditedBy] = @AuthorizedByPersonID,
         rl.[LastEditedWhen] = SYSDATETIME()
     FROM [Returns].[ReturnLines] AS rl
+        CROSS APPLY (VALUES ([Returns].[ufn_RestockingFee](rl.[ReturnReasonID], @RegionCode,
+                                                           rl.[GrossCreditAmount], @DaysSinceSale))) AS fee ([Amount])
     WHERE rl.[ReturnAuthorizationID] = @ReturnAuthorizationID
         AND rl.[LineStatus] = N'AUTHORIZED';
 

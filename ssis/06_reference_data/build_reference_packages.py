@@ -945,7 +945,6 @@ def ref_load_date_dimension():
          str_col("WeekendFlag", 1)),
         ("WorkingDayFlag", 'DayOfWeekNumber == 1 || DayOfWeekNumber == 7 ? "N" : "Y"',
          str_col("WorkingDayFlag", 1)),
-        ("DateKey", '(CalendarYear * 10000) + (CalendarMonth * 100) + CalendarDay', int_col("DateKey")),
         ("LineageKey", '(DT_WSTR,40)"REF_Load_DateDimension"', str_col("LineageKey", 40)),
     ])
     flow.conditional_split("Screen Calendar", [

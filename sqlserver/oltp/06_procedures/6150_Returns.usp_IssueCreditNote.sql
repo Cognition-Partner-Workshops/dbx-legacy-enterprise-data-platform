@@ -128,7 +128,7 @@ BEGIN
     (
         [CreditNoteID], [LineNumber], [CreditLineType], [ReturnLineID], [StockItemID],
         [Description], [Quantity], [UnitCreditAmount], [TaxRatePercent],
-        [LineNetAmount], [LineTaxAmount], [GeneralLedgerCode]
+        [GeneralLedgerCode]
     )
     SELECT
         @CreditNoteID,
@@ -138,17 +138,11 @@ BEGIN
         rl.[StockItemID],
         N'Credit for returned goods on RMA line ' + CONVERT(NVARCHAR (12), rl.[LineNumber]),
         rl.[QuantityAccepted],
-        rl.[UnitPriceAtSale],
+        -- LineNetAmount and LineTaxAmount are computed from quantity, unit
+        -- credit and tax rate, so the restocking deduction has to reach them
+        -- through the unit credit rather than being written over the top.
+        ROUND(rl.[UnitPriceAtSale] * (1 - ISNULL(rl.[RestockingPercent], 0) / 100.0), 2),
         rl.[TaxRatePercentAtSale],
-        ROUND(rl.[QuantityAccepted] * rl.[UnitPriceAtSale]
-              * (1 - ISNULL(rl.[RestockingPercent], 0) / 100.0), 2),
-        CASE @RegionCode
-            WHEN N'NA' THEN ROUND(rl.[QuantityAccepted] * rl.[UnitPriceAtSale] * rl.[TaxRatePercentAtSale] / 100.0, 2)
-            WHEN N'EU' THEN ROUND(rl.[QuantityAccepted] * rl.[UnitPriceAtSale]
-                                  * (1 - ISNULL(rl.[RestockingPercent], 0) / 100.0)
-                                  * rl.[TaxRatePercentAtSale] / 100.0, 2)
-            ELSE ROUND(rl.[QuantityAccepted] * rl.[UnitPriceAtSale] * rl.[TaxRatePercentAtSale] / 100.0, 2)
-        END,
         CASE @RegionCode WHEN N'EU' THEN N'4001-EU' WHEN N'APAC' THEN N'4001-AP' ELSE N'4001-NA' END
     FROM [Returns].[ReturnLines] AS rl
     WHERE rl.[ReturnAuthorizationID] = @ReturnAuthorizationID

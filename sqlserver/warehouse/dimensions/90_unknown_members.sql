@@ -1,7 +1,9 @@
 /*
     Object        : Reserved (unknown / not applicable / invalid / inferred) dimension members
     Deploy target : WideWorldImportersDW
-    Deploy order  : 90 (after every Dimension.* table script, before any fact load)
+    Deploy order  : 90 (after 00_dimension_schemas_and_sequences.sql,
+                    01_dimension_key_registry.sql and every Dimension.*.sql table
+                    script, before any fact load)
     Depends on    : every dimension table in sqlserver/warehouse/dimensions,
                     Integration.DimensionKeyRegistry
     Called by     : deployment, and by Integration.usp_EnrichInferredMembers when it
@@ -173,22 +175,26 @@ GO
 /* -------------------------------------------------------------------- Date */
 DECLARE @ValidFrom  DATETIME2(7) = CONVERT(DATETIME2(7), N'1900-01-01T00:00:00');
 
-IF NOT EXISTS (SELECT 1 FROM [Dimension].[Date] WHERE [DateKey] = -1)
+/*
+    The date dimension keys on [Date], so its reserved members are sentinel dates
+    rather than negative keys: 1900-01-01 unknown, 1900-01-02 not applicable.
+*/
+IF NOT EXISTS (SELECT 1 FROM [Dimension].[Date] WHERE [Date] = CONVERT(DATE, N'1900-01-01'))
     INSERT INTO [Dimension].[Date]
-        ([Date], [DateKey], [Day Number], [Day], [Day of Week], [Day of Week Number],
+        ([Date], [Day Number], [Day], [Day of Week], [Day of Week Number],
          [Month], [Short Month], [Calendar Month Number], [Calendar Quarter Number],
          [Calendar Year], [Is Reserved Member], [Reserved Member Description])
     VALUES
-        (CONVERT(DATE, @ValidFrom), -1, 0, N'Unknown', N'Unknown', 0, N'Unknown', N'UNK',
+        (CONVERT(DATE, @ValidFrom), 0, N'Unknown', N'Unknown', 0, N'Unknown', N'UNK',
          0, 0, 1900, 1, N'Unknown date');
 
-IF NOT EXISTS (SELECT 1 FROM [Dimension].[Date] WHERE [DateKey] = -2)
+IF NOT EXISTS (SELECT 1 FROM [Dimension].[Date] WHERE [Date] = CONVERT(DATE, N'1900-01-02'))
     INSERT INTO [Dimension].[Date]
-        ([Date], [DateKey], [Day Number], [Day], [Day of Week], [Day of Week Number],
+        ([Date], [Day Number], [Day], [Day of Week], [Day of Week Number],
          [Month], [Short Month], [Calendar Month Number], [Calendar Quarter Number],
          [Calendar Year], [Is Reserved Member], [Reserved Member Description])
     VALUES
-        (CONVERT(DATE, N'1900-01-02'), -2, 0, N'N/A', N'N/A', 0, N'N/A', N'N/A',
+        (CONVERT(DATE, N'1900-01-02'), 0, N'N/A', N'N/A', 0, N'N/A', N'N/A',
          0, 0, 1900, 1, N'Not applicable - no date for this role');
 
 IF NOT EXISTS (SELECT 1 FROM [Dimension].[Time] WHERE [Time Key] = -1)

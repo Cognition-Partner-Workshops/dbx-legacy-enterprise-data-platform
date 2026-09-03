@@ -226,6 +226,19 @@ BEGIN
 END;
 GO
 
+IF OBJECT_ID(N'etl.ReconciliationExemption', N'U') IS NULL
+BEGIN
+    CREATE TABLE etl.ReconciliationExemption
+    (
+        ExemptionId     INT             NOT NULL IDENTITY(1,1),
+        ObjectName      NVARCHAR(200)   NOT NULL,
+        Reason          NVARCHAR(500)   NOT NULL,
+        CONSTRAINT PK_ReconciliationExemption PRIMARY KEY CLUSTERED (ExemptionId),
+        CONSTRAINT UQ_ReconciliationExemption UNIQUE (ObjectName)
+    );
+END;
+GO
+
 IF OBJECT_ID(N'etl.PackageDependency', N'U') IS NULL
 BEGIN
     CREATE TABLE etl.PackageDependency

@@ -20,8 +20,15 @@ import sys
 
 import check_control_framework_integration
 import check_control_object_columns
+import check_deployment_order
+import check_oracle_grants
+import check_oracle_partitions
+import check_oracle_seed_values
+import check_oracle_storage
+import check_oracle_view_columns
 import check_orphan_objects
 import check_source_to_target_coverage
+import check_sqlserver_columns
 import extract_package_dependency_graph
 
 CHECKS = (
@@ -30,6 +37,13 @@ CHECKS = (
     ("package dependency graph", extract_package_dependency_graph),
     ("control-framework integration", check_control_framework_integration),
     ("control object columns", check_control_object_columns),
+    ("Oracle view to table columns", check_oracle_view_columns),
+    ("Oracle cross-schema grants", check_oracle_grants),
+    ("Oracle tablespaces and quotas", check_oracle_storage),
+    ("Oracle seed values", check_oracle_seed_values),
+    ("Oracle partition maintenance", check_oracle_partitions),
+    ("SQL Server column and routine contracts", check_sqlserver_columns),
+    ("SQL Server deployment order", check_deployment_order),
 )
 
 

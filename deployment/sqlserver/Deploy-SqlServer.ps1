@@ -106,12 +106,67 @@ function Invoke-SqlScript {
     }
 
     Write-WwiLog "RUN    [$Database] $relative"
+    # No -X1: the ODBC sqlcmd disables SQLCMDPASSWORD under -X, and the password
+    # is only ever passed through that variable.
     $arguments = @('-S', $serverInstance, '-U', $env:SQLSERVER_USER, '-d', $Database,
                    '-b', '-I', '-j') + (Get-SqlcmdVariableArguments) + @('-i', $Path)
     & sqlcmd @arguments
     if ($LASTEXITCODE -ne 0) {
         Stop-WwiWithError "$relative failed against $Database (exit code $LASTEXITCODE)."
     }
+}
+
+# A script's header may name the scripts it has to follow, as
+# "Deploy order : after etl.usp_LogRejectedRecord.sql", and may use a wildcard
+# for a whole family, as "after Dimension.*.sql". Name order alone puts several
+# callers ahead of the procedures they call, which leaves the estate deployed
+# but full of unresolved references.
+function Get-DeploymentOrder {
+    param([Parameter(Mandatory)][System.IO.FileInfo[]] $Files)
+
+    $byName = @{}
+    foreach ($file in $Files) { $byName[$file.Name] = $file }
+
+    $prerequisites = @{}
+    foreach ($file in $Files) {
+        $names = @()
+        $header = (Get-Content -Path $file.FullName -TotalCount 20) -join "`n"
+        $field = [regex]::Match($header, 'Deploy order\s*:\s*(.*?)(?:\n\s*\w[\w ]*:|\z)',
+                                [Text.RegularExpressions.RegexOptions]::Singleline)
+        if ($field.Success) {
+            # Anything after "before" names a follower, not a prerequisite.
+            $after = [regex]::Split($field.Groups[1].Value, '(?i)\bbefore\b')[0]
+            # Half the warehouse scripts are named "Dimension.Buying Group.sql",
+            # so each candidate's own name is looked for in the header rather
+            # than the header being tokenised on whitespace.
+            $names += @($byName.Keys | Where-Object {
+                $_ -ne $file.Name -and $after.Contains($_) })
+            foreach ($match in [regex]::Matches($after, '[\w.]*\*[\w.*]*\.sql')) {
+                $token = $match.Value
+                $names += @($byName.Keys | Where-Object { $_ -like $token -and $_ -ne $file.Name })
+            }
+            $names = @($names | Select-Object -Unique)
+        }
+        $prerequisites[$file.Name] = $names
+    }
+
+    $ordered = New-Object System.Collections.Generic.List[System.IO.FileInfo]
+    $emitted = @{}
+    $visiting = @{}
+
+    function Add-File {
+        param([System.IO.FileInfo] $File)
+
+        if ($emitted.ContainsKey($File.Name) -or $visiting.ContainsKey($File.Name)) { return }
+        $visiting[$File.Name] = $true
+        foreach ($name in $prerequisites[$File.Name]) { Add-File -File $byName[$name] }
+        $visiting.Remove($File.Name)
+        $emitted[$File.Name] = $true
+        $ordered.Add($File)
+    }
+
+    foreach ($file in ($Files | Sort-Object FullName)) { Add-File -File $file }
+    return $ordered
 }
 
 function Invoke-SqlDirectory {
@@ -122,9 +177,9 @@ function Invoke-SqlDirectory {
         Write-WwiLog "$Relative is not present; skipping." 'WARN'
         return
     }
-    Get-ChildItem -Path $directory -Filter '*.sql' -Recurse -File |
-        Where-Object { $_.Name -ne '90_install_all_agent_jobs.sql' } |
-        Sort-Object FullName |
+    $files = Get-ChildItem -Path $directory -Filter '*.sql' -Recurse -File |
+        Where-Object { $_.Name -ne '90_install_all_agent_jobs.sql' }
+    Get-DeploymentOrder -Files $files |
         ForEach-Object { Invoke-SqlScript -Database $Database -Path $_.FullName }
 }
 

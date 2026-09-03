@@ -31,7 +31,7 @@ CREATE TABLE WWI_PROC.PURCHASE_ORDER_LINE
     LINE_AMT                NUMBER(15,5)    NOT NULL,
     DISCOUNT_PCT            NUMBER(5,2)     DEFAULT 0 NOT NULL,
     LINE_CURR_CD            VARCHAR2(3)     NOT NULL,
-    TAX_CODE_CD             VARCHAR2(8),
+    TAX_CODE_CD             VARCHAR2(12),
     TAX_RATE_PCT            NUMBER(7,5),
     TAX_AMT                 NUMBER(15,5)    DEFAULT 0 NOT NULL,
     RECEIVED_QTY            NUMBER(14,4)    DEFAULT 0 NOT NULL,

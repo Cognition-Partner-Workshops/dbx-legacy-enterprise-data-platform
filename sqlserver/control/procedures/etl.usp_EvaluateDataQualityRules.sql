@@ -1,7 +1,7 @@
 /*
     Object        : [etl].[usp_EvaluateDataQualityRules]
     Deploy target : WWI_Staging and WideWorldImportersDW
-    Deploy order  : after 04_tables_data_quality.sql
+    Deploy order  : after 04_tables_data_quality.sql and etl.usp_LogError.sql
     Depends on    : etl.DataQualityRule, etl.DataQualityResult,
                     etl.DataQualityRuleException, etl.usp_LogError
     Called by     : the DQ_* SSIS packages (via the "Evaluate Rules" Execute SQL

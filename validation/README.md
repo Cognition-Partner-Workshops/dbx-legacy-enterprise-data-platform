@@ -8,6 +8,7 @@ live estate and have never been pointed at one.
 | `validation/static/run_all_checks.py` | well-formedness and convention checks over the checked-in files | no |
 | `validation/checks/` | deeper structural analysis: coverage, orphans, the package graph, control-framework wiring | no |
 | `validation/static/run_negative_fixtures.py` | proves the static checks fail on deliberately malformed copies of real artifacts | no |
+| `validation/checks/run_check_fixtures.py` | the same idea for the deep checks: one injected defect per fixture, drawn from the defect classes a live deployment has actually hit | no |
 | `validation/runtime/` | SQL an operator would run *after* a deployment, to see whether the estate actually behaves | yes - and it has not been run |
 
 Everything under `validation/static` and `validation/checks` is offline. No
@@ -24,6 +25,7 @@ python3 validation/checks/run_deep_checks.py                      # all four dee
 python3 validation/checks/check_source_to_target_coverage.py --json
 python3 validation/checks/extract_package_dependency_graph.py --mermaid
 python3 validation/static/run_negative_fixtures.py                # negative fixtures
+python3 validation/checks/run_check_fixtures.py                   # deep-check fixtures
 ```
 
 `run_negative_fixtures.py` copies a real project, package, connection manager
@@ -75,6 +77,49 @@ estate calls actually created under `sqlserver/control/procedures`.
 Every column an `INSERT` or an `EXEC` names on a control table or routine has
 to exist on it.
 
+### `check_oracle_view_columns.py`
+
+Resolves every column a view under `oracle/views` selects against the columns
+the base table actually declares, following schema-qualified references across
+`oracle/tables` and `oracle/reference`.
+
+### `check_oracle_grants.py`
+
+A view only compiles if its owner holds a *direct* `SELECT` on every object it
+reads in another schema - a grant made through a role does not count. Every
+cross-schema reference has to be matched by a direct grant in `oracle/ddl` or
+`oracle/tables`.
+
+### `check_oracle_storage.py`
+
+Every tablespace a table or index names has to be created, and the owning
+schema has to hold a quota on it.
+
+### `check_oracle_seed_values.py`
+
+Every literal in a reference or seed `INSERT` has to fit the column it is
+written to, and no `NOT NULL` column may be left without a value.
+
+### `check_oracle_partitions.py`
+
+The partition-maintenance runbook may only `SPLIT` partitions that exist, on
+range-partitioned tables, with a `DATE` boundary expression, keeping the tail
+partition's name.
+
+### `check_sqlserver_columns.py`
+
+Column and routine contracts on the SQL Server side: `INSERT` column lists,
+index columns, foreign-key datatype compatibility, writes to computed columns,
+and scalar-function argument counts. Insert-column drift that predates the
+check is listed in `sqlserver_column_backlog.txt` and reported as warnings, so
+new drift is an error while the backlog stays visible.
+
+### `check_deployment_order.py`
+
+Reproduces the ordering the deployment drivers derive from the `Deploy order`
+headers offline, and asserts no script reads or writes an object a later script
+creates.
+
 ## What these checks can establish
 
 - The XML parses, the names follow the conventions, nothing is defined twice.
@@ -112,7 +157,8 @@ what has not been proven.
 
 ## Findings the deep checks currently report
 
-`python3 validation/checks/run_deep_checks.py` currently comes back clean, as
-does `run_all_checks.py`. That is a statement about structure only - see "What
+`python3 validation/checks/run_deep_checks.py` currently comes back clean apart
+from the insert-column backlog it reports as warnings, as does
+`run_all_checks.py`. That is a statement about structure only - see "What
 these checks cannot establish" above, and `docs/known-unvalidated-items.md`
 for the estate's standing ledger of what has not been proven.

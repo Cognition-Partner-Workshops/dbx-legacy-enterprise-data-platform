@@ -3,7 +3,8 @@
 
     Deploy target : WideWorldImportersStaging
     Called by     : Master_Daily_ETL final control container, AUD_* audit packages
-    Depends on    : etl.RowCountAudit, etl.PackageExecution, etl.ErrorLog, etl.Configuration
+    Depends on    : etl.RowCountAudit, etl.PackageExecution, etl.ErrorLog,
+                    etl.Configuration, etl.ReconciliationExemption
 
     Static balance check across a batch: for every audited object, rows read must
     equal rows landed plus rows rejected, within the configured absolute and
@@ -14,19 +15,6 @@
     This is an arithmetic consistency check over recorded counts. It does not,
     and cannot, prove that the values loaded are correct.
 */
-IF OBJECT_ID(N'etl.ReconciliationExemption', N'U') IS NULL
-BEGIN
-    CREATE TABLE etl.ReconciliationExemption
-    (
-        ExemptionId     INT             NOT NULL IDENTITY(1,1),
-        ObjectName      NVARCHAR(200)   NOT NULL,
-        Reason          NVARCHAR(500)   NOT NULL,
-        CONSTRAINT PK_ReconciliationExemption PRIMARY KEY CLUSTERED (ExemptionId),
-        CONSTRAINT UQ_ReconciliationExemption UNIQUE (ObjectName)
-    );
-END;
-GO
-
 IF OBJECT_ID(N'etl.usp_AssertRowCountReconciliation', N'P') IS NOT NULL
     DROP PROCEDURE etl.usp_AssertRowCountReconciliation;
 GO

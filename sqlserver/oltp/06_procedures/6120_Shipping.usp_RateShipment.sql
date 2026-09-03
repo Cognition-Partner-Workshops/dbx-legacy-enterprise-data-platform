@@ -73,9 +73,15 @@ BEGIN
     SET @ChargeableKg = CASE WHEN ISNULL(@VolumetricKg, 0) > ISNULL(@GrossWeightKg, 0)
                              THEN @VolumetricKg ELSE @GrossWeightKg END;
 
+    -- The chargeable weight is already the greater of gross and volumetric, so
+    -- the rate card is asked for it directly and the function's own volumetric
+    -- step is left out by passing no package dimensions.
     SET @BaseFreight = [Shipping].[ufn_FreightCost](@CarrierID, @ServiceLevelCode,
                                                     @OriginZoneCode, @DestinationZoneCode,
-                                                    @ChargeableKg, @IsResidential);
+                                                    @ChargeableKg,
+                                                    NULL, NULL, NULL,
+                                                    @IsResidential,
+                                                    CONVERT(DATE, SYSDATETIME()));
 
     SELECT
         @FuelPercent = ISNULL(car.[FuelSurchargePercent], 0)

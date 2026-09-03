@@ -104,15 +104,63 @@ run_script() {
     local var_args=()
     while IFS= read -r -d '' arg; do var_args+=("${arg}"); done < <(build_var_args)
 
-    # -b makes sqlcmd exit non-zero on error, -I enables quoted identifiers,
-    # -X1 disables the startup script and interactive commands.
+    # -b makes sqlcmd exit non-zero on error, -I enables quoted identifiers.
+    # -X is not passed: it suppresses the SQLCMDPASSWORD the login relies on.
     sqlcmd -S "${SERVER}" -U "${SQLSERVER_USER}" -d "${database}" \
-           -b -I -X1 -j "${var_args[@]}" -i "${file}" \
+           -b -I -j "${var_args[@]}" -i "${file}" \
         || wwi_fail "${relative} failed against ${database}."
 }
 
+# A script header may name the scripts it has to follow, as
+# "Deploy order : after etl.usp_LogRejectedRecord.sql", and may use a wildcard
+# for a whole family, as "after Dimension.*.sql". Name order alone puts several
+# callers ahead of the procedures they call, which leaves the estate deployed
+# but full of unresolved references.
+emit_with_prerequisites() {
+    local sql_file="$1"
+    local base
+    base="$(basename "${sql_file}")"
+
+    case " ${EMITTED} " in *" ${base} "*) return 0 ;; esac
+    case " ${VISITING} " in *" ${base} "*) return 0 ;; esac
+    VISITING="${VISITING} ${base}"
+
+    local header prerequisite prerequisite_path candidate
+    header="$(sed -n '1,20p' "${sql_file}" \
+            | awk '/Deploy order/ { inside = 1; print; next }
+                   inside && /^[[:space:]]*[A-Za-z][A-Za-z ]*:/ { inside = 0 }
+                   inside { print }' \
+            | sed 's/[Bb]efore .*//')"
+
+    # Half the warehouse scripts are named "Dimension.Buying Group.sql", so the
+    # header is searched for each candidate's own name rather than tokenised on
+    # whitespace, and wildcards are matched separately.
+    for prerequisite_path in "${DIRECTORY_FILES[@]}"; do
+        candidate="$(basename "${prerequisite_path}")"
+        [[ "${candidate}" == "${base}" ]] && continue
+        if [[ "${header}" == *"${candidate}"* ]]; then
+            emit_with_prerequisites "${prerequisite_path}"
+        fi
+    done
+    for prerequisite in $(printf '%s\n' "${header}" \
+            | grep -o '[A-Za-z0-9_.]*[*][A-Za-z0-9_.*]*\.sql' | sort -u); do
+        for prerequisite_path in "${DIRECTORY_FILES[@]}"; do
+            candidate="$(basename "${prerequisite_path}")"
+            [[ "${candidate}" == "${base}" ]] && continue
+            # shellcheck disable=SC2053 - the pattern side holds the wildcard
+            if [[ "${candidate}" == ${prerequisite} ]]; then
+                emit_with_prerequisites "${prerequisite_path}"
+            fi
+        done
+    done
+
+    VISITING="${VISITING% ${base}}"
+    EMITTED="${EMITTED} ${base}"
+    run_script "${DATABASE}" "${sql_file}"
+}
+
 run_directory() {
-    local database="$1"
+    DATABASE="$1"
     local directory="$2"
 
     if [[ ! -d "${directory}" ]]; then
@@ -120,11 +168,19 @@ run_directory() {
         return 0
     fi
 
+    DIRECTORY_FILES=()
     while IFS= read -r -d '' sql_file; do
         # The agent stage has its own :r driver; do not run its members twice.
         [[ "$(basename "${sql_file}")" == 90_install_all_agent_jobs.sql ]] && continue
-        run_script "${database}" "${sql_file}"
+        DIRECTORY_FILES+=("${sql_file}")
     done < <(find "${directory}" -maxdepth 2 -type f -name '*.sql' -print0 | sort -z)
+
+    EMITTED=""
+    VISITING=""
+    local file
+    for file in "${DIRECTORY_FILES[@]}"; do
+        emit_with_prerequisites "${file}"
+    done
 }
 
 stage_control() {
