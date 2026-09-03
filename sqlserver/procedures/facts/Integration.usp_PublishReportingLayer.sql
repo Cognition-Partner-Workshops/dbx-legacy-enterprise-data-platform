@@ -153,10 +153,10 @@ BEGIN
             @RejectRowCount     = @FailedRules;
 
         IF @OwnsExecution = 1
+            DECLARE @StatusValue NVARCHAR(200) = CASE WHEN @FailedRules = 0 THEN N'Succeeded' ELSE N'Warning' END;
             EXECUTE etl.usp_LogPackageEnd
                 @PackageExecutionId = @PackageExecutionId,
-                @Status             = CASE WHEN @FailedRules = 0
-                                           THEN N'Succeeded' ELSE N'Warning' END,
+                @Status             = @StatusValue,
                 @RowsUpdated        = @UpdateRowCount,
                 @RowsRejected       = @FailedRules;
     END TRY
@@ -169,11 +169,12 @@ BEGIN
             DEALLOCATE refresh_cursor;
         END;
 
+        DECLARE @ErrorNumber INT = ERROR_NUMBER();
         EXECUTE etl.usp_LogError
             @PackageExecutionId = @PackageExecutionId,
             @BatchId            = @BatchId,
             @ErrorSeverity      = N'Error',
-            @ErrorCode          = ERROR_NUMBER(),
+            @ErrorCode          = @ErrorNumber,
             @SourceName         = N'Report.PublishState',
             @SourceComponent    = N'Publish',
             @ProcedureName      = N'Integration.usp_PublishReportingLayer',

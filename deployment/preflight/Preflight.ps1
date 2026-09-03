@@ -18,7 +18,7 @@ param(
     [string] $Stage = 'all'
 )
 
-. (Join-Path $PSScriptRoot '..' 'lib' 'Common.ps1')
+. (Join-Path (Join-Path (Join-Path $PSScriptRoot '..') 'lib') 'Common.ps1')
 $script:WwiLogPrefix = 'wwi-preflight'
 
 $repoRoot = Get-WwiRepositoryRoot
@@ -57,6 +57,11 @@ if ($Stage -in @('all', 'oracle')) {
     foreach ($v in @('ORACLE_HOST', 'ORACLE_PORT', 'ORACLE_SERVICE', 'ORACLE_USER', 'ORACLE_PASSWORD')) {
         Add-Check "$v is set" ([scriptblock]::Create("Test-EnvVar '$v'"))
     }
+    # oracle/ddl/03_create_schemas.sql substitutes one per schema account.
+    foreach ($v in @('WWI_MDM_SECRET', 'WWI_PROC_SECRET', 'WWI_FIN_SECRET',
+                     'WWI_REF_SECRET', 'WWI_AUDIT_SECRET', 'WWI_EXTRACT_SECRET')) {
+        Add-Check "$v is set" ([scriptblock]::Create("Test-EnvVar '$v'"))
+    }
     Add-Check 'oracle/ source tree present' { Test-RepoPath 'oracle' }
 }
 
@@ -81,10 +86,14 @@ if ($Stage -in @('all', 'ssis')) {
     Add-Check 'SqlServer PowerShell module available' {
         [bool] (Get-Module -ListAvailable -Name SqlServer)
     }
-    foreach ($v in @('SSIS_SERVER', 'SSIS_FOLDER', 'SSIS_PROJECT')) {
+    foreach ($v in @('SSIS_SERVER', 'SSIS_FOLDER')) {
         Add-Check "$v is set" ([scriptblock]::Create("Test-EnvVar '$v'"))
     }
     Add-Check 'ssis/ project tree present' { Test-RepoPath 'ssis' }
+    Add-Check 'ssis/ contains at least one .dtproj' {
+        [bool] (Get-ChildItem -Path (Join-Path $repoRoot 'ssis') -Filter '*.dtproj' -Recurse -File |
+                Where-Object { $_.FullName -notmatch '\\obj\\' } | Select-Object -First 1)
+    }
 }
 
 Write-Host 'Landing zone'

@@ -163,13 +163,14 @@ BEGIN
 
         COMMIT TRANSACTION;
 
+        DECLARE @RejectRowCountValue BIGINT = @CandidateRows - @SurvivorRows;
         EXEC etl.usp_LogRowCount
             @PackageExecutionId = @PackageExecutionId,
             @ObjectName         = @ObjectName,
             @SourceRowCount     = @SourceRows,
             @TargetRowCount     = @CandidateRows,
             @InsertRowCount     = @CandidateRows,
-            @RejectRowCount     = @CandidateRows - @SurvivorRows;
+            @RejectRowCount     = @RejectRowCountValue;
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0

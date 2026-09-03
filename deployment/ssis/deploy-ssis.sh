@@ -6,7 +6,8 @@
 # Integration Services tooling, so this script covers the two parts that do not
 # need it:
 #
-#   * deploying a pre-built .ispac through SSISDB.catalog.deploy_project;
+#   * deploying every pre-built .ispac through SSISDB.catalog.deploy_project,
+#     one catalogue project per area project;
 #   * creating the catalogue environment and binding parameters, from the
 #     rendered SQL in deployment/ssis/environments/.
 #
@@ -15,26 +16,26 @@
 #
 # Nothing here has been executed against an SSIS catalogue.
 #
-# Usage: deployment/ssis/deploy-ssis.sh [--dry-run] [--ispac PATH] [--skip-project]
+# Usage: deployment/ssis/deploy-ssis.sh [--dry-run] [--ispac PATH]... [--skip-project]
 # ---------------------------------------------------------------------------
 
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 WWI_LOG_PREFIX="wwi-deploy-ssis"
 
-ISPAC_PATH=""
+ISPAC_PATHS=()
 SKIP_PROJECT=0
 
 while (( $# > 0 )); do
     case "$1" in
         --dry-run|--what-if) DRY_RUN=1; shift ;;
-        --ispac) ISPAC_PATH="${2:-}"; shift 2 ;;
+        --ispac) ISPAC_PATHS+=("${2:-}"); shift 2 ;;
         --skip-project) SKIP_PROJECT=1; shift ;;
         --help|-h) sed -n '2,19p' "${BASH_SOURCE[0]}"; exit 0 ;;
         *) wwi_fail "unknown argument '$1'." ;;
     esac
 done
 
-wwi_require_env SSIS_SERVER SSIS_FOLDER SSIS_PROJECT SQLSERVER_USER SQLSERVER_PASSWORD \
+wwi_require_env SSIS_SERVER SSIS_FOLDER SQLSERVER_USER SQLSERVER_PASSWORD \
                 ORACLE_PASSWORD
 wwi_confirm_prod
 wwi_require_tool sqlcmd "Install the mssql-tools package."
@@ -46,7 +47,11 @@ ENV_SQL="${REPO_ROOT}/deployment/ssis/environments/${ENV_LOWER}_environment.sql"
 
 export SQLCMDPASSWORD="${SQLSERVER_PASSWORD}"
 
-[[ -z "${ISPAC_PATH}" ]] && ISPAC_PATH="${REPO_ROOT}/artifacts/${SSIS_PROJECT}.ispac"
+if (( ${#ISPAC_PATHS[@]} == 0 )); then
+    while IFS= read -r artifact; do
+        ISPAC_PATHS+=("${artifact}")
+    done < <(find "${REPO_ROOT}/artifacts" -maxdepth 1 -name '*.ispac' -type f 2>/dev/null | sort)
+fi
 
 # --- folder --------------------------------------------------------------
 
@@ -64,20 +69,28 @@ fi
 # --- project -------------------------------------------------------------
 
 if (( SKIP_PROJECT == 0 )); then
-    if [[ ! -f "${ISPAC_PATH}" ]] && ! wwi_is_dry_run; then
-        wwi_fail "${ISPAC_PATH} does not exist. Build it on a Windows host with deployment/ssis/Build-SsisProject.ps1, or pass --skip-project."
+    if (( ${#ISPAC_PATHS[@]} == 0 )) && ! wwi_is_dry_run; then
+        wwi_fail "no .ispac files in ${REPO_ROOT}/artifacts. Build them on a Windows host with deployment/ssis/Build-SsisProject.ps1, or pass --skip-project."
     fi
 
-    # OPENROWSET reads the file from the SQL Server host, not from here, so the
-    # path must be one the database engine's service account can see. On the
-    # estate's deploy runbook that means copying the .ispac to the server first.
-    DEPLOY_SQL="DECLARE @ProjectBinary VARBINARY(MAX);
+    for ispac in "${ISPAC_PATHS[@]}"; do
+        project_name="$(basename "${ispac}" .ispac)"
+
+        if [[ ! -f "${ispac}" ]] && ! wwi_is_dry_run; then
+            wwi_fail "${ispac} does not exist. Build it on a Windows host with deployment/ssis/Build-SsisProject.ps1."
+        fi
+
+        # OPENROWSET reads the file from the SQL Server host, not from here, so
+        # the path must be one the database engine's service account can see. On
+        # the estate's deploy runbook that means copying the .ispac to the
+        # server first.
+        DEPLOY_SQL="DECLARE @ProjectBinary VARBINARY(MAX);
 DECLARE @OperationId BIGINT;
 SELECT @ProjectBinary = CAST(BulkColumn AS VARBINARY(MAX))
-FROM OPENROWSET(BULK N'${ISPAC_PATH}', SINGLE_BLOB) AS ProjectFile;
+FROM OPENROWSET(BULK N'${ispac}', SINGLE_BLOB) AS ProjectFile;
 EXEC SSISDB.catalog.deploy_project
      @folder_name = N'${SSIS_FOLDER}',
-     @project_name = N'${SSIS_PROJECT}',
+     @project_name = N'${project_name}',
      @project_stream = @ProjectBinary,
      @operation_id = @OperationId OUTPUT;
 SELECT m.message_time, m.message
@@ -85,13 +98,14 @@ FROM SSISDB.catalog.operation_messages AS m
 WHERE m.operation_id = @OperationId AND m.message_type IN (120, 130)
 ORDER BY m.message_time;"
 
-    if wwi_is_dry_run; then
-        wwi_log "WHATIF deploy ${ISPAC_PATH} to /SSISDB/${SSIS_FOLDER}/${SSIS_PROJECT}"
-    else
-        wwi_log "deploying ${SSIS_PROJECT} to /SSISDB/${SSIS_FOLDER}"
-        sqlcmd -S "${SSIS_SERVER}" -U "${SQLSERVER_USER}" -b -I -X1 -Q "${DEPLOY_SQL}" \
-            || wwi_fail "catalog.deploy_project reported a failure."
-    fi
+        if wwi_is_dry_run; then
+            wwi_log "WHATIF deploy ${ispac} to /SSISDB/${SSIS_FOLDER}/${project_name}"
+        else
+            wwi_log "deploying ${project_name} to /SSISDB/${SSIS_FOLDER}"
+            sqlcmd -S "${SSIS_SERVER}" -U "${SQLSERVER_USER}" -b -I -X1 -Q "${DEPLOY_SQL}" \
+                || wwi_fail "catalog.deploy_project reported a failure for ${project_name}."
+        fi
+    done
 else
     wwi_log "project deployment skipped by request"
 fi

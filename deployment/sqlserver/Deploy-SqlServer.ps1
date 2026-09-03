@@ -6,9 +6,10 @@
         1. control     etl.* framework, deployed into staging and the warehouse
         2. oltp        extract views and change-tracking extensions
         3. staging     raw/work/stg/err/ref schemas and load procedures
-        4. warehouse   dimensions, facts, aggregates, load procedures, views
-        5. security    roles, principals and grants
-        6. agent       msdb job definitions
+        4. reference   shared reference data loaded into staging
+        5. warehouse   dimensions, facts, aggregates, load procedures, views
+        6. security    roles, principals and grants
+        7. agent       msdb job definitions
 
     Connection details come from SQLSERVER_HOST, SQLSERVER_PORT, SQLSERVER_USER,
     SQLSERVER_PASSWORD, SQLSERVER_OLTP_DB, SQLSERVER_STAGING_DB and
@@ -23,12 +24,12 @@
 [CmdletBinding()]
 param(
     [switch] $DryRun,
-    [ValidateSet('control', 'oltp', 'staging', 'warehouse', 'security', 'agent')]
+    [ValidateSet('control', 'oltp', 'staging', 'reference', 'warehouse', 'security', 'agent')]
     [string] $Stage,
     [int]    $FromStage = 1
 )
 
-. (Join-Path $PSScriptRoot '..' 'lib' 'Common.ps1')
+. (Join-Path (Join-Path (Join-Path $PSScriptRoot '..') 'lib') 'Common.ps1')
 $script:WwiLogPrefix = 'wwi-deploy-sqlserver'
 
 Assert-WwiEnvironmentVariable @('SQLSERVER_HOST', 'SQLSERVER_PORT', 'SQLSERVER_USER', 'SQLSERVER_PASSWORD',
@@ -68,7 +69,6 @@ $sqlcmdVariables = [ordered]@{
     OracleLinkSecret     = (Get-DefaultedEnv 'ORACLE_PASSWORD')
     SsisServer           = (Get-DefaultedEnv 'SSIS_SERVER' $env:SQLSERVER_HOST)
     SsisFolder           = (Get-DefaultedEnv 'SSIS_FOLDER' "WWI_$environmentCode")
-    SsisProject          = (Get-DefaultedEnv 'SSIS_PROJECT' 'WWI_Estate')
     SsisProxyAccount     = (Get-DefaultedEnv 'WWI_SSIS_PROXY_ACCOUNT' 'svc-wwi-etl')
     FileProxyAccount     = (Get-DefaultedEnv 'WWI_FILE_PROXY_ACCOUNT' 'svc-wwi-files')
     SsisProxySecret      = (Get-DefaultedEnv 'WWI_SSIS_PROXY_PASSWORD')
@@ -138,8 +138,12 @@ $stageActions = [ordered]@{
         Write-WwiLog '--- stage 3: staging ---'
         Invoke-SqlDirectory -Database $env:SQLSERVER_STAGING_DB -Relative 'sqlserver/staging'
     }
+    reference = {
+        Write-WwiLog '--- stage 4: reference data ---'
+        Invoke-SqlDirectory -Database $env:SQLSERVER_STAGING_DB -Relative 'sqlserver/reference'
+    }
     warehouse = {
-        Write-WwiLog '--- stage 4: warehouse ---'
+        Write-WwiLog '--- stage 5: warehouse ---'
         foreach ($relative in @('sqlserver/warehouse/dimensions', 'sqlserver/warehouse/facts',
                                 'sqlserver/warehouse/aggregates', 'sqlserver/procedures/dimensions',
                                 'sqlserver/procedures/facts', 'sqlserver/views')) {
@@ -147,12 +151,12 @@ $stageActions = [ordered]@{
         }
     }
     security = {
-        Write-WwiLog '--- stage 5: security ---'
+        Write-WwiLog '--- stage 6: security ---'
         # Each security script issues its own USE, so they are submitted against master.
         Invoke-SqlDirectory -Database 'master' -Relative 'sqlserver/security'
     }
     agent = {
-        Write-WwiLog '--- stage 6: agent ---'
+        Write-WwiLog '--- stage 7: agent ---'
         Invoke-SqlDirectory -Database 'msdb' -Relative 'sqlserver/agent'
     }
 }

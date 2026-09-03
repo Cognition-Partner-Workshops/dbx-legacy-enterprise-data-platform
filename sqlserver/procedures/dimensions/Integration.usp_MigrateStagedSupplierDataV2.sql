@@ -153,17 +153,28 @@ BEGIN
                   tgt.[Is Current Row]     = 0
                 , tgt.[Effective To]       = ISNULL(src.[Source Changed On], @Now)
                 , tgt.[Valid To]           = ISNULL(src.[Source Changed On], @Now)
-                , tgt.[Last Load Batch Id] = @BatchId
-        WHEN MATCHED AND tgt.[Row Hash Type 1] <> src.[Row Hash Type 1]
-            THEN UPDATE SET
-                  tgt.[Primary Contact]          = src.[Primary Contact]
-                , tgt.[Sanction Screening Status] = src.[Sanction Screening Status]
-                , tgt.[Sanction Screened On]     = src.[Sanction Screened On]
-                , tgt.[Quality Rating]           = src.[Quality Rating]
-                , tgt.[Row Hash Type 1]          = src.[Row Hash Type 1]
-                , tgt.[Last Load Batch Id]       = @BatchId;
+                , tgt.[Last Load Batch Id] = @BatchId;
 
         SET @ClosedCount = @@ROWCOUNT;
+
+        /* Type 1 attributes overwrite the surviving current row in place. */
+        UPDATE tgt
+        SET   tgt.[Primary Contact]           = src.[Primary Contact]
+            , tgt.[Sanction Screening Status] = src.[Sanction Screening Status]
+            , tgt.[Sanction Screened On]      = src.[Sanction Screened On]
+            , tgt.[Quality Rating]            = src.[Quality Rating]
+            , tgt.[Row Hash Type 1]           = src.[Row Hash Type 1]
+            , tgt.[Last Load Batch Id]        = @BatchId
+        FROM [Dimension].[Supplier] AS tgt
+        INNER JOIN #SupplierSource AS src
+            ON  (
+                    (src.[Source Supplier Reference] IS NOT NULL AND tgt.[Source Supplier Reference] = src.[Source Supplier Reference])
+                 OR (src.[Source Supplier Reference] IS NULL     AND tgt.[WWI Supplier ID]   = src.[WWI Supplier ID])
+                )
+        WHERE tgt.[Is Current Row] = 1
+          AND tgt.[Supplier Key]   > 0
+          AND ISNULL(tgt.[Is Superseded Duplicate], 0) = 0
+          AND tgt.[Row Hash Type 1] <> src.[Row Hash Type 1];
 
         /* Step two: insert the new version for everything that is now uncovered. */
         INSERT INTO [Dimension].[Supplier]

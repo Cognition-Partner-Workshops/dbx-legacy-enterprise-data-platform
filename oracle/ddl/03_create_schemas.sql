@@ -3,8 +3,9 @@
  *                WWI_REF, WWI_AUDIT and the read-only extract account
  *                WWI_EXTRACT used by the downstream SSIS estate
  * Schema       : n/a (SYS/DBA level)
- * Deploy order : 02  - after 01_create_tablespaces.sql
- * Depends on   : oracle/ddl/01_create_tablespaces.sql
+ * Deploy order : 03  - after 02_create_profiles.sql
+ * Depends on   : oracle/ddl/01_create_tablespaces.sql,
+ *                oracle/ddl/02_create_profiles.sql
  * Called by    : DBA deployment runbook (oracle/ddl/README.md)
  *
  * No credential values appear in this repository. Each account is created

@@ -98,7 +98,7 @@ BEGIN
         i.[InvoiceID],
         i.[InvoiceDate],
         @FiscalPeriodLabel,
-        CASE plan.[CommissionBasis]
+        CASE cp.[CommissionBasis]
             WHEN N'INVOICENET' THEN i.[InvoiceTotalExTax]
             WHEN N'NETLESSFREIGHT' THEN i.[InvoiceTotalExTax]
             ELSE i.[InvoiceTotalExTax]
@@ -118,15 +118,15 @@ BEGIN
                 AND m.[ValidFrom] <= i.[InvoiceDate]
                 AND (m.[ValidTo] IS NULL OR m.[ValidTo] > i.[InvoiceDate])
                 AND m.[CommissionPlanID] IS NOT NULL
-        INNER JOIN [Sales].[CommissionPlans] AS plan
-            ON plan.[CommissionPlanID] = m.[CommissionPlanID]
+        INNER JOIN [Sales].[CommissionPlans] AS cp
+            ON cp.[CommissionPlanID] = m.[CommissionPlanID]
         LEFT JOIN [Sales].[SalesQuotas] AS q
             ON q.[SalespersonPersonID] = i.[SalespersonPersonID]
                 AND q.[FiscalPeriodLabel] = @FiscalPeriodLabel
     WHERE i.[InvoiceDate] BETWEEN @PeriodStart AND @PeriodEnd
-        AND (@RegionCode IS NULL OR plan.[RegionCode] = @RegionCode)
+        AND (@RegionCode IS NULL OR cp.[RegionCode] = @RegionCode)
         AND ISNULL(i.[SettlementStatus], N'OPEN') <> N'WRITTENOFF'
-        AND (plan.[RegionCode] <> N'APAC' OR i.[SettlementStatus] = N'PAID');
+        AND (cp.[RegionCode] <> N'APAC' OR i.[SettlementStatus] = N'PAID');
 
     SET @AccrualsWritten = @@ROWCOUNT;
 

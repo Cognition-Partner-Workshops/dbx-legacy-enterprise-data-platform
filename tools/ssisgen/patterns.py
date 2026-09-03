@@ -57,9 +57,11 @@ def log_package_start(pkg, name="Log Package Start"):
         name,
         CONTROL_CONNECTION,
         "EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;",
-        result_type="ResultSetType_SingleRow",
-        parameter_bindings=[("$Package::BatchId", 0, "LONG"), ("System::PackageName", 1, "NVARCHAR")],
-        result_bindings=[("0", "User::PackageExecutionId")],
+        parameter_bindings=[
+            ("$Package::BatchId", 0, "LONG"),
+            ("System::PackageName", 1, "NVARCHAR"),
+            ("User::PackageExecutionId", 2, "LONG", "Output"),
+        ],
         is_stored_procedure=True,
     )
 
@@ -85,15 +87,14 @@ def get_watermark(source_system_expr="$Package::SourceSystemCode", object_name="
     return ExecuteSql(
         name,
         CONTROL_CONNECTION,
-        "EXEC etl.usp_GetWatermark @SourceSystemCode = ?, @ObjectName = ?, @ReloadFullHistory = ?, "
-        "@WatermarkFrom = ? OUTPUT, @WatermarkTo = ? OUTPUT;",
-        result_type="ResultSetType_SingleRow",
+        "EXEC etl.usp_GetWatermark @SourceSystemCode = ?, @ObjectName = N'%s', @ReloadFullHistory = ?, "
+        "@WatermarkFrom = ? OUTPUT, @WatermarkTo = ? OUTPUT;" % object_name,
         parameter_bindings=[
             (source_system_expr, 0, "NVARCHAR"),
-            ("$Package::BatchId", 1, "LONG"),
-            ("$Package::ReloadFullHistory", 2, "BYTE"),
+            ("$Package::ReloadFullHistory", 1, "BYTE"),
+            ("User::WatermarkFrom", 2, "NVARCHAR", "Output"),
+            ("User::WatermarkTo", 3, "NVARCHAR", "Output"),
         ],
-        result_bindings=[("0", "User::WatermarkFrom"), ("1", "User::WatermarkTo")],
         is_stored_procedure=True,
     )
 

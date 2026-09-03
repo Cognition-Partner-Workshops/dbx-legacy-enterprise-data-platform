@@ -2,7 +2,7 @@
  * Object       : TABLE WWI_REF.LANGUAGE_REF
  * Schema       : WWI_REF (Oracle ERP - WWIGERP)
  * Deploy order : 27
- * Depends on   : oracle/ddl/02_create_schemas.sql
+ * Depends on   : oracle/ddl/03_create_schemas.sql
  * Called by    : Customer communication preferences, document generation
  *
  * Languages used for supplier and customer correspondence. The code is the

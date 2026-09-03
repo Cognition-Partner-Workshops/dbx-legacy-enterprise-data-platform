@@ -25,7 +25,6 @@ USE SSISDB;
 GO
 
 DECLARE @FolderName      NVARCHAR(128) = N'WWI_TEST';
-DECLARE @ProjectName     NVARCHAR(128) = N'WWI_Estate';
 DECLARE @EnvironmentName NVARCHAR(128) = N'WWI_TEST';
 
 IF NOT EXISTS (SELECT 1 FROM catalog.folders WHERE name = @FolderName)
@@ -466,13 +465,13 @@ IF NOT EXISTS (SELECT 1
                FROM SSISDB.catalog.environment_references AS r
                INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
                INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
-               WHERE p.name = N'WWI_Estate' AND f.name = N'WWI_TEST'
+               WHERE p.name = N'WWI_Orchestration' AND f.name = N'WWI_TEST'
                  AND r.environment_name = N'WWI_TEST')
 BEGIN
     DECLARE @ReferenceId BIGINT;
     EXEC SSISDB.catalog.create_environment_reference
          @folder_name       = N'WWI_TEST',
-         @project_name      = N'WWI_Estate',
+         @project_name      = N'WWI_Orchestration',
          @environment_name  = N'WWI_TEST',
          @reference_location = 'L',            /* local: same folder */
          @reference_id      = @ReferenceId OUTPUT;
@@ -482,7 +481,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'OracleHost',
      @parameter_value = N'OracleHost',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -491,7 +490,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'OraclePort',
      @parameter_value = N'OraclePort',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -500,7 +499,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'OracleService',
      @parameter_value = N'OracleService',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -509,7 +508,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'OracleUser',
      @parameter_value = N'OracleUser',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -518,7 +517,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'OraclePassword',
      @parameter_value = N'OraclePassword',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -527,7 +526,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'SqlServerHost',
      @parameter_value = N'SqlServerHost',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -536,7 +535,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'SqlServerPort',
      @parameter_value = N'SqlServerPort',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -545,7 +544,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'SqlServerUser',
      @parameter_value = N'SqlServerUser',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -554,7 +553,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'SqlServerPassword',
      @parameter_value = N'SqlServerPassword',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -563,7 +562,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'SqlServerOltpDb',
      @parameter_value = N'SqlServerOltpDb',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -572,7 +571,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'SqlServerStagingDb',
      @parameter_value = N'SqlServerStagingDb',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -581,7 +580,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'SqlServerDwDb',
      @parameter_value = N'SqlServerDwDb',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -590,7 +589,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'InboundFileRoot',
      @parameter_value = N'InboundFileRoot',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -599,7 +598,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'ArchiveFileRoot',
      @parameter_value = N'ArchiveFileRoot',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -608,7 +607,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'RejectFileRoot',
      @parameter_value = N'RejectFileRoot',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -617,7 +616,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'DefaultBatchSize',
      @parameter_value = N'DefaultBatchSize',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -626,7 +625,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'SourceQueryTimeoutSeconds',
      @parameter_value = N'SourceQueryTimeoutSeconds',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -635,7 +634,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'MaxRejectPercent',
      @parameter_value = N'MaxRejectPercent',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -644,7 +643,7 @@ GO
 EXEC SSISDB.catalog.set_object_parameter_value
      @object_type    = 20,                     /* project parameter */
      @folder_name    = N'WWI_TEST',
-     @project_name   = N'WWI_Estate',
+     @project_name   = N'WWI_Orchestration',
      @parameter_name = N'EnvironmentCode',
      @parameter_value = N'EnvironmentCode',
      @value_type     = 'R';                    /* referenced environment variable */
@@ -659,7 +658,3255 @@ FROM SSISDB.catalog.object_parameters AS p
 INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
 INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
 WHERE f.name = N'WWI_TEST'
-  AND pr.name = N'WWI_Estate'
+  AND pr.name = N'WWI_Orchestration'
+  AND p.object_type = 20
+ORDER BY p.parameter_name;
+GO
+
+/* Project reference and parameter bindings. */
+IF NOT EXISTS (SELECT 1
+               FROM SSISDB.catalog.environment_references AS r
+               INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
+               INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
+               WHERE p.name = N'WWI_Extract_Oracle' AND f.name = N'WWI_TEST'
+                 AND r.environment_name = N'WWI_TEST')
+BEGIN
+    DECLARE @ReferenceId BIGINT;
+    EXEC SSISDB.catalog.create_environment_reference
+         @folder_name       = N'WWI_TEST',
+         @project_name      = N'WWI_Extract_Oracle',
+         @environment_name  = N'WWI_TEST',
+         @reference_location = 'L',            /* local: same folder */
+         @reference_id      = @ReferenceId OUTPUT;
+END
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'OracleHost',
+     @parameter_value = N'OracleHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'OraclePort',
+     @parameter_value = N'OraclePort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'OracleService',
+     @parameter_value = N'OracleService',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'OracleUser',
+     @parameter_value = N'OracleUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'OraclePassword',
+     @parameter_value = N'OraclePassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'SqlServerHost',
+     @parameter_value = N'SqlServerHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'SqlServerPort',
+     @parameter_value = N'SqlServerPort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'SqlServerUser',
+     @parameter_value = N'SqlServerUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'SqlServerPassword',
+     @parameter_value = N'SqlServerPassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'SqlServerOltpDb',
+     @parameter_value = N'SqlServerOltpDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'SqlServerStagingDb',
+     @parameter_value = N'SqlServerStagingDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'SqlServerDwDb',
+     @parameter_value = N'SqlServerDwDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'InboundFileRoot',
+     @parameter_value = N'InboundFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'ArchiveFileRoot',
+     @parameter_value = N'ArchiveFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'RejectFileRoot',
+     @parameter_value = N'RejectFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'DefaultBatchSize',
+     @parameter_value = N'DefaultBatchSize',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'SourceQueryTimeoutSeconds',
+     @parameter_value = N'SourceQueryTimeoutSeconds',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'MaxRejectPercent',
+     @parameter_value = N'MaxRejectPercent',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_Oracle',
+     @parameter_name = N'EnvironmentCode',
+     @parameter_value = N'EnvironmentCode',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+/* Post-condition: every project parameter resolves to an environment variable. */
+SELECT p.parameter_name,
+       p.value_type,
+       p.design_default_value,
+       p.referenced_variable_name
+FROM SSISDB.catalog.object_parameters AS p
+INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
+INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+WHERE f.name = N'WWI_TEST'
+  AND pr.name = N'WWI_Extract_Oracle'
+  AND p.object_type = 20
+ORDER BY p.parameter_name;
+GO
+
+/* Project reference and parameter bindings. */
+IF NOT EXISTS (SELECT 1
+               FROM SSISDB.catalog.environment_references AS r
+               INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
+               INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
+               WHERE p.name = N'WWI_Extract_SqlServer' AND f.name = N'WWI_TEST'
+                 AND r.environment_name = N'WWI_TEST')
+BEGIN
+    DECLARE @ReferenceId BIGINT;
+    EXEC SSISDB.catalog.create_environment_reference
+         @folder_name       = N'WWI_TEST',
+         @project_name      = N'WWI_Extract_SqlServer',
+         @environment_name  = N'WWI_TEST',
+         @reference_location = 'L',            /* local: same folder */
+         @reference_id      = @ReferenceId OUTPUT;
+END
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'OracleHost',
+     @parameter_value = N'OracleHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'OraclePort',
+     @parameter_value = N'OraclePort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'OracleService',
+     @parameter_value = N'OracleService',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'OracleUser',
+     @parameter_value = N'OracleUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'OraclePassword',
+     @parameter_value = N'OraclePassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'SqlServerHost',
+     @parameter_value = N'SqlServerHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'SqlServerPort',
+     @parameter_value = N'SqlServerPort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'SqlServerUser',
+     @parameter_value = N'SqlServerUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'SqlServerPassword',
+     @parameter_value = N'SqlServerPassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'SqlServerOltpDb',
+     @parameter_value = N'SqlServerOltpDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'SqlServerStagingDb',
+     @parameter_value = N'SqlServerStagingDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'SqlServerDwDb',
+     @parameter_value = N'SqlServerDwDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'InboundFileRoot',
+     @parameter_value = N'InboundFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'ArchiveFileRoot',
+     @parameter_value = N'ArchiveFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'RejectFileRoot',
+     @parameter_value = N'RejectFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'DefaultBatchSize',
+     @parameter_value = N'DefaultBatchSize',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'SourceQueryTimeoutSeconds',
+     @parameter_value = N'SourceQueryTimeoutSeconds',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'MaxRejectPercent',
+     @parameter_value = N'MaxRejectPercent',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Extract_SqlServer',
+     @parameter_name = N'EnvironmentCode',
+     @parameter_value = N'EnvironmentCode',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+/* Post-condition: every project parameter resolves to an environment variable. */
+SELECT p.parameter_name,
+       p.value_type,
+       p.design_default_value,
+       p.referenced_variable_name
+FROM SSISDB.catalog.object_parameters AS p
+INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
+INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+WHERE f.name = N'WWI_TEST'
+  AND pr.name = N'WWI_Extract_SqlServer'
+  AND p.object_type = 20
+ORDER BY p.parameter_name;
+GO
+
+/* Project reference and parameter bindings. */
+IF NOT EXISTS (SELECT 1
+               FROM SSISDB.catalog.environment_references AS r
+               INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
+               INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
+               WHERE p.name = N'WWI_Ingest_Files' AND f.name = N'WWI_TEST'
+                 AND r.environment_name = N'WWI_TEST')
+BEGIN
+    DECLARE @ReferenceId BIGINT;
+    EXEC SSISDB.catalog.create_environment_reference
+         @folder_name       = N'WWI_TEST',
+         @project_name      = N'WWI_Ingest_Files',
+         @environment_name  = N'WWI_TEST',
+         @reference_location = 'L',            /* local: same folder */
+         @reference_id      = @ReferenceId OUTPUT;
+END
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'OracleHost',
+     @parameter_value = N'OracleHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'OraclePort',
+     @parameter_value = N'OraclePort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'OracleService',
+     @parameter_value = N'OracleService',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'OracleUser',
+     @parameter_value = N'OracleUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'OraclePassword',
+     @parameter_value = N'OraclePassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'SqlServerHost',
+     @parameter_value = N'SqlServerHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'SqlServerPort',
+     @parameter_value = N'SqlServerPort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'SqlServerUser',
+     @parameter_value = N'SqlServerUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'SqlServerPassword',
+     @parameter_value = N'SqlServerPassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'SqlServerOltpDb',
+     @parameter_value = N'SqlServerOltpDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'SqlServerStagingDb',
+     @parameter_value = N'SqlServerStagingDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'SqlServerDwDb',
+     @parameter_value = N'SqlServerDwDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'InboundFileRoot',
+     @parameter_value = N'InboundFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'ArchiveFileRoot',
+     @parameter_value = N'ArchiveFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'RejectFileRoot',
+     @parameter_value = N'RejectFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'DefaultBatchSize',
+     @parameter_value = N'DefaultBatchSize',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'SourceQueryTimeoutSeconds',
+     @parameter_value = N'SourceQueryTimeoutSeconds',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'MaxRejectPercent',
+     @parameter_value = N'MaxRejectPercent',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Ingest_Files',
+     @parameter_name = N'EnvironmentCode',
+     @parameter_value = N'EnvironmentCode',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+/* Post-condition: every project parameter resolves to an environment variable. */
+SELECT p.parameter_name,
+       p.value_type,
+       p.design_default_value,
+       p.referenced_variable_name
+FROM SSISDB.catalog.object_parameters AS p
+INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
+INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+WHERE f.name = N'WWI_TEST'
+  AND pr.name = N'WWI_Ingest_Files'
+  AND p.object_type = 20
+ORDER BY p.parameter_name;
+GO
+
+/* Project reference and parameter bindings. */
+IF NOT EXISTS (SELECT 1
+               FROM SSISDB.catalog.environment_references AS r
+               INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
+               INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
+               WHERE p.name = N'WWI_Staging' AND f.name = N'WWI_TEST'
+                 AND r.environment_name = N'WWI_TEST')
+BEGIN
+    DECLARE @ReferenceId BIGINT;
+    EXEC SSISDB.catalog.create_environment_reference
+         @folder_name       = N'WWI_TEST',
+         @project_name      = N'WWI_Staging',
+         @environment_name  = N'WWI_TEST',
+         @reference_location = 'L',            /* local: same folder */
+         @reference_id      = @ReferenceId OUTPUT;
+END
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'OracleHost',
+     @parameter_value = N'OracleHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'OraclePort',
+     @parameter_value = N'OraclePort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'OracleService',
+     @parameter_value = N'OracleService',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'OracleUser',
+     @parameter_value = N'OracleUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'OraclePassword',
+     @parameter_value = N'OraclePassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'SqlServerHost',
+     @parameter_value = N'SqlServerHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'SqlServerPort',
+     @parameter_value = N'SqlServerPort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'SqlServerUser',
+     @parameter_value = N'SqlServerUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'SqlServerPassword',
+     @parameter_value = N'SqlServerPassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'SqlServerOltpDb',
+     @parameter_value = N'SqlServerOltpDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'SqlServerStagingDb',
+     @parameter_value = N'SqlServerStagingDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'SqlServerDwDb',
+     @parameter_value = N'SqlServerDwDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'InboundFileRoot',
+     @parameter_value = N'InboundFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'ArchiveFileRoot',
+     @parameter_value = N'ArchiveFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'RejectFileRoot',
+     @parameter_value = N'RejectFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'DefaultBatchSize',
+     @parameter_value = N'DefaultBatchSize',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'SourceQueryTimeoutSeconds',
+     @parameter_value = N'SourceQueryTimeoutSeconds',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'MaxRejectPercent',
+     @parameter_value = N'MaxRejectPercent',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Staging',
+     @parameter_name = N'EnvironmentCode',
+     @parameter_value = N'EnvironmentCode',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+/* Post-condition: every project parameter resolves to an environment variable. */
+SELECT p.parameter_name,
+       p.value_type,
+       p.design_default_value,
+       p.referenced_variable_name
+FROM SSISDB.catalog.object_parameters AS p
+INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
+INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+WHERE f.name = N'WWI_TEST'
+  AND pr.name = N'WWI_Staging'
+  AND p.object_type = 20
+ORDER BY p.parameter_name;
+GO
+
+/* Project reference and parameter bindings. */
+IF NOT EXISTS (SELECT 1
+               FROM SSISDB.catalog.environment_references AS r
+               INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
+               INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
+               WHERE p.name = N'WWI_DataQuality' AND f.name = N'WWI_TEST'
+                 AND r.environment_name = N'WWI_TEST')
+BEGIN
+    DECLARE @ReferenceId BIGINT;
+    EXEC SSISDB.catalog.create_environment_reference
+         @folder_name       = N'WWI_TEST',
+         @project_name      = N'WWI_DataQuality',
+         @environment_name  = N'WWI_TEST',
+         @reference_location = 'L',            /* local: same folder */
+         @reference_id      = @ReferenceId OUTPUT;
+END
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'OracleHost',
+     @parameter_value = N'OracleHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'OraclePort',
+     @parameter_value = N'OraclePort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'OracleService',
+     @parameter_value = N'OracleService',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'OracleUser',
+     @parameter_value = N'OracleUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'OraclePassword',
+     @parameter_value = N'OraclePassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'SqlServerHost',
+     @parameter_value = N'SqlServerHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'SqlServerPort',
+     @parameter_value = N'SqlServerPort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'SqlServerUser',
+     @parameter_value = N'SqlServerUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'SqlServerPassword',
+     @parameter_value = N'SqlServerPassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'SqlServerOltpDb',
+     @parameter_value = N'SqlServerOltpDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'SqlServerStagingDb',
+     @parameter_value = N'SqlServerStagingDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'SqlServerDwDb',
+     @parameter_value = N'SqlServerDwDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'InboundFileRoot',
+     @parameter_value = N'InboundFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'ArchiveFileRoot',
+     @parameter_value = N'ArchiveFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'RejectFileRoot',
+     @parameter_value = N'RejectFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'DefaultBatchSize',
+     @parameter_value = N'DefaultBatchSize',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'SourceQueryTimeoutSeconds',
+     @parameter_value = N'SourceQueryTimeoutSeconds',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'MaxRejectPercent',
+     @parameter_value = N'MaxRejectPercent',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_DataQuality',
+     @parameter_name = N'EnvironmentCode',
+     @parameter_value = N'EnvironmentCode',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+/* Post-condition: every project parameter resolves to an environment variable. */
+SELECT p.parameter_name,
+       p.value_type,
+       p.design_default_value,
+       p.referenced_variable_name
+FROM SSISDB.catalog.object_parameters AS p
+INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
+INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+WHERE f.name = N'WWI_TEST'
+  AND pr.name = N'WWI_DataQuality'
+  AND p.object_type = 20
+ORDER BY p.parameter_name;
+GO
+
+/* Project reference and parameter bindings. */
+IF NOT EXISTS (SELECT 1
+               FROM SSISDB.catalog.environment_references AS r
+               INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
+               INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
+               WHERE p.name = N'WWI_ReferenceData' AND f.name = N'WWI_TEST'
+                 AND r.environment_name = N'WWI_TEST')
+BEGIN
+    DECLARE @ReferenceId BIGINT;
+    EXEC SSISDB.catalog.create_environment_reference
+         @folder_name       = N'WWI_TEST',
+         @project_name      = N'WWI_ReferenceData',
+         @environment_name  = N'WWI_TEST',
+         @reference_location = 'L',            /* local: same folder */
+         @reference_id      = @ReferenceId OUTPUT;
+END
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'OracleHost',
+     @parameter_value = N'OracleHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'OraclePort',
+     @parameter_value = N'OraclePort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'OracleService',
+     @parameter_value = N'OracleService',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'OracleUser',
+     @parameter_value = N'OracleUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'OraclePassword',
+     @parameter_value = N'OraclePassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'SqlServerHost',
+     @parameter_value = N'SqlServerHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'SqlServerPort',
+     @parameter_value = N'SqlServerPort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'SqlServerUser',
+     @parameter_value = N'SqlServerUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'SqlServerPassword',
+     @parameter_value = N'SqlServerPassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'SqlServerOltpDb',
+     @parameter_value = N'SqlServerOltpDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'SqlServerStagingDb',
+     @parameter_value = N'SqlServerStagingDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'SqlServerDwDb',
+     @parameter_value = N'SqlServerDwDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'InboundFileRoot',
+     @parameter_value = N'InboundFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'ArchiveFileRoot',
+     @parameter_value = N'ArchiveFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'RejectFileRoot',
+     @parameter_value = N'RejectFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'DefaultBatchSize',
+     @parameter_value = N'DefaultBatchSize',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'SourceQueryTimeoutSeconds',
+     @parameter_value = N'SourceQueryTimeoutSeconds',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'MaxRejectPercent',
+     @parameter_value = N'MaxRejectPercent',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ReferenceData',
+     @parameter_name = N'EnvironmentCode',
+     @parameter_value = N'EnvironmentCode',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+/* Post-condition: every project parameter resolves to an environment variable. */
+SELECT p.parameter_name,
+       p.value_type,
+       p.design_default_value,
+       p.referenced_variable_name
+FROM SSISDB.catalog.object_parameters AS p
+INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
+INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+WHERE f.name = N'WWI_TEST'
+  AND pr.name = N'WWI_ReferenceData'
+  AND p.object_type = 20
+ORDER BY p.parameter_name;
+GO
+
+/* Project reference and parameter bindings. */
+IF NOT EXISTS (SELECT 1
+               FROM SSISDB.catalog.environment_references AS r
+               INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
+               INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
+               WHERE p.name = N'WWI_Dimensions' AND f.name = N'WWI_TEST'
+                 AND r.environment_name = N'WWI_TEST')
+BEGIN
+    DECLARE @ReferenceId BIGINT;
+    EXEC SSISDB.catalog.create_environment_reference
+         @folder_name       = N'WWI_TEST',
+         @project_name      = N'WWI_Dimensions',
+         @environment_name  = N'WWI_TEST',
+         @reference_location = 'L',            /* local: same folder */
+         @reference_id      = @ReferenceId OUTPUT;
+END
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'OracleHost',
+     @parameter_value = N'OracleHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'OraclePort',
+     @parameter_value = N'OraclePort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'OracleService',
+     @parameter_value = N'OracleService',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'OracleUser',
+     @parameter_value = N'OracleUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'OraclePassword',
+     @parameter_value = N'OraclePassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'SqlServerHost',
+     @parameter_value = N'SqlServerHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'SqlServerPort',
+     @parameter_value = N'SqlServerPort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'SqlServerUser',
+     @parameter_value = N'SqlServerUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'SqlServerPassword',
+     @parameter_value = N'SqlServerPassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'SqlServerOltpDb',
+     @parameter_value = N'SqlServerOltpDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'SqlServerStagingDb',
+     @parameter_value = N'SqlServerStagingDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'SqlServerDwDb',
+     @parameter_value = N'SqlServerDwDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'InboundFileRoot',
+     @parameter_value = N'InboundFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'ArchiveFileRoot',
+     @parameter_value = N'ArchiveFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'RejectFileRoot',
+     @parameter_value = N'RejectFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'DefaultBatchSize',
+     @parameter_value = N'DefaultBatchSize',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'SourceQueryTimeoutSeconds',
+     @parameter_value = N'SourceQueryTimeoutSeconds',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'MaxRejectPercent',
+     @parameter_value = N'MaxRejectPercent',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Dimensions',
+     @parameter_name = N'EnvironmentCode',
+     @parameter_value = N'EnvironmentCode',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+/* Post-condition: every project parameter resolves to an environment variable. */
+SELECT p.parameter_name,
+       p.value_type,
+       p.design_default_value,
+       p.referenced_variable_name
+FROM SSISDB.catalog.object_parameters AS p
+INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
+INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+WHERE f.name = N'WWI_TEST'
+  AND pr.name = N'WWI_Dimensions'
+  AND p.object_type = 20
+ORDER BY p.parameter_name;
+GO
+
+/* Project reference and parameter bindings. */
+IF NOT EXISTS (SELECT 1
+               FROM SSISDB.catalog.environment_references AS r
+               INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
+               INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
+               WHERE p.name = N'WWI_Facts' AND f.name = N'WWI_TEST'
+                 AND r.environment_name = N'WWI_TEST')
+BEGIN
+    DECLARE @ReferenceId BIGINT;
+    EXEC SSISDB.catalog.create_environment_reference
+         @folder_name       = N'WWI_TEST',
+         @project_name      = N'WWI_Facts',
+         @environment_name  = N'WWI_TEST',
+         @reference_location = 'L',            /* local: same folder */
+         @reference_id      = @ReferenceId OUTPUT;
+END
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'OracleHost',
+     @parameter_value = N'OracleHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'OraclePort',
+     @parameter_value = N'OraclePort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'OracleService',
+     @parameter_value = N'OracleService',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'OracleUser',
+     @parameter_value = N'OracleUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'OraclePassword',
+     @parameter_value = N'OraclePassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'SqlServerHost',
+     @parameter_value = N'SqlServerHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'SqlServerPort',
+     @parameter_value = N'SqlServerPort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'SqlServerUser',
+     @parameter_value = N'SqlServerUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'SqlServerPassword',
+     @parameter_value = N'SqlServerPassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'SqlServerOltpDb',
+     @parameter_value = N'SqlServerOltpDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'SqlServerStagingDb',
+     @parameter_value = N'SqlServerStagingDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'SqlServerDwDb',
+     @parameter_value = N'SqlServerDwDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'InboundFileRoot',
+     @parameter_value = N'InboundFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'ArchiveFileRoot',
+     @parameter_value = N'ArchiveFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'RejectFileRoot',
+     @parameter_value = N'RejectFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'DefaultBatchSize',
+     @parameter_value = N'DefaultBatchSize',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'SourceQueryTimeoutSeconds',
+     @parameter_value = N'SourceQueryTimeoutSeconds',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'MaxRejectPercent',
+     @parameter_value = N'MaxRejectPercent',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Facts',
+     @parameter_name = N'EnvironmentCode',
+     @parameter_value = N'EnvironmentCode',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+/* Post-condition: every project parameter resolves to an environment variable. */
+SELECT p.parameter_name,
+       p.value_type,
+       p.design_default_value,
+       p.referenced_variable_name
+FROM SSISDB.catalog.object_parameters AS p
+INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
+INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+WHERE f.name = N'WWI_TEST'
+  AND pr.name = N'WWI_Facts'
+  AND p.object_type = 20
+ORDER BY p.parameter_name;
+GO
+
+/* Project reference and parameter bindings. */
+IF NOT EXISTS (SELECT 1
+               FROM SSISDB.catalog.environment_references AS r
+               INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
+               INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
+               WHERE p.name = N'WWI_Aggregates' AND f.name = N'WWI_TEST'
+                 AND r.environment_name = N'WWI_TEST')
+BEGIN
+    DECLARE @ReferenceId BIGINT;
+    EXEC SSISDB.catalog.create_environment_reference
+         @folder_name       = N'WWI_TEST',
+         @project_name      = N'WWI_Aggregates',
+         @environment_name  = N'WWI_TEST',
+         @reference_location = 'L',            /* local: same folder */
+         @reference_id      = @ReferenceId OUTPUT;
+END
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'OracleHost',
+     @parameter_value = N'OracleHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'OraclePort',
+     @parameter_value = N'OraclePort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'OracleService',
+     @parameter_value = N'OracleService',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'OracleUser',
+     @parameter_value = N'OracleUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'OraclePassword',
+     @parameter_value = N'OraclePassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'SqlServerHost',
+     @parameter_value = N'SqlServerHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'SqlServerPort',
+     @parameter_value = N'SqlServerPort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'SqlServerUser',
+     @parameter_value = N'SqlServerUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'SqlServerPassword',
+     @parameter_value = N'SqlServerPassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'SqlServerOltpDb',
+     @parameter_value = N'SqlServerOltpDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'SqlServerStagingDb',
+     @parameter_value = N'SqlServerStagingDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'SqlServerDwDb',
+     @parameter_value = N'SqlServerDwDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'InboundFileRoot',
+     @parameter_value = N'InboundFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'ArchiveFileRoot',
+     @parameter_value = N'ArchiveFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'RejectFileRoot',
+     @parameter_value = N'RejectFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'DefaultBatchSize',
+     @parameter_value = N'DefaultBatchSize',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'SourceQueryTimeoutSeconds',
+     @parameter_value = N'SourceQueryTimeoutSeconds',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'MaxRejectPercent',
+     @parameter_value = N'MaxRejectPercent',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Aggregates',
+     @parameter_name = N'EnvironmentCode',
+     @parameter_value = N'EnvironmentCode',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+/* Post-condition: every project parameter resolves to an environment variable. */
+SELECT p.parameter_name,
+       p.value_type,
+       p.design_default_value,
+       p.referenced_variable_name
+FROM SSISDB.catalog.object_parameters AS p
+INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
+INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+WHERE f.name = N'WWI_TEST'
+  AND pr.name = N'WWI_Aggregates'
+  AND p.object_type = 20
+ORDER BY p.parameter_name;
+GO
+
+/* Project reference and parameter bindings. */
+IF NOT EXISTS (SELECT 1
+               FROM SSISDB.catalog.environment_references AS r
+               INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
+               INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
+               WHERE p.name = N'WWI_Finance' AND f.name = N'WWI_TEST'
+                 AND r.environment_name = N'WWI_TEST')
+BEGIN
+    DECLARE @ReferenceId BIGINT;
+    EXEC SSISDB.catalog.create_environment_reference
+         @folder_name       = N'WWI_TEST',
+         @project_name      = N'WWI_Finance',
+         @environment_name  = N'WWI_TEST',
+         @reference_location = 'L',            /* local: same folder */
+         @reference_id      = @ReferenceId OUTPUT;
+END
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'OracleHost',
+     @parameter_value = N'OracleHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'OraclePort',
+     @parameter_value = N'OraclePort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'OracleService',
+     @parameter_value = N'OracleService',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'OracleUser',
+     @parameter_value = N'OracleUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'OraclePassword',
+     @parameter_value = N'OraclePassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'SqlServerHost',
+     @parameter_value = N'SqlServerHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'SqlServerPort',
+     @parameter_value = N'SqlServerPort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'SqlServerUser',
+     @parameter_value = N'SqlServerUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'SqlServerPassword',
+     @parameter_value = N'SqlServerPassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'SqlServerOltpDb',
+     @parameter_value = N'SqlServerOltpDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'SqlServerStagingDb',
+     @parameter_value = N'SqlServerStagingDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'SqlServerDwDb',
+     @parameter_value = N'SqlServerDwDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'InboundFileRoot',
+     @parameter_value = N'InboundFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'ArchiveFileRoot',
+     @parameter_value = N'ArchiveFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'RejectFileRoot',
+     @parameter_value = N'RejectFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'DefaultBatchSize',
+     @parameter_value = N'DefaultBatchSize',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'SourceQueryTimeoutSeconds',
+     @parameter_value = N'SourceQueryTimeoutSeconds',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'MaxRejectPercent',
+     @parameter_value = N'MaxRejectPercent',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Finance',
+     @parameter_name = N'EnvironmentCode',
+     @parameter_value = N'EnvironmentCode',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+/* Post-condition: every project parameter resolves to an environment variable. */
+SELECT p.parameter_name,
+       p.value_type,
+       p.design_default_value,
+       p.referenced_variable_name
+FROM SSISDB.catalog.object_parameters AS p
+INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
+INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+WHERE f.name = N'WWI_TEST'
+  AND pr.name = N'WWI_Finance'
+  AND p.object_type = 20
+ORDER BY p.parameter_name;
+GO
+
+/* Project reference and parameter bindings. */
+IF NOT EXISTS (SELECT 1
+               FROM SSISDB.catalog.environment_references AS r
+               INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
+               INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
+               WHERE p.name = N'WWI_Sales' AND f.name = N'WWI_TEST'
+                 AND r.environment_name = N'WWI_TEST')
+BEGIN
+    DECLARE @ReferenceId BIGINT;
+    EXEC SSISDB.catalog.create_environment_reference
+         @folder_name       = N'WWI_TEST',
+         @project_name      = N'WWI_Sales',
+         @environment_name  = N'WWI_TEST',
+         @reference_location = 'L',            /* local: same folder */
+         @reference_id      = @ReferenceId OUTPUT;
+END
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'OracleHost',
+     @parameter_value = N'OracleHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'OraclePort',
+     @parameter_value = N'OraclePort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'OracleService',
+     @parameter_value = N'OracleService',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'OracleUser',
+     @parameter_value = N'OracleUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'OraclePassword',
+     @parameter_value = N'OraclePassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'SqlServerHost',
+     @parameter_value = N'SqlServerHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'SqlServerPort',
+     @parameter_value = N'SqlServerPort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'SqlServerUser',
+     @parameter_value = N'SqlServerUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'SqlServerPassword',
+     @parameter_value = N'SqlServerPassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'SqlServerOltpDb',
+     @parameter_value = N'SqlServerOltpDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'SqlServerStagingDb',
+     @parameter_value = N'SqlServerStagingDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'SqlServerDwDb',
+     @parameter_value = N'SqlServerDwDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'InboundFileRoot',
+     @parameter_value = N'InboundFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'ArchiveFileRoot',
+     @parameter_value = N'ArchiveFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'RejectFileRoot',
+     @parameter_value = N'RejectFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'DefaultBatchSize',
+     @parameter_value = N'DefaultBatchSize',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'SourceQueryTimeoutSeconds',
+     @parameter_value = N'SourceQueryTimeoutSeconds',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'MaxRejectPercent',
+     @parameter_value = N'MaxRejectPercent',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Sales',
+     @parameter_name = N'EnvironmentCode',
+     @parameter_value = N'EnvironmentCode',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+/* Post-condition: every project parameter resolves to an environment variable. */
+SELECT p.parameter_name,
+       p.value_type,
+       p.design_default_value,
+       p.referenced_variable_name
+FROM SSISDB.catalog.object_parameters AS p
+INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
+INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+WHERE f.name = N'WWI_TEST'
+  AND pr.name = N'WWI_Sales'
+  AND p.object_type = 20
+ORDER BY p.parameter_name;
+GO
+
+/* Project reference and parameter bindings. */
+IF NOT EXISTS (SELECT 1
+               FROM SSISDB.catalog.environment_references AS r
+               INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
+               INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
+               WHERE p.name = N'WWI_Inventory' AND f.name = N'WWI_TEST'
+                 AND r.environment_name = N'WWI_TEST')
+BEGIN
+    DECLARE @ReferenceId BIGINT;
+    EXEC SSISDB.catalog.create_environment_reference
+         @folder_name       = N'WWI_TEST',
+         @project_name      = N'WWI_Inventory',
+         @environment_name  = N'WWI_TEST',
+         @reference_location = 'L',            /* local: same folder */
+         @reference_id      = @ReferenceId OUTPUT;
+END
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'OracleHost',
+     @parameter_value = N'OracleHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'OraclePort',
+     @parameter_value = N'OraclePort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'OracleService',
+     @parameter_value = N'OracleService',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'OracleUser',
+     @parameter_value = N'OracleUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'OraclePassword',
+     @parameter_value = N'OraclePassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'SqlServerHost',
+     @parameter_value = N'SqlServerHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'SqlServerPort',
+     @parameter_value = N'SqlServerPort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'SqlServerUser',
+     @parameter_value = N'SqlServerUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'SqlServerPassword',
+     @parameter_value = N'SqlServerPassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'SqlServerOltpDb',
+     @parameter_value = N'SqlServerOltpDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'SqlServerStagingDb',
+     @parameter_value = N'SqlServerStagingDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'SqlServerDwDb',
+     @parameter_value = N'SqlServerDwDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'InboundFileRoot',
+     @parameter_value = N'InboundFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'ArchiveFileRoot',
+     @parameter_value = N'ArchiveFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'RejectFileRoot',
+     @parameter_value = N'RejectFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'DefaultBatchSize',
+     @parameter_value = N'DefaultBatchSize',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'SourceQueryTimeoutSeconds',
+     @parameter_value = N'SourceQueryTimeoutSeconds',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'MaxRejectPercent',
+     @parameter_value = N'MaxRejectPercent',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Inventory',
+     @parameter_name = N'EnvironmentCode',
+     @parameter_value = N'EnvironmentCode',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+/* Post-condition: every project parameter resolves to an environment variable. */
+SELECT p.parameter_name,
+       p.value_type,
+       p.design_default_value,
+       p.referenced_variable_name
+FROM SSISDB.catalog.object_parameters AS p
+INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
+INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+WHERE f.name = N'WWI_TEST'
+  AND pr.name = N'WWI_Inventory'
+  AND p.object_type = 20
+ORDER BY p.parameter_name;
+GO
+
+/* Project reference and parameter bindings. */
+IF NOT EXISTS (SELECT 1
+               FROM SSISDB.catalog.environment_references AS r
+               INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
+               INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
+               WHERE p.name = N'WWI_Procurement' AND f.name = N'WWI_TEST'
+                 AND r.environment_name = N'WWI_TEST')
+BEGIN
+    DECLARE @ReferenceId BIGINT;
+    EXEC SSISDB.catalog.create_environment_reference
+         @folder_name       = N'WWI_TEST',
+         @project_name      = N'WWI_Procurement',
+         @environment_name  = N'WWI_TEST',
+         @reference_location = 'L',            /* local: same folder */
+         @reference_id      = @ReferenceId OUTPUT;
+END
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'OracleHost',
+     @parameter_value = N'OracleHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'OraclePort',
+     @parameter_value = N'OraclePort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'OracleService',
+     @parameter_value = N'OracleService',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'OracleUser',
+     @parameter_value = N'OracleUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'OraclePassword',
+     @parameter_value = N'OraclePassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'SqlServerHost',
+     @parameter_value = N'SqlServerHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'SqlServerPort',
+     @parameter_value = N'SqlServerPort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'SqlServerUser',
+     @parameter_value = N'SqlServerUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'SqlServerPassword',
+     @parameter_value = N'SqlServerPassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'SqlServerOltpDb',
+     @parameter_value = N'SqlServerOltpDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'SqlServerStagingDb',
+     @parameter_value = N'SqlServerStagingDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'SqlServerDwDb',
+     @parameter_value = N'SqlServerDwDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'InboundFileRoot',
+     @parameter_value = N'InboundFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'ArchiveFileRoot',
+     @parameter_value = N'ArchiveFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'RejectFileRoot',
+     @parameter_value = N'RejectFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'DefaultBatchSize',
+     @parameter_value = N'DefaultBatchSize',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'SourceQueryTimeoutSeconds',
+     @parameter_value = N'SourceQueryTimeoutSeconds',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'MaxRejectPercent',
+     @parameter_value = N'MaxRejectPercent',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Procurement',
+     @parameter_name = N'EnvironmentCode',
+     @parameter_value = N'EnvironmentCode',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+/* Post-condition: every project parameter resolves to an environment variable. */
+SELECT p.parameter_name,
+       p.value_type,
+       p.design_default_value,
+       p.referenced_variable_name
+FROM SSISDB.catalog.object_parameters AS p
+INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
+INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+WHERE f.name = N'WWI_TEST'
+  AND pr.name = N'WWI_Procurement'
+  AND p.object_type = 20
+ORDER BY p.parameter_name;
+GO
+
+/* Project reference and parameter bindings. */
+IF NOT EXISTS (SELECT 1
+               FROM SSISDB.catalog.environment_references AS r
+               INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
+               INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
+               WHERE p.name = N'WWI_Customer360' AND f.name = N'WWI_TEST'
+                 AND r.environment_name = N'WWI_TEST')
+BEGIN
+    DECLARE @ReferenceId BIGINT;
+    EXEC SSISDB.catalog.create_environment_reference
+         @folder_name       = N'WWI_TEST',
+         @project_name      = N'WWI_Customer360',
+         @environment_name  = N'WWI_TEST',
+         @reference_location = 'L',            /* local: same folder */
+         @reference_id      = @ReferenceId OUTPUT;
+END
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'OracleHost',
+     @parameter_value = N'OracleHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'OraclePort',
+     @parameter_value = N'OraclePort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'OracleService',
+     @parameter_value = N'OracleService',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'OracleUser',
+     @parameter_value = N'OracleUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'OraclePassword',
+     @parameter_value = N'OraclePassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'SqlServerHost',
+     @parameter_value = N'SqlServerHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'SqlServerPort',
+     @parameter_value = N'SqlServerPort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'SqlServerUser',
+     @parameter_value = N'SqlServerUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'SqlServerPassword',
+     @parameter_value = N'SqlServerPassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'SqlServerOltpDb',
+     @parameter_value = N'SqlServerOltpDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'SqlServerStagingDb',
+     @parameter_value = N'SqlServerStagingDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'SqlServerDwDb',
+     @parameter_value = N'SqlServerDwDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'InboundFileRoot',
+     @parameter_value = N'InboundFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'ArchiveFileRoot',
+     @parameter_value = N'ArchiveFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'RejectFileRoot',
+     @parameter_value = N'RejectFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'DefaultBatchSize',
+     @parameter_value = N'DefaultBatchSize',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'SourceQueryTimeoutSeconds',
+     @parameter_value = N'SourceQueryTimeoutSeconds',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'MaxRejectPercent',
+     @parameter_value = N'MaxRejectPercent',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Customer360',
+     @parameter_name = N'EnvironmentCode',
+     @parameter_value = N'EnvironmentCode',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+/* Post-condition: every project parameter resolves to an environment variable. */
+SELECT p.parameter_name,
+       p.value_type,
+       p.design_default_value,
+       p.referenced_variable_name
+FROM SSISDB.catalog.object_parameters AS p
+INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
+INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+WHERE f.name = N'WWI_TEST'
+  AND pr.name = N'WWI_Customer360'
+  AND p.object_type = 20
+ORDER BY p.parameter_name;
+GO
+
+/* Project reference and parameter bindings. */
+IF NOT EXISTS (SELECT 1
+               FROM SSISDB.catalog.environment_references AS r
+               INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
+               INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
+               WHERE p.name = N'WWI_ErrorHandling' AND f.name = N'WWI_TEST'
+                 AND r.environment_name = N'WWI_TEST')
+BEGIN
+    DECLARE @ReferenceId BIGINT;
+    EXEC SSISDB.catalog.create_environment_reference
+         @folder_name       = N'WWI_TEST',
+         @project_name      = N'WWI_ErrorHandling',
+         @environment_name  = N'WWI_TEST',
+         @reference_location = 'L',            /* local: same folder */
+         @reference_id      = @ReferenceId OUTPUT;
+END
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'OracleHost',
+     @parameter_value = N'OracleHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'OraclePort',
+     @parameter_value = N'OraclePort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'OracleService',
+     @parameter_value = N'OracleService',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'OracleUser',
+     @parameter_value = N'OracleUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'OraclePassword',
+     @parameter_value = N'OraclePassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'SqlServerHost',
+     @parameter_value = N'SqlServerHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'SqlServerPort',
+     @parameter_value = N'SqlServerPort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'SqlServerUser',
+     @parameter_value = N'SqlServerUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'SqlServerPassword',
+     @parameter_value = N'SqlServerPassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'SqlServerOltpDb',
+     @parameter_value = N'SqlServerOltpDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'SqlServerStagingDb',
+     @parameter_value = N'SqlServerStagingDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'SqlServerDwDb',
+     @parameter_value = N'SqlServerDwDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'InboundFileRoot',
+     @parameter_value = N'InboundFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'ArchiveFileRoot',
+     @parameter_value = N'ArchiveFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'RejectFileRoot',
+     @parameter_value = N'RejectFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'DefaultBatchSize',
+     @parameter_value = N'DefaultBatchSize',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'SourceQueryTimeoutSeconds',
+     @parameter_value = N'SourceQueryTimeoutSeconds',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'MaxRejectPercent',
+     @parameter_value = N'MaxRejectPercent',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_ErrorHandling',
+     @parameter_name = N'EnvironmentCode',
+     @parameter_value = N'EnvironmentCode',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+/* Post-condition: every project parameter resolves to an environment variable. */
+SELECT p.parameter_name,
+       p.value_type,
+       p.design_default_value,
+       p.referenced_variable_name
+FROM SSISDB.catalog.object_parameters AS p
+INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
+INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+WHERE f.name = N'WWI_TEST'
+  AND pr.name = N'WWI_ErrorHandling'
+  AND p.object_type = 20
+ORDER BY p.parameter_name;
+GO
+
+/* Project reference and parameter bindings. */
+IF NOT EXISTS (SELECT 1
+               FROM SSISDB.catalog.environment_references AS r
+               INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
+               INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
+               WHERE p.name = N'WWI_Maintenance' AND f.name = N'WWI_TEST'
+                 AND r.environment_name = N'WWI_TEST')
+BEGIN
+    DECLARE @ReferenceId BIGINT;
+    EXEC SSISDB.catalog.create_environment_reference
+         @folder_name       = N'WWI_TEST',
+         @project_name      = N'WWI_Maintenance',
+         @environment_name  = N'WWI_TEST',
+         @reference_location = 'L',            /* local: same folder */
+         @reference_id      = @ReferenceId OUTPUT;
+END
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'OracleHost',
+     @parameter_value = N'OracleHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'OraclePort',
+     @parameter_value = N'OraclePort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'OracleService',
+     @parameter_value = N'OracleService',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'OracleUser',
+     @parameter_value = N'OracleUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'OraclePassword',
+     @parameter_value = N'OraclePassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'SqlServerHost',
+     @parameter_value = N'SqlServerHost',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'SqlServerPort',
+     @parameter_value = N'SqlServerPort',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'SqlServerUser',
+     @parameter_value = N'SqlServerUser',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'SqlServerPassword',
+     @parameter_value = N'SqlServerPassword',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'SqlServerOltpDb',
+     @parameter_value = N'SqlServerOltpDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'SqlServerStagingDb',
+     @parameter_value = N'SqlServerStagingDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'SqlServerDwDb',
+     @parameter_value = N'SqlServerDwDb',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'InboundFileRoot',
+     @parameter_value = N'InboundFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'ArchiveFileRoot',
+     @parameter_value = N'ArchiveFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'RejectFileRoot',
+     @parameter_value = N'RejectFileRoot',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'DefaultBatchSize',
+     @parameter_value = N'DefaultBatchSize',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'SourceQueryTimeoutSeconds',
+     @parameter_value = N'SourceQueryTimeoutSeconds',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'MaxRejectPercent',
+     @parameter_value = N'MaxRejectPercent',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+EXEC SSISDB.catalog.set_object_parameter_value
+     @object_type    = 20,                     /* project parameter */
+     @folder_name    = N'WWI_TEST',
+     @project_name   = N'WWI_Maintenance',
+     @parameter_name = N'EnvironmentCode',
+     @parameter_value = N'EnvironmentCode',
+     @value_type     = 'R';                    /* referenced environment variable */
+GO
+
+/* Post-condition: every project parameter resolves to an environment variable. */
+SELECT p.parameter_name,
+       p.value_type,
+       p.design_default_value,
+       p.referenced_variable_name
+FROM SSISDB.catalog.object_parameters AS p
+INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
+INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+WHERE f.name = N'WWI_TEST'
+  AND pr.name = N'WWI_Maintenance'
   AND p.object_type = 20
 ORDER BY p.parameter_name;
 GO

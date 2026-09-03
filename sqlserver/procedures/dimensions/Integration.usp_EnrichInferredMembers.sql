@@ -210,11 +210,12 @@ BEGIN
              @UpdateRowCount     = @EnrichedCount,
              @RejectRowCount     = @AbandonedCount;
 
+        DECLARE @RowsUpdatedValue BIGINT = @EnrichedCount + @RetriedCount;
         EXEC [etl].[usp_LogPackageEnd]
              @PackageExecutionId = @PackageExecutionId,
              @Status             = N'Succeeded',
              @RowsRead           = @PendingCount,
-             @RowsUpdated        = @EnrichedCount + @RetriedCount,
+             @RowsUpdated        = @RowsUpdatedValue,
              @RowsRejected       = @AbandonedCount;
     END TRY
     BEGIN CATCH

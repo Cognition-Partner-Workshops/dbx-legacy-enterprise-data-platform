@@ -2,7 +2,7 @@
  * Object       : TABLE WWI_MDM.PRODUCT_CATEGORY
  * Schema       : WWI_MDM (Oracle ERP - WWIGERP)
  * Deploy order : 33
- * Depends on   : oracle/ddl/02_create_schemas.sql
+ * Depends on   : oracle/ddl/03_create_schemas.sql
  * Called by    : PKG_PRODUCT_MASTER, PRODUCT_MASTER, DIM_Load_StockItem downstream
  *
  * Category master. Self-referencing parent, but only three levels are actually

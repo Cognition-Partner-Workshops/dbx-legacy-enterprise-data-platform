@@ -2,7 +2,7 @@
  * Object       : TABLE WWI_REF.STATUS_CODE_REF
  * Schema       : WWI_REF (Oracle ERP - WWIGERP)
  * Deploy order : 30
- * Depends on   : oracle/ddl/02_create_schemas.sql
+ * Depends on   : oracle/ddl/03_create_schemas.sql
  * Called by    : Every status column in WWI_PROC and WWI_FIN, extract decoding
  *
  * Central decode table for the status codes scattered across the estate. It is

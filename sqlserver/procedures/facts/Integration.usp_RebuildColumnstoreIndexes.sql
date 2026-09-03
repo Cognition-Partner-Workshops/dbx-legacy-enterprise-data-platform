@@ -129,10 +129,10 @@ BEGIN
             @RejectRowCount     = @FailureCount;
 
         IF @OwnsExecution = 1
+            DECLARE @StatusValue NVARCHAR(200) = CASE WHEN @FailureCount = 0 THEN N'Succeeded' ELSE N'Warning' END;
             EXECUTE etl.usp_LogPackageEnd
                 @PackageExecutionId = @PackageExecutionId,
-                @Status             = CASE WHEN @FailureCount = 0
-                                           THEN N'Succeeded' ELSE N'Warning' END,
+                @Status             = @StatusValue,
                 @RowsRead           = @ObjectCount,
                 @RowsUpdated        = @ActionCount,
                 @RowsRejected       = @FailureCount;
@@ -146,11 +146,12 @@ BEGIN
             DEALLOCATE index_cursor;
         END;
 
+        DECLARE @ErrorNumber INT = ERROR_NUMBER();
         EXECUTE etl.usp_LogError
             @PackageExecutionId = @PackageExecutionId,
             @BatchId            = @BatchId,
             @ErrorSeverity      = N'Error',
-            @ErrorCode          = ERROR_NUMBER(),
+            @ErrorCode          = @ErrorNumber,
             @SourceName         = N'Columnstore maintenance',
             @SourceComponent    = N'Index maintenance',
             @ProcedureName      = N'Integration.usp_RebuildColumnstoreIndexes',

@@ -826,11 +826,12 @@ def build_mnt_check_diskspace():
         ("Shortfall", "HasShortfall == (DT_BOOL)1"),
         ("Healthy", "HasShortfall == (DT_BOOL)0"),
     ])
+    flow.multicast("Fan Out Shortfalls", ["Result Output", "Shortfall Output"])
     flow.row_count("Count Volumes", "User::RowsRead")
     flow.oledb_destination("etl PreflightResult", CONN_STAGING, "[etl].[PreflightResult]",
                            batch_size=1000)
     flow.branch_destination("work VolumeShortfall", CONN_STAGING, "[work].[VolumeShortfall]",
-                            "Split Shortfalls", "Shortfall")
+                            "Fan Out Shortfalls", "Shortfall Output")
     evaluate = pkg.add(DataFlowTask(flow))
 
     measure = pkg.add(ExecuteSql(

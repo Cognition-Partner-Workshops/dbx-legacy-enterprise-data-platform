@@ -366,13 +366,15 @@ BEGIN
 
         COMMIT TRANSACTION;
 
+        DECLARE @TargetRowCountValue BIGINT = @InsertedRows + @UpdatedRows;
+        DECLARE @UpdateRowCountValue BIGINT = @UpdatedRows + @ClosedRows;
         EXEC etl.usp_LogRowCount
             @PackageExecutionId = @PackageExecutionId,
             @ObjectName         = @ObjectName,
             @SourceRowCount     = @SourceRows,
-            @TargetRowCount     = @InsertedRows + @UpdatedRows,
+            @TargetRowCount     = @TargetRowCountValue,
             @InsertRowCount     = @InsertedRows,
-            @UpdateRowCount     = @UpdatedRows + @ClosedRows,
+            @UpdateRowCount     = @UpdateRowCountValue,
             @RejectRowCount     = @RejectedRows;
 
         DROP TABLE #CrosswalkGrid;

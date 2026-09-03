@@ -1,10 +1,8 @@
 /* =====================================================================
  * Object       : PROFILE WWI_ETL_PROFILE, PROFILE WWI_APP_PROFILE
  * Schema       : n/a (SYS/DBA level)
- * Deploy order : 03  - referenced by 02_create_schemas.sql, so on a clean
- *                build this script is run first; it is numbered 03 because
- *                the 1998 runbook listed it here and the order was never
- *                corrected.
+ * Deploy order : 02  - before 03_create_schemas.sql, which assigns
+ *                WWI_ETL_PROFILE to the extract account
  * Depends on   : nothing
  * Called by    : DBA deployment runbook (oracle/ddl/README.md)
  *

@@ -2,7 +2,7 @@
  * Object       : TABLE WWI_AUDIT.CHANGE_LOG
  * Schema       : WWI_AUDIT (Oracle ERP - WWIGERP)
  * Deploy order : 80 (first table in WWI_AUDIT)
- * Depends on   : oracle/ddl/02_create_schemas.sql
+ * Depends on   : oracle/ddl/03_create_schemas.sql
  * Called by    : Row-level audit triggers on WWI_MDM and WWI_FIN, CDC-style extracts
  *
  * Row-level change capture written by per-table triggers. Old and new values

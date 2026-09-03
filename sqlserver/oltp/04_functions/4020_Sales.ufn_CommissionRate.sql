@@ -24,13 +24,13 @@ BEGIN
 
     SELECT @Rate = CASE
                        WHEN @AttainmentPercent IS NULL THEN 0
-                       WHEN @AttainmentPercent <= plan.[Band1UpperPercent] THEN plan.[Band1RatePercent]
-                       WHEN @AttainmentPercent <= plan.[Band2UpperPercent] THEN plan.[Band2RatePercent]
-                       WHEN @AttainmentPercent <= plan.[Band3UpperPercent] THEN plan.[Band3RatePercent]
-                       ELSE plan.[Band3RatePercent]
+                       WHEN @AttainmentPercent <= cp.[Band1UpperPercent] THEN cp.[Band1RatePercent]
+                       WHEN @AttainmentPercent <= cp.[Band2UpperPercent] THEN cp.[Band2RatePercent]
+                       WHEN @AttainmentPercent <= cp.[Band3UpperPercent] THEN cp.[Band3RatePercent]
+                       ELSE cp.[Band3RatePercent]
                    END
-    FROM [Sales].[CommissionPlans] AS plan
-    WHERE plan.[CommissionPlanID] = @CommissionPlanID;
+    FROM [Sales].[CommissionPlans] AS cp
+    WHERE cp.[CommissionPlanID] = @CommissionPlanID;
 
     RETURN ISNULL(@Rate, 0);
 END

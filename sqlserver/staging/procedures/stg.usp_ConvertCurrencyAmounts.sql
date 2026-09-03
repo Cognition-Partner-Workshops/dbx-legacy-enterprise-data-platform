@@ -227,11 +227,12 @@ BEGIN
             @ToCurrencyCode   = @ToCurrencyCode,
             @RowsAffected     = @SameCurrencyRows OUTPUT;
 
+        DECLARE @UpdateRowCountValue BIGINT = @UpdatedRows + @SameCurrencyRows;
         EXEC etl.usp_LogRowCount
             @PackageExecutionId = @PackageExecutionId,
             @ObjectName         = @ObjectName,
             @SourceRowCount     = @StagedRows,
-            @UpdateRowCount     = @UpdatedRows + @SameCurrencyRows,
+            @UpdateRowCount     = @UpdateRowCountValue,
             @RejectRowCount     = @MissingRows;
     END TRY
     BEGIN CATCH

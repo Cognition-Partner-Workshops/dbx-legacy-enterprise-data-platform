@@ -2,7 +2,7 @@
  * Object       : TABLE WWI_FIN.GL_ACCOUNT
  * Schema       : WWI_FIN (Oracle ERP - WWIGERP)
  * Deploy order : 60 (first table in WWI_FIN)
- * Depends on   : oracle/ddl/02_create_schemas.sql
+ * Depends on   : oracle/ddl/03_create_schemas.sql
  * Called by    : PKG_GL_POST, PKG_AP_INVOICE, V_GL_ACCOUNT_HIERARCHY
  *
  * Chart of accounts. The natural key is a six-segment concatenated string kept

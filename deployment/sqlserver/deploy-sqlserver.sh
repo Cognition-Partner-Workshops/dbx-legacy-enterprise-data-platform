@@ -7,9 +7,10 @@
 #   1. control     - etl.* framework tables, procedures and views (staging + DW)
 #   2. oltp        - extract views and change-tracking extensions on WideWorldImporters
 #   3. staging     - raw/work/stg/err/ref schemas and load procedures
-#   4. warehouse   - dimensions, facts, aggregates and their load procedures
-#   5. security    - roles, principals and grants (needs the schemas to exist)
-#   6. agent       - msdb jobs (needs the SSIS folder name, not the packages)
+#   4. reference   - shared reference data load procedures (staging)
+#   5. warehouse   - dimensions, facts, aggregates and their load procedures
+#   6. security    - roles, principals and grants (needs the schemas to exist)
+#   7. agent       - msdb jobs (needs the SSIS folder name, not the packages)
 #
 # Connection details come from SQLSERVER_HOST, SQLSERVER_PORT, SQLSERVER_USER,
 # SQLSERVER_PASSWORD, SQLSERVER_OLTP_DB, SQLSERVER_STAGING_DB and
@@ -68,7 +69,6 @@ SQLCMD_VARS=(
     "OracleLinkSecret=${ORACLE_PASSWORD:-}"
     "SsisServer=${SSIS_SERVER:-${SQLSERVER_HOST}}"
     "SsisFolder=${SSIS_FOLDER:-WWI_${ENV_CODE}}"
-    "SsisProject=${SSIS_PROJECT:-WWI_Estate}"
     "SsisProxyAccount=${WWI_SSIS_PROXY_ACCOUNT:-svc-wwi-etl}"
     "FileProxyAccount=${WWI_FILE_PROXY_ACCOUNT:-svc-wwi-files}"
     "SsisProxySecret=${WWI_SSIS_PROXY_PASSWORD:-}"
@@ -138,8 +138,10 @@ stage_control() {
 stage_oltp()      { wwi_log "--- stage 2: OLTP extensions ---"; run_directory "${SQLSERVER_OLTP_DB}"    "${REPO_ROOT}/sqlserver/oltp"; }
 stage_staging()   { wwi_log "--- stage 3: staging ---";         run_directory "${SQLSERVER_STAGING_DB}" "${REPO_ROOT}/sqlserver/staging"; }
 
+stage_reference() { wwi_log "--- stage 4: reference data ---";  run_directory "${SQLSERVER_STAGING_DB}" "${REPO_ROOT}/sqlserver/reference"; }
+
 stage_warehouse() {
-    wwi_log "--- stage 4: warehouse ---"
+    wwi_log "--- stage 5: warehouse ---"
     run_directory "${SQLSERVER_DW_DB}" "${REPO_ROOT}/sqlserver/warehouse/dimensions"
     run_directory "${SQLSERVER_DW_DB}" "${REPO_ROOT}/sqlserver/warehouse/facts"
     run_directory "${SQLSERVER_DW_DB}" "${REPO_ROOT}/sqlserver/warehouse/aggregates"
@@ -149,18 +151,18 @@ stage_warehouse() {
 }
 
 stage_security() {
-    wwi_log "--- stage 5: security ---"
+    wwi_log "--- stage 6: security ---"
     # Every security script sets its own database with USE, so it is submitted
     # against master.
     run_directory "master" "${REPO_ROOT}/sqlserver/security"
 }
 
 stage_agent() {
-    wwi_log "--- stage 6: agent ---"
+    wwi_log "--- stage 7: agent ---"
     run_directory "msdb" "${REPO_ROOT}/sqlserver/agent"
 }
 
-STAGE_NAMES=(control oltp staging warehouse security agent)
+STAGE_NAMES=(control oltp staging reference warehouse security agent)
 STAGE_INDEX=0
 
 for stage in "${STAGE_NAMES[@]}"; do

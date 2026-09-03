@@ -221,11 +221,12 @@ BEGIN
 
         SET @RekeyRows = @@ROWCOUNT;
 
+        DECLARE @InsertRowCountValue BIGINT = @QueuedRows + @RekeyRows;
         EXEC etl.usp_LogRowCount
             @PackageExecutionId = @PackageExecutionId,
             @ObjectName         = @ObjectName,
             @SourceRowCount     = @QueuedRows,
-            @InsertRowCount     = @QueuedRows + @RekeyRows;
+            @InsertRowCount     = @InsertRowCountValue;
     END TRY
     BEGIN CATCH
         EXEC etl.usp_LogError

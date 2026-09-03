@@ -13,7 +13,7 @@
                       executed against any server.
 
     Required sqlcmd variables (the deployment driver supplies all of them):
-        SsisServer, SsisFolder, SsisProject,
+        SsisServer, SsisFolder,
         StagingDatabase, DwDatabase, OltpDatabase,
         AgentLogRoot, InboundFileRoot, QuarantineFileRoot,
         EnvironmentCode, SsisProxyAccount, FileProxyAccount,

@@ -161,11 +161,12 @@ BEGIN
 
         COMMIT TRANSACTION;
 
+        DECLARE @TargetRowCountValue BIGINT = @TargetRows - @DeletedRows;
         EXEC etl.usp_LogRowCount
             @PackageExecutionId = @PackageExecutionId,
             @ObjectName         = @ObjectName,
             @SourceRowCount     = @TargetRows,
-            @TargetRowCount     = @TargetRows - @DeletedRows,
+            @TargetRowCount     = @TargetRowCountValue,
             @UpdateRowCount     = @FlaggedRows,
             @DeleteRowCount     = @DeletedRows,
             @RejectRowCount     = @RejectedRows;

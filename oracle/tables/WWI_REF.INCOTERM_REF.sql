@@ -2,7 +2,7 @@
  * Object       : TABLE WWI_REF.INCOTERM_REF
  * Schema       : WWI_REF (Oracle ERP - WWIGERP)
  * Deploy order : 28
- * Depends on   : oracle/ddl/02_create_schemas.sql
+ * Depends on   : oracle/ddl/03_create_schemas.sql
  * Called by    : PKG_PURCHASE_ORDER, landed-cost calculation
  *
  * Incoterms. Both the 2010 and 2020 revisions are present and active at the

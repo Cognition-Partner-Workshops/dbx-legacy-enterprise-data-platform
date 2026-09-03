@@ -240,11 +240,12 @@ def build_err_route_rejectedrows():
         ("Escalated", "IsEscalated == (DT_BOOL)1"),
         ("Standard", "IsEscalated == (DT_BOOL)0"),
     ])
+    flow.multicast("Fan Out Escalations", ["History Output", "Escalation Output"])
     flow.row_count("Count Routed Rejects", "User::RoutedRowCount")
     flow.oledb_destination("work RejectRoutingHistory", CONN_STAGING,
                            "[work].[RejectRoutingHistory]", batch_size=20000)
     flow.branch_destination("work RejectEscalation", CONN_STAGING, "[work].[RejectEscalation]",
-                            "Split Escalations", "Escalated")
+                            "Fan Out Escalations", "Escalation Output")
     route = pkg.add(DataFlowTask(flow))
 
     escalate = pkg.add(ExecuteSql(
@@ -744,11 +745,12 @@ def build_err_reconcile_rowcounts():
         ("Failed", 'ReconciliationStatus == "FAILED"'),
         ("Passed", 'ReconciliationStatus != "FAILED"'),
     ])
+    flow.multicast("Fan Out Failures", ["Result Output", "Failure Output"])
     flow.row_count("Count Reconciled Objects", "User::RowsRead")
     flow.oledb_destination("etl ReconciliationResult", CONN_STAGING,
                            "[etl].[ReconciliationResult]", batch_size=10000)
     flow.branch_destination("work RowCountFailure", CONN_STAGING, "[work].[RowCountFailure]",
-                            "Split Reconciliation Outcome", "Failed")
+                            "Fan Out Failures", "Failure Output")
     evaluate = pkg.add(DataFlowTask(flow))
 
     measure = pkg.add(ExecuteSql(

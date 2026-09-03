@@ -186,11 +186,12 @@ BEGIN
                 @RejectReason       = N'Loyalty card is not linked to a known customer',
                 @RejectStage        = N'Fact';
 
+        DECLARE @InsertRowCountValue BIGINT = @InsertRowCount + @ExpiryRowCount;
         EXECUTE etl.usp_LogRowCount
             @PackageExecutionId = @PackageExecutionId,
             @ObjectName         = N'Fact.Loyalty Points',
             @SourceRowCount     = @SourceRowCount,
-            @InsertRowCount     = @InsertRowCount + @ExpiryRowCount,
+            @InsertRowCount     = @InsertRowCountValue,
             @RejectRowCount     = @RejectRowCount;
 
         EXECUTE etl.usp_SetWatermark
@@ -200,21 +201,23 @@ BEGIN
             @PackageExecutionId = @PackageExecutionId;
 
         IF @OwnsExecution = 1
+            DECLARE @RowsInsertedValue BIGINT = @InsertRowCount + @ExpiryRowCount;
             EXECUTE etl.usp_LogPackageEnd
                 @PackageExecutionId = @PackageExecutionId,
                 @Status             = N'Succeeded',
                 @RowsRead           = @SourceRowCount,
-                @RowsInserted       = @InsertRowCount + @ExpiryRowCount,
+                @RowsInserted       = @RowsInsertedValue,
                 @RowsRejected       = @RejectRowCount;
     END TRY
     BEGIN CATCH
         DECLARE @ErrorMessage NVARCHAR(MAX) = ERROR_MESSAGE();
 
+        DECLARE @ErrorNumber INT = ERROR_NUMBER();
         EXECUTE etl.usp_LogError
             @PackageExecutionId = @PackageExecutionId,
             @BatchId            = @BatchId,
             @ErrorSeverity      = N'Error',
-            @ErrorCode          = ERROR_NUMBER(),
+            @ErrorCode          = @ErrorNumber,
             @SourceName         = N'Fact.Loyalty Points',
             @SourceComponent    = N'Fact load',
             @ProcedureName      = N'Integration.usp_LoadFactLoyaltyPoints',

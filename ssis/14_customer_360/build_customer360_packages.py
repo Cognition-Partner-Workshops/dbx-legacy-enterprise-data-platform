@@ -594,11 +594,12 @@ def build_c360_build_churnflags():
         ("HighRisk", 'ChurnRiskBandCode == "HIGH"'),
         ("Other", 'ChurnRiskBandCode != "HIGH"'),
     ])
+    flow.multicast("Fan Out High Risk", ["Flag Output", "Work Output"])
     flow.row_count("Count Churn Rows", "User::RowsInserted")
     flow.oledb_destination("Customer360 ChurnFlag", CONN_DW, "[Customer360].[CustomerChurnFlag]",
                            batch_size=50000)
     flow.branch_destination("work ChurnHighRisk", CONN_STAGING, "[work].[CustomerChurnHighRisk]",
-                            "Split Risk Bands", "HighRisk")
+                            "Fan Out High Risk", "Work Output")
     score = pkg.add(DataFlowTask(flow))
 
     high = pkg.add(ExecuteSql(

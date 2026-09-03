@@ -371,14 +371,17 @@ BEGIN
 
         COMMIT TRANSACTION;
 
+        DECLARE @TargetRowCountValue BIGINT = @NaRows + @EuRows + @ApacRows;
+        DECLARE @InsertRowCountValue BIGINT = @NaRows + @EuRows + @ApacRows;
+        DECLARE @RejectRowCountValue BIGINT = @RejectedRows + @LookupMisses;
         EXEC etl.usp_LogRowCount
             @PackageExecutionId = @PackageExecutionId,
             @ObjectName         = @ObjectName,
             @SourceRowCount     = @SourceRows,
-            @TargetRowCount     = @NaRows + @EuRows + @ApacRows,
-            @InsertRowCount     = @NaRows + @EuRows + @ApacRows,
+            @TargetRowCount     = @TargetRowCountValue,
+            @InsertRowCount     = @InsertRowCountValue,
             @UpdateRowCount     = @ClosedRows,
-            @RejectRowCount     = @RejectedRows + @LookupMisses;
+            @RejectRowCount     = @RejectRowCountValue;
 
         DROP TABLE #TaxTyped;
         DROP TABLE #TaxUsable;

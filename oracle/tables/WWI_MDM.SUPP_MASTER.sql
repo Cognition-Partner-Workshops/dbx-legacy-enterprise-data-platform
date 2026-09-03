@@ -2,7 +2,7 @@
  * Object       : TABLE WWI_MDM.SUPP_MASTER
  * Schema       : WWI_MDM (Oracle ERP - WWIGERP)
  * Deploy order : 27
- * Depends on   : oracle/ddl/02_create_schemas.sql, WWI_REF.COUNTRY_REF, WWI_FIN.PAYMENT_TERMS
+ * Depends on   : oracle/ddl/03_create_schemas.sql, WWI_REF.COUNTRY_REF, WWI_FIN.PAYMENT_TERMS
  * Called by    : PKG_SUPPLIER_MASTER, V_SUPPLIER_EXTRACT, SSIS EXT_ORA_SupplierMaster
  *
  * Supplier master. Approval workflow state lives in APPROVAL_STATUS_CD, but a
