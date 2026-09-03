@@ -1,0 +1,762 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{739F7627-DA07-A4C8-DA02-CDE3BB09419F}"
+  DTS:Description="Seed the -1 unknown member into every conformed reference table that declares it is required, so that fact loads can always resolve a dimension key. The seeding loops over the inventory table and builds the insert with dynamic SQL per reference table."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="REF_Load_UnknownMembers"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{FB21EEDF-C818-CCC2-42D7-622D116D3A7D}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{357C872F-9830-F583-F9C7-7E9B8B7AB518}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{81AC3D5F-3767-5C38-5597-FDDF596ADFF9}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{32062416-CA90-4A09-A396-E9DE142CB79B}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{52870B40-EEB9-D0B2-54A3-7EB6C155622A}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWI_OLTP</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{77DE4004-EBDF-A3BB-F8D5-BD6F59945EF7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{9CC5D18B-4150-526A-0CC6-FAD6A35970CF}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{1EB95768-4769-0AFD-66E0-EA3D9E47E7E6}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{7471B1D3-599F-C386-B4A1-157B342934EE}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{06585679-FA9C-0A24-CBFF-9EC4BD34DCB3}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{0E58D12C-D12C-EBAC-8B3E-B025F2A78861}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{526A0263-BE88-7F46-2F68-81D674DFFFF5}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{D9DD0A95-857F-E857-E44D-BB8E45F90CEF}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::UnmappedCodeCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{7F77E76F-AE71-FD46-D489-B69E1251E857}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="UnmappedCodeCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::VersionNumber]"
+      DTS:CreationName=""
+      DTS:DTSID="{4AB56548-DA2C-1FBA-89D7-462686B632D4}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="VersionNumber">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::EffectiveFromDate]"
+      DTS:CreationName=""
+      DTS:DTSID="{87BA3283-AB90-F22C-D11D-6005E3D5455F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="EffectiveFromDate">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Truncate [ref].[UnknownMember]"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{D8E34399-9CF7-F3F6-AFF8-4CE48241D447}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Truncate [ref].[UnknownMember]"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE [ref].[UnknownMember];"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\DFT Seed Unknown Members"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{AF404568-3AED-6D65-045B-4BCD300BC091}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="DFT Seed Unknown Members"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\DFT Seed Unknown Members\REF Table Inventory" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="REF Table Inventory" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT t.ReferenceTableName, N'-1' AS UnknownCodeValue, N'Unknown' AS UnknownDescription
+FROM ref.ReferenceTableInventory AS t
+WHERE t.RequiresUnknownMember = 1;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Seed Unknown Members\REF Table Inventory.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Output].Columns[ReferenceTableName]" dataType="wstr" length="60" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Output].ExternalColumns[ReferenceTableName]" lineageId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Output].Columns[ReferenceTableName]" name="ReferenceTableName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Output].Columns[UnknownCodeValue]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Output].ExternalColumns[UnknownCodeValue]" lineageId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Output].Columns[UnknownCodeValue]" name="UnknownCodeValue" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Output].Columns[UnknownDescription]" dataType="wstr" length="60" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Output].ExternalColumns[UnknownDescription]" lineageId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Output].Columns[UnknownDescription]" name="UnknownDescription" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Output].ExternalColumns[ReferenceTableName]" dataType="wstr" length="60" name="ReferenceTableName" />
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Output].ExternalColumns[UnknownCodeValue]" dataType="wstr" length="20" name="UnknownCodeValue" />
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Output].ExternalColumns[UnknownDescription]" dataType="wstr" length="60" name="UnknownDescription" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Error Output].Columns[ReferenceTableName]" dataType="wstr" length="60" lineageId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Error Output].Columns[ReferenceTableName]" name="ReferenceTableName" />
+                  <outputColumn refId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Error Output].Columns[UnknownCodeValue]" dataType="wstr" length="20" lineageId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Error Output].Columns[UnknownCodeValue]" name="UnknownCodeValue" />
+                  <outputColumn refId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Error Output].Columns[UnknownDescription]" dataType="wstr" length="60" lineageId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Error Output].Columns[UnknownDescription]" name="UnknownDescription" />
+                  <outputColumn refId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Seed Unknown Members\Count Reference Tables" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Reference Tables" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Seed Unknown Members\Count Reference Tables.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Seed Unknown Members\Count Reference Tables.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Seed Unknown Members\Count Reference Tables.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Seed Unknown Members\Shape Unknown Member" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Shape Unknown Member" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\DFT Seed Unknown Members\Shape Unknown Member.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Seed Unknown Members\Shape Unknown Member.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\DFT Seed Unknown Members\Shape Unknown Member.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Seed Unknown Members\Shape Unknown Member.Outputs[Derived Column Output].Columns[CodeValue]" dataType="wstr" length="60" lineageId="Package\DFT Seed Unknown Members\Shape Unknown Member.Outputs[Derived Column Output].Columns[CodeValue]" name="CodeValue">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"-1"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"-1"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Seed Unknown Members\Shape Unknown Member.Outputs[Derived Column Output].Columns[CodeDescription]" dataType="wstr" length="200" lineageId="Package\DFT Seed Unknown Members\Shape Unknown Member.Outputs[Derived Column Output].Columns[CodeDescription]" name="CodeDescription">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"Unknown"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"Unknown"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Seed Unknown Members\Shape Unknown Member.Outputs[Derived Column Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\DFT Seed Unknown Members\Shape Unknown Member.Outputs[Derived Column Output].Columns[RegionCode]" name="RegionCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"ALL"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"ALL"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Seed Unknown Members\Shape Unknown Member.Outputs[Derived Column Output].Columns[IsUnknownMemberFlag]" dataType="wstr" length="1" lineageId="Package\DFT Seed Unknown Members\Shape Unknown Member.Outputs[Derived Column Output].Columns[IsUnknownMemberFlag]" name="IsUnknownMemberFlag">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"Y"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"Y"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Seed Unknown Members\Shape Unknown Member.Outputs[Derived Column Output].Columns[ChangeHash]" dataType="wstr" length="200" lineageId="Package\DFT Seed Unknown Members\Shape Unknown Member.Outputs[Derived Column Output].Columns[ChangeHash]" name="ChangeHash">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"UNKNOWN|MEMBER|SEED"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"UNKNOWN|MEMBER|SEED"</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Seed Unknown Members\Screen Unknown Member" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Screen Unknown Member" version="1">
+            <inputs>
+              <input refId="Package\DFT Seed Unknown Members\Screen Unknown Member.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Seed Unknown Members\Screen Unknown Member.Outputs[Seedable Table]" exclusionGroup="1" name="Seedable Table" synchronousInputId="Package\DFT Seed Unknown Members\Screen Unknown Member.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">LEN(TRIM(ReferenceTableName)) &gt; 0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">LEN(TRIM(ReferenceTableName)) &gt; 0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\DFT Seed Unknown Members\Screen Unknown Member.Outputs[Unnamed Table]" exclusionGroup="1" isDefaultOut="true" name="Unnamed Table" synchronousInputId="Package\DFT Seed Unknown Members\Screen Unknown Member.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Seed Unknown Members\Count Unknown Members Seeded" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Unknown Members Seeded" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsInserted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Seed Unknown Members\Count Unknown Members Seeded.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Seed Unknown Members\Count Unknown Members Seeded.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Seed Unknown Members\Count Unknown Members Seeded.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Seed Unknown Members\REF Unknown Member" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="REF Unknown Member" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[ref].[UnknownMember]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">1000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Seed Unknown Members\REF Unknown Member.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].Columns[ReferenceTableName]" cachedDataType="wstr" cachedLength="60" cachedName="ReferenceTableName" externalMetadataColumnId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[ReferenceTableName]" name="ReferenceTableName" />
+                  <inputColumn refId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].Columns[UnknownCodeValue]" cachedDataType="wstr" cachedLength="20" cachedName="UnknownCodeValue" externalMetadataColumnId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[UnknownCodeValue]" name="UnknownCodeValue" />
+                  <inputColumn refId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].Columns[UnknownDescription]" cachedDataType="wstr" cachedLength="60" cachedName="UnknownDescription" externalMetadataColumnId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[UnknownDescription]" name="UnknownDescription" />
+                  <inputColumn refId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].Columns[CodeValue]" cachedDataType="wstr" cachedLength="60" cachedName="CodeValue" externalMetadataColumnId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" name="CodeValue" />
+                  <inputColumn refId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].Columns[CodeDescription]" cachedDataType="wstr" cachedLength="200" cachedName="CodeDescription" externalMetadataColumnId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" name="CodeDescription" />
+                  <inputColumn refId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].Columns[IsUnknownMemberFlag]" cachedDataType="wstr" cachedLength="1" cachedName="IsUnknownMemberFlag" externalMetadataColumnId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[IsUnknownMemberFlag]" name="IsUnknownMemberFlag" />
+                  <inputColumn refId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].Columns[ChangeHash]" cachedDataType="wstr" cachedLength="200" cachedName="ChangeHash" externalMetadataColumnId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" name="ChangeHash" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[ReferenceTableName]" dataType="wstr" length="60" name="ReferenceTableName" />
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[UnknownCodeValue]" dataType="wstr" length="20" name="UnknownCodeValue" />
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[UnknownDescription]" dataType="wstr" length="60" name="UnknownDescription" />
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" dataType="wstr" length="60" name="CodeValue" />
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" dataType="wstr" length="200" name="CodeDescription" />
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[IsUnknownMemberFlag]" dataType="wstr" length="1" name="IsUnknownMemberFlag" />
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" dataType="wstr" length="200" name="ChangeHash" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Seed Unknown Members\REF Unknown Member.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="ERR Unknown Member Unnamed" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].Columns[ReferenceTableName]" cachedDataType="wstr" cachedLength="60" cachedName="ReferenceTableName" externalMetadataColumnId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].ExternalColumns[ReferenceTableName]" name="ReferenceTableName" />
+                  <inputColumn refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].Columns[UnknownCodeValue]" cachedDataType="wstr" cachedLength="20" cachedName="UnknownCodeValue" externalMetadataColumnId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].ExternalColumns[UnknownCodeValue]" name="UnknownCodeValue" />
+                  <inputColumn refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].Columns[UnknownDescription]" cachedDataType="wstr" cachedLength="60" cachedName="UnknownDescription" externalMetadataColumnId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].ExternalColumns[UnknownDescription]" name="UnknownDescription" />
+                  <inputColumn refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].Columns[CodeValue]" cachedDataType="wstr" cachedLength="60" cachedName="CodeValue" externalMetadataColumnId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" name="CodeValue" />
+                  <inputColumn refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].Columns[CodeDescription]" cachedDataType="wstr" cachedLength="200" cachedName="CodeDescription" externalMetadataColumnId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" name="CodeDescription" />
+                  <inputColumn refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].Columns[IsUnknownMemberFlag]" cachedDataType="wstr" cachedLength="1" cachedName="IsUnknownMemberFlag" externalMetadataColumnId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].ExternalColumns[IsUnknownMemberFlag]" name="IsUnknownMemberFlag" />
+                  <inputColumn refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].Columns[ChangeHash]" cachedDataType="wstr" cachedLength="200" cachedName="ChangeHash" externalMetadataColumnId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" name="ChangeHash" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].ExternalColumns[ReferenceTableName]" dataType="wstr" length="60" name="ReferenceTableName" />
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].ExternalColumns[UnknownCodeValue]" dataType="wstr" length="20" name="UnknownCodeValue" />
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].ExternalColumns[UnknownDescription]" dataType="wstr" length="60" name="UnknownDescription" />
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" dataType="wstr" length="60" name="CodeValue" />
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" dataType="wstr" length="200" name="CodeDescription" />
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].ExternalColumns[IsUnknownMemberFlag]" dataType="wstr" length="1" name="IsUnknownMemberFlag" />
+                  <externalMetadataColumn refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" dataType="wstr" length="200" name="ChangeHash" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\DFT Seed Unknown Members.Paths[OLE DB Source Output]" endId="Package\DFT Seed Unknown Members\Count Reference Tables.Inputs[Row Count Input]" name="OLE DB Source Output" startId="Package\DFT Seed Unknown Members\REF Table Inventory.Outputs[OLE DB Source Output]" />
+          <path refId="Package\DFT Seed Unknown Members.Paths[Row Count Output 1]" endId="Package\DFT Seed Unknown Members\Shape Unknown Member.Inputs[Derived Column Input]" name="Row Count Output 1" startId="Package\DFT Seed Unknown Members\Count Reference Tables.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Seed Unknown Members.Paths[Derived Column Output 2]" endId="Package\DFT Seed Unknown Members\Screen Unknown Member.Inputs[Conditional Split Input]" name="Derived Column Output 2" startId="Package\DFT Seed Unknown Members\Shape Unknown Member.Outputs[Derived Column Output]" />
+          <path refId="Package\DFT Seed Unknown Members.Paths[Seedable Table 3]" endId="Package\DFT Seed Unknown Members\Count Unknown Members Seeded.Inputs[Row Count Input]" name="Seedable Table 3" startId="Package\DFT Seed Unknown Members\Screen Unknown Member.Outputs[Seedable Table]" />
+          <path refId="Package\DFT Seed Unknown Members.Paths[Row Count Output 4]" endId="Package\DFT Seed Unknown Members\REF Unknown Member.Inputs[OLE DB Destination Input]" name="Row Count Output 4" startId="Package\DFT Seed Unknown Members\Count Unknown Members Seeded.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Seed Unknown Members.Paths[Unnamed Table 5]" endId="Package\DFT Seed Unknown Members\ERR Unknown Member Unnamed.Inputs[OLE DB Destination Input]" name="Unnamed Table 5" startId="Package\DFT Seed Unknown Members\Screen Unknown Member.Outputs[Unnamed Table]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\DFT Publish Unknown Members"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{220AADA9-6638-E580-70EE-1730EF9ADD8B}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="DFT Publish Unknown Members"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\DFT Publish Unknown Members\REF Unknown Member Current" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="REF Unknown Member Current" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT ReferenceTableName, CodeValue, CodeDescription, RegionCode FROM ref.UnknownMember;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Output].Columns[ReferenceTableName]" dataType="wstr" length="60" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Output].ExternalColumns[ReferenceTableName]" lineageId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Output].Columns[ReferenceTableName]" name="ReferenceTableName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Output].Columns[CodeValue]" dataType="wstr" length="60" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Output].ExternalColumns[CodeValue]" lineageId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Output].Columns[CodeValue]" name="CodeValue" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Output].Columns[CodeDescription]" dataType="wstr" length="200" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Output].ExternalColumns[CodeDescription]" lineageId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Output].Columns[CodeDescription]" name="CodeDescription" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Output].ExternalColumns[ReferenceTableName]" dataType="wstr" length="60" name="ReferenceTableName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Output].ExternalColumns[CodeValue]" dataType="wstr" length="60" name="CodeValue" />
+                  <externalMetadataColumn refId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Output].ExternalColumns[CodeDescription]" dataType="wstr" length="200" name="CodeDescription" />
+                  <externalMetadataColumn refId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Error Output].Columns[ReferenceTableName]" dataType="wstr" length="60" lineageId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Error Output].Columns[ReferenceTableName]" name="ReferenceTableName" />
+                  <outputColumn refId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Error Output].Columns[CodeValue]" dataType="wstr" length="60" lineageId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Error Output].Columns[CodeValue]" name="CodeValue" />
+                  <outputColumn refId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Error Output].Columns[CodeDescription]" dataType="wstr" length="200" lineageId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Error Output].Columns[CodeDescription]" name="CodeDescription" />
+                  <outputColumn refId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Unknown Members\Count Unknown Members Published" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Unknown Members Published" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsUpdated</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Publish Unknown Members\Count Unknown Members Published.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Unknown Members\Count Unknown Members Published.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Publish Unknown Members\Count Unknown Members Published.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Unknown Members\DW Dimension Unknown Member" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="DW Dimension Unknown Member" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Dimension].[UnknownMember]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">1000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Publish Unknown Members\DW Dimension Unknown Member.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Publish Unknown Members\DW Dimension Unknown Member.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Publish Unknown Members\DW Dimension Unknown Member.Inputs[OLE DB Destination Input].Columns[ReferenceTableName]" cachedDataType="wstr" cachedLength="60" cachedName="ReferenceTableName" externalMetadataColumnId="Package\DFT Publish Unknown Members\DW Dimension Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[ReferenceTableName]" name="ReferenceTableName" />
+                  <inputColumn refId="Package\DFT Publish Unknown Members\DW Dimension Unknown Member.Inputs[OLE DB Destination Input].Columns[CodeValue]" cachedDataType="wstr" cachedLength="60" cachedName="CodeValue" externalMetadataColumnId="Package\DFT Publish Unknown Members\DW Dimension Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" name="CodeValue" />
+                  <inputColumn refId="Package\DFT Publish Unknown Members\DW Dimension Unknown Member.Inputs[OLE DB Destination Input].Columns[CodeDescription]" cachedDataType="wstr" cachedLength="200" cachedName="CodeDescription" externalMetadataColumnId="Package\DFT Publish Unknown Members\DW Dimension Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" name="CodeDescription" />
+                  <inputColumn refId="Package\DFT Publish Unknown Members\DW Dimension Unknown Member.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Publish Unknown Members\DW Dimension Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Publish Unknown Members\DW Dimension Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[ReferenceTableName]" dataType="wstr" length="60" name="ReferenceTableName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Unknown Members\DW Dimension Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" dataType="wstr" length="60" name="CodeValue" />
+                  <externalMetadataColumn refId="Package\DFT Publish Unknown Members\DW Dimension Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" dataType="wstr" length="200" name="CodeDescription" />
+                  <externalMetadataColumn refId="Package\DFT Publish Unknown Members\DW Dimension Unknown Member.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Unknown Members\DW Dimension Unknown Member.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\DFT Publish Unknown Members.Paths[OLE DB Source Output]" endId="Package\DFT Publish Unknown Members\Count Unknown Members Published.Inputs[Row Count Input]" name="OLE DB Source Output" startId="Package\DFT Publish Unknown Members\REF Unknown Member Current.Outputs[OLE DB Source Output]" />
+          <path refId="Package\DFT Publish Unknown Members.Paths[Row Count Output 1]" endId="Package\DFT Publish Unknown Members\DW Dimension Unknown Member.Inputs[OLE DB Destination Input]" name="Row Count Output 1" startId="Package\DFT Publish Unknown Members\Count Unknown Members Published.Outputs[Row Count Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Seed Unknown Member Rows"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{2245A63D-6208-3EE9-9DD3-BDFD760830E7}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Seed Unknown Member Rows"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="DECLARE @Table NVARCHAR(60), @Sql NVARCHAR(MAX);&#10;DECLARE seed_cur CURSOR LOCAL FAST_FORWARD FOR&#10;    SELECT ReferenceTableName FROM ref.ReferenceTableInventory WHERE RequiresUnknownMember = 1;&#10;OPEN seed_cur;&#10;FETCH NEXT FROM seed_cur INTO @Table;&#10;WHILE @@FETCH_STATUS = 0&#10;BEGIN&#10;    SET @Sql = N'IF NOT EXISTS (SELECT 1 FROM ref.' + QUOTENAME(@Table) +&#10;               N' WHERE CodeValue = N''-1'') INSERT INTO ref.' + QUOTENAME(@Table) +&#10;               N' (CodeValue, CodeDescription, RegionCode, ChangeHash, ValidFrom, ValidTo, IsCurrent, VersionNumber) VALUES (N''-1'', N''Unknown'', N''ALL'', N''UNKNOWN'', SYSUTCDATETIME(), CONVERT(DATETIME2(3), N''9999-12-31''), 1, 1);';&#10;    EXEC sp_executesql @Sql;&#10;    FETCH NEXT FROM seed_cur INTO @Table;&#10;END&#10;CLOSE seed_cur;&#10;DEALLOCATE seed_cur;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'ref.UnknownMember', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Truncate [ref].[UnknownMember]" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Truncate [ref].[UnknownMember]"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\DFT Seed Unknown Members" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\DFT Seed Unknown Members"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\DFT Publish Unknown Members" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\DFT Publish Unknown Members"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Seed Unknown Member Rows" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Seed Unknown Member Rows"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{A062FA54-051F-7674-F776-D319B3065F7A}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

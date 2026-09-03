@@ -1,0 +1,817 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{926B1C39-87F4-3BDD-FF6A-43F6DC5B4305}"
+  DTS:Description="Rebuild the loyalty tier reference set from the staged member balances, ranking the tiers and applying the regional discount schedule: richer in APAC, capped at five percent in the EU by local promotion rules and the legacy schedule in NA."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="REF_Load_LoyaltyTier"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{C5689CE8-3BEC-09CB-3B1F-95586AB204FF}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{80AF017F-7581-C9D5-C6E0-C21CDF53C0D5}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{D00B6619-768D-7663-73A2-7646560AE4E6}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{31C48792-1829-7F8D-DB65-BF9C0EDFCEA4}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{9DD8D20B-C9E2-C132-310E-B2E3954A1150}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWI_OLTP</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{2F5F7251-16A4-8ADB-F416-6B0B2F85970B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{272BD207-A9E3-D8F8-D1A9-E1787C08FF1D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{B9EE7993-8701-86C3-F17C-32B886B33A0E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{D73041E6-927A-C83E-7D78-0F6953F00221}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{801668D8-E6BC-7579-A8E2-0F0541A305A9}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{376AAE85-B931-5199-A03B-A3E5E57CFE22}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{015D1563-72B2-0F8A-1C3D-E55B6DE5B8C9}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{47BC7F8B-4A10-00BB-E32C-D75A4F45ADE2}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::UnmappedCodeCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{CC8B2773-4775-8005-FDCA-D18A1656A0D3}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="UnmappedCodeCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::VersionNumber]"
+      DTS:CreationName=""
+      DTS:DTSID="{FE925769-18E0-5327-E6D4-B6879DB8FD4C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="VersionNumber">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::EffectiveFromDate]"
+      DTS:CreationName=""
+      DTS:DTSID="{1F5A9D47-1D9B-316B-9746-C7503C98F584}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="EffectiveFromDate">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Truncate [ref].[LoyaltyTier_Incoming]"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{A1E8A66C-660B-442D-D893-CF4DA64E4399}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Truncate [ref].[LoyaltyTier_Incoming]"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE [ref].[LoyaltyTier_Incoming];"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\DFT Load Loyalty Tier"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{BC6B37A8-8145-4407-4D3E-A6EDC4FEFEF6}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="DFT Load Loyalty Tier"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="STG Loyalty Tier Distribution" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">1800</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT l.LoyaltyTierCode, l.ProgramCode, l.RegionCode,
+       COUNT_BIG(DISTINCT l.CustomerId) AS MemberCount,
+       SUM(CAST(l.NetPointsBalance AS BIGINT)) AS TotalPoints
+FROM stg.LoyaltyLedger AS l
+GROUP BY l.LoyaltyTierCode, l.ProgramCode, l.RegionCode;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].Columns[LoyaltyTierCode]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].ExternalColumns[LoyaltyTierCode]" lineageId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].Columns[LoyaltyTierCode]" name="LoyaltyTierCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].Columns[ProgramCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].ExternalColumns[ProgramCode]" lineageId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].Columns[ProgramCode]" name="ProgramCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].Columns[MemberCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].ExternalColumns[MemberCount]" lineageId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].Columns[MemberCount]" name="MemberCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].Columns[TotalPoints]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].ExternalColumns[TotalPoints]" lineageId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].Columns[TotalPoints]" name="TotalPoints" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].ExternalColumns[LoyaltyTierCode]" dataType="wstr" length="3" name="LoyaltyTierCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].ExternalColumns[ProgramCode]" dataType="wstr" length="10" name="ProgramCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].ExternalColumns[MemberCount]" dataType="i4" name="MemberCount" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output].ExternalColumns[TotalPoints]" dataType="i8" name="TotalPoints" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Error Output].Columns[LoyaltyTierCode]" dataType="wstr" length="3" lineageId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Error Output].Columns[LoyaltyTierCode]" name="LoyaltyTierCode" />
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Error Output].Columns[ProgramCode]" dataType="wstr" length="10" lineageId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Error Output].Columns[ProgramCode]" name="ProgramCode" />
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Error Output].Columns[MemberCount]" dataType="i4" lineageId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Error Output].Columns[MemberCount]" name="MemberCount" />
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Error Output].Columns[TotalPoints]" dataType="i8" lineageId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Error Output].Columns[TotalPoints]" name="TotalPoints" />
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Loyalty Tier\Count Tiers Read" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Tiers Read" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Load Loyalty Tier\Count Tiers Read.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Loyalty Tier\Count Tiers Read.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Load Loyalty Tier\Count Tiers Read.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Conform Loyalty Tier" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Outputs[Derived Column Output].Columns[LoyaltyTierCode]" dataType="wstr" length="3" lineageId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Outputs[Derived Column Output].Columns[LoyaltyTierCode]" name="LoyaltyTierCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(LoyaltyTierCode))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(LoyaltyTierCode))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Outputs[Derived Column Output].Columns[TierName]" dataType="wstr" length="40" lineageId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Outputs[Derived Column Output].Columns[TierName]" name="TierName">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(LoyaltyTierCode)) == "PLT" ? "Platinum" : (UPPER(TRIM(LoyaltyTierCode)) == "GLD" ? "Gold" : (UPPER(TRIM(LoyaltyTierCode)) == "SLV" ? "Silver" : "Bronze"))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(LoyaltyTierCode)) == "PLT" ? "Platinum" : (UPPER(TRIM(LoyaltyTierCode)) == "GLD" ? "Gold" : (UPPER(TRIM(LoyaltyTierCode)) == "SLV" ? "Silver" : "Bronze"))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Outputs[Derived Column Output].Columns[TierRank]" dataType="i4" lineageId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Outputs[Derived Column Output].Columns[TierRank]" name="TierRank">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(LoyaltyTierCode)) == "PLT" ? 1 : (UPPER(TRIM(LoyaltyTierCode)) == "GLD" ? 2 : (UPPER(TRIM(LoyaltyTierCode)) == "SLV" ? 3 : 4))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(LoyaltyTierCode)) == "PLT" ? 1 : (UPPER(TRIM(LoyaltyTierCode)) == "GLD" ? 2 : (UPPER(TRIM(LoyaltyTierCode)) == "SLV" ? 3 : 4))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Outputs[Derived Column Output].Columns[DiscountPercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Outputs[Derived Column Output].Columns[DiscountPercent]" name="DiscountPercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">RegionCode == "APAC" ? (DT_NUMERIC,9,4)(12 - 2 * (UPPER(TRIM(LoyaltyTierCode)) == "PLT" ? 1 : (UPPER(TRIM(LoyaltyTierCode)) == "GLD" ? 2 : (UPPER(TRIM(LoyaltyTierCode)) == "SLV" ? 3 : 4)))) : (RegionCode == "EU" ? (DT_NUMERIC,9,4)5 : (DT_NUMERIC,9,4)(10 - 2 * (UPPER(TRIM(LoyaltyTierCode)) == "PLT" ? 1 : (UPPER(TRIM(LoyaltyTierCode)) == "GLD" ? 2 : (UPPER(TRIM(LoyaltyTierCode)) == "SLV" ? 3 : 4)))))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">RegionCode == "APAC" ? (DT_NUMERIC,9,4)(12 - 2 * (UPPER(TRIM(LoyaltyTierCode)) == "PLT" ? 1 : (UPPER(TRIM(LoyaltyTierCode)) == "GLD" ? 2 : (UPPER(TRIM(LoyaltyTierCode)) == "SLV" ? 3 : 4)))) : (RegionCode == "EU" ? (DT_NUMERIC,9,4)5 : (DT_NUMERIC,9,4)(10 - 2 * (UPPER(TRIM(LoyaltyTierCode)) == "PLT" ? 1 : (UPPER(TRIM(LoyaltyTierCode)) == "GLD" ? 2 : (UPPER(TRIM(LoyaltyTierCode)) == "SLV" ? 3 : 4)))))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Outputs[Derived Column Output].Columns[AveragePointsPerMember]" dataType="numeric" precision="18" scale="2" lineageId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Outputs[Derived Column Output].Columns[AveragePointsPerMember]" name="AveragePointsPerMember">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">MemberCount == 0 ? (DT_NUMERIC,18,2)0 : (DT_NUMERIC,18,2)(TotalPoints / MemberCount)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">MemberCount == 0 ? (DT_NUMERIC,18,2)0 : (DT_NUMERIC,18,2)(TotalPoints / MemberCount)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Outputs[Derived Column Output].Columns[CodeValue]" dataType="wstr" length="60" lineageId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Outputs[Derived Column Output].Columns[CodeValue]" name="CodeValue">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(LoyaltyTierCode))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(LoyaltyTierCode))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Outputs[Derived Column Output].Columns[CodeDescription]" dataType="wstr" length="200" lineageId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Outputs[Derived Column Output].Columns[CodeDescription]" name="CodeDescription">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(LoyaltyTierCode)) == "PLT" ? "Platinum" : (UPPER(TRIM(LoyaltyTierCode)) == "GLD" ? "Gold" : (UPPER(TRIM(LoyaltyTierCode)) == "SLV" ? "Silver" : "Bronze"))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(LoyaltyTierCode)) == "PLT" ? "Platinum" : (UPPER(TRIM(LoyaltyTierCode)) == "GLD" ? "Gold" : (UPPER(TRIM(LoyaltyTierCode)) == "SLV" ? "Silver" : "Bronze"))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Outputs[Derived Column Output].Columns[ChangeHash]" dataType="wstr" length="200" lineageId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Outputs[Derived Column Output].Columns[ChangeHash]" name="ChangeHash">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM((DT_WSTR,60)LoyaltyTierCode)) + "|" + UPPER(TRIM((DT_WSTR,60)ProgramCode)) + "|" + UPPER(TRIM((DT_WSTR,60)RegionCode))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM((DT_WSTR,60)LoyaltyTierCode)) + "|" + UPPER(TRIM((DT_WSTR,60)ProgramCode)) + "|" + UPPER(TRIM((DT_WSTR,60)RegionCode))</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Loyalty Tier\Screen Loyalty Tier" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Screen Loyalty Tier" version="1">
+            <inputs>
+              <input refId="Package\DFT Load Loyalty Tier\Screen Loyalty Tier.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Loyalty Tier\Screen Loyalty Tier.Outputs[Populated Tier]" exclusionGroup="1" name="Populated Tier" synchronousInputId="Package\DFT Load Loyalty Tier\Screen Loyalty Tier.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">MemberCount &gt; 0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">MemberCount &gt; 0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\DFT Load Loyalty Tier\Screen Loyalty Tier.Outputs[Empty Tier]" exclusionGroup="1" isDefaultOut="true" name="Empty Tier" synchronousInputId="Package\DFT Load Loyalty Tier\Screen Loyalty Tier.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Loyalty Tier\Count Tiers Loaded" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Tiers Loaded" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsInserted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Load Loyalty Tier\Count Tiers Loaded.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Loyalty Tier\Count Tiers Loaded.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Load Loyalty Tier\Count Tiers Loaded.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="REF LoyaltyTier Incoming" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[ref].[LoyaltyTier_Incoming]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">5000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].Columns[LoyaltyTierCode]" cachedDataType="wstr" cachedLength="3" cachedName="LoyaltyTierCode" externalMetadataColumnId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyTierCode]" name="LoyaltyTierCode" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].Columns[ProgramCode]" cachedDataType="wstr" cachedLength="10" cachedName="ProgramCode" externalMetadataColumnId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[ProgramCode]" name="ProgramCode" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].Columns[MemberCount]" cachedDataType="i4" cachedName="MemberCount" externalMetadataColumnId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[MemberCount]" name="MemberCount" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].Columns[TotalPoints]" cachedDataType="i8" cachedName="TotalPoints" externalMetadataColumnId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[TotalPoints]" name="TotalPoints" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].Columns[LoyaltyTierCode]" cachedDataType="wstr" cachedLength="3" cachedName="LoyaltyTierCode" externalMetadataColumnId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyTierCode]" name="LoyaltyTierCode" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].Columns[TierName]" cachedDataType="wstr" cachedLength="40" cachedName="TierName" externalMetadataColumnId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[TierName]" name="TierName" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].Columns[TierRank]" cachedDataType="i4" cachedName="TierRank" externalMetadataColumnId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[TierRank]" name="TierRank" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].Columns[DiscountPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="DiscountPercent" externalMetadataColumnId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" name="DiscountPercent" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].Columns[AveragePointsPerMember]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AveragePointsPerMember" externalMetadataColumnId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[AveragePointsPerMember]" name="AveragePointsPerMember" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].Columns[CodeValue]" cachedDataType="wstr" cachedLength="60" cachedName="CodeValue" externalMetadataColumnId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" name="CodeValue" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].Columns[CodeDescription]" cachedDataType="wstr" cachedLength="200" cachedName="CodeDescription" externalMetadataColumnId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" name="CodeDescription" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].Columns[ChangeHash]" cachedDataType="wstr" cachedLength="200" cachedName="ChangeHash" externalMetadataColumnId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" name="ChangeHash" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyTierCode]" dataType="wstr" length="3" name="LoyaltyTierCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[ProgramCode]" dataType="wstr" length="10" name="ProgramCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[MemberCount]" dataType="i4" name="MemberCount" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[TotalPoints]" dataType="i8" name="TotalPoints" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyTierCode]" dataType="wstr" length="3" name="LoyaltyTierCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[TierName]" dataType="wstr" length="40" name="TierName" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[TierRank]" dataType="i4" name="TierRank" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" dataType="numeric" precision="9" scale="4" name="DiscountPercent" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[AveragePointsPerMember]" dataType="numeric" precision="18" scale="2" name="AveragePointsPerMember" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" dataType="wstr" length="60" name="CodeValue" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" dataType="wstr" length="200" name="CodeDescription" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" dataType="wstr" length="200" name="ChangeHash" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="ERR Loyalty Tier Empty" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].Columns[LoyaltyTierCode]" cachedDataType="wstr" cachedLength="3" cachedName="LoyaltyTierCode" externalMetadataColumnId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyTierCode]" name="LoyaltyTierCode" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].Columns[ProgramCode]" cachedDataType="wstr" cachedLength="10" cachedName="ProgramCode" externalMetadataColumnId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[ProgramCode]" name="ProgramCode" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].Columns[MemberCount]" cachedDataType="i4" cachedName="MemberCount" externalMetadataColumnId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[MemberCount]" name="MemberCount" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].Columns[TotalPoints]" cachedDataType="i8" cachedName="TotalPoints" externalMetadataColumnId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[TotalPoints]" name="TotalPoints" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].Columns[LoyaltyTierCode]" cachedDataType="wstr" cachedLength="3" cachedName="LoyaltyTierCode" externalMetadataColumnId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyTierCode]" name="LoyaltyTierCode" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].Columns[TierName]" cachedDataType="wstr" cachedLength="40" cachedName="TierName" externalMetadataColumnId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[TierName]" name="TierName" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].Columns[TierRank]" cachedDataType="i4" cachedName="TierRank" externalMetadataColumnId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[TierRank]" name="TierRank" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].Columns[DiscountPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="DiscountPercent" externalMetadataColumnId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" name="DiscountPercent" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].Columns[AveragePointsPerMember]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AveragePointsPerMember" externalMetadataColumnId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[AveragePointsPerMember]" name="AveragePointsPerMember" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].Columns[CodeValue]" cachedDataType="wstr" cachedLength="60" cachedName="CodeValue" externalMetadataColumnId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" name="CodeValue" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].Columns[CodeDescription]" cachedDataType="wstr" cachedLength="200" cachedName="CodeDescription" externalMetadataColumnId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" name="CodeDescription" />
+                  <inputColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].Columns[ChangeHash]" cachedDataType="wstr" cachedLength="200" cachedName="ChangeHash" externalMetadataColumnId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" name="ChangeHash" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyTierCode]" dataType="wstr" length="3" name="LoyaltyTierCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[ProgramCode]" dataType="wstr" length="10" name="ProgramCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[MemberCount]" dataType="i4" name="MemberCount" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[TotalPoints]" dataType="i8" name="TotalPoints" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyTierCode]" dataType="wstr" length="3" name="LoyaltyTierCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[TierName]" dataType="wstr" length="40" name="TierName" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[TierRank]" dataType="i4" name="TierRank" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[DiscountPercent]" dataType="numeric" precision="9" scale="4" name="DiscountPercent" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[AveragePointsPerMember]" dataType="numeric" precision="18" scale="2" name="AveragePointsPerMember" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" dataType="wstr" length="60" name="CodeValue" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" dataType="wstr" length="200" name="CodeDescription" />
+                  <externalMetadataColumn refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" dataType="wstr" length="200" name="ChangeHash" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\DFT Load Loyalty Tier.Paths[OLE DB Source Output]" endId="Package\DFT Load Loyalty Tier\Count Tiers Read.Inputs[Row Count Input]" name="OLE DB Source Output" startId="Package\DFT Load Loyalty Tier\STG Loyalty Tier Distribution.Outputs[OLE DB Source Output]" />
+          <path refId="Package\DFT Load Loyalty Tier.Paths[Row Count Output 1]" endId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Inputs[Derived Column Input]" name="Row Count Output 1" startId="Package\DFT Load Loyalty Tier\Count Tiers Read.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Load Loyalty Tier.Paths[Derived Column Output 2]" endId="Package\DFT Load Loyalty Tier\Screen Loyalty Tier.Inputs[Conditional Split Input]" name="Derived Column Output 2" startId="Package\DFT Load Loyalty Tier\Conform Loyalty Tier.Outputs[Derived Column Output]" />
+          <path refId="Package\DFT Load Loyalty Tier.Paths[Populated Tier 3]" endId="Package\DFT Load Loyalty Tier\Count Tiers Loaded.Inputs[Row Count Input]" name="Populated Tier 3" startId="Package\DFT Load Loyalty Tier\Screen Loyalty Tier.Outputs[Populated Tier]" />
+          <path refId="Package\DFT Load Loyalty Tier.Paths[Row Count Output 4]" endId="Package\DFT Load Loyalty Tier\REF LoyaltyTier Incoming.Inputs[OLE DB Destination Input]" name="Row Count Output 4" startId="Package\DFT Load Loyalty Tier\Count Tiers Loaded.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Load Loyalty Tier.Paths[Empty Tier 5]" endId="Package\DFT Load Loyalty Tier\ERR Loyalty Tier Empty.Inputs[OLE DB Destination Input]" name="Empty Tier 5" startId="Package\DFT Load Loyalty Tier\Screen Loyalty Tier.Outputs[Empty Tier]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\DFT Publish Loyalty Tier Dimension"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{101443D0-EABB-1E49-C382-E91E1457F312}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="DFT Publish Loyalty Tier Dimension"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="REF LoyaltyTier Current" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">1800</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT CodeValue AS LoyaltyTierCode, CodeDescription AS TierName, RegionCode,
+       VersionNumber, ValidFrom
+FROM ref.LoyaltyTier WHERE IsCurrent = 1;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].Columns[LoyaltyTierCode]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].ExternalColumns[LoyaltyTierCode]" lineageId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].Columns[LoyaltyTierCode]" name="LoyaltyTierCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].Columns[TierName]" dataType="wstr" length="40" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].ExternalColumns[TierName]" lineageId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].Columns[TierName]" name="TierName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].Columns[VersionNumber]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].ExternalColumns[VersionNumber]" lineageId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].Columns[VersionNumber]" name="VersionNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].Columns[ValidFrom]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].ExternalColumns[ValidFrom]" lineageId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].Columns[ValidFrom]" name="ValidFrom" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].ExternalColumns[LoyaltyTierCode]" dataType="wstr" length="3" name="LoyaltyTierCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].ExternalColumns[TierName]" dataType="wstr" length="40" name="TierName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].ExternalColumns[VersionNumber]" dataType="i4" name="VersionNumber" />
+                  <externalMetadataColumn refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output].ExternalColumns[ValidFrom]" dataType="dbTimeStamp" name="ValidFrom" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Error Output].Columns[LoyaltyTierCode]" dataType="wstr" length="3" lineageId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Error Output].Columns[LoyaltyTierCode]" name="LoyaltyTierCode" />
+                  <outputColumn refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Error Output].Columns[TierName]" dataType="wstr" length="40" lineageId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Error Output].Columns[TierName]" name="TierName" />
+                  <outputColumn refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Error Output].Columns[VersionNumber]" dataType="i4" lineageId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Error Output].Columns[VersionNumber]" name="VersionNumber" />
+                  <outputColumn refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Error Output].Columns[ValidFrom]" dataType="dbTimeStamp" lineageId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Error Output].Columns[ValidFrom]" name="ValidFrom" />
+                  <outputColumn refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Loyalty Tier Dimension\Count Tier Dimension Rows" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Tier Dimension Rows" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsUpdated</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Publish Loyalty Tier Dimension\Count Tier Dimension Rows.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Loyalty Tier Dimension\Count Tier Dimension Rows.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Publish Loyalty Tier Dimension\Count Tier Dimension Rows.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="DW Dimension Loyalty Tier" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Dimension].[Loyalty Tier]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">5000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Inputs[OLE DB Destination Input].Columns[LoyaltyTierCode]" cachedDataType="wstr" cachedLength="3" cachedName="LoyaltyTierCode" externalMetadataColumnId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyTierCode]" name="LoyaltyTierCode" />
+                  <inputColumn refId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Inputs[OLE DB Destination Input].Columns[TierName]" cachedDataType="wstr" cachedLength="40" cachedName="TierName" externalMetadataColumnId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Inputs[OLE DB Destination Input].ExternalColumns[TierName]" name="TierName" />
+                  <inputColumn refId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Inputs[OLE DB Destination Input].Columns[VersionNumber]" cachedDataType="i4" cachedName="VersionNumber" externalMetadataColumnId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Inputs[OLE DB Destination Input].ExternalColumns[VersionNumber]" name="VersionNumber" />
+                  <inputColumn refId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Inputs[OLE DB Destination Input].Columns[ValidFrom]" cachedDataType="dbTimeStamp" cachedName="ValidFrom" externalMetadataColumnId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Inputs[OLE DB Destination Input].ExternalColumns[ValidFrom]" name="ValidFrom" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Inputs[OLE DB Destination Input].ExternalColumns[LoyaltyTierCode]" dataType="wstr" length="3" name="LoyaltyTierCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Inputs[OLE DB Destination Input].ExternalColumns[TierName]" dataType="wstr" length="40" name="TierName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Inputs[OLE DB Destination Input].ExternalColumns[VersionNumber]" dataType="i4" name="VersionNumber" />
+                  <externalMetadataColumn refId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Inputs[OLE DB Destination Input].ExternalColumns[ValidFrom]" dataType="dbTimeStamp" name="ValidFrom" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\DFT Publish Loyalty Tier Dimension.Paths[OLE DB Source Output]" endId="Package\DFT Publish Loyalty Tier Dimension\Count Tier Dimension Rows.Inputs[Row Count Input]" name="OLE DB Source Output" startId="Package\DFT Publish Loyalty Tier Dimension\REF LoyaltyTier Current.Outputs[OLE DB Source Output]" />
+          <path refId="Package\DFT Publish Loyalty Tier Dimension.Paths[Row Count Output 1]" endId="Package\DFT Publish Loyalty Tier Dimension\DW Dimension Loyalty Tier.Inputs[OLE DB Destination Input]" name="Row Count Output 1" startId="Package\DFT Publish Loyalty Tier Dimension\Count Tier Dimension Rows.Outputs[Row Count Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Version Reference Set - LOYALTY_TIER"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{21F1947F-148C-D0DD-89B1-0980AE68202E}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Version Reference Set - LOYALTY_TIER"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();&#10;BEGIN TRANSACTION;&#10;UPDATE ref.LoyaltyTier&#10;SET ValidTo = @Now, IsCurrent = 0&#10;WHERE IsCurrent = 1&#10;  AND EXISTS (SELECT 1 FROM ref.LoyaltyTier_Incoming AS i&#10;              WHERE i.BatchId = ? AND i.CodeValue = ref.LoyaltyTier.CodeValue&#10;                AND i.ChangeHash &lt;&gt; ref.LoyaltyTier.ChangeHash);&#10;INSERT INTO ref.LoyaltyTier (CodeValue, CodeDescription, RegionCode, ChangeHash, ValidFrom, ValidTo, IsCurrent, VersionNumber, CodeSetName)&#10;SELECT i.CodeValue, i.CodeDescription, i.RegionCode, i.ChangeHash, @Now, CONVERT(DATETIME2(3), N'9999-12-31'), 1,&#10;       ISNULL((SELECT MAX(p.VersionNumber) FROM ref.LoyaltyTier AS p WHERE p.CodeValue = i.CodeValue), 0) + 1,&#10;       N'LOYALTY_TIER'&#10;FROM ref.LoyaltyTier_Incoming AS i&#10;WHERE i.BatchId = ?&#10;  AND NOT EXISTS (SELECT 1 FROM ref.LoyaltyTier AS c&#10;                  WHERE c.CodeValue = i.CodeValue AND c.IsCurrent = 1&#10;                    AND c.ChangeHash = i.ChangeHash);&#10;COMMIT TRANSACTION;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'ref.LoyaltyTier', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Truncate [ref].[LoyaltyTier_Incoming]" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Truncate [ref].[LoyaltyTier_Incoming]"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\DFT Load Loyalty Tier" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\DFT Load Loyalty Tier"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\DFT Publish Loyalty Tier Dimension" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\DFT Publish Loyalty Tier Dimension"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Version Reference Set - LOYALTY_TIER" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Version Reference Set - LOYALTY_TIER"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{C6C320A6-1D2F-8015-FDC1-D91E1C59A0FB}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

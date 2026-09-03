@@ -1,0 +1,960 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{8F35AAEF-8222-57D9-8720-9C6EC0FB9BF8}"
+  DTS:Description="Rebuild the conformed geography reference set. Postal codes are standardised three different ways depending on the region, duplicate country/state/city combinations are collapsed on sort and rows without a usable city or postal code are rejected."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="REF_Load_Geography"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{41C93366-C691-3A9D-DA4B-C27200B3A22A}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{10CAA457-3814-8728-058B-FD6468B09833}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{B147CC80-1966-70D0-BB0B-5E391581C351}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{7FEC0D84-E120-324D-318B-D3FA72C45EE6}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{AA5FCC4A-8E9E-68BD-C758-F395F399AB50}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWI_OLTP</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{6A5255BB-45B7-CB87-F4F2-EB2D0B6F8488}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{C8C44B2F-F887-3651-FEBA-57BBE3BC9C2E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{1818927C-50FC-C81E-E038-2BC3A75C9EEA}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{B02CD3D4-4B57-4BCE-FD5A-C002C2006680}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{E29E7198-262E-E917-BA55-09A8130F1158}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{DA2946C3-6BAA-25C8-B106-A500FC5DD2DC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{8D2E01C8-31C1-3EF1-C005-1046E0691FB5}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{B4958E79-734B-E859-5B39-E8AE02A750D6}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::UnmappedCodeCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{ED48EA46-CC86-EEBD-D9CC-668A80B074B3}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="UnmappedCodeCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::VersionNumber]"
+      DTS:CreationName=""
+      DTS:DTSID="{AE2DBAEF-0B3E-8A28-AA17-E6CD14A1597D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="VersionNumber">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::EffectiveFromDate]"
+      DTS:CreationName=""
+      DTS:DTSID="{A9AC1A2C-A922-8730-B5FB-71FAFC3DE208}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="EffectiveFromDate">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Truncate [ref].[Geography_Incoming]"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{1E9F130D-DC0A-59D6-D33C-A64762C2D168}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Truncate [ref].[Geography_Incoming]"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE [ref].[Geography_Incoming];"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\DFT Load Geography"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{CA324931-70A2-4DC1-1DDD-B081C82C8C55}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="DFT Load Geography"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\DFT Load Geography\STG Geography" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="STG Geography" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">3600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT g.CountryCode, g.CountryName, g.StateProvinceCode, g.StateProvinceName, g.CityName,
+       g.PostalCode, g.RegionCode, g.SubRegionName
+FROM stg.Geography AS g;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Load Geography\STG Geography.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].Columns[CountryCode]" dataType="wstr" length="3" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].ExternalColumns[CountryCode]" lineageId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].Columns[CountryCode]" name="CountryCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].Columns[CountryName]" dataType="wstr" length="60" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].ExternalColumns[CountryName]" lineageId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].Columns[CountryName]" name="CountryName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].Columns[StateProvinceCode]" dataType="wstr" length="6" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].ExternalColumns[StateProvinceCode]" lineageId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].Columns[StateProvinceCode]" name="StateProvinceCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].Columns[StateProvinceName]" dataType="wstr" length="60" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].ExternalColumns[StateProvinceName]" lineageId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].Columns[StateProvinceName]" name="StateProvinceName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].Columns[CityName]" dataType="wstr" length="60" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].ExternalColumns[CityName]" lineageId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].Columns[CityName]" name="CityName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].Columns[PostalCode]" dataType="wstr" length="16" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].ExternalColumns[PostalCode]" lineageId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].Columns[PostalCode]" name="PostalCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].Columns[SubRegionName]" dataType="wstr" length="60" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].ExternalColumns[SubRegionName]" lineageId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].Columns[SubRegionName]" name="SubRegionName" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].ExternalColumns[CountryCode]" dataType="wstr" length="3" name="CountryCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].ExternalColumns[CountryName]" dataType="wstr" length="60" name="CountryName" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].ExternalColumns[StateProvinceCode]" dataType="wstr" length="6" name="StateProvinceCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].ExternalColumns[StateProvinceName]" dataType="wstr" length="60" name="StateProvinceName" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].ExternalColumns[CityName]" dataType="wstr" length="60" name="CityName" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].ExternalColumns[PostalCode]" dataType="wstr" length="16" name="PostalCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output].ExternalColumns[SubRegionName]" dataType="wstr" length="60" name="SubRegionName" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[CountryCode]" dataType="wstr" length="3" lineageId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[CountryCode]" name="CountryCode" />
+                  <outputColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[CountryName]" dataType="wstr" length="60" lineageId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[CountryName]" name="CountryName" />
+                  <outputColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[StateProvinceCode]" dataType="wstr" length="6" lineageId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[StateProvinceCode]" name="StateProvinceCode" />
+                  <outputColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[StateProvinceName]" dataType="wstr" length="60" lineageId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[StateProvinceName]" name="StateProvinceName" />
+                  <outputColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[CityName]" dataType="wstr" length="60" lineageId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[CityName]" name="CityName" />
+                  <outputColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[PostalCode]" dataType="wstr" length="16" lineageId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[PostalCode]" name="PostalCode" />
+                  <outputColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[SubRegionName]" dataType="wstr" length="60" lineageId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[SubRegionName]" name="SubRegionName" />
+                  <outputColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Geography\Count Geography Rows Read" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Geography Rows Read" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Load Geography\Count Geography Rows Read.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Geography\Count Geography Rows Read.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Load Geography\Count Geography Rows Read.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Geography\Standardize Geography" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Standardize Geography" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\DFT Load Geography\Standardize Geography.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Geography\Standardize Geography.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\DFT Load Geography\Standardize Geography.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Load Geography\Standardize Geography.Outputs[Derived Column Output].Columns[CountryCode]" dataType="wstr" length="3" lineageId="Package\DFT Load Geography\Standardize Geography.Outputs[Derived Column Output].Columns[CountryCode]" name="CountryCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(CountryCode))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(CountryCode))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Geography\Standardize Geography.Outputs[Derived Column Output].Columns[CityNameStandardized]" dataType="wstr" length="60" lineageId="Package\DFT Load Geography\Standardize Geography.Outputs[Derived Column Output].Columns[CityNameStandardized]" name="CityNameStandardized">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(CityName))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(CityName))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Geography\Standardize Geography.Outputs[Derived Column Output].Columns[PostalCodeStandardized]" dataType="wstr" length="16" lineageId="Package\DFT Load Geography\Standardize Geography.Outputs[Derived Column Output].Columns[PostalCodeStandardized]" name="PostalCodeStandardized">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(RegionCode)) == "NA" ? LEFT(REPLACE(TRIM(PostalCode), " ", ""), 5) : (UPPER(TRIM(RegionCode)) == "EU" ? UPPER(TRIM(CountryCode)) + "-" + REPLACE(TRIM(PostalCode), " ", "") : REPLACE(REPLACE(TRIM(PostalCode), "-", ""), " ", ""))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(RegionCode)) == "NA" ? LEFT(REPLACE(TRIM(PostalCode), " ", ""), 5) : (UPPER(TRIM(RegionCode)) == "EU" ? UPPER(TRIM(CountryCode)) + "-" + REPLACE(TRIM(PostalCode), " ", "") : REPLACE(REPLACE(TRIM(PostalCode), "-", ""), " ", ""))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Geography\Standardize Geography.Outputs[Derived Column Output].Columns[PostalPrefix]" dataType="wstr" length="3" lineageId="Package\DFT Load Geography\Standardize Geography.Outputs[Derived Column Output].Columns[PostalPrefix]" name="PostalPrefix">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">LEFT(REPLACE(TRIM(PostalCode), " ", ""), 3)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">LEFT(REPLACE(TRIM(PostalCode), " ", ""), 3)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Geography\Standardize Geography.Outputs[Derived Column Output].Columns[GeographyKeyText]" dataType="wstr" length="130" lineageId="Package\DFT Load Geography\Standardize Geography.Outputs[Derived Column Output].Columns[GeographyKeyText]" name="GeographyKeyText">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(CountryCode)) + "|" + UPPER(TRIM(ISNULL(StateProvinceCode) ? "XX" : StateProvinceCode)) + "|" + UPPER(TRIM(CityName))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(CountryCode)) + "|" + UPPER(TRIM(ISNULL(StateProvinceCode) ? "XX" : StateProvinceCode)) + "|" + UPPER(TRIM(CityName))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Geography\Standardize Geography.Outputs[Derived Column Output].Columns[CodeValue]" dataType="wstr" length="60" lineageId="Package\DFT Load Geography\Standardize Geography.Outputs[Derived Column Output].Columns[CodeValue]" name="CodeValue">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(CountryCode)) + "|" + UPPER(TRIM(ISNULL(StateProvinceCode) ? "XX" : StateProvinceCode))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(CountryCode)) + "|" + UPPER(TRIM(ISNULL(StateProvinceCode) ? "XX" : StateProvinceCode))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Geography\Standardize Geography.Outputs[Derived Column Output].Columns[CodeDescription]" dataType="wstr" length="200" lineageId="Package\DFT Load Geography\Standardize Geography.Outputs[Derived Column Output].Columns[CodeDescription]" name="CodeDescription">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">TRIM(CountryName) + " / " + TRIM(ISNULL(StateProvinceName) ? "" : StateProvinceName)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">TRIM(CountryName) + " / " + TRIM(ISNULL(StateProvinceName) ? "" : StateProvinceName)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Geography\Standardize Geography.Outputs[Derived Column Output].Columns[ChangeHash]" dataType="wstr" length="200" lineageId="Package\DFT Load Geography\Standardize Geography.Outputs[Derived Column Output].Columns[ChangeHash]" name="ChangeHash">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM((DT_WSTR,60)CountryCode)) + "|" + UPPER(TRIM((DT_WSTR,60)StateProvinceCode)) + "|" + UPPER(TRIM((DT_WSTR,60)CityName)) + "|" + UPPER(TRIM((DT_WSTR,60)PostalCode))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM((DT_WSTR,60)CountryCode)) + "|" + UPPER(TRIM((DT_WSTR,60)StateProvinceCode)) + "|" + UPPER(TRIM((DT_WSTR,60)CityName)) + "|" + UPPER(TRIM((DT_WSTR,60)PostalCode))</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Geography\Sort Geography For Dedup" componentClassID="Microsoft.Sort" description="Sort" name="Sort Geography For Dedup" version="1">
+            <properties>
+              <property dataType="System.Boolean" description="Remove duplicate rows." name="EliminateDuplicates">true</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Load Geography\Sort Geography For Dedup.Inputs[Sort Input]" name="Sort Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Load Geography\Sort Geography For Dedup.Inputs[Sort Input].Columns[GeographyKeyText]" cachedName="GeographyKeyText" name="GeographyKeyText">
+                    <properties>
+                      <property dataType="System.Int32" description="Sort key position." name="NewSortKeyPosition">1</property>
+                    </properties>
+                  </inputColumn>
+                  <inputColumn refId="Package\DFT Load Geography\Sort Geography For Dedup.Inputs[Sort Input].Columns[PostalCodeStandardized]" cachedName="PostalCodeStandardized" name="PostalCodeStandardized">
+                    <properties>
+                      <property dataType="System.Int32" description="Sort key position." name="NewSortKeyPosition">2</property>
+                    </properties>
+                  </inputColumn>
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Geography\Sort Geography For Dedup.Outputs[Sort Output]" name="Sort Output" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Geography\Lookup Country Reference (Full Cache)" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Country Reference (Full Cache)" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT CountryCode, IsoNumericCode, ContinentName FROM ref.Country;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">0</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Load Geography\Lookup Country Reference (Full Cache).Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Load Geography\Lookup Country Reference (Full Cache).Inputs[Lookup Input]" errorRowDisposition="RedirectRow" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Load Geography\Lookup Country Reference (Full Cache).Inputs[Lookup Input].Columns[CountryCode]" cachedName="CountryCode" name="CountryCode" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Geography\Lookup Country Reference (Full Cache).Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\DFT Load Geography\Lookup Country Reference (Full Cache).Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Load Geography\Lookup Country Reference (Full Cache).Outputs[Lookup Match Output].Columns[IsoNumericCode]" dataType="wstr" length="3" lineageId="Package\DFT Load Geography\Lookup Country Reference (Full Cache).Outputs[Lookup Match Output].Columns[IsoNumericCode]" name="IsoNumericCode" />
+                  <outputColumn refId="Package\DFT Load Geography\Lookup Country Reference (Full Cache).Outputs[Lookup Match Output].Columns[ContinentName]" dataType="wstr" length="30" lineageId="Package\DFT Load Geography\Lookup Country Reference (Full Cache).Outputs[Lookup Match Output].Columns[ContinentName]" name="ContinentName" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\DFT Load Geography\Lookup Country Reference (Full Cache).Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\DFT Load Geography\Lookup Country Reference (Full Cache).Inputs[Lookup Input]" />
+              <output refId="Package\DFT Load Geography\Lookup Country Reference (Full Cache).Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\DFT Load Geography\Lookup Country Reference (Full Cache).Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Geography\Screen Geography" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Screen Geography" version="1">
+            <inputs>
+              <input refId="Package\DFT Load Geography\Screen Geography.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Geography\Screen Geography.Outputs[Complete Geography]" exclusionGroup="1" name="Complete Geography" synchronousInputId="Package\DFT Load Geography\Screen Geography.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">LEN(CityNameStandardized) &gt; 0 &amp;&amp; LEN(PostalCodeStandardized) &gt; 2</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">LEN(CityNameStandardized) &gt; 0 &amp;&amp; LEN(PostalCodeStandardized) &gt; 2</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\DFT Load Geography\Screen Geography.Outputs[Incomplete Geography]" exclusionGroup="1" isDefaultOut="true" name="Incomplete Geography" synchronousInputId="Package\DFT Load Geography\Screen Geography.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Geography\Count Geography Rows Loaded" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Geography Rows Loaded" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsInserted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Load Geography\Count Geography Rows Loaded.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Geography\Count Geography Rows Loaded.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Load Geography\Count Geography Rows Loaded.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Geography\REF Geography Incoming" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="REF Geography Incoming" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[ref].[Geography_Incoming]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">50000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Load Geography\REF Geography Incoming.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].Columns[CountryCode]" cachedDataType="wstr" cachedLength="3" cachedName="CountryCode" externalMetadataColumnId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CountryCode]" name="CountryCode" />
+                  <inputColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].Columns[CountryName]" cachedDataType="wstr" cachedLength="60" cachedName="CountryName" externalMetadataColumnId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CountryName]" name="CountryName" />
+                  <inputColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].Columns[StateProvinceCode]" cachedDataType="wstr" cachedLength="6" cachedName="StateProvinceCode" externalMetadataColumnId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[StateProvinceCode]" name="StateProvinceCode" />
+                  <inputColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].Columns[StateProvinceName]" cachedDataType="wstr" cachedLength="60" cachedName="StateProvinceName" externalMetadataColumnId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[StateProvinceName]" name="StateProvinceName" />
+                  <inputColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].Columns[CityName]" cachedDataType="wstr" cachedLength="60" cachedName="CityName" externalMetadataColumnId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CityName]" name="CityName" />
+                  <inputColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].Columns[PostalCode]" cachedDataType="wstr" cachedLength="16" cachedName="PostalCode" externalMetadataColumnId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[PostalCode]" name="PostalCode" />
+                  <inputColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].Columns[SubRegionName]" cachedDataType="wstr" cachedLength="60" cachedName="SubRegionName" externalMetadataColumnId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[SubRegionName]" name="SubRegionName" />
+                  <inputColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].Columns[CountryCode]" cachedDataType="wstr" cachedLength="3" cachedName="CountryCode" externalMetadataColumnId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CountryCode]" name="CountryCode" />
+                  <inputColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].Columns[CityNameStandardized]" cachedDataType="wstr" cachedLength="60" cachedName="CityNameStandardized" externalMetadataColumnId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CityNameStandardized]" name="CityNameStandardized" />
+                  <inputColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].Columns[PostalCodeStandardized]" cachedDataType="wstr" cachedLength="16" cachedName="PostalCodeStandardized" externalMetadataColumnId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[PostalCodeStandardized]" name="PostalCodeStandardized" />
+                  <inputColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].Columns[PostalPrefix]" cachedDataType="wstr" cachedLength="3" cachedName="PostalPrefix" externalMetadataColumnId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[PostalPrefix]" name="PostalPrefix" />
+                  <inputColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].Columns[GeographyKeyText]" cachedDataType="wstr" cachedLength="130" cachedName="GeographyKeyText" externalMetadataColumnId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[GeographyKeyText]" name="GeographyKeyText" />
+                  <inputColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].Columns[CodeValue]" cachedDataType="wstr" cachedLength="60" cachedName="CodeValue" externalMetadataColumnId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" name="CodeValue" />
+                  <inputColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].Columns[CodeDescription]" cachedDataType="wstr" cachedLength="200" cachedName="CodeDescription" externalMetadataColumnId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" name="CodeDescription" />
+                  <inputColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].Columns[ChangeHash]" cachedDataType="wstr" cachedLength="200" cachedName="ChangeHash" externalMetadataColumnId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" name="ChangeHash" />
+                  <inputColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].Columns[IsoNumericCode]" cachedDataType="wstr" cachedLength="3" cachedName="IsoNumericCode" externalMetadataColumnId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[IsoNumericCode]" name="IsoNumericCode" />
+                  <inputColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].Columns[ContinentName]" cachedDataType="wstr" cachedLength="30" cachedName="ContinentName" externalMetadataColumnId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[ContinentName]" name="ContinentName" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CountryCode]" dataType="wstr" length="3" name="CountryCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CountryName]" dataType="wstr" length="60" name="CountryName" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[StateProvinceCode]" dataType="wstr" length="6" name="StateProvinceCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[StateProvinceName]" dataType="wstr" length="60" name="StateProvinceName" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CityName]" dataType="wstr" length="60" name="CityName" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[PostalCode]" dataType="wstr" length="16" name="PostalCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[SubRegionName]" dataType="wstr" length="60" name="SubRegionName" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CountryCode]" dataType="wstr" length="3" name="CountryCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CityNameStandardized]" dataType="wstr" length="60" name="CityNameStandardized" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[PostalCodeStandardized]" dataType="wstr" length="16" name="PostalCodeStandardized" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[PostalPrefix]" dataType="wstr" length="3" name="PostalPrefix" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[GeographyKeyText]" dataType="wstr" length="130" name="GeographyKeyText" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" dataType="wstr" length="60" name="CodeValue" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" dataType="wstr" length="200" name="CodeDescription" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" dataType="wstr" length="200" name="ChangeHash" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[IsoNumericCode]" dataType="wstr" length="3" name="IsoNumericCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input].ExternalColumns[ContinentName]" dataType="wstr" length="30" name="ContinentName" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Geography\REF Geography Incoming.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Geography\ERR Geography Incomplete" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="ERR Geography Incomplete" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Load Geography\ERR Geography Incomplete.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].Columns[CountryCode]" cachedDataType="wstr" cachedLength="3" cachedName="CountryCode" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[CountryCode]" name="CountryCode" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].Columns[CountryName]" cachedDataType="wstr" cachedLength="60" cachedName="CountryName" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[CountryName]" name="CountryName" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].Columns[StateProvinceCode]" cachedDataType="wstr" cachedLength="6" cachedName="StateProvinceCode" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[StateProvinceCode]" name="StateProvinceCode" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].Columns[StateProvinceName]" cachedDataType="wstr" cachedLength="60" cachedName="StateProvinceName" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[StateProvinceName]" name="StateProvinceName" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].Columns[CityName]" cachedDataType="wstr" cachedLength="60" cachedName="CityName" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[CityName]" name="CityName" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].Columns[PostalCode]" cachedDataType="wstr" cachedLength="16" cachedName="PostalCode" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[PostalCode]" name="PostalCode" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].Columns[SubRegionName]" cachedDataType="wstr" cachedLength="60" cachedName="SubRegionName" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[SubRegionName]" name="SubRegionName" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].Columns[CountryCode]" cachedDataType="wstr" cachedLength="3" cachedName="CountryCode" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[CountryCode]" name="CountryCode" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].Columns[CityNameStandardized]" cachedDataType="wstr" cachedLength="60" cachedName="CityNameStandardized" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[CityNameStandardized]" name="CityNameStandardized" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].Columns[PostalCodeStandardized]" cachedDataType="wstr" cachedLength="16" cachedName="PostalCodeStandardized" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[PostalCodeStandardized]" name="PostalCodeStandardized" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].Columns[PostalPrefix]" cachedDataType="wstr" cachedLength="3" cachedName="PostalPrefix" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[PostalPrefix]" name="PostalPrefix" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].Columns[GeographyKeyText]" cachedDataType="wstr" cachedLength="130" cachedName="GeographyKeyText" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[GeographyKeyText]" name="GeographyKeyText" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].Columns[CodeValue]" cachedDataType="wstr" cachedLength="60" cachedName="CodeValue" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" name="CodeValue" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].Columns[CodeDescription]" cachedDataType="wstr" cachedLength="200" cachedName="CodeDescription" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" name="CodeDescription" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].Columns[ChangeHash]" cachedDataType="wstr" cachedLength="200" cachedName="ChangeHash" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" name="ChangeHash" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].Columns[IsoNumericCode]" cachedDataType="wstr" cachedLength="3" cachedName="IsoNumericCode" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[IsoNumericCode]" name="IsoNumericCode" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].Columns[ContinentName]" cachedDataType="wstr" cachedLength="30" cachedName="ContinentName" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[ContinentName]" name="ContinentName" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[CountryCode]" dataType="wstr" length="3" name="CountryCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[CountryName]" dataType="wstr" length="60" name="CountryName" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[StateProvinceCode]" dataType="wstr" length="6" name="StateProvinceCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[StateProvinceName]" dataType="wstr" length="60" name="StateProvinceName" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[CityName]" dataType="wstr" length="60" name="CityName" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[PostalCode]" dataType="wstr" length="16" name="PostalCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[SubRegionName]" dataType="wstr" length="60" name="SubRegionName" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[CountryCode]" dataType="wstr" length="3" name="CountryCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[CityNameStandardized]" dataType="wstr" length="60" name="CityNameStandardized" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[PostalCodeStandardized]" dataType="wstr" length="16" name="PostalCodeStandardized" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[PostalPrefix]" dataType="wstr" length="3" name="PostalPrefix" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[GeographyKeyText]" dataType="wstr" length="130" name="GeographyKeyText" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" dataType="wstr" length="60" name="CodeValue" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" dataType="wstr" length="200" name="CodeDescription" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" dataType="wstr" length="200" name="ChangeHash" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[IsoNumericCode]" dataType="wstr" length="3" name="IsoNumericCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[ContinentName]" dataType="wstr" length="30" name="ContinentName" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Geography\ERR Geography Incomplete.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Geography\ERR Geography Unknown Country" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="ERR Geography Unknown Country" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedLookupFailure]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Load Geography\ERR Geography Unknown Country.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].Columns[CountryCode]" cachedDataType="wstr" cachedLength="3" cachedName="CountryCode" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[CountryCode]" name="CountryCode" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].Columns[CountryName]" cachedDataType="wstr" cachedLength="60" cachedName="CountryName" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[CountryName]" name="CountryName" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].Columns[StateProvinceCode]" cachedDataType="wstr" cachedLength="6" cachedName="StateProvinceCode" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[StateProvinceCode]" name="StateProvinceCode" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].Columns[StateProvinceName]" cachedDataType="wstr" cachedLength="60" cachedName="StateProvinceName" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[StateProvinceName]" name="StateProvinceName" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].Columns[CityName]" cachedDataType="wstr" cachedLength="60" cachedName="CityName" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[CityName]" name="CityName" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].Columns[PostalCode]" cachedDataType="wstr" cachedLength="16" cachedName="PostalCode" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[PostalCode]" name="PostalCode" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].Columns[SubRegionName]" cachedDataType="wstr" cachedLength="60" cachedName="SubRegionName" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[SubRegionName]" name="SubRegionName" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].Columns[CountryCode]" cachedDataType="wstr" cachedLength="3" cachedName="CountryCode" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[CountryCode]" name="CountryCode" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].Columns[CityNameStandardized]" cachedDataType="wstr" cachedLength="60" cachedName="CityNameStandardized" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[CityNameStandardized]" name="CityNameStandardized" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].Columns[PostalCodeStandardized]" cachedDataType="wstr" cachedLength="16" cachedName="PostalCodeStandardized" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[PostalCodeStandardized]" name="PostalCodeStandardized" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].Columns[PostalPrefix]" cachedDataType="wstr" cachedLength="3" cachedName="PostalPrefix" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[PostalPrefix]" name="PostalPrefix" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].Columns[GeographyKeyText]" cachedDataType="wstr" cachedLength="130" cachedName="GeographyKeyText" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[GeographyKeyText]" name="GeographyKeyText" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].Columns[CodeValue]" cachedDataType="wstr" cachedLength="60" cachedName="CodeValue" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" name="CodeValue" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].Columns[CodeDescription]" cachedDataType="wstr" cachedLength="200" cachedName="CodeDescription" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" name="CodeDescription" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].Columns[ChangeHash]" cachedDataType="wstr" cachedLength="200" cachedName="ChangeHash" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" name="ChangeHash" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].Columns[IsoNumericCode]" cachedDataType="wstr" cachedLength="3" cachedName="IsoNumericCode" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[IsoNumericCode]" name="IsoNumericCode" />
+                  <inputColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].Columns[ContinentName]" cachedDataType="wstr" cachedLength="30" cachedName="ContinentName" externalMetadataColumnId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[ContinentName]" name="ContinentName" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[CountryCode]" dataType="wstr" length="3" name="CountryCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[CountryName]" dataType="wstr" length="60" name="CountryName" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[StateProvinceCode]" dataType="wstr" length="6" name="StateProvinceCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[StateProvinceName]" dataType="wstr" length="60" name="StateProvinceName" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[CityName]" dataType="wstr" length="60" name="CityName" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[PostalCode]" dataType="wstr" length="16" name="PostalCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[SubRegionName]" dataType="wstr" length="60" name="SubRegionName" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[CountryCode]" dataType="wstr" length="3" name="CountryCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[CityNameStandardized]" dataType="wstr" length="60" name="CityNameStandardized" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[PostalCodeStandardized]" dataType="wstr" length="16" name="PostalCodeStandardized" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[PostalPrefix]" dataType="wstr" length="3" name="PostalPrefix" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[GeographyKeyText]" dataType="wstr" length="130" name="GeographyKeyText" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" dataType="wstr" length="60" name="CodeValue" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" dataType="wstr" length="200" name="CodeDescription" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" dataType="wstr" length="200" name="ChangeHash" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[IsoNumericCode]" dataType="wstr" length="3" name="IsoNumericCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input].ExternalColumns[ContinentName]" dataType="wstr" length="30" name="ContinentName" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Geography\ERR Geography Unknown Country.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\DFT Load Geography.Paths[OLE DB Source Output]" endId="Package\DFT Load Geography\Count Geography Rows Read.Inputs[Row Count Input]" name="OLE DB Source Output" startId="Package\DFT Load Geography\STG Geography.Outputs[OLE DB Source Output]" />
+          <path refId="Package\DFT Load Geography.Paths[Row Count Output 1]" endId="Package\DFT Load Geography\Standardize Geography.Inputs[Derived Column Input]" name="Row Count Output 1" startId="Package\DFT Load Geography\Count Geography Rows Read.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Load Geography.Paths[Derived Column Output 2]" endId="Package\DFT Load Geography\Sort Geography For Dedup.Inputs[Sort Input]" name="Derived Column Output 2" startId="Package\DFT Load Geography\Standardize Geography.Outputs[Derived Column Output]" />
+          <path refId="Package\DFT Load Geography.Paths[Sort Output 3]" endId="Package\DFT Load Geography\Lookup Country Reference (Full Cache).Inputs[Lookup Input]" name="Sort Output 3" startId="Package\DFT Load Geography\Sort Geography For Dedup.Outputs[Sort Output]" />
+          <path refId="Package\DFT Load Geography.Paths[Lookup Match Output 4]" endId="Package\DFT Load Geography\Screen Geography.Inputs[Conditional Split Input]" name="Lookup Match Output 4" startId="Package\DFT Load Geography\Lookup Country Reference (Full Cache).Outputs[Lookup Match Output]" />
+          <path refId="Package\DFT Load Geography.Paths[Complete Geography 5]" endId="Package\DFT Load Geography\Count Geography Rows Loaded.Inputs[Row Count Input]" name="Complete Geography 5" startId="Package\DFT Load Geography\Screen Geography.Outputs[Complete Geography]" />
+          <path refId="Package\DFT Load Geography.Paths[Row Count Output 6]" endId="Package\DFT Load Geography\REF Geography Incoming.Inputs[OLE DB Destination Input]" name="Row Count Output 6" startId="Package\DFT Load Geography\Count Geography Rows Loaded.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Load Geography.Paths[Incomplete Geography 7]" endId="Package\DFT Load Geography\ERR Geography Incomplete.Inputs[OLE DB Destination Input]" name="Incomplete Geography 7" startId="Package\DFT Load Geography\Screen Geography.Outputs[Incomplete Geography]" />
+          <path refId="Package\DFT Load Geography.Paths[Lookup No Match Output 8]" endId="Package\DFT Load Geography\ERR Geography Unknown Country.Inputs[OLE DB Destination Input]" name="Lookup No Match Output 8" startId="Package\DFT Load Geography\Lookup Country Reference (Full Cache).Outputs[Lookup No Match Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\DFT Publish Geography Dimension"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{BE7297A5-AD84-14E3-1375-8BB9EC55D09A}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="DFT Publish Geography Dimension"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\DFT Publish Geography Dimension\REF Geography Current" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="REF Geography Current" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">1800</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT CodeValue AS GeographyCode, CodeDescription AS GeographyName, RegionCode,
+       VersionNumber, ValidFrom
+FROM ref.Geography WHERE IsCurrent = 1;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Publish Geography Dimension\REF Geography Current.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].Columns[GeographyCode]" dataType="wstr" length="60" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].ExternalColumns[GeographyCode]" lineageId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].Columns[GeographyCode]" name="GeographyCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].Columns[GeographyName]" dataType="wstr" length="200" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].ExternalColumns[GeographyName]" lineageId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].Columns[GeographyName]" name="GeographyName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].Columns[VersionNumber]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].ExternalColumns[VersionNumber]" lineageId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].Columns[VersionNumber]" name="VersionNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].Columns[ValidFrom]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].ExternalColumns[ValidFrom]" lineageId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].Columns[ValidFrom]" name="ValidFrom" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].ExternalColumns[GeographyCode]" dataType="wstr" length="60" name="GeographyCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].ExternalColumns[GeographyName]" dataType="wstr" length="200" name="GeographyName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].ExternalColumns[VersionNumber]" dataType="i4" name="VersionNumber" />
+                  <externalMetadataColumn refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output].ExternalColumns[ValidFrom]" dataType="dbTimeStamp" name="ValidFrom" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Error Output].Columns[GeographyCode]" dataType="wstr" length="60" lineageId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Error Output].Columns[GeographyCode]" name="GeographyCode" />
+                  <outputColumn refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Error Output].Columns[GeographyName]" dataType="wstr" length="200" lineageId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Error Output].Columns[GeographyName]" name="GeographyName" />
+                  <outputColumn refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Error Output].Columns[VersionNumber]" dataType="i4" lineageId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Error Output].Columns[VersionNumber]" name="VersionNumber" />
+                  <outputColumn refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Error Output].Columns[ValidFrom]" dataType="dbTimeStamp" lineageId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Error Output].Columns[ValidFrom]" name="ValidFrom" />
+                  <outputColumn refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Geography Dimension\Count Geography Dimension Rows" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Geography Dimension Rows" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsUpdated</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Publish Geography Dimension\Count Geography Dimension Rows.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Geography Dimension\Count Geography Dimension Rows.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Publish Geography Dimension\Count Geography Dimension Rows.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Geography Dimension\DW Dimension Geography" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="DW Dimension Geography" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Dimension].[Geography]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">50000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Inputs[OLE DB Destination Input].Columns[GeographyCode]" cachedDataType="wstr" cachedLength="60" cachedName="GeographyCode" externalMetadataColumnId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Inputs[OLE DB Destination Input].ExternalColumns[GeographyCode]" name="GeographyCode" />
+                  <inputColumn refId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Inputs[OLE DB Destination Input].Columns[GeographyName]" cachedDataType="wstr" cachedLength="200" cachedName="GeographyName" externalMetadataColumnId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Inputs[OLE DB Destination Input].ExternalColumns[GeographyName]" name="GeographyName" />
+                  <inputColumn refId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Inputs[OLE DB Destination Input].Columns[VersionNumber]" cachedDataType="i4" cachedName="VersionNumber" externalMetadataColumnId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Inputs[OLE DB Destination Input].ExternalColumns[VersionNumber]" name="VersionNumber" />
+                  <inputColumn refId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Inputs[OLE DB Destination Input].Columns[ValidFrom]" cachedDataType="dbTimeStamp" cachedName="ValidFrom" externalMetadataColumnId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Inputs[OLE DB Destination Input].ExternalColumns[ValidFrom]" name="ValidFrom" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Inputs[OLE DB Destination Input].ExternalColumns[GeographyCode]" dataType="wstr" length="60" name="GeographyCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Inputs[OLE DB Destination Input].ExternalColumns[GeographyName]" dataType="wstr" length="200" name="GeographyName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Inputs[OLE DB Destination Input].ExternalColumns[VersionNumber]" dataType="i4" name="VersionNumber" />
+                  <externalMetadataColumn refId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Inputs[OLE DB Destination Input].ExternalColumns[ValidFrom]" dataType="dbTimeStamp" name="ValidFrom" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\DFT Publish Geography Dimension.Paths[OLE DB Source Output]" endId="Package\DFT Publish Geography Dimension\Count Geography Dimension Rows.Inputs[Row Count Input]" name="OLE DB Source Output" startId="Package\DFT Publish Geography Dimension\REF Geography Current.Outputs[OLE DB Source Output]" />
+          <path refId="Package\DFT Publish Geography Dimension.Paths[Row Count Output 1]" endId="Package\DFT Publish Geography Dimension\DW Dimension Geography.Inputs[OLE DB Destination Input]" name="Row Count Output 1" startId="Package\DFT Publish Geography Dimension\Count Geography Dimension Rows.Outputs[Row Count Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Version Reference Set - GEOGRAPHY"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{0147FA8D-AD60-0A50-66B1-2A4AC45E82F3}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Version Reference Set - GEOGRAPHY"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();&#10;BEGIN TRANSACTION;&#10;UPDATE ref.Geography&#10;SET ValidTo = @Now, IsCurrent = 0&#10;WHERE IsCurrent = 1&#10;  AND EXISTS (SELECT 1 FROM ref.Geography_Incoming AS i&#10;              WHERE i.BatchId = ? AND i.CodeValue = ref.Geography.CodeValue&#10;                AND i.ChangeHash &lt;&gt; ref.Geography.ChangeHash);&#10;INSERT INTO ref.Geography (CodeValue, CodeDescription, RegionCode, ChangeHash, ValidFrom, ValidTo, IsCurrent, VersionNumber, CodeSetName)&#10;SELECT i.CodeValue, i.CodeDescription, i.RegionCode, i.ChangeHash, @Now, CONVERT(DATETIME2(3), N'9999-12-31'), 1,&#10;       ISNULL((SELECT MAX(p.VersionNumber) FROM ref.Geography AS p WHERE p.CodeValue = i.CodeValue), 0) + 1,&#10;       N'GEOGRAPHY'&#10;FROM ref.Geography_Incoming AS i&#10;WHERE i.BatchId = ?&#10;  AND NOT EXISTS (SELECT 1 FROM ref.Geography AS c&#10;                  WHERE c.CodeValue = i.CodeValue AND c.IsCurrent = 1&#10;                    AND c.ChangeHash = i.ChangeHash);&#10;COMMIT TRANSACTION;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'ref.Geography', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Truncate [ref].[Geography_Incoming]" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Truncate [ref].[Geography_Incoming]"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\DFT Load Geography" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\DFT Load Geography"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\DFT Publish Geography Dimension" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\DFT Publish Geography Dimension"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Version Reference Set - GEOGRAPHY" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Version Reference Set - GEOGRAPHY"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{8ED89F9B-DBAE-2B4A-0C3E-9DFF1F166322}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>
