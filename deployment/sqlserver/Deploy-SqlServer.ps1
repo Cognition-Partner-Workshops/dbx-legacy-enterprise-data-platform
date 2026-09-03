@@ -41,7 +41,8 @@ $repoRoot        = Get-WwiRepositoryRoot
 $environmentCode = Get-WwiEnvironmentCode
 $serverInstance  = "$($env:SQLSERVER_HOST),$($env:SQLSERVER_PORT)"
 
-# sqlcmd picks the secret up from here rather than from -P.
+# sqlcmd picks the secret up from here rather than from -P. Note that -X
+# makes sqlcmd ignore SQLCMDPASSWORD, so it must not be passed below.
 $env:SQLCMDPASSWORD = $env:SQLSERVER_PASSWORD
 
 function Get-DefaultedEnv {
@@ -84,8 +85,13 @@ $sqlcmdVariables = [ordered]@{
 function Get-SqlcmdVariableArguments {
     $args = @()
     foreach ($key in $sqlcmdVariables.Keys) {
+        # sqlcmd rejects "-v Name=" outright, so a variable with no value has to
+        # be left out; a script that needs it fails on the reference instead.
+        if ([string]::IsNullOrWhiteSpace($sqlcmdVariables[$key])) { continue }
         $args += '-v'
-        $args += ("{0}={1}" -f $key, $sqlcmdVariables[$key])
+        # The value is quoted because sqlcmd otherwise splits paths such as
+        # D:\WWI\Logs\Agent and rejects the remainder as an unknown argument.
+        $args += ('{0}="{1}"' -f $key, $sqlcmdVariables[$key])
     }
     return $args
 }
@@ -101,7 +107,7 @@ function Invoke-SqlScript {
 
     Write-WwiLog "RUN    [$Database] $relative"
     $arguments = @('-S', $serverInstance, '-U', $env:SQLSERVER_USER, '-d', $Database,
-                   '-b', '-I', '-X1', '-j') + (Get-SqlcmdVariableArguments) + @('-i', $Path)
+                   '-b', '-I', '-j') + (Get-SqlcmdVariableArguments) + @('-i', $Path)
     & sqlcmd @arguments
     if ($LASTEXITCODE -ne 0) {
         Stop-WwiWithError "$relative failed against $Database (exit code $LASTEXITCODE)."
