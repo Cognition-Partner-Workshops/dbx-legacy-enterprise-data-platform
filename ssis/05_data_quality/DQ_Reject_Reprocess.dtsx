@@ -1,0 +1,853 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{9CC8CF4B-C340-6089-771A-5D71BD1BBB14}"
+  DTS:Description="Replay rejected lookup failures after late-arriving dimension rows land. Each reject gets at most five retries over thirty days; rows that resolve are replayed into stg.OrderLine and closed out, rows that age out stay in err.RejectedLookupFailure for stewardship."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="DQ_Reject_Reprocess"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{53C35B2B-DAD1-1B6B-6439-7431EC876646}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{59A003C8-0975-6DEA-BE1D-C35F8697C389}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{D9A626CC-0A22-2ABB-AF8A-EEAF32E56B84}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{02A4EC74-CBEC-9904-9369-C79A341169FA}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{0E830595-6EC2-3E39-2B0A-C0E10B7AAD64}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWI_OLTP</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{C5532140-B62B-1865-CB26-E5427DA9FAB8}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{15D51917-CAE9-8FDC-B14D-ECCBC720179B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{FE80292F-9705-535C-9579-2F6A94035E42}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{5ABA6E24-B43D-8493-9B36-AE699878A097}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{BF3CD16F-1063-BCE0-5B84-DC8A01B8902F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{E9477B24-1D70-C47D-82D0-2FAA091453DC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{CA1ED67F-CEEE-1677-1A1B-627CB285029F}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{E63D1CAA-48F0-588C-FBC8-E7235DF37538}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::FailedRuleCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{2570F734-7E83-28BF-72F2-130DBCA36B45}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="FailedRuleCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::FailedObjectCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{1B880F60-DB52-321D-7A14-EBFFC2FA1220}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="FailedObjectCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::MeasuredValue]"
+      DTS:CreationName=""
+      DTS:DTSID="{7C9A1AB5-7CCC-0542-A69E-EF2B7ACCB833}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="MeasuredValue">
+      <DTS:VariableValue DTS:DataType="14" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::SecondaryMeasure]"
+      DTS:CreationName=""
+      DTS:DTSID="{4C2D9A2E-207E-F795-610C-60795B0BDFB3}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="SecondaryMeasure">
+      <DTS:VariableValue DTS:DataType="14" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ThresholdPercent]"
+      DTS:CreationName=""
+      DTS:DTSID="{659E227B-FF91-F3C8-2493-ECC3B5851FFB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ThresholdPercent">
+      <DTS:VariableValue DTS:DataType="14" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::QualityScore]"
+      DTS:CreationName=""
+      DTS:DTSID="{E67459DE-B6C7-F40E-0F36-FA853E0354CB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="QualityScore">
+      <DTS:VariableValue DTS:DataType="14" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\DFT Reprocess Rejects"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{7552DA86-F56C-8B12-5108-455030616069}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="DFT Reprocess Rejects"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="ERR Rejected Lookup Failure" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">3600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT RejectedRowId, ObjectName, BusinessKey, RejectReasonCode, RetryCount,
+       FirstRejectedAtUtc, PayloadJson
+FROM err.RejectedLookupFailure
+WHERE Reprocessed = 0 AND RetryCount &lt; 5;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].Columns[RejectedRowId]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].ExternalColumns[RejectedRowId]" lineageId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].Columns[RejectedRowId]" name="RejectedRowId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].Columns[ObjectName]" dataType="wstr" length="200" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].ExternalColumns[ObjectName]" lineageId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].Columns[ObjectName]" name="ObjectName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].Columns[BusinessKey]" dataType="wstr" length="200" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].ExternalColumns[BusinessKey]" lineageId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].Columns[BusinessKey]" name="BusinessKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].Columns[RejectReasonCode]" dataType="wstr" length="30" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].ExternalColumns[RejectReasonCode]" lineageId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].Columns[RejectReasonCode]" name="RejectReasonCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].Columns[RetryCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].ExternalColumns[RetryCount]" lineageId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].Columns[RetryCount]" name="RetryCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].Columns[FirstRejectedAtUtc]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].ExternalColumns[FirstRejectedAtUtc]" lineageId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].Columns[FirstRejectedAtUtc]" name="FirstRejectedAtUtc" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].Columns[PayloadJson]" dataType="wstr" length="4000" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].ExternalColumns[PayloadJson]" lineageId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].Columns[PayloadJson]" name="PayloadJson" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].ExternalColumns[RejectedRowId]" dataType="i8" name="RejectedRowId" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].ExternalColumns[ObjectName]" dataType="wstr" length="200" name="ObjectName" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].ExternalColumns[BusinessKey]" dataType="wstr" length="200" name="BusinessKey" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].ExternalColumns[RejectReasonCode]" dataType="wstr" length="30" name="RejectReasonCode" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].ExternalColumns[RetryCount]" dataType="i4" name="RetryCount" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].ExternalColumns[FirstRejectedAtUtc]" dataType="dbTimeStamp" name="FirstRejectedAtUtc" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output].ExternalColumns[PayloadJson]" dataType="wstr" length="4000" name="PayloadJson" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output].Columns[RejectedRowId]" dataType="i8" lineageId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output].Columns[RejectedRowId]" name="RejectedRowId" />
+                  <outputColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output].Columns[ObjectName]" dataType="wstr" length="200" lineageId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output].Columns[ObjectName]" name="ObjectName" />
+                  <outputColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output].Columns[BusinessKey]" dataType="wstr" length="200" lineageId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output].Columns[BusinessKey]" name="BusinessKey" />
+                  <outputColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output].Columns[RejectReasonCode]" dataType="wstr" length="30" lineageId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output].Columns[RejectReasonCode]" name="RejectReasonCode" />
+                  <outputColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output].Columns[RetryCount]" dataType="i4" lineageId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output].Columns[RetryCount]" name="RetryCount" />
+                  <outputColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output].Columns[FirstRejectedAtUtc]" dataType="dbTimeStamp" lineageId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output].Columns[FirstRejectedAtUtc]" name="FirstRejectedAtUtc" />
+                  <outputColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output].Columns[PayloadJson]" dataType="wstr" length="4000" lineageId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output].Columns[PayloadJson]" name="PayloadJson" />
+                  <outputColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Reprocess Rejects\Count Rejects Considered" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Rejects Considered" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Reprocess Rejects\Count Rejects Considered.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Reprocess Rejects\Count Rejects Considered.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Reprocess Rejects\Count Rejects Considered.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Reprocess Rejects\Prepare Retry" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Prepare Retry" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\DFT Reprocess Rejects\Prepare Retry.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Reprocess Rejects\Prepare Retry.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\DFT Reprocess Rejects\Prepare Retry.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Reprocess Rejects\Prepare Retry.Outputs[Derived Column Output].Columns[RetryCount]" dataType="i4" lineageId="Package\DFT Reprocess Rejects\Prepare Retry.Outputs[Derived Column Output].Columns[RetryCount]" name="RetryCount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(RetryCount) ? 1 : RetryCount + 1</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(RetryCount) ? 1 : RetryCount + 1</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Reprocess Rejects\Prepare Retry.Outputs[Derived Column Output].Columns[AgeDays]" dataType="i4" lineageId="Package\DFT Reprocess Rejects\Prepare Retry.Outputs[Derived Column Output].Columns[AgeDays]" name="AgeDays">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">DATEDIFF("day", FirstRejectedAtUtc, GETUTCDATE())</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">DATEDIFF("day", FirstRejectedAtUtc, GETUTCDATE())</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Reprocess Rejects\Prepare Retry.Outputs[Derived Column Output].Columns[StockItemId]" dataType="i4" lineageId="Package\DFT Reprocess Rejects\Prepare Retry.Outputs[Derived Column Output].Columns[StockItemId]" name="StockItemId">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_I4)TOKEN(BusinessKey, "|", 2)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_I4)TOKEN(BusinessKey, "|", 2)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Reprocess Rejects\Prepare Retry.Outputs[Derived Column Output].Columns[AbandonFlag]" dataType="wstr" length="1" lineageId="Package\DFT Reprocess Rejects\Prepare Retry.Outputs[Derived Column Output].Columns[AbandonFlag]" name="AbandonFlag">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">DATEDIFF("day", FirstRejectedAtUtc, GETUTCDATE()) &gt; 30 ? "Y" : "N"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">DATEDIFF("day", FirstRejectedAtUtc, GETUTCDATE()) &gt; 30 ? "Y" : "N"</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Reprocess Rejects\Re-Lookup Stock Item (No Cache)" componentClassID="Microsoft.Lookup" description="Lookup" name="Re-Lookup Stock Item (No Cache)" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT StockItemId, StockItemName FROM stg.StockItem;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">0</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Reprocess Rejects\Re-Lookup Stock Item (No Cache).Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Reprocess Rejects\Re-Lookup Stock Item (No Cache).Inputs[Lookup Input]" errorRowDisposition="RedirectRow" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Reprocess Rejects\Re-Lookup Stock Item (No Cache).Inputs[Lookup Input].Columns[StockItemId]" cachedName="StockItemId" name="StockItemId" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Reprocess Rejects\Re-Lookup Stock Item (No Cache).Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\DFT Reprocess Rejects\Re-Lookup Stock Item (No Cache).Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Reprocess Rejects\Re-Lookup Stock Item (No Cache).Outputs[Lookup Match Output].Columns[StockItemName]" dataType="wstr" length="100" lineageId="Package\DFT Reprocess Rejects\Re-Lookup Stock Item (No Cache).Outputs[Lookup Match Output].Columns[StockItemName]" name="StockItemName" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\DFT Reprocess Rejects\Re-Lookup Stock Item (No Cache).Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\DFT Reprocess Rejects\Re-Lookup Stock Item (No Cache).Inputs[Lookup Input]" />
+              <output refId="Package\DFT Reprocess Rejects\Re-Lookup Stock Item (No Cache).Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\DFT Reprocess Rejects\Re-Lookup Stock Item (No Cache).Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Reprocess Rejects\Route Reprocess Outcome" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Route Reprocess Outcome" version="1">
+            <inputs>
+              <input refId="Package\DFT Reprocess Rejects\Route Reprocess Outcome.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Reprocess Rejects\Route Reprocess Outcome.Outputs[Resolved Now]" exclusionGroup="1" name="Resolved Now" synchronousInputId="Package\DFT Reprocess Rejects\Route Reprocess Outcome.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">AbandonFlag == "N"</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">AbandonFlag == "N"</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\DFT Reprocess Rejects\Route Reprocess Outcome.Outputs[Aged Out]" exclusionGroup="1" isDefaultOut="true" name="Aged Out" synchronousInputId="Package\DFT Reprocess Rejects\Route Reprocess Outcome.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Reprocess Rejects\Count Rejects Resolved" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Rejects Resolved" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsInserted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Reprocess Rejects\Count Rejects Resolved.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Reprocess Rejects\Count Rejects Resolved.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Reprocess Rejects\Count Rejects Resolved.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Reprocess Rejects\STG OrderLine Replay" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="STG OrderLine Replay" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[stg].[OrderLine]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].Columns[RejectedRowId]" cachedDataType="i8" cachedName="RejectedRowId" externalMetadataColumnId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[RejectedRowId]" name="RejectedRowId" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].Columns[ObjectName]" cachedDataType="wstr" cachedLength="200" cachedName="ObjectName" externalMetadataColumnId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[ObjectName]" name="ObjectName" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].Columns[BusinessKey]" cachedDataType="wstr" cachedLength="200" cachedName="BusinessKey" externalMetadataColumnId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" name="BusinessKey" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].Columns[RejectReasonCode]" cachedDataType="wstr" cachedLength="30" cachedName="RejectReasonCode" externalMetadataColumnId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" name="RejectReasonCode" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].Columns[RetryCount]" cachedDataType="i4" cachedName="RetryCount" externalMetadataColumnId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" name="RetryCount" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].Columns[FirstRejectedAtUtc]" cachedDataType="dbTimeStamp" cachedName="FirstRejectedAtUtc" externalMetadataColumnId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[FirstRejectedAtUtc]" name="FirstRejectedAtUtc" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].Columns[PayloadJson]" cachedDataType="wstr" cachedLength="4000" cachedName="PayloadJson" externalMetadataColumnId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[PayloadJson]" name="PayloadJson" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].Columns[RetryCount]" cachedDataType="i4" cachedName="RetryCount" externalMetadataColumnId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" name="RetryCount" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].Columns[AgeDays]" cachedDataType="i4" cachedName="AgeDays" externalMetadataColumnId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[AgeDays]" name="AgeDays" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].Columns[StockItemId]" cachedDataType="i4" cachedName="StockItemId" externalMetadataColumnId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" name="StockItemId" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].Columns[AbandonFlag]" cachedDataType="wstr" cachedLength="1" cachedName="AbandonFlag" externalMetadataColumnId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[AbandonFlag]" name="AbandonFlag" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].Columns[StockItemName]" cachedDataType="wstr" cachedLength="100" cachedName="StockItemName" externalMetadataColumnId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[StockItemName]" name="StockItemName" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[RejectedRowId]" dataType="i8" name="RejectedRowId" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[ObjectName]" dataType="wstr" length="200" name="ObjectName" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" dataType="wstr" length="200" name="BusinessKey" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" dataType="wstr" length="30" name="RejectReasonCode" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" dataType="i4" name="RetryCount" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[FirstRejectedAtUtc]" dataType="dbTimeStamp" name="FirstRejectedAtUtc" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[PayloadJson]" dataType="wstr" length="4000" name="PayloadJson" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" dataType="i4" name="RetryCount" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[AgeDays]" dataType="i4" name="AgeDays" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" dataType="i4" name="StockItemId" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[AbandonFlag]" dataType="wstr" length="1" name="AbandonFlag" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input].ExternalColumns[StockItemName]" dataType="wstr" length="100" name="StockItemName" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="ERR Reject Aged Out" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedLookupFailure]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].Columns[RejectedRowId]" cachedDataType="i8" cachedName="RejectedRowId" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[RejectedRowId]" name="RejectedRowId" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].Columns[ObjectName]" cachedDataType="wstr" cachedLength="200" cachedName="ObjectName" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[ObjectName]" name="ObjectName" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].Columns[BusinessKey]" cachedDataType="wstr" cachedLength="200" cachedName="BusinessKey" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" name="BusinessKey" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].Columns[RejectReasonCode]" cachedDataType="wstr" cachedLength="30" cachedName="RejectReasonCode" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" name="RejectReasonCode" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].Columns[RetryCount]" cachedDataType="i4" cachedName="RetryCount" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" name="RetryCount" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].Columns[FirstRejectedAtUtc]" cachedDataType="dbTimeStamp" cachedName="FirstRejectedAtUtc" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[FirstRejectedAtUtc]" name="FirstRejectedAtUtc" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].Columns[PayloadJson]" cachedDataType="wstr" cachedLength="4000" cachedName="PayloadJson" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[PayloadJson]" name="PayloadJson" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].Columns[RetryCount]" cachedDataType="i4" cachedName="RetryCount" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" name="RetryCount" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].Columns[AgeDays]" cachedDataType="i4" cachedName="AgeDays" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[AgeDays]" name="AgeDays" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].Columns[StockItemId]" cachedDataType="i4" cachedName="StockItemId" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" name="StockItemId" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].Columns[AbandonFlag]" cachedDataType="wstr" cachedLength="1" cachedName="AbandonFlag" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[AbandonFlag]" name="AbandonFlag" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].Columns[StockItemName]" cachedDataType="wstr" cachedLength="100" cachedName="StockItemName" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[StockItemName]" name="StockItemName" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[RejectedRowId]" dataType="i8" name="RejectedRowId" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[ObjectName]" dataType="wstr" length="200" name="ObjectName" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" dataType="wstr" length="200" name="BusinessKey" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" dataType="wstr" length="30" name="RejectReasonCode" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" dataType="i4" name="RetryCount" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[FirstRejectedAtUtc]" dataType="dbTimeStamp" name="FirstRejectedAtUtc" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[PayloadJson]" dataType="wstr" length="4000" name="PayloadJson" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" dataType="i4" name="RetryCount" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[AgeDays]" dataType="i4" name="AgeDays" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" dataType="i4" name="StockItemId" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[AbandonFlag]" dataType="wstr" length="1" name="AbandonFlag" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input].ExternalColumns[StockItemName]" dataType="wstr" length="100" name="StockItemName" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="ERR Reject Still Unresolved" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedLookupFailure]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].Columns[RejectedRowId]" cachedDataType="i8" cachedName="RejectedRowId" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[RejectedRowId]" name="RejectedRowId" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].Columns[ObjectName]" cachedDataType="wstr" cachedLength="200" cachedName="ObjectName" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[ObjectName]" name="ObjectName" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].Columns[BusinessKey]" cachedDataType="wstr" cachedLength="200" cachedName="BusinessKey" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" name="BusinessKey" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].Columns[RejectReasonCode]" cachedDataType="wstr" cachedLength="30" cachedName="RejectReasonCode" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" name="RejectReasonCode" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].Columns[RetryCount]" cachedDataType="i4" cachedName="RetryCount" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" name="RetryCount" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].Columns[FirstRejectedAtUtc]" cachedDataType="dbTimeStamp" cachedName="FirstRejectedAtUtc" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[FirstRejectedAtUtc]" name="FirstRejectedAtUtc" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].Columns[PayloadJson]" cachedDataType="wstr" cachedLength="4000" cachedName="PayloadJson" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[PayloadJson]" name="PayloadJson" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].Columns[RetryCount]" cachedDataType="i4" cachedName="RetryCount" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" name="RetryCount" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].Columns[AgeDays]" cachedDataType="i4" cachedName="AgeDays" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[AgeDays]" name="AgeDays" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].Columns[StockItemId]" cachedDataType="i4" cachedName="StockItemId" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" name="StockItemId" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].Columns[AbandonFlag]" cachedDataType="wstr" cachedLength="1" cachedName="AbandonFlag" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[AbandonFlag]" name="AbandonFlag" />
+                  <inputColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].Columns[StockItemName]" cachedDataType="wstr" cachedLength="100" cachedName="StockItemName" externalMetadataColumnId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[StockItemName]" name="StockItemName" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[RejectedRowId]" dataType="i8" name="RejectedRowId" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[ObjectName]" dataType="wstr" length="200" name="ObjectName" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" dataType="wstr" length="200" name="BusinessKey" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" dataType="wstr" length="30" name="RejectReasonCode" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" dataType="i4" name="RetryCount" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[FirstRejectedAtUtc]" dataType="dbTimeStamp" name="FirstRejectedAtUtc" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[PayloadJson]" dataType="wstr" length="4000" name="PayloadJson" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[RetryCount]" dataType="i4" name="RetryCount" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[AgeDays]" dataType="i4" name="AgeDays" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[StockItemId]" dataType="i4" name="StockItemId" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[AbandonFlag]" dataType="wstr" length="1" name="AbandonFlag" />
+                  <externalMetadataColumn refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input].ExternalColumns[StockItemName]" dataType="wstr" length="100" name="StockItemName" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\DFT Reprocess Rejects.Paths[OLE DB Source Output]" endId="Package\DFT Reprocess Rejects\Count Rejects Considered.Inputs[Row Count Input]" name="OLE DB Source Output" startId="Package\DFT Reprocess Rejects\ERR Rejected Lookup Failure.Outputs[OLE DB Source Output]" />
+          <path refId="Package\DFT Reprocess Rejects.Paths[Row Count Output 1]" endId="Package\DFT Reprocess Rejects\Prepare Retry.Inputs[Derived Column Input]" name="Row Count Output 1" startId="Package\DFT Reprocess Rejects\Count Rejects Considered.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Reprocess Rejects.Paths[Derived Column Output 2]" endId="Package\DFT Reprocess Rejects\Re-Lookup Stock Item (No Cache).Inputs[Lookup Input]" name="Derived Column Output 2" startId="Package\DFT Reprocess Rejects\Prepare Retry.Outputs[Derived Column Output]" />
+          <path refId="Package\DFT Reprocess Rejects.Paths[Lookup Match Output 3]" endId="Package\DFT Reprocess Rejects\Route Reprocess Outcome.Inputs[Conditional Split Input]" name="Lookup Match Output 3" startId="Package\DFT Reprocess Rejects\Re-Lookup Stock Item (No Cache).Outputs[Lookup Match Output]" />
+          <path refId="Package\DFT Reprocess Rejects.Paths[Resolved Now 4]" endId="Package\DFT Reprocess Rejects\Count Rejects Resolved.Inputs[Row Count Input]" name="Resolved Now 4" startId="Package\DFT Reprocess Rejects\Route Reprocess Outcome.Outputs[Resolved Now]" />
+          <path refId="Package\DFT Reprocess Rejects.Paths[Row Count Output 5]" endId="Package\DFT Reprocess Rejects\STG OrderLine Replay.Inputs[OLE DB Destination Input]" name="Row Count Output 5" startId="Package\DFT Reprocess Rejects\Count Rejects Resolved.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Reprocess Rejects.Paths[Aged Out 6]" endId="Package\DFT Reprocess Rejects\ERR Reject Aged Out.Inputs[OLE DB Destination Input]" name="Aged Out 6" startId="Package\DFT Reprocess Rejects\Route Reprocess Outcome.Outputs[Aged Out]" />
+          <path refId="Package\DFT Reprocess Rejects.Paths[Lookup No Match Output 7]" endId="Package\DFT Reprocess Rejects\ERR Reject Still Unresolved.Inputs[OLE DB Destination Input]" name="Lookup No Match Output 7" startId="Package\DFT Reprocess Rejects\Re-Lookup Stock Item (No Cache).Outputs[Lookup No Match Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Register Quality Rejects - err.RejectedLookupFailure"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{533A0420-1D2A-7FE3-911B-6CF73B896410}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Register Quality Rejects - err.RejectedLookupFailure"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="DECLARE @RejectId BIGINT, @Key NVARCHAR(200), @Reason NVARCHAR(50);&#10;DECLARE dq_cur CURSOR LOCAL FAST_FORWARD FOR&#10;    SELECT r.RejectedRowId, r.BusinessKey, r.RejectReasonCode&#10;    FROM [err].[RejectedLookupFailure] AS r&#10;    WHERE r.BatchId = ? AND r.LoggedToControl = 0;&#10;OPEN dq_cur;&#10;FETCH NEXT FROM dq_cur INTO @RejectId, @Key, @Reason;&#10;WHILE @@FETCH_STATUS = 0&#10;BEGIN&#10;    EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @BatchId = ?, @SourceSystemCode = ?, @ObjectName = N'err.RejectedLookupFailure', @BusinessKey = @Key, @RejectReasonCode = @Reason, @RejectStage = N'Reprocess';&#10;    UPDATE [err].[RejectedLookupFailure] SET LoggedToControl = 1 WHERE RejectedRowId = @RejectId;&#10;    FETCH NEXT FROM dq_cur INTO @RejectId, @Key, @Reason;&#10;END&#10;CLOSE dq_cur;&#10;DEALLOCATE dq_cur;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Close Reprocessed Rejects"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{FC90AFB9-AED6-CE9A-E8D3-D27D07AAB0F5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Close Reprocessed Rejects"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="UPDATE err.RejectedLookupFailure&#10;SET Reprocessed = 1, ReprocessedAtUtc = SYSUTCDATETIME(), ReprocessedByExecutionId = ?&#10;WHERE Reprocessed = 0 AND RetryCount &lt; 5&#10;  AND EXISTS (SELECT 1 FROM stg.StockItem AS s&#10;              WHERE CAST(s.StockItemId AS NVARCHAR(20)) = PARSENAME(REPLACE(err.RejectedLookupFailure.BusinessKey, N'|', N'.'), 1));"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Evaluate Rules - REPROCESS"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{639BCE59-27D1-2D31-B3C7-91644CB26DD3}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Evaluate Rules - REPROCESS"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_EvaluateDataQualityRules @BatchId = ?, @PackageExecutionId = ?, @RuleGroupCode = N'REPROCESS', @ObjectName = N'err.RejectedLookupFailure', @FailedRuleCount = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::FailedRuleCount" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'err.RejectedLookupFailure', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Warn On Persistent Rejects"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{B24E9A07-2050-02A4-F91C-80E9DB0F639E}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Warn On Persistent Rejects"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = 50000, @ErrorDescription = N'Rejected rows remain unresolved after the retry window.', @SourceName = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\DFT Reprocess Rejects" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\DFT Reprocess Rejects"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Register Quality Rejects - err.RejectedLookupFailure" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Register Quality Rejects - err.RejectedLookupFailure"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Close Reprocessed Rejects" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Close Reprocessed Rejects"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Evaluate Rules - REPROCESS" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Evaluate Rules - REPROCESS"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Package Success" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:EvalOp="2"
+      DTS:Expression="@[User::FailedRuleCount] &gt; 0"
+      DTS:To="Package\Warn On Persistent Rejects" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Warn On Persistent Rejects"
+      DTS:LogicalAnd="False"
+      DTS:ObjectName="Constraint 7"
+      DTS:Value="2"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{597FB62A-FEAD-AFDE-8FA0-776F7ADC0A7A}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

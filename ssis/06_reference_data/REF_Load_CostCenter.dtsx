@@ -1,0 +1,926 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{B1B14C31-BB0E-C81C-D149-A656B0A319D5}"
+  DTS:Description="Rebuild the cost centre reference set from the Oracle chart of accounts, rooting orphaned nodes, decoding the function segment out of the code and rejecting self-referencing hierarchy rows that would otherwise loop the rollup procedure."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="REF_Load_CostCenter"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{266515A1-2B75-D626-582E-0887501582A9}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{E6B18ED1-6029-2DE8-4452-1F79F162A2A9}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{EFA6ED3D-C0D0-B6EB-93D6-8161B38B7328}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{367E572E-63ED-3185-DFEE-03099D208904}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{DD6EF100-908C-412B-1014-58A7F46049D2}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">ORA_ERP</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{F4003615-E7DC-A98F-9B2E-E7BC836E4222}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{9AA12611-7870-82A3-BBE8-7AED72058998}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{9A9C7FEC-81F8-F9F3-C65F-8945B9568FB1}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{57BC952F-6CD1-C501-661C-69FDF45C2B7D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{8A7AE909-739F-DFF3-0377-BE7DCA795859}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{FF718B72-3241-3DC1-AF3B-A81E3C54DE08}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{F32C2EE0-483F-AFD5-96BA-CAC84BCE6C11}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{2088CDC9-44BA-F042-6A52-1FEE77F63010}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::UnmappedCodeCount]"
+      DTS:CreationName=""
+      DTS:DTSID="{2B0810A6-4646-320D-9C49-AD12FF887DCD}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="UnmappedCodeCount">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::VersionNumber]"
+      DTS:CreationName=""
+      DTS:DTSID="{3B6E3BAD-3236-8F8A-62B4-1CC3096C0501}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="VersionNumber">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::EffectiveFromDate]"
+      DTS:CreationName=""
+      DTS:DTSID="{8B07E1D6-D3F4-64C0-D5A9-F4EA1F8B4198}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="EffectiveFromDate">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Truncate [ref].[CostCenter_Incoming]"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{A2FDA4A7-D672-6D8D-DC28-4CE12631B449}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Truncate [ref].[CostCenter_Incoming]"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE [ref].[CostCenter_Incoming];"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\DFT Load Cost Center"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{425E3F7C-BD85-2694-8E9B-69A7EC181138}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="DFT Load Cost Center"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\DFT Load Cost Center\STG Cost Center" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="STG Cost Center" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">1800</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT CostCenterCode, CostCenterName, ParentCostCenterCode, CompanyCode, RegionCode, IsActive
+FROM stg.CostCenter;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Load Cost Center\STG Cost Center.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].Columns[CostCenterCode]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].ExternalColumns[CostCenterCode]" lineageId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].Columns[CostCenterCode]" name="CostCenterCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].Columns[CostCenterName]" dataType="wstr" length="60" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].ExternalColumns[CostCenterName]" lineageId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].Columns[CostCenterName]" name="CostCenterName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].Columns[ParentCostCenterCode]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].ExternalColumns[ParentCostCenterCode]" lineageId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].Columns[ParentCostCenterCode]" name="ParentCostCenterCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].Columns[CompanyCode]" dataType="wstr" length="6" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].ExternalColumns[CompanyCode]" lineageId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].Columns[CompanyCode]" name="CompanyCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].Columns[IsActive]" dataType="bool" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].ExternalColumns[IsActive]" lineageId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].Columns[IsActive]" name="IsActive" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].ExternalColumns[CostCenterCode]" dataType="wstr" length="12" name="CostCenterCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].ExternalColumns[CostCenterName]" dataType="wstr" length="60" name="CostCenterName" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].ExternalColumns[ParentCostCenterCode]" dataType="wstr" length="12" name="ParentCostCenterCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].ExternalColumns[CompanyCode]" dataType="wstr" length="6" name="CompanyCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output].ExternalColumns[IsActive]" dataType="bool" name="IsActive" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Error Output].Columns[CostCenterCode]" dataType="wstr" length="12" lineageId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Error Output].Columns[CostCenterCode]" name="CostCenterCode" />
+                  <outputColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Error Output].Columns[CostCenterName]" dataType="wstr" length="60" lineageId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Error Output].Columns[CostCenterName]" name="CostCenterName" />
+                  <outputColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Error Output].Columns[ParentCostCenterCode]" dataType="wstr" length="12" lineageId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Error Output].Columns[ParentCostCenterCode]" name="ParentCostCenterCode" />
+                  <outputColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Error Output].Columns[CompanyCode]" dataType="wstr" length="6" lineageId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Error Output].Columns[CompanyCode]" name="CompanyCode" />
+                  <outputColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Error Output].Columns[IsActive]" dataType="bool" lineageId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Error Output].Columns[IsActive]" name="IsActive" />
+                  <outputColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Cost Center\Count Cost Centers Read" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Cost Centers Read" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsRead</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Load Cost Center\Count Cost Centers Read.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Cost Center\Count Cost Centers Read.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Load Cost Center\Count Cost Centers Read.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Cost Center\Conform Cost Center" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Conform Cost Center" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\DFT Load Cost Center\Conform Cost Center.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Cost Center\Conform Cost Center.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\DFT Load Cost Center\Conform Cost Center.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Load Cost Center\Conform Cost Center.Outputs[Derived Column Output].Columns[CostCenterCode]" dataType="wstr" length="12" lineageId="Package\DFT Load Cost Center\Conform Cost Center.Outputs[Derived Column Output].Columns[CostCenterCode]" name="CostCenterCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(CostCenterCode))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(CostCenterCode))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Cost Center\Conform Cost Center.Outputs[Derived Column Output].Columns[ParentCostCenterCode]" dataType="wstr" length="12" lineageId="Package\DFT Load Cost Center\Conform Cost Center.Outputs[Derived Column Output].Columns[ParentCostCenterCode]" name="ParentCostCenterCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(ParentCostCenterCode) || TRIM(ParentCostCenterCode) == "" ? "ROOT" : UPPER(TRIM(ParentCostCenterCode))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(ParentCostCenterCode) || TRIM(ParentCostCenterCode) == "" ? "ROOT" : UPPER(TRIM(ParentCostCenterCode))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Cost Center\Conform Cost Center.Outputs[Derived Column Output].Columns[CompanyCode]" dataType="wstr" length="6" lineageId="Package\DFT Load Cost Center\Conform Cost Center.Outputs[Derived Column Output].Columns[CompanyCode]" name="CompanyCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(ISNULL(CompanyCode) ? "0001" : CompanyCode))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(ISNULL(CompanyCode) ? "0001" : CompanyCode))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Cost Center\Conform Cost Center.Outputs[Derived Column Output].Columns[FunctionCode]" dataType="wstr" length="2" lineageId="Package\DFT Load Cost Center\Conform Cost Center.Outputs[Derived Column Output].Columns[FunctionCode]" name="FunctionCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">LEN(UPPER(TRIM(CostCenterCode))) &gt;= 4 ? SUBSTRING(UPPER(TRIM(CostCenterCode)), 3, 2) : "XX"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">LEN(UPPER(TRIM(CostCenterCode))) &gt;= 4 ? SUBSTRING(UPPER(TRIM(CostCenterCode)), 3, 2) : "XX"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Cost Center\Conform Cost Center.Outputs[Derived Column Output].Columns[CodeValue]" dataType="wstr" length="60" lineageId="Package\DFT Load Cost Center\Conform Cost Center.Outputs[Derived Column Output].Columns[CodeValue]" name="CodeValue">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM(CostCenterCode))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM(CostCenterCode))</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Cost Center\Conform Cost Center.Outputs[Derived Column Output].Columns[CodeDescription]" dataType="wstr" length="200" lineageId="Package\DFT Load Cost Center\Conform Cost Center.Outputs[Derived Column Output].Columns[CodeDescription]" name="CodeDescription">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">TRIM(CostCenterName)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">TRIM(CostCenterName)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Load Cost Center\Conform Cost Center.Outputs[Derived Column Output].Columns[ChangeHash]" dataType="wstr" length="200" lineageId="Package\DFT Load Cost Center\Conform Cost Center.Outputs[Derived Column Output].Columns[ChangeHash]" name="ChangeHash">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">UPPER(TRIM((DT_WSTR,60)CostCenterCode)) + "|" + UPPER(TRIM((DT_WSTR,60)CostCenterName)) + "|" + UPPER(TRIM((DT_WSTR,60)ParentCostCenterCode)) + "|" + UPPER(TRIM((DT_WSTR,60)CompanyCode))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">UPPER(TRIM((DT_WSTR,60)CostCenterCode)) + "|" + UPPER(TRIM((DT_WSTR,60)CostCenterName)) + "|" + UPPER(TRIM((DT_WSTR,60)ParentCostCenterCode)) + "|" + UPPER(TRIM((DT_WSTR,60)CompanyCode))</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Cost Center\Sort Cost Centers By Hierarchy" componentClassID="Microsoft.Sort" description="Sort" name="Sort Cost Centers By Hierarchy" version="1">
+            <properties>
+              <property dataType="System.Boolean" description="Remove duplicate rows." name="EliminateDuplicates">false</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Load Cost Center\Sort Cost Centers By Hierarchy.Inputs[Sort Input]" name="Sort Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Load Cost Center\Sort Cost Centers By Hierarchy.Inputs[Sort Input].Columns[ParentCostCenterCode]" cachedName="ParentCostCenterCode" name="ParentCostCenterCode">
+                    <properties>
+                      <property dataType="System.Int32" description="Sort key position." name="NewSortKeyPosition">1</property>
+                    </properties>
+                  </inputColumn>
+                  <inputColumn refId="Package\DFT Load Cost Center\Sort Cost Centers By Hierarchy.Inputs[Sort Input].Columns[CostCenterCode]" cachedName="CostCenterCode" name="CostCenterCode">
+                    <properties>
+                      <property dataType="System.Int32" description="Sort key position." name="NewSortKeyPosition">2</property>
+                    </properties>
+                  </inputColumn>
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Cost Center\Sort Cost Centers By Hierarchy.Outputs[Sort Output]" name="Sort Output" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Cost Center\Screen Cost Center" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Screen Cost Center" version="1">
+            <inputs>
+              <input refId="Package\DFT Load Cost Center\Screen Cost Center.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Cost Center\Screen Cost Center.Outputs[Active Cost Center]" exclusionGroup="1" name="Active Cost Center" synchronousInputId="Package\DFT Load Cost Center\Screen Cost Center.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">IsActive == TRUE &amp;&amp; CostCenterCode != ParentCostCenterCode</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">IsActive == TRUE &amp;&amp; CostCenterCode != ParentCostCenterCode</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\DFT Load Cost Center\Screen Cost Center.Outputs[Self Referencing]" exclusionGroup="1" name="Self Referencing" synchronousInputId="Package\DFT Load Cost Center\Screen Cost Center.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">CostCenterCode == ParentCostCenterCode</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">CostCenterCode == ParentCostCenterCode</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\DFT Load Cost Center\Screen Cost Center.Outputs[Inactive Cost Center]" exclusionGroup="1" isDefaultOut="true" name="Inactive Cost Center" synchronousInputId="Package\DFT Load Cost Center\Screen Cost Center.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Cost Center\Count Cost Centers Loaded" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Cost Centers Loaded" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsInserted</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Load Cost Center\Count Cost Centers Loaded.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Cost Center\Count Cost Centers Loaded.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Load Cost Center\Count Cost Centers Loaded.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Cost Center\REF CostCenter Incoming" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="REF CostCenter Incoming" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[ref].[CostCenter_Incoming]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">5000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].Columns[CostCenterCode]" cachedDataType="wstr" cachedLength="12" cachedName="CostCenterCode" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterCode]" name="CostCenterCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].Columns[CostCenterName]" cachedDataType="wstr" cachedLength="60" cachedName="CostCenterName" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterName]" name="CostCenterName" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].Columns[ParentCostCenterCode]" cachedDataType="wstr" cachedLength="12" cachedName="ParentCostCenterCode" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[ParentCostCenterCode]" name="ParentCostCenterCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].Columns[CompanyCode]" cachedDataType="wstr" cachedLength="6" cachedName="CompanyCode" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CompanyCode]" name="CompanyCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].Columns[IsActive]" cachedDataType="bool" cachedName="IsActive" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[IsActive]" name="IsActive" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].Columns[CostCenterCode]" cachedDataType="wstr" cachedLength="12" cachedName="CostCenterCode" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterCode]" name="CostCenterCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].Columns[ParentCostCenterCode]" cachedDataType="wstr" cachedLength="12" cachedName="ParentCostCenterCode" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[ParentCostCenterCode]" name="ParentCostCenterCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].Columns[CompanyCode]" cachedDataType="wstr" cachedLength="6" cachedName="CompanyCode" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CompanyCode]" name="CompanyCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].Columns[FunctionCode]" cachedDataType="wstr" cachedLength="2" cachedName="FunctionCode" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[FunctionCode]" name="FunctionCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].Columns[CodeValue]" cachedDataType="wstr" cachedLength="60" cachedName="CodeValue" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" name="CodeValue" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].Columns[CodeDescription]" cachedDataType="wstr" cachedLength="200" cachedName="CodeDescription" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" name="CodeDescription" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].Columns[ChangeHash]" cachedDataType="wstr" cachedLength="200" cachedName="ChangeHash" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" name="ChangeHash" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterCode]" dataType="wstr" length="12" name="CostCenterCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterName]" dataType="wstr" length="60" name="CostCenterName" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[ParentCostCenterCode]" dataType="wstr" length="12" name="ParentCostCenterCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CompanyCode]" dataType="wstr" length="6" name="CompanyCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[IsActive]" dataType="bool" name="IsActive" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterCode]" dataType="wstr" length="12" name="CostCenterCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[ParentCostCenterCode]" dataType="wstr" length="12" name="ParentCostCenterCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CompanyCode]" dataType="wstr" length="6" name="CompanyCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[FunctionCode]" dataType="wstr" length="2" name="FunctionCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" dataType="wstr" length="60" name="CodeValue" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" dataType="wstr" length="200" name="CodeDescription" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" dataType="wstr" length="200" name="ChangeHash" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Cost Center\REF CostCenter Incoming.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="ERR Cost Center Self Reference" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].Columns[CostCenterCode]" cachedDataType="wstr" cachedLength="12" cachedName="CostCenterCode" externalMetadataColumnId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterCode]" name="CostCenterCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].Columns[CostCenterName]" cachedDataType="wstr" cachedLength="60" cachedName="CostCenterName" externalMetadataColumnId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterName]" name="CostCenterName" />
+                  <inputColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].Columns[ParentCostCenterCode]" cachedDataType="wstr" cachedLength="12" cachedName="ParentCostCenterCode" externalMetadataColumnId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[ParentCostCenterCode]" name="ParentCostCenterCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].Columns[CompanyCode]" cachedDataType="wstr" cachedLength="6" cachedName="CompanyCode" externalMetadataColumnId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[CompanyCode]" name="CompanyCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].Columns[IsActive]" cachedDataType="bool" cachedName="IsActive" externalMetadataColumnId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[IsActive]" name="IsActive" />
+                  <inputColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].Columns[CostCenterCode]" cachedDataType="wstr" cachedLength="12" cachedName="CostCenterCode" externalMetadataColumnId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterCode]" name="CostCenterCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].Columns[ParentCostCenterCode]" cachedDataType="wstr" cachedLength="12" cachedName="ParentCostCenterCode" externalMetadataColumnId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[ParentCostCenterCode]" name="ParentCostCenterCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].Columns[CompanyCode]" cachedDataType="wstr" cachedLength="6" cachedName="CompanyCode" externalMetadataColumnId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[CompanyCode]" name="CompanyCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].Columns[FunctionCode]" cachedDataType="wstr" cachedLength="2" cachedName="FunctionCode" externalMetadataColumnId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[FunctionCode]" name="FunctionCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].Columns[CodeValue]" cachedDataType="wstr" cachedLength="60" cachedName="CodeValue" externalMetadataColumnId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" name="CodeValue" />
+                  <inputColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].Columns[CodeDescription]" cachedDataType="wstr" cachedLength="200" cachedName="CodeDescription" externalMetadataColumnId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" name="CodeDescription" />
+                  <inputColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].Columns[ChangeHash]" cachedDataType="wstr" cachedLength="200" cachedName="ChangeHash" externalMetadataColumnId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" name="ChangeHash" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterCode]" dataType="wstr" length="12" name="CostCenterCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterName]" dataType="wstr" length="60" name="CostCenterName" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[ParentCostCenterCode]" dataType="wstr" length="12" name="ParentCostCenterCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[CompanyCode]" dataType="wstr" length="6" name="CompanyCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[IsActive]" dataType="bool" name="IsActive" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterCode]" dataType="wstr" length="12" name="CostCenterCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[ParentCostCenterCode]" dataType="wstr" length="12" name="ParentCostCenterCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[CompanyCode]" dataType="wstr" length="6" name="CompanyCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[FunctionCode]" dataType="wstr" length="2" name="FunctionCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" dataType="wstr" length="60" name="CodeValue" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" dataType="wstr" length="200" name="CodeDescription" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" dataType="wstr" length="200" name="ChangeHash" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Load Cost Center\REF CostCenter Retired" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="REF CostCenter Retired" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[ref].[CostCenter_Incoming]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Load Cost Center\REF CostCenter Retired.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].Columns[CostCenterCode]" cachedDataType="wstr" cachedLength="12" cachedName="CostCenterCode" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterCode]" name="CostCenterCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].Columns[CostCenterName]" cachedDataType="wstr" cachedLength="60" cachedName="CostCenterName" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterName]" name="CostCenterName" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].Columns[ParentCostCenterCode]" cachedDataType="wstr" cachedLength="12" cachedName="ParentCostCenterCode" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[ParentCostCenterCode]" name="ParentCostCenterCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].Columns[CompanyCode]" cachedDataType="wstr" cachedLength="6" cachedName="CompanyCode" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[CompanyCode]" name="CompanyCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].Columns[IsActive]" cachedDataType="bool" cachedName="IsActive" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[IsActive]" name="IsActive" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].Columns[CostCenterCode]" cachedDataType="wstr" cachedLength="12" cachedName="CostCenterCode" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterCode]" name="CostCenterCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].Columns[ParentCostCenterCode]" cachedDataType="wstr" cachedLength="12" cachedName="ParentCostCenterCode" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[ParentCostCenterCode]" name="ParentCostCenterCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].Columns[CompanyCode]" cachedDataType="wstr" cachedLength="6" cachedName="CompanyCode" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[CompanyCode]" name="CompanyCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].Columns[FunctionCode]" cachedDataType="wstr" cachedLength="2" cachedName="FunctionCode" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[FunctionCode]" name="FunctionCode" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].Columns[CodeValue]" cachedDataType="wstr" cachedLength="60" cachedName="CodeValue" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" name="CodeValue" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].Columns[CodeDescription]" cachedDataType="wstr" cachedLength="200" cachedName="CodeDescription" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" name="CodeDescription" />
+                  <inputColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].Columns[ChangeHash]" cachedDataType="wstr" cachedLength="200" cachedName="ChangeHash" externalMetadataColumnId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" name="ChangeHash" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterCode]" dataType="wstr" length="12" name="CostCenterCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterName]" dataType="wstr" length="60" name="CostCenterName" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[ParentCostCenterCode]" dataType="wstr" length="12" name="ParentCostCenterCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[CompanyCode]" dataType="wstr" length="6" name="CompanyCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[IsActive]" dataType="bool" name="IsActive" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterCode]" dataType="wstr" length="12" name="CostCenterCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[ParentCostCenterCode]" dataType="wstr" length="12" name="ParentCostCenterCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[CompanyCode]" dataType="wstr" length="6" name="CompanyCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[FunctionCode]" dataType="wstr" length="2" name="FunctionCode" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[CodeValue]" dataType="wstr" length="60" name="CodeValue" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[CodeDescription]" dataType="wstr" length="200" name="CodeDescription" />
+                  <externalMetadataColumn refId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input].ExternalColumns[ChangeHash]" dataType="wstr" length="200" name="ChangeHash" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Load Cost Center\REF CostCenter Retired.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\DFT Load Cost Center.Paths[OLE DB Source Output]" endId="Package\DFT Load Cost Center\Count Cost Centers Read.Inputs[Row Count Input]" name="OLE DB Source Output" startId="Package\DFT Load Cost Center\STG Cost Center.Outputs[OLE DB Source Output]" />
+          <path refId="Package\DFT Load Cost Center.Paths[Row Count Output 1]" endId="Package\DFT Load Cost Center\Conform Cost Center.Inputs[Derived Column Input]" name="Row Count Output 1" startId="Package\DFT Load Cost Center\Count Cost Centers Read.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Load Cost Center.Paths[Derived Column Output 2]" endId="Package\DFT Load Cost Center\Sort Cost Centers By Hierarchy.Inputs[Sort Input]" name="Derived Column Output 2" startId="Package\DFT Load Cost Center\Conform Cost Center.Outputs[Derived Column Output]" />
+          <path refId="Package\DFT Load Cost Center.Paths[Sort Output 3]" endId="Package\DFT Load Cost Center\Screen Cost Center.Inputs[Conditional Split Input]" name="Sort Output 3" startId="Package\DFT Load Cost Center\Sort Cost Centers By Hierarchy.Outputs[Sort Output]" />
+          <path refId="Package\DFT Load Cost Center.Paths[Active Cost Center 4]" endId="Package\DFT Load Cost Center\Count Cost Centers Loaded.Inputs[Row Count Input]" name="Active Cost Center 4" startId="Package\DFT Load Cost Center\Screen Cost Center.Outputs[Active Cost Center]" />
+          <path refId="Package\DFT Load Cost Center.Paths[Row Count Output 5]" endId="Package\DFT Load Cost Center\REF CostCenter Incoming.Inputs[OLE DB Destination Input]" name="Row Count Output 5" startId="Package\DFT Load Cost Center\Count Cost Centers Loaded.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Load Cost Center.Paths[Self Referencing 6]" endId="Package\DFT Load Cost Center\ERR Cost Center Self Reference.Inputs[OLE DB Destination Input]" name="Self Referencing 6" startId="Package\DFT Load Cost Center\Screen Cost Center.Outputs[Self Referencing]" />
+          <path refId="Package\DFT Load Cost Center.Paths[Inactive Cost Center 7]" endId="Package\DFT Load Cost Center\REF CostCenter Retired.Inputs[OLE DB Destination Input]" name="Inactive Cost Center 7" startId="Package\DFT Load Cost Center\Screen Cost Center.Outputs[Inactive Cost Center]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\DFT Publish Cost Center Dimension"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{97C4293F-6B0B-6035-6485-AC0FD8C8AD4B}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="DFT Publish Cost Center Dimension"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="REF CostCenter Current" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">1800</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT CodeValue AS CostCenterCode, CodeDescription AS CostCenterName, RegionCode,
+       VersionNumber, ValidFrom
+FROM ref.CostCenter WHERE IsCurrent = 1;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].Columns[CostCenterCode]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].ExternalColumns[CostCenterCode]" lineageId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].Columns[CostCenterCode]" name="CostCenterCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].Columns[CostCenterName]" dataType="wstr" length="60" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].ExternalColumns[CostCenterName]" lineageId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].Columns[CostCenterName]" name="CostCenterName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].Columns[VersionNumber]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].ExternalColumns[VersionNumber]" lineageId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].Columns[VersionNumber]" name="VersionNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].Columns[ValidFrom]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].ExternalColumns[ValidFrom]" lineageId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].Columns[ValidFrom]" name="ValidFrom" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].ExternalColumns[CostCenterCode]" dataType="wstr" length="12" name="CostCenterCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].ExternalColumns[CostCenterName]" dataType="wstr" length="60" name="CostCenterName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].ExternalColumns[VersionNumber]" dataType="i4" name="VersionNumber" />
+                  <externalMetadataColumn refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output].ExternalColumns[ValidFrom]" dataType="dbTimeStamp" name="ValidFrom" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Error Output].Columns[CostCenterCode]" dataType="wstr" length="12" lineageId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Error Output].Columns[CostCenterCode]" name="CostCenterCode" />
+                  <outputColumn refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Error Output].Columns[CostCenterName]" dataType="wstr" length="60" lineageId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Error Output].Columns[CostCenterName]" name="CostCenterName" />
+                  <outputColumn refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="4" lineageId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Error Output].Columns[VersionNumber]" dataType="i4" lineageId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Error Output].Columns[VersionNumber]" name="VersionNumber" />
+                  <outputColumn refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Error Output].Columns[ValidFrom]" dataType="dbTimeStamp" lineageId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Error Output].Columns[ValidFrom]" name="ValidFrom" />
+                  <outputColumn refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Cost Center Dimension\Count Cost Center Dimension Rows" componentClassID="Microsoft.RowCount" description="Row Count" name="Count Cost Center Dimension Rows" version="1">
+            <properties>
+              <property dataType="System.String" description="The variable that receives the row count." name="VariableName">User::RowsUpdated</property>
+            </properties>
+            <inputs>
+              <input refId="Package\DFT Publish Cost Center Dimension\Count Cost Center Dimension Rows.Inputs[Row Count Input]" name="Row Count Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Cost Center Dimension\Count Cost Center Dimension Rows.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Publish Cost Center Dimension\Count Cost Center Dimension Rows.Inputs[Row Count Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="DW Dimension Cost Center" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Dimension].[Cost Center]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">5000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Inputs[OLE DB Destination Input].Columns[CostCenterCode]" cachedDataType="wstr" cachedLength="12" cachedName="CostCenterCode" externalMetadataColumnId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterCode]" name="CostCenterCode" />
+                  <inputColumn refId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Inputs[OLE DB Destination Input].Columns[CostCenterName]" cachedDataType="wstr" cachedLength="60" cachedName="CostCenterName" externalMetadataColumnId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterName]" name="CostCenterName" />
+                  <inputColumn refId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="4" cachedName="RegionCode" externalMetadataColumnId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Inputs[OLE DB Destination Input].Columns[VersionNumber]" cachedDataType="i4" cachedName="VersionNumber" externalMetadataColumnId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Inputs[OLE DB Destination Input].ExternalColumns[VersionNumber]" name="VersionNumber" />
+                  <inputColumn refId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Inputs[OLE DB Destination Input].Columns[ValidFrom]" cachedDataType="dbTimeStamp" cachedName="ValidFrom" externalMetadataColumnId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Inputs[OLE DB Destination Input].ExternalColumns[ValidFrom]" name="ValidFrom" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterCode]" dataType="wstr" length="12" name="CostCenterCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Inputs[OLE DB Destination Input].ExternalColumns[CostCenterName]" dataType="wstr" length="60" name="CostCenterName" />
+                  <externalMetadataColumn refId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="4" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Inputs[OLE DB Destination Input].ExternalColumns[VersionNumber]" dataType="i4" name="VersionNumber" />
+                  <externalMetadataColumn refId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Inputs[OLE DB Destination Input].ExternalColumns[ValidFrom]" dataType="dbTimeStamp" name="ValidFrom" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\DFT Publish Cost Center Dimension.Paths[OLE DB Source Output]" endId="Package\DFT Publish Cost Center Dimension\Count Cost Center Dimension Rows.Inputs[Row Count Input]" name="OLE DB Source Output" startId="Package\DFT Publish Cost Center Dimension\REF CostCenter Current.Outputs[OLE DB Source Output]" />
+          <path refId="Package\DFT Publish Cost Center Dimension.Paths[Row Count Output 1]" endId="Package\DFT Publish Cost Center Dimension\DW Dimension Cost Center.Inputs[OLE DB Destination Input]" name="Row Count Output 1" startId="Package\DFT Publish Cost Center Dimension\Count Cost Center Dimension Rows.Outputs[Row Count Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Version Reference Set - COST_CENTER"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{85E06437-4698-AD10-E6D0-F0235C19EB3C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Version Reference Set - COST_CENTER"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();&#10;BEGIN TRANSACTION;&#10;UPDATE ref.CostCenter&#10;SET ValidTo = @Now, IsCurrent = 0&#10;WHERE IsCurrent = 1&#10;  AND EXISTS (SELECT 1 FROM ref.CostCenter_Incoming AS i&#10;              WHERE i.BatchId = ? AND i.CodeValue = ref.CostCenter.CodeValue&#10;                AND i.ChangeHash &lt;&gt; ref.CostCenter.ChangeHash);&#10;INSERT INTO ref.CostCenter (CodeValue, CodeDescription, RegionCode, ChangeHash, ValidFrom, ValidTo, IsCurrent, VersionNumber, CodeSetName)&#10;SELECT i.CodeValue, i.CodeDescription, i.RegionCode, i.ChangeHash, @Now, CONVERT(DATETIME2(3), N'9999-12-31'), 1,&#10;       ISNULL((SELECT MAX(p.VersionNumber) FROM ref.CostCenter AS p WHERE p.CodeValue = i.CodeValue), 0) + 1,&#10;       N'COST_CENTER'&#10;FROM ref.CostCenter_Incoming AS i&#10;WHERE i.BatchId = ?&#10;  AND NOT EXISTS (SELECT 1 FROM ref.CostCenter AS c&#10;                  WHERE c.CodeValue = i.CodeValue AND c.IsCurrent = 1&#10;                    AND c.ChangeHash = i.ChangeHash);&#10;COMMIT TRANSACTION;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Rebuild Cost Center Hierarchy"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{BEC3AA2D-BE99-16BD-BFCF-DD48526DD9B1}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Rebuild Cost Center Hierarchy"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC ref.usp_RebuildCostCenterHierarchy @BatchId = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'ref.CostCenter', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Truncate [ref].[CostCenter_Incoming]" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Truncate [ref].[CostCenter_Incoming]"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\DFT Load Cost Center" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\DFT Load Cost Center"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\DFT Publish Cost Center Dimension" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\DFT Publish Cost Center Dimension"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Version Reference Set - COST_CENTER" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Version Reference Set - COST_CENTER"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Rebuild Cost Center Hierarchy" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Rebuild Cost Center Hierarchy"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{2F5E7FC2-0847-AE95-92BD-91A30A77F41F}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>
