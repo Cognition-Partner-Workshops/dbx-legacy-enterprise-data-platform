@@ -2,7 +2,7 @@
  * Object       : TABLE WWI_PROC.REQUISITION_HDR
  * Schema       : WWI_PROC (Oracle ERP - WWIGERP)
  * Deploy order : 40 (first table in WWI_PROC)
- * Depends on   : WWI_MDM.PRODUCT_MASTER, WWI_FIN.COST_CENTER, oracle/ddl/02_create_schemas.sql
+ * Depends on   : WWI_MDM.PRODUCT_MASTER, WWI_FIN.COST_CENTER, oracle/ddl/03_create_schemas.sql
  * Called by    : PKG_PURCHASE_ORDER, requisition approval workflow
  *
  * Internal purchase requisition. Approval is a fixed three-step chain held in

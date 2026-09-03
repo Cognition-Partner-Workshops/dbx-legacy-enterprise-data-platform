@@ -52,6 +52,17 @@ fi
 
 # Dependency order. Types and DDL first, reference data before the packages
 # that read it, seed data last because it calls the packages.
+# oracle/ddl/03_create_schemas.sql creates each account with a
+# &&WWI_<schema>_SECRET substitution variable supplied from the environment.
+SCHEMA_SECRET_VARIABLES=(
+    "WWI_MDM_SECRET"
+    "WWI_PROC_SECRET"
+    "WWI_FIN_SECRET"
+    "WWI_REF_SECRET"
+    "WWI_AUDIT_SECRET"
+    "WWI_EXTRACT_SECRET"
+)
+
 ORACLE_STAGE_DIRS=(
     "ddl"
     "tables"
@@ -73,21 +84,32 @@ run_sql_file() {
     fi
 
     wwi_log "RUN    ${relative}"
+    local defines=""
+    local undefines=""
+    local name value
+    for name in "${SCHEMA_SECRET_VARIABLES[@]}"; do
+        value="${!name:-}"
+        [[ -n "${value}" ]] && defines+="DEFINE ${name} = \"${value}\""$'\n'
+        undefines+="UNDEFINE ${name}"$'\n'
+    done
+
     # WHENEVER SQLERROR EXIT makes the client return non-zero on the first
-    # error, which is the only reliable way to stop an ordered run.
+    # error, which is the only reliable way to stop an ordered run. DEFINE stays
+    # on for the DDL substitution variables; the data scripts turn it off
+    # themselves around any literal ampersand.
     "${ORA_CLIENT}" "${ORA_CLIENT_ARGS[@]}" <<SQLPLUS
 WHENEVER SQLERROR EXIT SQL.SQLCODE
 WHENEVER OSERROR EXIT 9
 CONNECT ${ORACLE_USER}/${ORACLE_PASSWORD}@${ORACLE_HOST}:${ORACLE_PORT}/${ORACLE_SERVICE}
-SET DEFINE OFF
-SET ECHO OFF
+SET DEFINE ON
+${defines}SET ECHO OFF
 SET FEEDBACK ON
 SET SERVEROUTPUT ON SIZE UNLIMITED
 ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD HH24:MI:SS';
 ALTER SESSION SET CURRENT_SCHEMA = ${ORACLE_USER};
 @${file}
 SHOW ERRORS
-EXIT SQL.SQLCODE
+${undefines}EXIT SQL.SQLCODE
 SQLPLUS
 }
 

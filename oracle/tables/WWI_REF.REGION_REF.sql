@@ -2,7 +2,7 @@
  * Object       : TABLE WWI_REF.REGION_REF
  * Schema       : WWI_REF (Oracle ERP - WWIGERP)
  * Deploy order : 20 (first table in WWI_REF)
- * Depends on   : oracle/ddl/02_create_schemas.sql
+ * Depends on   : oracle/ddl/03_create_schemas.sql
  * Called by    : Every regional branch in PKG_TAX_CALC and the extract views
  *
  * The three operating regions plus the two retired ones that history still

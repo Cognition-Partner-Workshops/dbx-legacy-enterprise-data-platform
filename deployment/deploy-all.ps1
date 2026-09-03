@@ -32,7 +32,7 @@ param(
     [switch] $ContinueOnError
 )
 
-. (Join-Path $PSScriptRoot 'lib' 'Common.ps1')
+. (Join-Path (Join-Path $PSScriptRoot 'lib') 'Common.ps1')
 $script:WwiLogPrefix = 'wwi-deploy-all'
 
 $environmentCode = Get-WwiEnvironmentCode
@@ -65,22 +65,23 @@ function Invoke-Stage {
 
 if (-not $SkipPreflight) {
     Invoke-Stage 'preflight' {
-        & (Join-Path $PSScriptRoot 'preflight' 'Preflight.ps1') -Stage all
+        & (Join-Path (Join-Path $PSScriptRoot 'preflight') 'Preflight.ps1') -Stage all
     }
 }
 
 Invoke-Stage 'oracle' {
-    & (Join-Path $PSScriptRoot 'oracle' 'Deploy-Oracle.ps1') -DryRun:$DryRun
+    & (Join-Path (Join-Path $PSScriptRoot 'oracle') 'Deploy-Oracle.ps1') -DryRun:$DryRun
 }
 
 Invoke-Stage 'sqlserver' {
-    & (Join-Path $PSScriptRoot 'sqlserver' 'Deploy-SqlServer.ps1') -DryRun:$DryRun
+    & (Join-Path (Join-Path $PSScriptRoot 'sqlserver') 'Deploy-SqlServer.ps1') -DryRun:$DryRun
 }
 
 Invoke-Stage 'ssis' {
-    & (Join-Path $PSScriptRoot 'ssis' 'Build-SsisProject.ps1')    -DryRun:$DryRun
-    & (Join-Path $PSScriptRoot 'ssis' 'Deploy-SsisCatalog.ps1')   -DryRun:$DryRun
-    & (Join-Path $PSScriptRoot 'ssis' 'Deploy-SsisEnvironment.ps1') -DryRun:$DryRun -Verify
+    $ssisDir = Join-Path $PSScriptRoot 'ssis'
+    & (Join-Path $ssisDir 'Build-SsisProject.ps1')     -DryRun:$DryRun
+    & (Join-Path $ssisDir 'Deploy-SsisCatalog.ps1')    -DryRun:$DryRun
+    & (Join-Path $ssisDir 'Deploy-SsisEnvironment.ps1') -DryRun:$DryRun -Verify
 }
 
 if ($failed.Count -gt 0) {

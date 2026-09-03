@@ -2,7 +2,7 @@
  * Object       : TABLE WWI_MDM.CUST_MASTER
  * Schema       : WWI_MDM (Oracle ERP - WWIGERP)
  * Deploy order : 20 (first table in WWI_MDM)
- * Depends on   : oracle/ddl/02_create_schemas.sql; WWI_REF.COUNTRY_REF, WWI_REF.CURRENCY_CODE
+ * Depends on   : oracle/ddl/03_create_schemas.sql; WWI_REF.COUNTRY_REF, WWI_REF.CURRENCY_CODE
  * Called by    : PKG_CUSTOMER_MASTER, V_CUSTOMER_EXTRACT, SSIS EXT_ORA_CustomerMaster
  *
  * Customer master. The oldest table in the estate: the original 1998 columns

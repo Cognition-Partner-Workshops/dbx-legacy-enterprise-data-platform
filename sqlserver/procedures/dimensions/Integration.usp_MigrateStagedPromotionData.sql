@@ -376,20 +376,22 @@ BEGIN
              0, @ClosedCount, @InsertedCount, @EnrichedCount, @SameDayCount, @RejectCount,
              N'Type2WithInferred', @Now, SYSDATETIME());
 
+        DECLARE @UpdateRowCountValue BIGINT = @ClosedCount + @EnrichedCount;
         EXEC [etl].[usp_LogRowCount]
              @PackageExecutionId = @PackageExecutionId,
              @ObjectName         = N'Dimension.Promotion',
              @SourceRowCount     = @SourceRowCount,
              @InsertRowCount     = @InsertedCount,
-             @UpdateRowCount     = @ClosedCount + @EnrichedCount,
+             @UpdateRowCount     = @UpdateRowCountValue,
              @RejectRowCount     = @RejectCount;
 
+        DECLARE @RowsUpdatedValue BIGINT = @ClosedCount + @EnrichedCount;
         EXEC [etl].[usp_LogPackageEnd]
              @PackageExecutionId = @PackageExecutionId,
              @Status             = N'Succeeded',
              @RowsRead           = @SourceRowCount,
              @RowsInserted       = @InsertedCount,
-             @RowsUpdated        = @ClosedCount + @EnrichedCount,
+             @RowsUpdated        = @RowsUpdatedValue,
              @RowsRejected       = @RejectCount;
     END TRY
     BEGIN CATCH

@@ -3,8 +3,8 @@
  *                WWI_ERP_READONLY_ROLE, WWI_ETL_EXTRACT_ROLE,
  *                WWI_FIN_SENSITIVE_ROLE
  * Schema       : n/a (SYS/DBA level)
- * Deploy order : 04  - after 02_create_schemas.sql
- * Depends on   : oracle/ddl/02_create_schemas.sql
+ * Deploy order : 04  - after 03_create_schemas.sql
+ * Depends on   : oracle/ddl/03_create_schemas.sql
  * Called by    : DBA deployment runbook; grants applied in
  *                oracle/ddl/05_grant_privileges.sql
  *

@@ -30,8 +30,12 @@ import sys
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-CATALOG_PATH = os.path.join(REPO_ROOT, "config", "estate-catalog.yaml")
+SOURCE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# The tree the file checks walk. Overridable so the negative fixtures in
+# validation/static/run_negative_fixtures.py can point the same checks at a
+# scratch copy of a deliberately broken artifact.
+REPO_ROOT = os.environ.get("WWI_ESTATE_ROOT") or SOURCE_ROOT
+CATALOG_PATH = os.path.join(SOURCE_ROOT, "config", "estate-catalog.yaml")
 
 # Pre-existing Microsoft WideWorldImporters content. Out of scope for the estate
 # conventions - it is preserved as shipped.
@@ -105,7 +109,8 @@ def load_catalog():
 
 def walk_files(prefixes, extensions=None):
     for dirpath, dirnames, filenames in os.walk(REPO_ROOT):
-        dirnames[:] = [d for d in dirnames if d not in (".git", "__pycache__", ".venv", "node_modules")]
+        dirnames[:] = [d for d in dirnames
+                       if d not in (".git", "__pycache__", ".venv", "node_modules", "obj", "bin")]
         rel_dir = os.path.relpath(dirpath, REPO_ROOT)
         rel_dir = "" if rel_dir == "." else rel_dir.replace(os.sep, "/")
         if rel_dir.split("/")[0] in LEGACY_SAMPLE_DIRS:
@@ -194,6 +199,171 @@ def check_dtsx_references(result, prefixes):
             if child and child not in all_packages:
                 result.fail("dtsx-references", rel,
                             "Execute Package Task references missing package %r" % child)
+
+
+def check_dtsx_pipeline(result, prefixes):
+    """Data-flow XML must be internally resolvable: unique refIds, real paths."""
+    ns = {"DTS": "www.microsoft.com/SqlServer/Dts"}
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for pipeline in root.iter("pipeline"):
+            ref_ids = []
+            for node in pipeline.iter():
+                ref_id = node.get("refId")
+                if ref_id:
+                    ref_ids.append(ref_id)
+            duplicates = sorted({r for r in ref_ids if ref_ids.count(r) > 1})
+            for duplicate in duplicates:
+                result.fail("dtsx-pipeline", rel, "duplicate refId %r" % duplicate)
+            known = set(ref_ids)
+            for path in pipeline.iter("path"):
+                for attr in ("startId", "endId"):
+                    target = path.get(attr)
+                    if target and target not in known:
+                        result.fail("dtsx-pipeline", rel,
+                                    "path %r %s references unknown object %r"
+                                    % (path.get("name"), attr, target))
+            for component in pipeline.iter("component"):
+                if not component.get("componentClassID"):
+                    result.fail("dtsx-pipeline", rel,
+                                "component %r has no componentClassID" % component.get("name"))
+        for log_provider in root.iter("{%s}LogProvider" % ns["DTS"]):
+            creation = log_provider.get("{%s}CreationName" % ns["DTS"]) or ""
+            if creation.startswith("DTS.LogProviderSQLServer."):
+                result.fail("dtsx-pipeline", rel,
+                            "log provider creation name %r is not a runtime type" % creation)
+
+
+def check_dtproj_structure(result, prefixes):
+    """Project manifests must be the SSDT project-deployment shape SSIS builds."""
+    ssis_ns = "www.microsoft.com/SqlServer/SSIS"
+    checked = 0
+    for rel, full in walk_files(prefixes, (".dtproj",)):
+        checked += 1
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        if root.tag != "Project":
+            result.fail("dtproj-structure", rel,
+                        "root element is %s, expected an unqualified Project" % root.tag)
+            continue
+        model = root.find("DeploymentModel")
+        if model is None or (model.text or "").strip() != "Project":
+            result.fail("dtproj-structure", rel, "DeploymentModel is not Project")
+        manifest = root.find("DeploymentModelSpecificContent/Manifest")
+        if manifest is None:
+            result.fail("dtproj-structure", rel,
+                        "DeploymentModelSpecificContent/Manifest is missing")
+            continue
+        if manifest.find("{%s}Project" % ssis_ns) is None:
+            result.fail("dtproj-structure", rel, "manifest has no SSIS:Project element")
+            continue
+        declared = {node.get("{%s}Name" % ssis_ns)
+                    for node in manifest.iter("{%s}Package" % ssis_ns)}
+        on_disk = {name for name in os.listdir(os.path.dirname(full))
+                   if name.endswith(".dtsx")}
+        for missing in sorted(on_disk - declared):
+            result.fail("dtproj-structure", rel,
+                        "package %s is in the project folder but not in the manifest" % missing)
+        for absent in sorted(declared - on_disk):
+            result.fail("dtproj-structure", rel,
+                        "manifest declares %s, which is not in the project folder" % absent)
+    result.count("dtproj_files_checked", checked)
+
+
+def check_conmgr_binding(result, prefixes):
+    """Connection managers must bind at run time, not carry a literal token."""
+    ns = {"DTS": "www.microsoft.com/SqlServer/Dts"}
+    checked = 0
+    for rel, full in walk_files(prefixes, (".conmgr",)):
+        checked += 1
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        expressions = [node for node in root.iter("{%s}PropertyExpression" % ns["DTS"])
+                       if node.get("{%s}Name" % ns["DTS"]) == "ConnectionString"]
+        if not expressions:
+            result.fail("conmgr-binding", rel,
+                        "no ConnectionString property expression; the connection cannot be "
+                        "retargeted at run time")
+        for node in root.iter():
+            literal = node.get("{%s}ConnectionString" % ns["DTS"])
+            if literal and "@[$" in literal:
+                result.fail("conmgr-binding", rel,
+                            "ConnectionString holds the unevaluated token %r" % literal)
+    result.count("conmgr_files_checked", checked)
+
+
+EXEC_ARG_RE = re.compile(
+    r"@\w+\s*=\s*(?P<value>[^,;\r\n]+?)\s*(?=,\s*@\w+\s*=|[,;]?\s*(?:\r?\n|$))")
+EXEC_STATEMENT_RE = re.compile(r"(?is)\bEXEC(?:UTE)?\s+[\[\]\w.]+\s+(?P<args>.*?);")
+# A blanked literal is '' on one line and a bare N (or nothing) where the
+# literal ran over several lines.
+SIMPLE_ARG_RE = re.compile(
+    r"(?is)^(?:@\w+(?:\s+OUTPUT)?|NULL|DEFAULT|N?''|N|-?[\d.]+|0x[0-9a-f]+)?$")
+NOISE_RE = re.compile(r"(?P<string>'(?:[^']|'')*')|(?P<line>--[^\n]*)|(?P<block>/\*.*?\*/)",
+                      re.DOTALL)
+
+
+def blank_literals(text):
+    """Blank comment and string bodies, keeping every character offset intact.
+
+    Argument checking runs over the result, so a literal collapses to '' and
+    can never look like an expression, and nothing inside dynamic SQL or a
+    comment is mistaken for a real call.
+    """
+    def blank(match):
+        body = match.group(0)
+        blanked = re.sub(r"[^\n]", " ", body)
+        if match.lastgroup == "string" and "\n" not in body:
+            return "''" + blanked[2:]
+        return blanked
+
+    return NOISE_RE.sub(blank, text)
+
+
+def check_sql_exec_arguments(result, prefixes):
+    """Stored procedure arguments must be constants, variables, NULL or DEFAULT."""
+    for rel, full in walk_files(prefixes, (".sql",)):
+        if not rel.startswith(("sqlserver/", "ssis/")):
+            continue
+        with open(full, errors="replace") as handle:
+            text = blank_literals(handle.read())
+        for statement in EXEC_STATEMENT_RE.finditer(text):
+            args = statement.group("args")
+            if "=" not in args:
+                continue
+            for arg in EXEC_ARG_RE.finditer(args):
+                value = arg.group("value").strip()
+                if SIMPLE_ARG_RE.match(value):
+                    continue
+                line = text[: statement.start() + arg.start()].count("\n") + 1
+                result.fail("sql-exec-arguments", "%s:%d" % (rel, line),
+                            "EXEC argument value %r is an expression; assign it to a "
+                            "variable first" % value)
+
+
+MERGE_RE = re.compile(r"(?is)\bMERGE\b.*?;")
+WHEN_MATCHED_UPDATE_RE = re.compile(r"(?is)WHEN\s+MATCHED\s+THEN\s+UPDATE")
+
+
+def check_sql_merge_clauses(result, prefixes):
+    """A MERGE may carry at most one unconditional WHEN MATCHED THEN UPDATE."""
+    for rel, full in walk_files(prefixes, (".sql",)):
+        with open(full, errors="replace") as handle:
+            text = blank_literals(handle.read())
+        for statement in MERGE_RE.finditer(text):
+            matches = WHEN_MATCHED_UPDATE_RE.findall(statement.group(0))
+            if len(matches) > 1:
+                line = text[: statement.start()].count("\n") + 1
+                result.fail("sql-merge", "%s:%d" % (rel, line),
+                            "MERGE has %d unconditional WHEN MATCHED THEN UPDATE clauses"
+                            % len(matches))
 
 
 def check_catalog_coverage(result, catalog, prefixes):
@@ -414,6 +584,11 @@ CHECKS = [
     ("xml", check_dtsx_xml),
     ("dtsx-structure", check_dtsx_structure),
     ("dtsx-references", check_dtsx_references),
+    ("dtsx-pipeline", check_dtsx_pipeline),
+    ("dtproj-structure", check_dtproj_structure),
+    ("conmgr-binding", check_conmgr_binding),
+    ("sql-exec-arguments", check_sql_exec_arguments),
+    ("sql-merge", check_sql_merge_clauses),
     ("package-naming", check_package_naming),
     ("sql-naming", check_sql_naming),
     ("duplicates", check_duplicates),
@@ -439,6 +614,11 @@ def main():
     check_dtsx_xml(result, prefixes)
     check_dtsx_structure(result, prefixes)
     check_dtsx_references(result, prefixes)
+    check_dtsx_pipeline(result, prefixes)
+    check_dtproj_structure(result, prefixes)
+    check_conmgr_binding(result, prefixes)
+    check_sql_exec_arguments(result, prefixes)
+    check_sql_merge_clauses(result, prefixes)
     check_catalog_coverage(result, catalog, prefixes)
     check_package_naming(result, catalog, prefixes)
     check_sql_naming(result, prefixes)

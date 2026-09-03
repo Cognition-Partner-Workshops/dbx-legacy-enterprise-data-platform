@@ -219,11 +219,12 @@ BEGIN
     BEGIN CATCH
         DECLARE @ErrorMessage NVARCHAR(MAX) = ERROR_MESSAGE();
 
+        DECLARE @ErrorNumber INT = ERROR_NUMBER();
         EXECUTE etl.usp_LogError
             @PackageExecutionId = @PackageExecutionId,
             @BatchId            = @BatchId,
             @ErrorSeverity      = N'Error',
-            @ErrorCode          = ERROR_NUMBER(),
+            @ErrorCode          = @ErrorNumber,
             @SourceName         = N'Aggregate.Product Performance',
             @SourceComponent    = N'Aggregate refresh',
             @ProcedureName      = N'Integration.usp_RefreshAggregateProductPerformance',

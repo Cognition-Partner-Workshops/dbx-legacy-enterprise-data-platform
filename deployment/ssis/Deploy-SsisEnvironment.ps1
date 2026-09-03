@@ -24,7 +24,7 @@ param(
     [switch] $Verify
 )
 
-. (Join-Path $PSScriptRoot '..' 'lib' 'Common.ps1')
+. (Join-Path (Join-Path (Join-Path $PSScriptRoot '..') 'lib') 'Common.ps1')
 $script:WwiLogPrefix = 'wwi-deploy-ssis-env'
 
 Assert-WwiEnvironmentVariable @('SSIS_SERVER', 'ORACLE_PASSWORD', 'SQLSERVER_PASSWORD')

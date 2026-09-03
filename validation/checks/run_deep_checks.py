@@ -19,6 +19,7 @@ import argparse
 import sys
 
 import check_control_framework_integration
+import check_control_object_columns
 import check_orphan_objects
 import check_source_to_target_coverage
 import extract_package_dependency_graph
@@ -28,6 +29,7 @@ CHECKS = (
     ("staging and warehouse orphans", check_orphan_objects),
     ("package dependency graph", extract_package_dependency_graph),
     ("control-framework integration", check_control_framework_integration),
+    ("control object columns", check_control_object_columns),
 )
 
 

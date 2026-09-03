@@ -7,6 +7,7 @@ live estate and have never been pointed at one.
 | --- | --- | --- |
 | `validation/static/run_all_checks.py` | well-formedness and convention checks over the checked-in files | no |
 | `validation/checks/` | deeper structural analysis: coverage, orphans, the package graph, control-framework wiring | no |
+| `validation/static/run_negative_fixtures.py` | proves the static checks fail on deliberately malformed copies of real artifacts | no |
 | `validation/runtime/` | SQL an operator would run *after* a deployment, to see whether the estate actually behaves | yes - and it has not been run |
 
 Everything under `validation/static` and `validation/checks` is offline. No
@@ -22,7 +23,14 @@ python3 validation/static/run_all_checks.py --path validation --path docs
 python3 validation/checks/run_deep_checks.py                      # all four deep checks
 python3 validation/checks/check_source_to_target_coverage.py --json
 python3 validation/checks/extract_package_dependency_graph.py --mermaid
+python3 validation/static/run_negative_fixtures.py                # negative fixtures
 ```
+
+`run_negative_fixtures.py` copies a real project, package, connection manager
+or procedure into a scratch tree, breaks exactly one thing in the copy, and
+asserts the matching static check fires - and that it stays quiet on the
+unbroken copy. The repository is never written to. It is what stops the static
+suite from passing everything by passing nothing.
 
 Each deep check exits non-zero when it finds an error, `0` when it finds only
 warnings, and non-zero for either under `--strict`. `--json` emits findings,
@@ -62,6 +70,11 @@ and end logged, errors logged, batches opened and closed by the masters,
 watermarks read and written by incremental loads, and every `etl.usp_*` the
 estate calls actually created under `sqlserver/control/procedures`.
 
+### `check_control_object_columns.py`
+
+Every column an `INSERT` or an `EXEC` names on a control table or routine has
+to exist on it.
+
 ## What these checks can establish
 
 - The XML parses, the names follow the conventions, nothing is defined twice.
@@ -99,9 +112,7 @@ what has not been proven.
 
 ## Findings the deep checks currently report
 
-`python3 validation/checks/run_deep_checks.py` does not come back clean, and
-that is the point: the estate accreted over twenty fictional years and the
-checks are what surfaces the seams. The current findings are catalogued in
-`docs/known-unvalidated-items.md` under "Static findings in the merged estate".
-They are real inconsistencies in the merged tree, not check defects, and they
-belong to the work packages that own those files rather than to this one.
+`python3 validation/checks/run_deep_checks.py` currently comes back clean, as
+does `run_all_checks.py`. That is a statement about structure only - see "What
+these checks cannot establish" above, and `docs/known-unvalidated-items.md`
+for the estate's standing ledger of what has not been proven.

@@ -348,14 +348,17 @@ BEGIN
 
         COMMIT TRANSACTION;
 
+        DECLARE @TargetRowCountValue BIGINT = @InsertedRows + @UpdatedRows + @CarriedRows;
+        DECLARE @InsertRowCountValue BIGINT = @InsertedRows + @CarriedRows;
+        DECLARE @RejectRowCountValue BIGINT = @RejectedRows + @OpenGapRows;
         EXEC etl.usp_LogRowCount
             @PackageExecutionId = @PackageExecutionId,
             @ObjectName         = @ObjectName,
             @SourceRowCount     = @SourceRows,
-            @TargetRowCount     = @InsertedRows + @UpdatedRows + @CarriedRows,
-            @InsertRowCount     = @InsertedRows + @CarriedRows,
+            @TargetRowCount     = @TargetRowCountValue,
+            @InsertRowCount     = @InsertRowCountValue,
             @UpdateRowCount     = @UpdatedRows,
-            @RejectRowCount     = @RejectedRows + @OpenGapRows;
+            @RejectRowCount     = @RejectRowCountValue;
 
         DROP TABLE #FxTyped;
     END TRY

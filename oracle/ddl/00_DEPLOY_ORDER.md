@@ -13,16 +13,17 @@ dependencies in the file headers only.
 ## 1. Instance and schema objects
 
 - `oracle/ddl/01_create_tablespaces.sql`
-- `oracle/ddl/02_create_schemas.sql`
-- `oracle/ddl/03_create_profiles.sql`
+- `oracle/ddl/02_create_profiles.sql`
+- `oracle/ddl/03_create_schemas.sql`
 - `oracle/ddl/04_create_roles.sql`
 - `oracle/ddl/05_grant_privileges.sql`
 - `oracle/ddl/06_create_directories.sql`
 - `oracle/ddl/07_create_synonyms.sql`
-- `oracle/ddl/08_add_future_partitions.sql`
+- `oracle/tables/ZZ_add_future_partitions.sql`
 
-Scripts 01-07 run before any table script. `oracle/ddl/08_add_future_partitions.sql`
-runs after the tables exist and is re-run each year.
+Scripts 01-07 run before any table script. `oracle/tables/ZZ_add_future_partitions.sql`
+runs after the tables exist - it sorts last in the table stage - and is re-run
+each year.
 
 ## 2. Tables, sequences, constraints and indexes
 

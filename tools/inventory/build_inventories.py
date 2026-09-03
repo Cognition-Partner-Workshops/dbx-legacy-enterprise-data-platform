@@ -35,7 +35,7 @@ SAMPLE_DIRS = (
     "wwi-ssasmd", "power-bi-dashboards", "sample-scripts", "workload-drivers",
 )
 
-SKIP_DIRS = (".git", "__pycache__", ".venv", "node_modules")
+SKIP_DIRS = (".git", "__pycache__", ".venv", "node_modules", "obj", "bin")
 
 LAYERS = (
     ("oracle/", "oracle"),
@@ -113,6 +113,17 @@ def owner_of(relative, work_packages):
     return best[0]
 
 
+def measure(path):
+    """Line count and size of a file, counted the same on Windows and Linux.
+
+    Sizes are taken over LF-normalised bytes so a CRLF checkout inventories
+    identically to an LF one.
+    """
+    with open(path, "rb") as handle:
+        body = handle.read().replace(b"\r\n", b"\n")
+    return body.count(b"\n") + (1 if body and not body.endswith(b"\n") else 0), len(body)
+
+
 def build_artifacts(catalog):
     work_packages = catalog.get("work_packages", {}) or {}
     rows = []
@@ -121,15 +132,15 @@ def build_artifacts(catalog):
         if extension in ("pyc",):
             continue
         try:
-            lines = sum(1 for _ in open(path, encoding="utf-8", errors="ignore"))
+            lines, size = measure(path)
         except OSError:
-            lines = 0
+            lines, size = 0, 0
         rows.append([
             relative.replace(os.sep, "/"),
             classify(relative),
             extension or "none",
             lines,
-            os.path.getsize(path),
+            size,
             owner_of(relative, work_packages),
         ])
     rows.sort()

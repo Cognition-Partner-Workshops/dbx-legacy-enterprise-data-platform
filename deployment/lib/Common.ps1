@@ -88,5 +88,5 @@ function Invoke-WwiCommand {
 }
 
 function Get-WwiRepositoryRoot {
-    return (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
+    return (Resolve-Path (Join-Path (Join-Path $PSScriptRoot '..') '..')).Path
 }

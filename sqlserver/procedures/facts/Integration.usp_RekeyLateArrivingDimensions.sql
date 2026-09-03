@@ -236,11 +236,12 @@ BEGIN
             DEALLOCATE hold_cursor;
         END;
 
+        DECLARE @ErrorNumber INT = ERROR_NUMBER();
         EXECUTE etl.usp_LogError
             @PackageExecutionId = @PackageExecutionId,
             @BatchId            = @BatchId,
             @ErrorSeverity      = N'Error',
-            @ErrorCode          = ERROR_NUMBER(),
+            @ErrorCode          = @ErrorNumber,
             @SourceName         = N'Fact.Fact Load Hold',
             @SourceComponent    = N'Late arriving rekey',
             @ProcedureName      = N'Integration.usp_RekeyLateArrivingDimensions',

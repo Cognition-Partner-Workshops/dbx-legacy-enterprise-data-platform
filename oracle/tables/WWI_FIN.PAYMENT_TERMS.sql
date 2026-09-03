@@ -2,7 +2,7 @@
  * Object       : TABLE WWI_FIN.PAYMENT_TERMS
  * Schema       : WWI_FIN (Oracle ERP - WWIGERP)
  * Deploy order : 63
- * Depends on   : oracle/ddl/02_create_schemas.sql
+ * Depends on   : oracle/ddl/03_create_schemas.sql
  * Called by    : PKG_AP_INVOICE (due-date derivation), PKG_PURCHASE_ORDER
  *
  * Payment terms. Discounts are modelled as up to two tiers in columns; the

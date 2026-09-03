@@ -399,11 +399,12 @@ BEGIN
              @SourceRowCount     = @FiscalCount,
              @InsertRowCount     = @FiscalCount;
 
+        DECLARE @RowsInsertedValue BIGINT = @InsertedCount + @FiscalCount;
         EXEC [etl].[usp_LogPackageEnd]
              @PackageExecutionId = @PackageExecutionId,
              @Status             = N'Succeeded',
              @RowsRead           = @InsertedCount,
-             @RowsInserted       = @InsertedCount + @FiscalCount,
+             @RowsInserted       = @RowsInsertedValue,
              @RowsUpdated        = @UpdatedCount;
     END TRY
     BEGIN CATCH

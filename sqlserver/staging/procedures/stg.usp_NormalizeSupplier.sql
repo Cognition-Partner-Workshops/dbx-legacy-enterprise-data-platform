@@ -140,12 +140,13 @@ BEGIN
 
         COMMIT TRANSACTION;
 
+        DECLARE @UpdateRowCountValue BIGINT = @UpdatedRows + @HeldRows;
         EXEC etl.usp_LogRowCount
             @PackageExecutionId = @PackageExecutionId,
             @ObjectName         = @ObjectName,
             @SourceRowCount     = @TargetRows,
             @TargetRowCount     = @TargetRows,
-            @UpdateRowCount     = @UpdatedRows + @HeldRows;
+            @UpdateRowCount     = @UpdateRowCountValue;
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0

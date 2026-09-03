@@ -122,8 +122,12 @@ def scan_repository(tables, routines):
     return failures, checked_inserts, checked_execs
 
 
-def main():
-    as_json = "--json" in sys.argv
+def run(options):
+    """Entry point used by validation/checks/run_deep_checks.py."""
+    return report(as_json=options.json)
+
+
+def report(as_json):
     tables, routines = collect_control_objects()
     failures, inserts, execs = scan_repository(tables, routines)
     failures = sorted(set(failures))
@@ -149,6 +153,10 @@ def main():
         print("Static checks only - nothing here was executed against a live system.")
 
     return 1 if failures else 0
+
+
+def main():
+    return report(as_json="--json" in sys.argv)
 
 
 if __name__ == "__main__":

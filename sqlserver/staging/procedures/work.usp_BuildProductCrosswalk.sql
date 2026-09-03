@@ -266,13 +266,14 @@ BEGIN
         WHERE p.BatchId      = @BatchId
           AND p.ResolvedFlag = 0;
 
+        DECLARE @RejectRowCountValue BIGINT = @ErpRows - @MatchedRows;
         EXEC etl.usp_LogRowCount
             @PackageExecutionId = @PackageExecutionId,
             @ObjectName         = @ObjectName,
             @SourceRowCount     = @ErpRows,
             @TargetRowCount     = @ErpRows,
             @InsertRowCount     = @MatchedRows,
-            @RejectRowCount     = @ErpRows - @MatchedRows;
+            @RejectRowCount     = @RejectRowCountValue;
     END TRY
     BEGIN CATCH
         EXEC etl.usp_LogError

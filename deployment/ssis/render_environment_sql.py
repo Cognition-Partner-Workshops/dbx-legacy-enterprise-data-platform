@@ -30,6 +30,7 @@ except ImportError:  # pragma: no cover - the message is the useful part
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CONFIG_DIR = os.path.join(REPO_ROOT, "config", "environments")
 OUTPUT_DIR = os.path.join(REPO_ROOT, "deployment", "ssis", "environments")
+SSIS_DIR = os.path.join(REPO_ROOT, "ssis")
 
 ENVIRONMENTS = ("dev", "test", "prod")
 
@@ -61,7 +62,6 @@ USE SSISDB;
 GO
 
 DECLARE @FolderName      NVARCHAR(128) = N'{folder}';
-DECLARE @ProjectName     NVARCHAR(128) = N'{project}';
 DECLARE @EnvironmentName NVARCHAR(128) = N'{environment_name}';
 
 IF NOT EXISTS (SELECT 1 FROM catalog.folders WHERE name = @FolderName)
@@ -152,6 +152,19 @@ GO
 """
 
 
+def discovered_projects():
+    """Every area project under ssis/, which is what gets deployed to the folder."""
+    names = []
+    for entry in sorted(os.listdir(SSIS_DIR)):
+        area = os.path.join(SSIS_DIR, entry)
+        if not os.path.isdir(area):
+            continue
+        for candidate in sorted(os.listdir(area)):
+            if candidate.endswith(".dtproj"):
+                names.append(candidate[: -len(".dtproj")])
+    return names
+
+
 def load_environment(code):
     path = os.path.join(CONFIG_DIR, "%s.env.yaml" % code)
     with open(path) as handle:
@@ -172,7 +185,9 @@ def render(code):
     variables = document["ssis_environment_variables"]
 
     folder = environment["ssis_folder"]
-    project = environment["ssis_project"]
+    # The estate deploys one project per area; the environment is created once
+    # and referenced by all of them.
+    projects = environment.get("ssis_projects") or discovered_projects()
     environment_name = environment["ssis_environment_name"]
     description = " ".join(environment["description"].split()).replace("'", "''")
 
@@ -181,7 +196,6 @@ def render(code):
     parts = [HEADER.format(environment_name=environment_name,
                            source_name=source_name,
                            folder=folder,
-                           project=project,
                            description=description,
                            secret_vars=", ".join(secrets) or "none")]
 
@@ -204,14 +218,15 @@ def render(code):
             environment_name=environment_name,
             folder=folder))
 
-    parts.append(REFERENCE_TEMPLATE.format(folder=folder, project=project,
-                                           environment_name=environment_name))
+    for project in projects:
+        parts.append(REFERENCE_TEMPLATE.format(folder=folder, project=project,
+                                               environment_name=environment_name))
 
-    for variable in variables:
-        parts.append(BINDING_TEMPLATE.format(folder=folder, project=project,
-                                             parameter=variable["parameter"]))
+        for variable in variables:
+            parts.append(BINDING_TEMPLATE.format(folder=folder, project=project,
+                                                 parameter=variable["parameter"]))
 
-    parts.append(FOOTER.format(folder=folder, project=project))
+        parts.append(FOOTER.format(folder=folder, project=project))
     return "\n".join(parts)
 
 

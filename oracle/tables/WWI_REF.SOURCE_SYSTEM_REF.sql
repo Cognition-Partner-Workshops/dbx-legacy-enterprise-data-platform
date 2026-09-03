@@ -2,7 +2,7 @@
  * Object       : TABLE WWI_REF.SOURCE_SYSTEM_REF
  * Schema       : WWI_REF (Oracle ERP - WWIGERP)
  * Deploy order : 33
- * Depends on   : oracle/ddl/02_create_schemas.sql
+ * Depends on   : oracle/ddl/03_create_schemas.sql
  * Called by    : SOURCE_SYS columns across the estate, ETL control framework
  *
  * The systems that write into this ERP. The values here are what the SOURCE_SYS

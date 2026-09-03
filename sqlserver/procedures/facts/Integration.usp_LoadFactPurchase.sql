@@ -279,11 +279,12 @@ BEGIN
             DEALLOCATE reject_cursor;
         END;
 
+        DECLARE @ErrorNumber INT = ERROR_NUMBER();
         EXECUTE etl.usp_LogError
             @PackageExecutionId = @PackageExecutionId,
             @BatchId            = @BatchId,
             @ErrorSeverity      = N'Error',
-            @ErrorCode          = ERROR_NUMBER(),
+            @ErrorCode          = @ErrorNumber,
             @SourceName         = N'Fact.Purchase',
             @SourceComponent    = N'Fact load',
             @ProcedureName      = N'Integration.usp_LoadFactPurchase',

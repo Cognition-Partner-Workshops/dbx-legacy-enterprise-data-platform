@@ -1,7 +1,7 @@
 /* =====================================================================
  * Object       : Partition maintenance for the range-partitioned ERP tables
  * Schema       : WWI_PROC, WWI_FIN, WWI_REF, WWI_AUDIT
- * Deploy order : 08  - after oracle/tables/* have been created
+ * Deploy order : last in the table stage - after every oracle/tables/* script
  * Depends on   : oracle/tables/WWI_PROC.PURCHASE_ORDER_HDR.sql and the other
  *                partitioned tables listed below
  * Called by    : DBA deployment runbook, and again every December when the

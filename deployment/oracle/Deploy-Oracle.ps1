@@ -7,6 +7,12 @@
     is piped to the client rather than passed as an argument so it never reaches
     the process table or the -DryRun output.
 
+    oracle/ddl/03_create_schemas.sql creates each schema account with a
+    &&WWI_<schema>_SECRET substitution variable. Those are DEFINEd from the
+    matching environment variables (WWI_MDM_SECRET, WWI_PROC_SECRET,
+    WWI_FIN_SECRET, WWI_REF_SECRET, WWI_AUDIT_SECRET, WWI_EXTRACT_SECRET) for
+    the ddl stage only, and are UNDEFINEd again before the script exits.
+
     This script has not been executed against any Oracle instance.
 
     Usage: .\deployment\oracle\Deploy-Oracle.ps1 [-DryRun] [-Only ddl] [-FromStage 3]
@@ -19,7 +25,7 @@ param(
     [int]    $FromStage = 1
 )
 
-. (Join-Path $PSScriptRoot '..' 'lib' 'Common.ps1')
+. (Join-Path (Join-Path (Join-Path $PSScriptRoot '..') 'lib') 'Common.ps1')
 $script:WwiLogPrefix = 'wwi-deploy-oracle'
 
 Assert-WwiEnvironmentVariable @('ORACLE_HOST', 'ORACLE_PORT', 'ORACLE_SERVICE', 'ORACLE_USER', 'ORACLE_PASSWORD')
@@ -31,7 +37,11 @@ if (-not (Test-Path $oracleRoot)) { Stop-WwiWithError "oracle/ is not present in
 
 $client = if (Get-Command sqlplus -ErrorAction SilentlyContinue) { 'sqlplus' }
           elseif (Get-Command sql -ErrorAction SilentlyContinue) { 'sql' }
+          elseif ($DryRun) { 'sqlplus' }
           else { Stop-WwiWithError 'neither sqlplus nor sql (sqlcl) is on PATH.' }
+
+$schemaSecretVariables = @('WWI_MDM_SECRET', 'WWI_PROC_SECRET', 'WWI_FIN_SECRET',
+                           'WWI_REF_SECRET', 'WWI_AUDIT_SECRET', 'WWI_EXTRACT_SECRET')
 
 # Same dependency order as the shell variant. Keep the two in step.
 $stages = @('ddl', 'tables', 'views', 'functions', 'procedures', 'packages', 'reference', 'seed')
@@ -46,17 +56,25 @@ function Invoke-OracleScript {
     }
 
     Write-WwiLog "RUN    $relative"
+    # The DDL scripts rely on substitution; the data scripts turn DEFINE off
+    # themselves around any literal ampersand.
+    $defines = ($schemaSecretVariables |
+        Where-Object { -not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) } |
+        ForEach-Object { "DEFINE $_ = `"$([Environment]::GetEnvironmentVariable($_))`"" }) -join "`n"
+    $undefines = ($schemaSecretVariables | ForEach-Object { "UNDEFINE $_" }) -join "`n"
     $script = @"
 WHENEVER SQLERROR EXIT SQL.SQLCODE
 WHENEVER OSERROR EXIT 9
 CONNECT $($env:ORACLE_USER)/$($env:ORACLE_PASSWORD)@$($env:ORACLE_HOST):$($env:ORACLE_PORT)/$($env:ORACLE_SERVICE)
-SET DEFINE OFF
+SET DEFINE ON
+$defines
 SET ECHO OFF
 SET SERVEROUTPUT ON SIZE UNLIMITED
 ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD HH24:MI:SS';
 ALTER SESSION SET CURRENT_SCHEMA = $($env:ORACLE_USER);
 @$Path
 SHOW ERRORS
+$undefines
 EXIT SQL.SQLCODE
 "@
     $script | & $client -S -L /nolog

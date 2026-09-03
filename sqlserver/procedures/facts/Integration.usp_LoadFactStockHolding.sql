@@ -166,11 +166,12 @@ BEGIN
         IF XACT_STATE() <> 0
             ROLLBACK TRANSACTION;
 
+        DECLARE @ErrorNumber INT = ERROR_NUMBER();
         EXECUTE etl.usp_LogError
             @PackageExecutionId = @PackageExecutionId,
             @BatchId            = @BatchId,
             @ErrorSeverity      = N'Error',
-            @ErrorCode          = ERROR_NUMBER(),
+            @ErrorCode          = @ErrorNumber,
             @SourceName         = N'Fact.Stock Holding',
             @SourceComponent    = N'Fact load',
             @ProcedureName      = N'Integration.usp_LoadFactStockHolding',

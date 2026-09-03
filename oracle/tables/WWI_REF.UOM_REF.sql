@@ -2,7 +2,7 @@
  * Object       : TABLE WWI_REF.UOM_REF
  * Schema       : WWI_REF (Oracle ERP - WWIGERP)
  * Deploy order : 26
- * Depends on   : oracle/ddl/02_create_schemas.sql
+ * Depends on   : oracle/ddl/03_create_schemas.sql
  * Called by    : PKG_PURCHASE_ORDER, PKG_RECEIPTS, product costing
  *
  * Units of measure with conversion to a base unit within a UOM class. Cross
