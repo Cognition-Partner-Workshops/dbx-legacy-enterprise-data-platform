@@ -151,19 +151,15 @@ These were found by the checks and are open. They belong to the work packages
 that own the files, and WP13 records them rather than editing sibling-owned
 paths to make a check go green.
 
-### Duplicate object definition (WP05 / WP06)
+### Duplicate object definition (WP05 / WP06) - resolved during integration
 
-`validation/static/run_all_checks.py` fails on the whole tree with:
-
-```
-FAIL [duplicates] PROCEDURE INTEGRATION.USP_ENSUREUNKNOWNMEMBERS is created in 2 files:
-  sqlserver/procedures/dimensions/Integration.usp_EnsureUnknownMembers.sql
-  sqlserver/procedures/facts/Integration.usp_EnsureUnknownMembers.sql
-```
-
-The dimension work package and the fact work package each created the
-procedure. Whichever deploys second wins, and the two bodies have not been
-diffed here. This is the only whole-tree static failure outside WP13's paths.
+The dimension and fact work packages each created
+`Integration.usp_EnsureUnknownMembers`, with different reserved-key
+conventions. The fact package's copy was removed at merge time and the
+dimension package's copy kept, because it is the one driven by
+`Integration.DimensionKeyRegistry` and it agrees with the reserved keys the
+dimension tables are seeded with (`-1` Unknown, `-2` Not Applicable). Neither
+body has been executed.
 
 ### Unresolved source and target objects (18, WP08 / WP09)
 
