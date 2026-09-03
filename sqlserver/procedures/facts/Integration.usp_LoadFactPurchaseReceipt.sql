@@ -67,7 +67,7 @@ BEGIN
 
         INSERT INTO Fact.[Purchase Receipt]
         (
-            [Receipt Date Key], [Po Date Key], [Supplier Key], [Stock Item Key],
+            [Receipt Date Key], [Purchase Order Date Key], [Supplier Key], [Stock Item Key],
             [Warehouse Site Key], [Vendor Contract Key], [Currency Key], [Employee Key],
             [Region Code], [Receipt Number], [Receipt Line Number], [Po Number],
             [Po Line Number], [Delivery Note Number], [Container Reference],
@@ -151,7 +151,7 @@ BEGIN
             ON item.[Stock Item Code] = lin.StockItemCode
            AND hdr.ReceiptDate >= item.[Valid From] AND hdr.ReceiptDate < item.[Valid To]
         LEFT JOIN Dimension.[Warehouse Site] AS site
-            ON site.[Site Code] = hdr.WarehouseSiteCode
+            ON site.[Warehouse Site Code] = hdr.WarehouseSiteCode
         LEFT JOIN Dimension.[Vendor Contract] AS vc
             ON vc.[Contract Reference] = hdr.ContractReference
            AND hdr.ReceiptDate >= vc.[Valid From] AND hdr.ReceiptDate < vc.[Valid To]
@@ -178,7 +178,7 @@ BEGIN
            still loaded, because the stock physically arrived. */
         SELECT @RejectRowCount = COUNT_BIG(*)
         FROM Fact.[Purchase Receipt]
-        WHERE [Batch Id] = @BatchId AND [Po Date Key] IS NULL;
+        WHERE [Batch Id] = @BatchId AND [Purchase Order Date Key] IS NULL;
 
         IF @RejectRowCount > 0
             EXECUTE etl.usp_LogRejectedRecord

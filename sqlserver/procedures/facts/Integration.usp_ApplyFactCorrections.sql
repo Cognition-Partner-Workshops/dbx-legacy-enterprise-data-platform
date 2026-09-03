@@ -16,8 +16,11 @@
                            original row is left untouched, a mirrored row with
                            negated measures and [Correction Type Code] = 'REV'
                            is inserted, and the restated row is inserted with
-                           'RESTATE'. Period totals therefore stay correct for
+                           'RES'. Period totals therefore stay correct for
                            any as-at date, which the statutory reports need.
+                           The reason code stays on the request row in
+                           stg.FactCorrectionRequest; the facts carry the type
+                           and the corrected key only.
 
       IN-PLACE pattern   - Fact.Payment, Fact.Order, Fact.Shipment. The row is
                            updated and [Restatement Version] incremented. No
@@ -96,12 +99,12 @@ BEGIN
                     [Sales Territory Key], [Sales Channel Key], [Customer Segment Key],
                     [Promotion Key], [Currency Key], [City Key], [Region Code],
                     [Invoice Number], [Invoice Line Number], [Order Number],
-                    [Transaction Currency Code], [Quantity Base UOM], [Quantity Source UOM],
+                    [Transaction Currency Code], [Quantity Base UOM], [Quantity],
                     [Source UOM Code], [Unit Price], [Gross Amount], [Line Discount Amount],
                     [Net Amount], [Tax Amount], [Freight Amount], [Cost Of Sale Amount],
-                    [Gross Margin Amount], [Fx Rate], [Net Amount Reporting],
-                    [Correction Type Code], [Correction Reason Code],
-                    [Corrects Sale Key], [Natural Key Hash], [Lineage Key],
+                    [Gross Margin Amount], [FX Rate To Reporting], [Net Amount Reporting],
+                    [Correction Type Code],
+                    [Corrected Sale Key], [Natural Key Hash], [Lineage Key],
                     [Batch Id], [Load Datetime]
                 )
                 SELECT
@@ -116,7 +119,7 @@ BEGIN
                     -s.[Net Amount], -s.[Tax Amount], -ISNULL(s.[Freight Amount], 0),
                     -s.[Cost Of Sale Amount], -s.[Gross Margin Amount], s.[FX Rate To Reporting],
                     -s.[Net Amount Reporting],
-                    N'REV', @ReasonCode, s.[Sale Key], s.[Natural Key Hash], s.[Lineage Key],
+                    N'REV', s.[Sale Key], s.[Natural Key Hash], s.[Lineage Key],
                     @BatchId, SYSDATETIME()
                 FROM Fact.[Sale] AS s
                 WHERE CONVERT(NVARCHAR(200), s.[Invoice Number]) + N'|'
@@ -133,12 +136,12 @@ BEGIN
                     [Sales Territory Key], [Sales Channel Key], [Customer Segment Key],
                     [Promotion Key], [Currency Key], [City Key], [Region Code],
                     [Invoice Number], [Invoice Line Number], [Order Number],
-                    [Transaction Currency Code], [Quantity Base UOM], [Quantity Source UOM],
+                    [Transaction Currency Code], [Quantity Base UOM], [Quantity],
                     [Source UOM Code], [Unit Price], [Gross Amount], [Line Discount Amount],
                     [Net Amount], [Tax Amount], [Freight Amount], [Cost Of Sale Amount],
-                    [Gross Margin Amount], [Fx Rate], [Net Amount Reporting],
-                    [Correction Type Code], [Correction Reason Code],
-                    [Corrects Sale Key], [Natural Key Hash], [Lineage Key],
+                    [Gross Margin Amount], [FX Rate To Reporting], [Net Amount Reporting],
+                    [Correction Type Code],
+                    [Corrected Sale Key], [Natural Key Hash], [Lineage Key],
                     [Batch Id], [Load Datetime]
                 )
                 SELECT
@@ -159,7 +162,7 @@ BEGIN
                     s.[FX Rate To Reporting],
                     ROUND((ISNULL(@NewAmount, s.[Gross Amount]) - s.[Line Discount Amount])
                           * s.[FX Rate To Reporting], 2),
-                    N'RESTATE', @ReasonCode, s.[Sale Key], s.[Natural Key Hash], s.[Lineage Key],
+                    N'RES', s.[Sale Key], s.[Natural Key Hash], s.[Lineage Key],
                     @BatchId, SYSDATETIME()
                 FROM Fact.[Sale] AS s
                 WHERE CONVERT(NVARCHAR(200), s.[Invoice Number]) + N'|'
@@ -174,11 +177,11 @@ BEGIN
                 SET [Allocated Amount]     = ISNULL(@NewAmount, [Allocated Amount]),
                     [Unallocated Amount]   = [Payment Amount] - ISNULL(@NewAmount, [Allocated Amount]),
                     [Restatement Version]  = ISNULL([Restatement Version], 1) + 1,
-                    [Correction Reason Code] = @ReasonCode,
+                    [Restated Datetime]    = SYSDATETIME(),
                     [Batch Id]             = @BatchId,
                     [Load Datetime]        = SYSDATETIME()
                 WHERE CONVERT(NVARCHAR(200), [Receipt Number]) + N'|'
-                      + CONVERT(NVARCHAR(20), [Allocation Line Number]) = @NaturalKey;
+                      + CONVERT(NVARCHAR(20), [Receipt Line Number]) = @NaturalKey;
 
                 SET @UpdateRowCount = @UpdateRowCount + @@ROWCOUNT;
             END
@@ -186,10 +189,10 @@ BEGIN
             BEGIN
                 UPDATE Fact.[Order]
                 SET [Quantity Ordered]    = ISNULL(@NewQuantity, [Quantity Ordered]),
-                    [Net Order Value]     = ISNULL(@NewAmount, [Net Order Value]),
-                    [Open Order Value]    = ISNULL(@NewAmount, [Net Order Value])
-                                            - ISNULL([Despatched Value], 0),
-                    [Restatement Version] = ISNULL([Restatement Version], 1) + 1,
+                    [Net Order Amount]    = ISNULL(@NewAmount, [Net Order Amount]),
+                    [Net Order Amount Reporting] =
+                        ROUND(ISNULL(@NewAmount, [Net Order Amount])
+                              * ISNULL([FX Rate To Reporting], 1), 2),
                     [Batch Id]            = @BatchId,
                     [Load Datetime]       = SYSDATETIME()
                 WHERE CONVERT(NVARCHAR(200), [Order Number]) + N'|'

@@ -99,7 +99,7 @@ BEGIN
             SET @Sql = N'SELECT @KeyOut = MAX(d.[' + REPLACE(@DimensionName, N']', N']]')
                      + N' Key]) FROM Dimension.[' + REPLACE(@DimensionName, N']', N']]')
                      + N'] AS d WHERE CONVERT(NVARCHAR(200), d.[Business Key]) = @KeyIn'
-                     + N' AND d.[Is Inferred] = 0;';
+                     + N' AND d.[Is Inferred Member] = 0;';
 
             IF OBJECT_ID(N'Dimension.[' + @DimensionName + N']', N'U') IS NOT NULL
                 EXECUTE sp_executesql @Sql,
@@ -111,7 +111,8 @@ BEGIN
                 /* Replay the held payload into its fact table. The payload was
                    stored as an INSERT statement at hold time, with the key
                    left as a token. */
-                SELECT @Sql = REPLACE(h.[Source Payload], N'{RESOLVED_KEY}',
+                SELECT @Sql = REPLACE(CONVERT(NVARCHAR(MAX), h.[Source Payload]),
+                                      N'{RESOLVED_KEY}',
                                       CONVERT(NVARCHAR(20), @ResolvedKey))
                 FROM Fact.[Fact Load Hold] AS h
                 WHERE h.[Fact Load Hold Key] = @HoldId;
@@ -124,11 +125,11 @@ BEGIN
 
                 UPDATE Fact.[Fact Load Hold]
                 SET [Hold Status Code]   = N'RELEASED',
-                    [Resolved Key]       = @ResolvedKey,
+                    [Released Fact Key]  = @ResolvedKey,
                     [Released Datetime]  = SYSDATETIME(),
                     [Retry Count]        = @RetryCount + 1,
-                    [Batch Id]           = @BatchId
-                WHERE [Hold Id] = @HoldId;
+                    [Last Batch Id]      = @BatchId
+                WHERE [Fact Load Hold Key] = @HoldId;
             END
             ELSE IF @RetryCount + 1 >= @RetryLimit
             BEGIN
@@ -136,8 +137,8 @@ BEGIN
                 SET [Hold Status Code]  = N'ABANDONED',
                     [Retry Count]       = @RetryCount + 1,
                     [Released Datetime] = SYSDATETIME(),
-                    [Batch Id]          = @BatchId
-                WHERE [Hold Id] = @HoldId;
+                    [Last Batch Id]     = @BatchId
+                WHERE [Fact Load Hold Key] = @HoldId;
 
                 EXECUTE etl.usp_LogRejectedRecord
                     @PackageExecutionId = @PackageExecutionId,
@@ -156,8 +157,8 @@ BEGIN
                 UPDATE Fact.[Fact Load Hold]
                 SET [Retry Count]      = @RetryCount + 1,
                     [Last Retry Datetime] = SYSDATETIME(),
-                    [Batch Id]         = @BatchId
-                WHERE [Hold Id] = @HoldId;
+                    [Last Batch Id]    = @BatchId
+                WHERE [Fact Load Hold Key] = @HoldId;
             END;
 
             FETCH NEXT FROM hold_cursor
@@ -174,10 +175,10 @@ BEGIN
         FROM Fact.[Sale] AS f
         INNER JOIN Dimension.[Customer] AS inferred
             ON inferred.[Customer Key] = f.[Customer Key]
-           AND inferred.[Is Inferred] = 1
+           AND inferred.[Is Inferred Member] = 1
         INNER JOIN Dimension.[Customer] AS real_member
             ON real_member.[WWI Customer ID] = inferred.[WWI Customer ID]
-           AND real_member.[Is Inferred] = 0
+           AND real_member.[Is Inferred Member] = 0
            AND real_member.[Valid To] = CONVERT(DATETIME2(7), '9999-12-31');
 
         SET @UpdateRowCount = @@ROWCOUNT;
@@ -188,10 +189,10 @@ BEGIN
         FROM Fact.[Movement] AS f
         INNER JOIN Dimension.[Stock Item] AS inferred
             ON inferred.[Stock Item Key] = f.[Stock Item Key]
-           AND inferred.[Is Inferred] = 1
+           AND inferred.[Is Inferred Member] = 1
         INNER JOIN Dimension.[Stock Item] AS real_member
             ON real_member.[Stock Item Code] = inferred.[Stock Item Code]
-           AND real_member.[Is Inferred] = 0
+           AND real_member.[Is Inferred Member] = 0
            AND real_member.[Valid To] = CONVERT(DATETIME2(7), '9999-12-31');
 
         SET @UpdateRowCount = @UpdateRowCount + @@ROWCOUNT;
@@ -202,10 +203,10 @@ BEGIN
         FROM Fact.[Purchase] AS f
         INNER JOIN Dimension.[Supplier] AS inferred
             ON inferred.[Supplier Key] = f.[Supplier Key]
-           AND inferred.[Is Inferred] = 1
+           AND inferred.[Is Inferred Member] = 1
         INNER JOIN Dimension.[Supplier] AS real_member
             ON real_member.[Supplier Reference] = inferred.[Supplier Reference]
-           AND real_member.[Is Inferred] = 0
+           AND real_member.[Is Inferred Member] = 0
            AND real_member.[Valid To] = CONVERT(DATETIME2(7), '9999-12-31');
 
         SET @UpdateRowCount = @UpdateRowCount + @@ROWCOUNT;

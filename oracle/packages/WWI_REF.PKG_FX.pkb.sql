@@ -24,23 +24,23 @@ CREATE OR REPLACE PACKAGE BODY WWI_REF.PKG_FX AS
 
     FUNCTION direct_rate
     (
-        p_from_ccy     IN WWI_REF.FX_RATE_DAILY.FROM_CURRENCY_CD%TYPE,
-        p_to_ccy       IN WWI_REF.FX_RATE_DAILY.TO_CURRENCY_CD%TYPE,
+        p_from_ccy     IN WWI_REF.FX_RATE_DAILY.FROM_CURR_CD%TYPE,
+        p_to_ccy       IN WWI_REF.FX_RATE_DAILY.TO_CURR_CD%TYPE,
         p_rate_dt      IN DATE,
         p_rate_type_cd IN WWI_REF.FX_RATE_DAILY.RATE_TYPE_CD%TYPE
     ) RETURN NUMBER
     IS
-        l_rate NUMBER;
+        l_rate    NUMBER;
+        l_backoff PLS_INTEGER := backoff_days(p_rate_type_cd);
     BEGIN
-        SELECT RATE_NUM
+        SELECT RATE
           INTO l_rate
-          FROM (SELECT r.RATE_NUM
+          FROM (SELECT r.RATE
                   FROM WWI_REF.FX_RATE_DAILY r
-                 WHERE r.FROM_CURRENCY_CD = p_from_ccy
-                   AND r.TO_CURRENCY_CD   = p_to_ccy
+                 WHERE r.FROM_CURR_CD = p_from_ccy
+                   AND r.TO_CURR_CD   = p_to_ccy
                    AND r.RATE_TYPE_CD     = p_rate_type_cd
-                   AND r.RATE_DT BETWEEN TRUNC(p_rate_dt)
-                                         - backoff_days(p_rate_type_cd)
+                   AND r.RATE_DT BETWEEN TRUNC(p_rate_dt) - l_backoff
                                      AND TRUNC(p_rate_dt)
                  ORDER BY r.RATE_DT DESC)
          WHERE ROWNUM = 1;
@@ -53,8 +53,8 @@ CREATE OR REPLACE PACKAGE BODY WWI_REF.PKG_FX AS
 
     FUNCTION get_rate
     (
-        p_from_ccy     IN WWI_REF.FX_RATE_DAILY.FROM_CURRENCY_CD%TYPE,
-        p_to_ccy       IN WWI_REF.FX_RATE_DAILY.TO_CURRENCY_CD%TYPE,
+        p_from_ccy     IN WWI_REF.FX_RATE_DAILY.FROM_CURR_CD%TYPE,
+        p_to_ccy       IN WWI_REF.FX_RATE_DAILY.TO_CURR_CD%TYPE,
         p_rate_dt      IN DATE DEFAULT TRUNC(SYSDATE),
         p_rate_type_cd IN WWI_REF.FX_RATE_DAILY.RATE_TYPE_CD%TYPE DEFAULT 'CORP'
     ) RETURN NUMBER
@@ -102,8 +102,8 @@ CREATE OR REPLACE PACKAGE BODY WWI_REF.PKG_FX AS
 
     FUNCTION month_end_rate
     (
-        p_from_ccy  IN WWI_REF.FX_RATE_DAILY.FROM_CURRENCY_CD%TYPE,
-        p_to_ccy    IN WWI_REF.FX_RATE_DAILY.TO_CURRENCY_CD%TYPE,
+        p_from_ccy  IN WWI_REF.FX_RATE_DAILY.FROM_CURR_CD%TYPE,
+        p_to_ccy    IN WWI_REF.FX_RATE_DAILY.TO_CURR_CD%TYPE,
         p_period_cd IN VARCHAR2
     ) RETURN NUMBER
     IS
@@ -124,15 +124,15 @@ CREATE OR REPLACE PACKAGE BODY WWI_REF.PKG_FX AS
     FUNCTION round_to_minor_unit
     (
         p_amount      IN NUMBER,
-        p_currency_cd IN WWI_REF.CURRENCY_CODE.CURRENCY_CD%TYPE
+        p_currency_cd IN WWI_REF.CURRENCY_CODE.CURR_CD%TYPE
     ) RETURN NUMBER
     IS
         l_minor PLS_INTEGER;
     BEGIN
-        SELECT NVL(MINOR_UNIT_NUM, 2)
+        SELECT NVL(MINOR_UNIT_DIGITS, 2)
           INTO l_minor
           FROM WWI_REF.CURRENCY_CODE
-         WHERE CURRENCY_CD = p_currency_cd;
+         WHERE CURR_CD = p_currency_cd;
 
         RETURN ROUND(p_amount, l_minor);
     EXCEPTION
@@ -143,12 +143,12 @@ CREATE OR REPLACE PACKAGE BODY WWI_REF.PKG_FX AS
 
     PROCEDURE upsert_rate
     (
-        p_from_ccy     IN WWI_REF.FX_RATE_DAILY.FROM_CURRENCY_CD%TYPE,
-        p_to_ccy       IN WWI_REF.FX_RATE_DAILY.TO_CURRENCY_CD%TYPE,
+        p_from_ccy     IN WWI_REF.FX_RATE_DAILY.FROM_CURR_CD%TYPE,
+        p_to_ccy       IN WWI_REF.FX_RATE_DAILY.TO_CURR_CD%TYPE,
         p_rate_dt      IN DATE,
         p_rate_type_cd IN WWI_REF.FX_RATE_DAILY.RATE_TYPE_CD%TYPE,
-        p_rate_num     IN WWI_REF.FX_RATE_DAILY.RATE_NUM%TYPE,
-        p_src_system_cd    IN WWI_REF.FX_RATE_DAILY.SRC_SYSTEM_CD%TYPE
+        p_rate_num     IN WWI_REF.FX_RATE_DAILY.RATE%TYPE,
+        p_src_system_cd    IN WWI_REF.FX_RATE_DAILY.SOURCE_SYS%TYPE
     )
     IS
         l_prior NUMBER;
@@ -171,23 +171,23 @@ CREATE OR REPLACE PACKAGE BODY WWI_REF.PKG_FX AS
         END IF;
 
         MERGE INTO WWI_REF.FX_RATE_DAILY t
-        USING (SELECT p_from_ccy     AS FROM_CURRENCY_CD,
-                      p_to_ccy       AS TO_CURRENCY_CD,
+        USING (SELECT p_from_ccy     AS FROM_CURR_CD,
+                      p_to_ccy       AS TO_CURR_CD,
                       TRUNC(p_rate_dt) AS RATE_DT,
                       p_rate_type_cd AS RATE_TYPE_CD
                  FROM DUAL) s
-           ON (    t.FROM_CURRENCY_CD = s.FROM_CURRENCY_CD
-               AND t.TO_CURRENCY_CD   = s.TO_CURRENCY_CD
+           ON (    t.FROM_CURR_CD = s.FROM_CURR_CD
+               AND t.TO_CURR_CD   = s.TO_CURR_CD
                AND t.RATE_DT          = s.RATE_DT
                AND t.RATE_TYPE_CD     = s.RATE_TYPE_CD)
          WHEN MATCHED THEN
-            UPDATE SET t.RATE_NUM    = p_rate_num,
-                       t.SRC_SYSTEM_CD   = p_src_system_cd,
-                       t.LAST_UPD_DT = SYSDATE
+            UPDATE SET t.RATE    = p_rate_num,
+                       t.SOURCE_SYS   = p_src_system_cd,
+                       t.UPDATED_DT = SYSDATE
          WHEN NOT MATCHED THEN
-            INSERT (FROM_CURRENCY_CD, TO_CURRENCY_CD, RATE_DT, RATE_TYPE_CD,
-                    RATE_NUM, INVERSE_RATE_NUM, SRC_SYSTEM_CD, LOADED_DT, LAST_UPD_DT)
-            VALUES (s.FROM_CURRENCY_CD, s.TO_CURRENCY_CD, s.RATE_DT, s.RATE_TYPE_CD,
+            INSERT (FROM_CURR_CD, TO_CURR_CD, RATE_DT, RATE_TYPE_CD,
+                    RATE, INVERSE_RATE, SOURCE_SYS, LOADED_TS, UPDATED_DT)
+            VALUES (s.FROM_CURR_CD, s.TO_CURR_CD, s.RATE_DT, s.RATE_TYPE_CD,
                     p_rate_num, ROUND(1 / p_rate_num, 10), p_src_system_cd,
                     SYSDATE, SYSDATE);
     END upsert_rate;
@@ -199,14 +199,14 @@ CREATE OR REPLACE PACKAGE BODY WWI_REF.PKG_FX AS
     )
     IS
         CURSOR c_pairs IS
-            SELECT r.FROM_CURRENCY_CD, r.TO_CURRENCY_CD, r.RATE_TYPE_CD,
+            SELECT r.FROM_CURR_CD, r.TO_CURR_CD, r.RATE_TYPE_CD,
                    MAX(r.RATE_DT) AS LAST_RATE_DT
               FROM WWI_REF.FX_RATE_DAILY r
               JOIN WWI_REF.CURRENCY_CODE c
-                ON c.CURRENCY_CD = r.FROM_CURRENCY_CD
-             WHERE NVL(c.ACTIVE_FLAG, 'Y') = 'Y'
+                ON c.CURR_CD = r.FROM_CURR_CD
+             WHERE NVL(c.ACTIVE_FLG, 'Y') = 'Y'
                AND r.RATE_TYPE_CD IN ('CORP', 'SPOT')
-             GROUP BY r.FROM_CURRENCY_CD, r.TO_CURRENCY_CD, r.RATE_TYPE_CD
+             GROUP BY r.FROM_CURR_CD, r.TO_CURR_CD, r.RATE_TYPE_CD
             HAVING MAX(r.RATE_DT) < TRUNC(SYSDATE) - p_max_age_days;
     BEGIN
         p_stale_cnt := 0;
@@ -214,8 +214,8 @@ CREATE OR REPLACE PACKAGE BODY WWI_REF.PKG_FX AS
         FOR rec IN c_pairs LOOP
             p_stale_cnt := p_stale_cnt + 1;
             WWI_AUDIT.PKG_DATA_QUALITY.log_error('PKG_FX.check_rate_freshness',
-                                                 rec.FROM_CURRENCY_CD || '/'
-                                                 || rec.TO_CURRENCY_CD,
+                                                 rec.FROM_CURR_CD || '/'
+                                                 || rec.TO_CURR_CD,
                                                  'last ' || rec.RATE_TYPE_CD
                                                  || ' rate is '
                                                  || TO_CHAR(rec.LAST_RATE_DT,

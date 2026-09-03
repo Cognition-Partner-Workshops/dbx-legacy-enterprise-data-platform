@@ -32,16 +32,16 @@ CREATE OR REPLACE PACKAGE WWI_MDM.PKG_SUPPLIER_MASTER AS
     FUNCTION certification_status
     (
         p_supp_id IN WWI_MDM.SUPP_MASTER.SUPP_ID%TYPE,
-        p_cert_cd IN WWI_MDM.SUPP_CERTIFICATION.CERT_CD%TYPE
+        p_cert_cd IN WWI_MDM.SUPP_CERTIFICATION.CERT_TYPE_CD%TYPE
     ) RETURN VARCHAR2;
 
     PROCEDURE onboard_supplier
     (
-        p_supp_num    IN  WWI_MDM.SUPP_MASTER.SUPP_NUM%TYPE,
+        p_supp_num    IN  WWI_MDM.SUPP_MASTER.SUPP_NBR%TYPE,
         p_supp_name   IN  WWI_MDM.SUPP_MASTER.SUPP_NAME%TYPE,
         p_region_cd   IN  WWI_MDM.SUPP_MASTER.REGION_CD%TYPE,
         p_country_cd  IN  WWI_MDM.SUPP_MASTER.COUNTRY_CD%TYPE,
-        p_tax_reg_num IN  WWI_MDM.SUPP_MASTER.TAX_REG_NUM%TYPE,
+        p_tax_reg_num IN  WWI_MDM.SUPP_MASTER.TAX_ID_NBR%TYPE,
         p_supp_id     OUT WWI_MDM.SUPP_MASTER.SUPP_ID%TYPE
     );
 
@@ -51,15 +51,15 @@ CREATE OR REPLACE PACKAGE WWI_MDM.PKG_SUPPLIER_MASTER AS
         p_bank_name    IN  WWI_MDM.SUPP_BANK_ACCOUNT.BANK_NAME%TYPE,
         p_acct_num     IN  VARCHAR2,
         p_iban         IN  VARCHAR2 DEFAULT NULL,
-        p_swift_cd     IN  WWI_MDM.SUPP_BANK_ACCOUNT.SWIFT_CD%TYPE DEFAULT NULL,
-        p_currency_cd  IN  WWI_MDM.SUPP_BANK_ACCOUNT.CURRENCY_CD%TYPE,
-        p_bank_acct_id OUT WWI_MDM.SUPP_BANK_ACCOUNT.BANK_ACCT_ID%TYPE
+        p_swift_cd     IN  WWI_MDM.SUPP_BANK_ACCOUNT.BIC_CD%TYPE DEFAULT NULL,
+        p_currency_cd  IN  WWI_MDM.SUPP_BANK_ACCOUNT.ACCOUNT_CURR_CD%TYPE,
+        p_bank_acct_id OUT WWI_MDM.SUPP_BANK_ACCOUNT.SUPP_BANK_ID%TYPE
     );
 
     PROCEDURE block_supplier
     (
         p_supp_id    IN WWI_MDM.SUPP_MASTER.SUPP_ID%TYPE,
-        p_reason_cd  IN WWI_MDM.SUPP_MASTER.BLOCK_REASON_CD%TYPE,
+        p_reason_cd  IN WWI_MDM.SUPP_MASTER.HOLD_REASON_CD%TYPE,
         p_blocked_by IN VARCHAR2
     );
 

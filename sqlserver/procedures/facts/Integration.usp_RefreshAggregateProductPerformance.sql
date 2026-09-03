@@ -114,7 +114,7 @@ BEGIN
             COUNT(DISTINCT s.[Customer Key]),
             NULL, NULL, NULL, NULL, NULL,
             CASE WHEN item.[Valid From] > DATEADD(MONTH, -6, @MonthStart) THEN 1 ELSE 0 END,
-            CASE WHEN ISNULL(item.[Discontinued Flag], 0) = 1 THEN 1 ELSE 0 END,
+            CASE WHEN ISNULL(item.[Is Discontinued], 0) = 1 THEN 1 ELSE 0 END,
             @BatchId, SYSDATETIME()
         FROM Fact.[Sale] AS s
         LEFT JOIN Dimension.[Stock Item] AS item
@@ -138,7 +138,7 @@ BEGIN
         WHERE s.[Invoice Date Key] BETWEEN @MonthStart AND @MonthEnd
           AND ISNULL(s.[Correction Type Code], N'ORIG') <> N'REV'
         GROUP BY s.[Stock Item Key], item.[Product Category Key], s.[Region Code],
-                 item.[Primary Supplier Key], item.[Valid From], item.[Discontinued Flag],
+                 item.[Primary Supplier Key], item.[Valid From], item.[Is Discontinued],
                  ret.UnitsReturned, inv.AverageStockValue, inv.StockoutDays,
                  inv.OpeningQuantity;
 

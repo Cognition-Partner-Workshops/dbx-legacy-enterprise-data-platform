@@ -43,9 +43,9 @@ BEGIN
         SELECT c.PERIOD_CD
           INTO l_period_cd
           FROM WWI_REF.CALENDAR_FISCAL c
-         WHERE c.FISCAL_CALENDAR_CD = l_calendar_cd
-           AND TRUNC(p_dt) BETWEEN c.START_DT AND c.END_DT
-           AND NVL(c.ADJUSTMENT_FLAG, 'N') = 'N';
+         WHERE c.CALENDAR_CD = l_calendar_cd
+           AND c.CALENDAR_DT = TRUNC(p_dt)
+           AND NVL(c.ADJUSTMENT_PERIOD_FLG, 'N') = 'N';
         RETURN l_period_cd;
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
@@ -54,8 +54,8 @@ BEGIN
             SELECT MIN(c.PERIOD_CD)
               INTO l_period_cd
               FROM WWI_REF.CALENDAR_FISCAL c
-             WHERE c.FISCAL_CALENDAR_CD = l_calendar_cd
-               AND TRUNC(p_dt) BETWEEN c.START_DT AND c.END_DT;
+             WHERE c.CALENDAR_CD = l_calendar_cd
+               AND c.CALENDAR_DT = TRUNC(p_dt);
             RETURN l_period_cd;
     END;
 

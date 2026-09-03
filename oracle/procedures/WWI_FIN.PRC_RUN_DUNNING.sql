@@ -28,11 +28,16 @@ IS
     CURSOR c_overdue IS
         SELECT sm.SUPP_ID,
                sm.SUPP_NAME,
-               sm.CONSENT_FLAG,
-               sm.STATUS_CD,
-               MAX(s.DAYS_PAST_DUE)      AS MAX_DAYS_PAST_DUE,
-               SUM(-s.BASE_OPEN_AMT)     AS TOTAL_OPEN_AMT,
-               COUNT(*)                  AS OPEN_ITEM_CNT
+               sm.SUPP_STATUS_CD,
+               MAX(s.AVG_DAYS_OUTSTANDING)      AS MAX_DAYS_PAST_DUE,
+               SUM(s.TOTAL_OUTSTANDING_AMT)     AS TOTAL_OPEN_AMT,
+               SUM(s.OPEN_INVOICE_CNT)          AS OPEN_ITEM_CNT,
+               MAX(CASE WHEN EXISTS (SELECT 1
+                                       FROM WWI_MDM.SUPP_CONTACT ct
+                                      WHERE ct.SUPP_ID = sm.SUPP_ID
+                                        AND ct.CONTACT_ROLE_CD = 'AR'
+                                        AND NVL(ct.ACTIVE_FLG, 'Y') = 'Y')
+                        THEN 'Y' ELSE 'N' END)  AS CONTACT_OK_FLG
           FROM WWI_FIN.AP_AGING_SNAPSHOT s
           JOIN WWI_MDM.SUPP_MASTER sm
             ON sm.SUPP_ID = s.SUPP_ID
@@ -41,14 +46,14 @@ IS
                                   FROM WWI_FIN.AP_AGING_SNAPSHOT s2
                                  WHERE s2.REGION_CD = p_region_cd
                                    AND s2.SNAPSHOT_DT <= p_as_of_dt)
-           AND s.DAYS_PAST_DUE > 0
-           AND s.BASE_OPEN_AMT < 0
-         GROUP BY sm.SUPP_ID, sm.SUPP_NAME, sm.CONSENT_FLAG, sm.STATUS_CD;
+           AND s.AVG_DAYS_OUTSTANDING > 0
+           AND s.TOTAL_OUTSTANDING_AMT > 0
+         GROUP BY sm.SUPP_ID, sm.SUPP_NAME, sm.SUPP_STATUS_CD;
 
     l_level_cd   VARCHAR2(10);
     l_min_days   PLS_INTEGER;
     l_min_amt    NUMBER;
-    l_email_txt  WWI_MDM.SUPP_CONTACT.EMAIL_TXT%TYPE;
+    l_email_txt  WWI_MDM.SUPP_CONTACT.EMAIL_ADDR%TYPE;
 BEGIN
     p_letter_cnt  := 0;
     p_skipped_cnt := 0;
@@ -60,18 +65,17 @@ BEGIN
     FOR rec IN c_overdue LOOP
         IF rec.MAX_DAYS_PAST_DUE < l_min_days
            OR NVL(rec.TOTAL_OPEN_AMT, 0) < l_min_amt
-           OR rec.STATUS_CD <> 'A' THEN
+           OR rec.SUPP_STATUS_CD <> 'A' THEN
             p_skipped_cnt := p_skipped_cnt + 1;
             CONTINUE;
         END IF;
 
-        IF p_region_cd = 'EU' AND NVL(rec.CONSENT_FLAG, 'N') <> 'Y' THEN
-            /* no marketing or reminder contact without recorded consent */
+        IF p_region_cd = 'EU' AND NVL(rec.CONTACT_OK_FLG, 'N') <> 'Y' THEN
+            /* no reminder without an active AR contact of record */
             p_skipped_cnt := p_skipped_cnt + 1;
-            WWI_AUDIT.PKG_DATA_QUALITY.log_reject(NULL, 'WWI_MDM.SUPP_MASTER',
+            WWI_AUDIT.PKG_DATA_QUALITY.log_reject(NULL, 'WWI_MDM.SUPP_CONTACT',
                 TO_CHAR(rec.SUPP_ID), 'NO_CONSENT',
-                'dunning suppressed, consent flag is '
-                || NVL(rec.CONSENT_FLAG, 'NULL'), 'W');
+                'dunning suppressed, no active AR contact', 'W');
             CONTINUE;
         END IF;
 
@@ -99,12 +103,12 @@ BEGIN
         END IF;
 
         BEGIN
-            SELECT MIN(ct.EMAIL_TXT)
+            SELECT MIN(ct.EMAIL_ADDR)
               INTO l_email_txt
               FROM WWI_MDM.SUPP_CONTACT ct
              WHERE ct.SUPP_ID = rec.SUPP_ID
-               AND ct.CONTACT_TYPE_CD = 'AR'
-               AND NVL(ct.ACTIVE_FLAG, 'Y') = 'Y';
+               AND ct.CONTACT_ROLE_CD = 'AR'
+               AND NVL(ct.ACTIVE_FLG, 'Y') = 'Y';
         EXCEPTION
             WHEN NO_DATA_FOUND THEN
                 l_email_txt := NULL;
@@ -119,8 +123,8 @@ BEGIN
         END IF;
 
         INSERT INTO WWI_AUDIT.CHANGE_LOG
-            (CHANGE_LOG_ID, SRC_SCHEMA_NAME, SRC_OBJECT_NAME, SRC_KEY_TXT,
-             CHANGE_TYPE_CD, CHANGE_DT, CHANGE_DETAIL_TXT, EXTRACTED_FLAG,
+            (CHANGE_LOG_ID, SCHEMA_NAME, TABLE_NAME, PK_VALUE_TXT,
+             OPERATION_CD, CHANGE_TS, NEW_VALUE_TXT, EXTRACTED_FLG,
              CHANGED_BY)
         VALUES
             (WWI_AUDIT.SEQ_CHANGE_LOG.NEXTVAL, 'WWI_FIN', 'DUNNING',
@@ -134,9 +138,10 @@ BEGIN
            APAC credit control insist on a human decision                 */
         IF p_region_cd = 'NA' AND l_level_cd = 'COLLECT' THEN
             UPDATE WWI_MDM.SUPP_MASTER
-               SET PAYMENT_HOLD_FLAG = 'Y',
-                   LAST_UPD_DT       = SYSDATE,
-                   LAST_UPD_BY       = USER
+               SET HOLD_ALL_FLG = 'Y',
+                   HOLD_REASON_CD   = 'DUNNING',
+                   UPDATED_DT       = SYSDATE,
+                   UPDATED_BY       = USER
              WHERE SUPP_ID = rec.SUPP_ID;
         END IF;
 

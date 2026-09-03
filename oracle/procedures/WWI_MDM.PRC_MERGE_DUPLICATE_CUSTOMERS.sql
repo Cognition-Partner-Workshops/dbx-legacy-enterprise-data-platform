@@ -35,8 +35,8 @@ IS
              = WWI_MDM.FN_NORMALIZE_NAME(a.CUST_NAME)
          WHERE a.REGION_CD = p_region_cd
            AND b.REGION_CD = p_region_cd
-           AND a.STATUS_CD <> 'M'
-           AND b.STATUS_CD <> 'M'
+           AND a.CUST_STATUS_CD <> 'M'
+           AND b.CUST_STATUS_CD <> 'M'
          ORDER BY a.CUST_ID, b.CUST_ID;
 
     l_score     NUMBER;

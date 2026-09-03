@@ -23,7 +23,7 @@ AS
 SELECT
     m.[Customer Key]                                             AS [Customer Key],
     c.[Customer]                                                AS [Customer Name],
-    c.[Customer Category]                                       AS [Customer Category],
+    c.[Category]                                                AS [Customer Category],
     m.[Region Code]                                              AS [Region],
     m.[Fiscal Calendar Code]                                      AS [Fiscal Calendar],
     m.[Fiscal Year]                                              AS [Fiscal Year],

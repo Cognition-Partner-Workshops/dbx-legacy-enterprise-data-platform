@@ -12,16 +12,33 @@ CREATE OR REPLACE PACKAGE BODY WWI_AUDIT.PKG_EXTRACT_CONTROL AS
 
     c_bulk_limit CONSTANT PLS_INTEGER := 5000;
 
+    /* EXTRACT_CONTROL keeps the watermark as a timestamp and as a numeric id;
+       which one an extract uses follows its watermark column.              */
+    FUNCTION watermark_type
+    (
+        p_watermark_column IN WWI_AUDIT.EXTRACT_CONTROL.WATERMARK_COLUMN_NAME%TYPE
+    ) RETURN VARCHAR2
+    IS
+    BEGIN
+        RETURN CASE
+                   WHEN UPPER(NVL(p_watermark_column, 'X')) LIKE '%\_ID' ESCAPE '\'
+                     OR UPPER(NVL(p_watermark_column, 'X')) LIKE '%\_NBR' ESCAPE '\'
+                     OR UPPER(NVL(p_watermark_column, 'X')) LIKE '%\_SEQ' ESCAPE '\'
+                   THEN 'KEY'
+                   ELSE 'DATE'
+               END;
+    END watermark_type;
+
     FUNCTION get_watermark
     (
         p_extract_name IN WWI_AUDIT.EXTRACT_CONTROL.EXTRACT_NAME%TYPE
-    ) RETURN WWI_AUDIT.EXTRACT_CONTROL.LAST_EXTRACT_VALUE_TXT%TYPE
+    ) RETURN WWI_AUDIT.V_EXTRACT_WATERMARK.LAST_EXTRACT_VALUE_TXT%TYPE
     IS
-        l_value WWI_AUDIT.EXTRACT_CONTROL.LAST_EXTRACT_VALUE_TXT%TYPE;
+        l_value WWI_AUDIT.V_EXTRACT_WATERMARK.LAST_EXTRACT_VALUE_TXT%TYPE;
     BEGIN
         SELECT LAST_EXTRACT_VALUE_TXT
           INTO l_value
-          FROM WWI_AUDIT.EXTRACT_CONTROL
+          FROM WWI_AUDIT.V_EXTRACT_WATERMARK
          WHERE EXTRACT_NAME = p_extract_name;
 
         RETURN l_value;
@@ -37,13 +54,18 @@ CREATE OR REPLACE PACKAGE BODY WWI_AUDIT.PKG_EXTRACT_CONTROL AS
         p_extract_name IN WWI_AUDIT.EXTRACT_CONTROL.EXTRACT_NAME%TYPE
     ) RETURN DATE
     IS
-        l_value WWI_AUDIT.EXTRACT_CONTROL.LAST_EXTRACT_VALUE_TXT%TYPE;
-        l_type  WWI_AUDIT.EXTRACT_CONTROL.WATERMARK_TYPE_CD%TYPE;
+        l_value  WWI_AUDIT.V_EXTRACT_WATERMARK.LAST_EXTRACT_VALUE_TXT%TYPE;
+        l_column WWI_AUDIT.EXTRACT_CONTROL.WATERMARK_COLUMN_NAME%TYPE;
+        l_type   VARCHAR2(4);
     BEGIN
-        SELECT LAST_EXTRACT_VALUE_TXT, WATERMARK_TYPE_CD
-          INTO l_value, l_type
-          FROM WWI_AUDIT.EXTRACT_CONTROL
-         WHERE EXTRACT_NAME = p_extract_name;
+        SELECT COALESCE(TO_CHAR(ec.LAST_WATERMARK_TS, 'YYYY-MM-DD HH24:MI:SS'),
+                        TO_CHAR(ec.LAST_WATERMARK_ID)),
+               ec.WATERMARK_COLUMN_NAME
+          INTO l_value, l_column
+          FROM WWI_AUDIT.EXTRACT_CONTROL ec
+         WHERE ec.EXTRACT_NAME = p_extract_name;
+
+        l_type := watermark_type(l_column);
 
         IF l_type <> 'DATE' OR l_value IS NULL THEN
             /* a key-watermarked extract has no meaningful date; callers use
@@ -67,8 +89,8 @@ CREATE OR REPLACE PACKAGE BODY WWI_AUDIT.PKG_EXTRACT_CONTROL AS
     (
         p_extract_name IN  WWI_AUDIT.EXTRACT_CONTROL.EXTRACT_NAME%TYPE,
         p_run_id       OUT NUMBER,
-        p_from_value   OUT WWI_AUDIT.EXTRACT_CONTROL.LAST_EXTRACT_VALUE_TXT%TYPE,
-        p_to_value     OUT WWI_AUDIT.EXTRACT_CONTROL.LAST_EXTRACT_VALUE_TXT%TYPE
+        p_from_value   OUT WWI_AUDIT.V_EXTRACT_WATERMARK.LAST_EXTRACT_VALUE_TXT%TYPE,
+        p_to_value     OUT WWI_AUDIT.V_EXTRACT_WATERMARK.LAST_EXTRACT_VALUE_TXT%TYPE
     )
     IS
         l_ctl WWI_AUDIT.EXTRACT_CONTROL%ROWTYPE;
@@ -78,29 +100,33 @@ CREATE OR REPLACE PACKAGE BODY WWI_AUDIT.PKG_EXTRACT_CONTROL AS
          WHERE EXTRACT_NAME = p_extract_name
            FOR UPDATE;
 
-        IF NVL(l_ctl.ENABLED_FLAG, 'N') = 'N' THEN
+        IF NVL(l_ctl.ENABLED_FLG, 'N') = 'N' THEN
             RAISE_APPLICATION_ERROR(-20512,
                 'PKG_EXTRACT_CONTROL.begin_extract: extract ' || p_extract_name
                 || ' is disabled');
         END IF;
 
         p_run_id     := WWI_AUDIT.SEQ_EXTRACT_RUN.NEXTVAL;
-        p_from_value := l_ctl.LAST_EXTRACT_VALUE_TXT;
+        p_from_value := COALESCE(TO_CHAR(l_ctl.LAST_WATERMARK_TS,
+                                         'YYYY-MM-DD HH24:MI:SS'),
+                                 TO_CHAR(l_ctl.LAST_WATERMARK_ID));
 
         /* the upper bound is frozen here so a long running extract does not
            lose rows written while it is streaming. The one minute lag is a
            1990s hedge against clock skew between the ERP and the ETL server. */
-        p_to_value := CASE l_ctl.WATERMARK_TYPE_CD
+        p_to_value := CASE watermark_type(l_ctl.WATERMARK_COLUMN_NAME)
                           WHEN 'DATE' THEN TO_CHAR(SYSDATE - 1 / 1440,
                                                    'YYYY-MM-DD HH24:MI:SS')
                           ELSE TO_CHAR(WWI_AUDIT.SEQ_CHANGE_LOG.CURRVAL)
                       END;
 
         UPDATE WWI_AUDIT.EXTRACT_CONTROL
-           SET CURRENT_RUN_ID  = p_run_id,
-               RUN_STARTED_DT  = SYSDATE,
-               LAST_STATUS_CD  = 'RUNNING',
-               LAST_UPD_DT     = SYSDATE
+           SET LAST_EXTRACT_START_TS = SYSTIMESTAMP,
+               LAST_STATUS_CD        = 'RUNNING',
+               LOCK_FLG              = 'Y',
+               LOCKED_BY_TXT         = TO_CHAR(p_run_id),
+               LOCKED_TS             = SYSTIMESTAMP,
+               UPDATED_DT            = SYSDATE
          WHERE EXTRACT_NAME = p_extract_name;
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
@@ -114,18 +140,23 @@ CREATE OR REPLACE PACKAGE BODY WWI_AUDIT.PKG_EXTRACT_CONTROL AS
         p_extract_name IN WWI_AUDIT.EXTRACT_CONTROL.EXTRACT_NAME%TYPE,
         p_run_id       IN NUMBER,
         p_row_count    IN WWI_AUDIT.EXTRACT_CONTROL.LAST_ROW_COUNT%TYPE,
-        p_to_value     IN WWI_AUDIT.EXTRACT_CONTROL.LAST_EXTRACT_VALUE_TXT%TYPE,
+        p_to_value     IN WWI_AUDIT.V_EXTRACT_WATERMARK.LAST_EXTRACT_VALUE_TXT%TYPE,
         p_status_cd    IN WWI_AUDIT.EXTRACT_CONTROL.LAST_STATUS_CD%TYPE DEFAULT 'SUCCESS'
     )
     IS
-        l_prior WWI_AUDIT.EXTRACT_CONTROL.LAST_EXTRACT_VALUE_TXT%TYPE;
-        l_type  WWI_AUDIT.EXTRACT_CONTROL.WATERMARK_TYPE_CD%TYPE;
+        l_prior  WWI_AUDIT.V_EXTRACT_WATERMARK.LAST_EXTRACT_VALUE_TXT%TYPE;
+        l_column WWI_AUDIT.EXTRACT_CONTROL.WATERMARK_COLUMN_NAME%TYPE;
+        l_type   VARCHAR2(4);
     BEGIN
-        SELECT LAST_EXTRACT_VALUE_TXT, WATERMARK_TYPE_CD
-          INTO l_prior, l_type
-          FROM WWI_AUDIT.EXTRACT_CONTROL
-         WHERE EXTRACT_NAME = p_extract_name
+        SELECT COALESCE(TO_CHAR(ec.LAST_WATERMARK_TS, 'YYYY-MM-DD HH24:MI:SS'),
+                        TO_CHAR(ec.LAST_WATERMARK_ID)),
+               ec.WATERMARK_COLUMN_NAME
+          INTO l_prior, l_column
+          FROM WWI_AUDIT.EXTRACT_CONTROL ec
+         WHERE ec.EXTRACT_NAME = p_extract_name
            FOR UPDATE;
+
+        l_type := watermark_type(l_column);
 
         IF l_prior IS NOT NULL AND p_to_value IS NOT NULL THEN
             IF (l_type = 'KEY' AND TO_NUMBER(p_to_value) < TO_NUMBER(l_prior))
@@ -140,14 +171,25 @@ CREATE OR REPLACE PACKAGE BODY WWI_AUDIT.PKG_EXTRACT_CONTROL AS
         END IF;
 
         UPDATE WWI_AUDIT.EXTRACT_CONTROL
-           SET LAST_EXTRACT_VALUE_TXT = p_to_value,
-               LAST_EXTRACT_DT        = SYSDATE,
-               LAST_ROW_COUNT         = p_row_count,
-               LAST_STATUS_CD         = p_status_cd,
-               LAST_RUN_ID            = p_run_id,
-               CURRENT_RUN_ID         = NULL,
-               CONSECUTIVE_FAIL_CNT   = 0,
-               LAST_UPD_DT            = SYSDATE
+           SET LAST_WATERMARK_TS      = CASE
+                                            WHEN l_type = 'DATE'
+                                            THEN TO_TIMESTAMP(p_to_value,
+                                                              'YYYY-MM-DD HH24:MI:SS')
+                                            ELSE LAST_WATERMARK_TS
+                                        END,
+               LAST_WATERMARK_ID      = CASE
+                                            WHEN l_type = 'KEY'
+                                            THEN TO_NUMBER(p_to_value)
+                                            ELSE LAST_WATERMARK_ID
+                                        END,
+               LAST_EXTRACT_END_TS     = SYSTIMESTAMP,
+               LAST_ROW_COUNT          = p_row_count,
+               LAST_STATUS_CD          = p_status_cd,
+               CONSECUTIVE_FAILURE_CNT = 0,
+               LOCK_FLG                = 'N',
+               LOCKED_BY_TXT           = NULL,
+               LOCKED_TS               = NULL,
+               UPDATED_DT              = SYSDATE
          WHERE EXTRACT_NAME = p_extract_name;
 
         WWI_AUDIT.PKG_DATA_QUALITY.assert_reject_rate(p_extract_name, p_row_count);
@@ -168,13 +210,15 @@ CREATE OR REPLACE PACKAGE BODY WWI_AUDIT.PKG_EXTRACT_CONTROL AS
         l_fail_cnt PLS_INTEGER;
     BEGIN
         UPDATE WWI_AUDIT.EXTRACT_CONTROL
-           SET LAST_STATUS_CD       = 'FAILED',
-               LAST_RUN_ID          = p_run_id,
-               CURRENT_RUN_ID       = NULL,
-               CONSECUTIVE_FAIL_CNT = NVL(CONSECUTIVE_FAIL_CNT, 0) + 1,
-               LAST_UPD_DT          = SYSDATE
+           SET LAST_STATUS_CD           = 'FAILED',
+               LAST_ERROR_TXT           = SUBSTR(p_message, 1, 2000),
+               CONSECUTIVE_FAILURE_CNT  = NVL(CONSECUTIVE_FAILURE_CNT, 0) + 1,
+               LOCK_FLG                 = 'N',
+               LOCKED_BY_TXT            = NULL,
+               LOCKED_TS                = NULL,
+               UPDATED_DT               = SYSDATE
          WHERE EXTRACT_NAME = p_extract_name
-        RETURNING CONSECUTIVE_FAIL_CNT INTO l_fail_cnt;
+        RETURNING CONSECUTIVE_FAILURE_CNT INTO l_fail_cnt;
 
         WWI_AUDIT.PKG_DATA_QUALITY.log_reject(p_extract_name, 'EXTRACT_CONTROL',
                                               TO_CHAR(p_run_id), 'EXTRACT_FAILED',
@@ -184,16 +228,16 @@ CREATE OR REPLACE PACKAGE BODY WWI_AUDIT.PKG_EXTRACT_CONTROL AS
            so the rest of the batch is not held up                          */
         IF l_fail_cnt >= 3 THEN
             UPDATE WWI_AUDIT.EXTRACT_CONTROL
-               SET ENABLED_FLAG = 'N',
-                   LAST_UPD_DT  = SYSDATE
+               SET ENABLED_FLG = 'N',
+                   UPDATED_DT  = SYSDATE
              WHERE EXTRACT_NAME = p_extract_name;
         END IF;
     END fail_extract;
 
     PROCEDURE mark_changes_extracted
     (
-        p_schema_name IN  WWI_AUDIT.CHANGE_LOG.SRC_SCHEMA_NAME%TYPE,
-        p_object_name IN  WWI_AUDIT.CHANGE_LOG.SRC_OBJECT_NAME%TYPE,
+        p_schema_name IN  WWI_AUDIT.CHANGE_LOG.SCHEMA_NAME%TYPE,
+        p_object_name IN  WWI_AUDIT.CHANGE_LOG.TABLE_NAME%TYPE,
         p_thru_dt     IN  DATE,
         p_marked_cnt  OUT PLS_INTEGER
     )
@@ -201,10 +245,10 @@ CREATE OR REPLACE PACKAGE BODY WWI_AUDIT.PKG_EXTRACT_CONTROL AS
         CURSOR c_changes IS
             SELECT CHANGE_LOG_ID
               FROM WWI_AUDIT.CHANGE_LOG
-             WHERE SRC_SCHEMA_NAME = p_schema_name
-               AND SRC_OBJECT_NAME = p_object_name
-               AND NVL(EXTRACTED_FLAG, 'N') = 'N'
-               AND CHANGE_DT <= p_thru_dt
+             WHERE SCHEMA_NAME = p_schema_name
+               AND TABLE_NAME  = p_object_name
+               AND NVL(EXTRACTED_FLG, 'N') = 'N'
+               AND CHANGE_TS <= p_thru_dt
              ORDER BY CHANGE_LOG_ID;
 
         TYPE t_id_tab IS TABLE OF WWI_AUDIT.CHANGE_LOG.CHANGE_LOG_ID%TYPE;
@@ -219,8 +263,8 @@ CREATE OR REPLACE PACKAGE BODY WWI_AUDIT.PKG_EXTRACT_CONTROL AS
 
             FORALL i IN 1 .. l_ids.COUNT
                 UPDATE WWI_AUDIT.CHANGE_LOG
-                   SET EXTRACTED_FLAG = 'Y',
-                       EXTRACTED_DT   = SYSDATE
+                   SET EXTRACTED_FLG = 'Y',
+                       EXTRACTED_TS  = SYSTIMESTAMP
                  WHERE CHANGE_LOG_ID = l_ids(i);
 
             p_marked_cnt := p_marked_cnt + l_ids.COUNT;
@@ -251,8 +295,8 @@ CREATE OR REPLACE PACKAGE BODY WWI_AUDIT.PKG_EXTRACT_CONTROL AS
 
         LOOP
             DELETE FROM WWI_AUDIT.CHANGE_LOG
-             WHERE CHANGE_DT < l_cutoff_dt
-               AND NVL(EXTRACTED_FLAG, 'N') = 'Y'
+             WHERE CHANGE_TS < l_cutoff_dt
+               AND NVL(EXTRACTED_FLG, 'N') = 'Y'
                AND ROWNUM <= c_bulk_limit;
 
             l_batch      := SQL%ROWCOUNT;
@@ -263,11 +307,13 @@ CREATE OR REPLACE PACKAGE BODY WWI_AUDIT.PKG_EXTRACT_CONTROL AS
         END LOOP;
 
         INSERT INTO WWI_AUDIT.PURGE_LOG
-            (PURGE_LOG_ID, SRC_SCHEMA_NAME, SRC_OBJECT_NAME, PURGE_DT,
-             CUTOFF_DT, ROW_COUNT, PURGED_BY)
+            (PURGE_LOG_ID, PURGE_RUN_TS, POLICY_CD, SCHEMA_NAME, TABLE_NAME,
+             PURGE_METHOD_CD, CUTOFF_DT, ROWS_EVALUATED_CNT, ROWS_PURGED_CNT,
+             RUN_STATUS_CD, RUN_BY)
         VALUES
-            (WWI_AUDIT.SEQ_PURGE_LOG.NEXTVAL, 'WWI_AUDIT', 'CHANGE_LOG', SYSDATE,
-             l_cutoff_dt, p_purged_cnt, USER);
+            (WWI_AUDIT.SEQ_PURGE_LOG.NEXTVAL, SYSTIMESTAMP, 'CHANGE_LOG_RETENTION',
+             'WWI_AUDIT', 'CHANGE_LOG', 'DELETE', l_cutoff_dt, p_purged_cnt,
+             p_purged_cnt, 'SUCCESS', USER);
         COMMIT;
     END purge_change_log;
 

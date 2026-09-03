@@ -44,7 +44,7 @@ CREATE OR REPLACE PACKAGE WWI_FIN.PKG_AP_INVOICE AS
     FUNCTION is_duplicate
     (
         p_supp_id     IN WWI_FIN.AP_INVOICE_HDR.SUPP_ID%TYPE,
-        p_invoice_num IN WWI_FIN.AP_INVOICE_HDR.INVOICE_NUM%TYPE,
+        p_invoice_num IN WWI_FIN.AP_INVOICE_HDR.INVOICE_NBR%TYPE,
         p_invoice_id  IN WWI_FIN.AP_INVOICE_HDR.INVOICE_ID%TYPE DEFAULT NULL
     ) RETURN BOOLEAN;
 
@@ -58,34 +58,34 @@ CREATE OR REPLACE PACKAGE WWI_FIN.PKG_AP_INVOICE AS
     (
         p_invoice_id  IN  WWI_FIN.AP_INVOICE_HDR.INVOICE_ID%TYPE,
         p_hold_count  OUT PLS_INTEGER,
-        p_status_cd   OUT WWI_FIN.AP_INVOICE_HDR.STATUS_CD%TYPE
+        p_status_cd   OUT WWI_FIN.AP_INVOICE_HDR.INVOICE_STATUS_CD%TYPE
     );
 
     PROCEDURE apply_hold
     (
         p_invoice_id IN WWI_FIN.AP_INVOICE_HDR.INVOICE_ID%TYPE,
-        p_hold_cd    IN WWI_FIN.AP_INVOICE_HOLD.HOLD_CD%TYPE,
-        p_hold_desc  IN WWI_FIN.AP_INVOICE_HOLD.HOLD_DESC%TYPE DEFAULT NULL
+        p_hold_cd    IN WWI_FIN.AP_INVOICE_HOLD.HOLD_CODE_CD%TYPE,
+        p_hold_desc  IN WWI_FIN.AP_INVOICE_HOLD.HOLD_REASON_TXT%TYPE DEFAULT NULL
     );
 
     PROCEDURE release_hold
     (
         p_invoice_id  IN WWI_FIN.AP_INVOICE_HDR.INVOICE_ID%TYPE,
-        p_hold_cd     IN WWI_FIN.AP_INVOICE_HOLD.HOLD_CD%TYPE,
-        p_released_by IN WWI_FIN.AP_INVOICE_HOLD.RELEASED_BY%TYPE
+        p_hold_cd     IN WWI_FIN.AP_INVOICE_HOLD.HOLD_CODE_CD%TYPE,
+        p_released_by IN WWI_FIN.AP_INVOICE_HOLD.RELEASED_BY_CD%TYPE
     );
 
     PROCEDURE approve_invoice
     (
         p_invoice_id  IN WWI_FIN.AP_INVOICE_HDR.INVOICE_ID%TYPE,
-        p_approved_by IN WWI_FIN.AP_INVOICE_HDR.APPROVED_BY%TYPE
+        p_approved_by IN WWI_FIN.AP_INVOICE_HDR.UPDATED_BY%TYPE
     );
 
     PROCEDURE cancel_invoice
     (
         p_invoice_id   IN WWI_FIN.AP_INVOICE_HDR.INVOICE_ID%TYPE,
         p_reason_cd    IN VARCHAR2,
-        p_cancelled_by IN WWI_FIN.AP_INVOICE_HDR.LAST_UPD_BY%TYPE
+        p_cancelled_by IN WWI_FIN.AP_INVOICE_HDR.UPDATED_BY%TYPE
     );
 
     PROCEDURE validate_batch

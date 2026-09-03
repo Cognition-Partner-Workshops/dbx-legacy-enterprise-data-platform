@@ -43,22 +43,41 @@ $client = if (Get-Command sqlplus -ErrorAction SilentlyContinue) { 'sqlplus' }
 $schemaSecretVariables = @('WWI_MDM_SECRET', 'WWI_PROC_SECRET', 'WWI_FIN_SECRET',
                            'WWI_REF_SECRET', 'WWI_AUDIT_SECRET', 'WWI_EXTRACT_SECRET')
 
+# An undefined substitution variable makes SQL*Plus read its value from the next
+# line of standard input, so a missing secret silently creates the account with
+# a fragment of the script as its password instead of failing. Require them all.
+if (-not $DryRun -and (-not $Only -or $Only -eq 'ddl')) {
+    Assert-WwiEnvironmentVariable $schemaSecretVariables
+}
+
 # Same dependency order as the shell variant. Keep the two in step.
 # 05_grant_privileges.sql and 07_create_synonyms.sql name the objects in
 # oracle/tables one by one, so they run as their own stage after those exist
 # and before the views and packages that compile against them.
 $lateDdl = @('05_grant_privileges.sql', '07_create_synonyms.sql')
+# 08_grant_function_execute.sql grants EXECUTE on the scalar functions, so it
+# runs between the functions and the views that call them.
+$funcDdl = @('08_grant_function_execute.sql')
+# 09_grant_package_execute.sql grants EXECUTE on the packages, so it runs
+# between the package specifications and the bodies and procedures that call
+# across schemas.
+$pkgDdl = @('09_grant_package_execute.sql')
 # ZZ_add_future_partitions.sql is the December runbook script, run by hand
 # against a populated estate; it is not part of creating the objects.
 $handRun = @('ZZ_add_future_partitions.sql')
+# Views select through the scalar functions in oracle/functions, so functions
+# compile first.
 $stages  = [ordered]@{
-    ddl        = @{ Directory = 'ddl'; Exclude = $lateDdl }
+    ddl        = @{ Directory = 'ddl'; Exclude = $lateDdl + $funcDdl + $pkgDdl }
     tables     = @{ Directory = 'tables'; Exclude = $handRun }
     grants     = @{ Directory = 'ddl'; Include = $lateDdl }
-    views      = @{ Directory = 'views' }
     functions  = @{ Directory = 'functions' }
+    funcgrants = @{ Directory = 'ddl'; Include = $funcDdl }
+    views      = @{ Directory = 'views' }
+    pkgspecs   = @{ Directory = 'packages'; Pattern = '*.pks.sql' }
+    pkggrants  = @{ Directory = 'ddl'; Include = $pkgDdl }
+    pkgbodies  = @{ Directory = 'packages'; Pattern = '*.pkb.sql' }
     procedures = @{ Directory = 'procedures' }
-    packages   = @{ Directory = 'packages' }
     reference  = @{ Directory = 'reference' }
     seed       = @{ Directory = 'seed' }
 }
@@ -88,7 +107,6 @@ function Invoke-OracleScript {
     # The DDL scripts rely on substitution; the data scripts turn DEFINE off
     # themselves around any literal ampersand.
     $defines = ($schemaSecretVariables |
-        Where-Object { -not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) } |
         ForEach-Object { "DEFINE $_ = `"$([Environment]::GetEnvironmentVariable($_))`"" }) -join "`n"
     $undefines = ($schemaSecretVariables | ForEach-Object { "UNDEFINE $_" }) -join "`n"
     $script = @"
@@ -132,6 +150,7 @@ foreach ($stage in $stages.Keys) {
         Sort-Object @{ Expression = { Get-DeployOrder -Path $_.FullName } }, FullName
     if ($spec.ContainsKey('Include')) { $files = $files | Where-Object { $spec.Include -contains $_.Name } }
     if ($spec.ContainsKey('Exclude')) { $files = $files | Where-Object { $spec.Exclude -notcontains $_.Name } }
+    if ($spec.ContainsKey('Pattern')) { $files = $files | Where-Object { $_.Name -like $spec.Pattern } }
 
     Write-WwiLog "--- stage ${stageIndex}: $stage ---"
     $files | ForEach-Object { Invoke-OracleScript -Path $_.FullName; $fileCount++ }

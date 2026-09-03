@@ -26,13 +26,14 @@ BEGIN
 
     IF p_region_cd = 'EU' THEN
         UPDATE WWI_MDM.CUST_MASTER
-           SET CONSENT_FLAG      = 'N',
-               CONSENT_WITHDRAWN_DT = TRUNC(SYSDATE),
-               LAST_UPD_DT       = SYSDATE,
-               LAST_UPD_BY       = USER
+           SET CONSENT_MARKETING_FLG = 'N',
+               CONSENT_SOURCE_CD    = 'WITHDRAWN',
+               CONSENT_CAPTURED_DT  = TRUNC(SYSDATE),
+               UPDATED_DT       = SYSDATE,
+               UPDATED_BY       = USER
          WHERE REGION_CD = 'EU'
-           AND NVL(CONSENT_FLAG, 'N') = 'Y'
-           AND NVL(CONSENT_DT, CREATED_DT)
+           AND NVL(CONSENT_MARKETING_FLG, 'N') = 'Y'
+           AND NVL(CONSENT_CAPTURED_DT, CREATED_DT)
                < ADD_MONTHS(TRUNC(SYSDATE), -l_consent_months);
 
         p_withdrawn_cnt := SQL%ROWCOUNT;
@@ -49,8 +50,8 @@ BEGIN
 
     IF NVL(p_dry_run, 'Y') <> 'Y' THEN
         INSERT INTO WWI_AUDIT.PURGE_LOG
-            (PURGE_LOG_ID, SRC_SCHEMA_NAME, SRC_OBJECT_NAME, PURGE_DT, CUTOFF_DT,
-             ROW_COUNT, PURGED_BY)
+            (PURGE_LOG_ID, SCHEMA_NAME, TABLE_NAME, PURGE_RUN_TS, CUTOFF_DT,
+             ROWS_PURGED_CNT, RUN_BY)
         VALUES
             (WWI_AUDIT.SEQ_PURGE_LOG.NEXTVAL, 'WWI_MDM', 'CUST_MASTER', SYSDATE,
              ADD_MONTHS(TRUNC(SYSDATE),

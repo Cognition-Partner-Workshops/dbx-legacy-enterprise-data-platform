@@ -47,7 +47,7 @@ BEGIN
           INTO l_partial
           FROM WWI_PROC.PURCHASE_ORDER_HDR h
          WHERE h.REGION_CD = l_region
-           AND h.STATUS_CD = 'OPEN'
+           AND h.PO_STATUS_CD = 'OPEN'
            AND h.ORDER_DT < TRUNC(SYSDATE) - l_days
            AND EXISTS (SELECT 1
                          FROM WWI_PROC.PURCHASE_ORDER_LINE pl

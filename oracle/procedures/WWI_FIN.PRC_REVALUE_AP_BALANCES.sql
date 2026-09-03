@@ -20,21 +20,20 @@ CREATE OR REPLACE PROCEDURE WWI_FIN.PRC_REVALUE_AP_BALANCES
 )
 IS
     CURSOR c_open_fx IS
-        SELECT h.CURRENCY_CD,
-               SUM(NVL(h.GROSS_AMT, 0)
-                   - NVL((SELECT SUM(a.APPLIED_AMT)
-                            FROM WWI_FIN.AP_PAYMENT_APPLY a
-                           WHERE a.INVOICE_ID = h.INVOICE_ID
-                             AND NVL(a.VOIDED_FLAG, 'N') = 'N'), 0)) AS OPEN_AMT,
-               SUM(NVL(h.BASE_AMT, 0)
-                   - NVL((SELECT SUM(a.APPLIED_BASE_AMT)
-                            FROM WWI_FIN.AP_PAYMENT_APPLY a
-                           WHERE a.INVOICE_ID = h.INVOICE_ID
-                             AND NVL(a.VOIDED_FLAG, 'N') = 'N'), 0)) AS BOOKED_BASE_AMT
-          FROM WWI_FIN.AP_INVOICE_HDR h
-         WHERE h.REGION_CD = p_region_cd
-           AND h.STATUS_CD NOT IN ('CN', 'PD')
-         GROUP BY h.CURRENCY_CD;
+        SELECT o.INVOICE_CURR_CD AS CURRENCY_CD,
+               SUM(o.OPEN_AMT)                            AS OPEN_AMT,
+               SUM(o.OPEN_AMT * NVL(o.FX_RATE, 1))        AS BOOKED_BASE_AMT
+          FROM (SELECT h.INVOICE_CURR_CD,
+                       h.FX_RATE,
+                       NVL(h.GROSS_AMT, 0)
+                       - NVL((SELECT SUM(a.APPLIED_AMT)
+                                FROM WWI_FIN.AP_PAYMENT_APPLY a
+                               WHERE a.INVOICE_ID = h.INVOICE_ID
+                                 AND NVL(a.REVERSED_FLG, 'N') = 'N'), 0) AS OPEN_AMT
+                  FROM WWI_FIN.AP_INVOICE_HDR h
+                 WHERE h.REGION_CD = p_region_cd
+                   AND h.INVOICE_STATUS_CD NOT IN ('CN', 'PD')) o
+         GROUP BY o.INVOICE_CURR_CD;
 
     l_base_ccy    VARCHAR2(3);
     l_rate        NUMBER;

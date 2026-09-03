@@ -23,7 +23,7 @@ IS
     l_product_id    WWI_PROC.PO_RECEIPT_LINE.PRODUCT_ID%TYPE;
     l_order_qty     WWI_PROC.PURCHASE_ORDER_LINE.ORDER_QTY%TYPE;
     l_order_uom     WWI_PROC.PURCHASE_ORDER_LINE.UOM_CD%TYPE;
-    l_factor        WWI_MDM.PRODUCT_UOM_CONV.CONV_FACTOR_NUM%TYPE := 1;
+    l_factor        WWI_MDM.PRODUCT_UOM_CONV.CONV_FACTOR%TYPE := 1;
 BEGIN
     SELECT rl.RECEIVED_QTY, rl.UOM_CD, rl.PRODUCT_ID, pl.ORDER_QTY, pl.UOM_CD
       INTO l_received_qty, l_receipt_uom, l_product_id, l_order_qty, l_order_uom
@@ -38,18 +38,20 @@ BEGIN
 
     IF l_receipt_uom <> l_order_uom THEN
         BEGIN
-            SELECT c.CONV_FACTOR_NUM
+            SELECT c.CONV_FACTOR
               INTO l_factor
               FROM WWI_MDM.PRODUCT_UOM_CONV c
              WHERE c.PRODUCT_ID  = l_product_id
                AND c.FROM_UOM_CD = l_receipt_uom
                AND c.TO_UOM_CD   = l_order_uom
-               AND c.EFF_FROM_DT = (SELECT MAX(c2.EFF_FROM_DT)
-                                      FROM WWI_MDM.PRODUCT_UOM_CONV c2
-                                     WHERE c2.PRODUCT_ID  = c.PRODUCT_ID
-                                       AND c2.FROM_UOM_CD = c.FROM_UOM_CD
-                                       AND c2.TO_UOM_CD   = c.TO_UOM_CD
-                                       AND c2.EFF_FROM_DT <= SYSDATE);
+               AND SYSDATE BETWEEN c.EFFECTIVE_DT
+                               AND NVL(c.END_DT, DATE '4712-12-31')
+               AND c.EFFECTIVE_DT = (SELECT MAX(c2.EFFECTIVE_DT)
+                                       FROM WWI_MDM.PRODUCT_UOM_CONV c2
+                                      WHERE c2.PRODUCT_ID  = c.PRODUCT_ID
+                                        AND c2.FROM_UOM_CD = c.FROM_UOM_CD
+                                        AND c2.TO_UOM_CD   = c.TO_UOM_CD
+                                        AND c2.EFFECTIVE_DT <= SYSDATE);
         EXCEPTION
             WHEN NO_DATA_FOUND THEN
                 /* 2009 note: an unconvertible receipt is reported as a 999%

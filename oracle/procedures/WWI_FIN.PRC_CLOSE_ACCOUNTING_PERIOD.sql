@@ -41,20 +41,20 @@ BEGIN
       FROM WWI_FIN.GL_JOURNAL_HDR
      WHERE REGION_CD = p_region_cd
        AND PERIOD_CD = p_period_cd
-       AND STATUS_CD <> 'P';
+       AND POSTING_STATUS_CD <> 'P';
 
     SELECT COUNT(*)
       INTO l_unvalidated
       FROM WWI_FIN.AP_INVOICE_HDR
      WHERE REGION_CD = p_region_cd
-       AND STATUS_CD = 'EN'
+       AND INVOICE_STATUS_CD = 'EN'
        AND WWI_REF.FN_FISCAL_PERIOD(INVOICE_DT, p_region_cd) = p_period_cd;
 
     SELECT COUNT(*)
       INTO l_held
       FROM WWI_FIN.AP_INVOICE_HDR
      WHERE REGION_CD = p_region_cd
-       AND STATUS_CD = 'HO'
+       AND INVOICE_STATUS_CD = 'HO'
        AND WWI_REF.FN_FISCAL_PERIOD(INVOICE_DT, p_region_cd) = p_period_cd;
 
     p_blocker_cnt := l_unposted + l_unvalidated;
@@ -87,11 +87,11 @@ BEGIN
     END IF;
 
     UPDATE WWI_FIN.GL_PERIOD_STATUS
-       SET STATUS_CD   = 'CLOSED',
-           CLOSED_DT   = SYSDATE,
-           CLOSED_BY   = p_closed_by,
-           FORCED_FLAG = CASE WHEN p_blocker_cnt > 0 THEN 'Y' ELSE 'N' END,
-           LAST_UPD_DT = SYSDATE
+       SET AP_STATUS_CD   = 'CLOSED',
+           CLOSED_DT     = SYSDATE,
+           CLOSED_BY_CD  = p_closed_by,
+           SOFT_CLOSE_DT = CASE WHEN p_blocker_cnt > 0 THEN SYSDATE END,
+           UPDATED_DT = SYSDATE
      WHERE REGION_CD = p_region_cd
        AND PERIOD_CD = p_period_cd;
 
@@ -111,12 +111,11 @@ BEGIN
 
     IF l_next_period IS NOT NULL THEN
         UPDATE WWI_FIN.GL_PERIOD_STATUS
-           SET STATUS_CD   = 'OPEN',
-               OPENED_DT   = SYSDATE,
-               LAST_UPD_DT = SYSDATE
+           SET AP_STATUS_CD   = 'OPEN',
+               UPDATED_DT = SYSDATE
          WHERE REGION_CD = p_region_cd
            AND PERIOD_CD = l_next_period
-           AND STATUS_CD = 'FUTURE';
+           AND AP_STATUS_CD = 'FUTURE';
     END IF;
 
     COMMIT;

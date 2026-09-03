@@ -22,13 +22,13 @@ RETURN NUMBER
 IS
     l_order_qty     WWI_PROC.PURCHASE_ORDER_LINE.ORDER_QTY%TYPE;
     l_cancelled_qty WWI_PROC.PURCHASE_ORDER_LINE.CANCELLED_QTY%TYPE;
-    l_closed_flag   WWI_PROC.PURCHASE_ORDER_LINE.CLOSED_FLAG%TYPE;
+    l_line_status   WWI_PROC.PURCHASE_ORDER_LINE.LINE_STATUS_CD%TYPE;
     l_accepted_qty  NUMBER := 0;
     l_returned_qty  NUMBER := 0;
     l_open_qty      NUMBER;
 BEGIN
-    SELECT pl.ORDER_QTY, NVL(pl.CANCELLED_QTY, 0), NVL(pl.CLOSED_FLAG, 'N')
-      INTO l_order_qty, l_cancelled_qty, l_closed_flag
+    SELECT pl.ORDER_QTY, NVL(pl.CANCELLED_QTY, 0), pl.LINE_STATUS_CD
+      INTO l_order_qty, l_cancelled_qty, l_line_status
       FROM WWI_PROC.PURCHASE_ORDER_LINE pl
      WHERE pl.PO_LINE_ID = p_po_line_id;
 
@@ -36,7 +36,8 @@ BEGIN
       INTO l_accepted_qty
       FROM WWI_PROC.PO_RECEIPT_LINE rl
      WHERE rl.PO_LINE_ID = p_po_line_id
-       AND NVL(rl.INSPECTION_STATUS_CD, 'ACC') <> 'REJ';
+       AND NVL(rl.INSPECTION_RESULT_CD, 'ACC') <> 'REJ'
+       AND rl.LINE_STATUS_CD <> 'REVS';
 
     IF NVL(p_include_returns, 'Y') = 'Y' THEN
         SELECT NVL(SUM(gl.RETURN_QTY), 0)
@@ -49,7 +50,7 @@ BEGIN
 
     l_open_qty := l_order_qty - l_cancelled_qty - l_accepted_qty + l_returned_qty;
 
-    IF l_closed_flag = 'Y' AND l_returned_qty = 0 THEN
+    IF l_line_status IN ('CLSD', 'CANC') AND l_returned_qty = 0 THEN
         RETURN 0;
     END IF;
 

@@ -21,18 +21,18 @@ CREATE OR REPLACE PROCEDURE WWI_FIN.PRC_LOAD_INVOICE_INTERFACE
 )
 IS
     TYPE t_iface_rec IS RECORD (
-        supp_num      WWI_MDM.SUPP_MASTER.SUPP_NUM%TYPE,
-        invoice_num   WWI_FIN.AP_INVOICE_HDR.INVOICE_NUM%TYPE,
+        supp_num      WWI_MDM.SUPP_MASTER.SUPP_NBR%TYPE,
+        invoice_num   WWI_FIN.AP_INVOICE_HDR.INVOICE_NBR%TYPE,
         invoice_dt    DATE,
-        currency_cd   WWI_FIN.AP_INVOICE_HDR.CURRENCY_CD%TYPE,
+        currency_cd   WWI_FIN.AP_INVOICE_HDR.INVOICE_CURR_CD%TYPE,
         gross_amt     NUMBER,
-        po_num        WWI_PROC.PURCHASE_ORDER_HDR.PO_NUM%TYPE,
+        po_num        WWI_PROC.PURCHASE_ORDER_HDR.PO_NBR%TYPE,
         terms_cd      WWI_FIN.PAYMENT_TERMS.PAYMENT_TERMS_CD%TYPE
     );
     TYPE t_iface_tab IS TABLE OF t_iface_rec;
     TYPE t_ref IS REF CURSOR;
 
-    l_link_name  WWI_REF.SOURCE_SYSTEM_REF.DB_LINK_NAME%TYPE;
+    l_link_name  WWI_REF.SOURCE_SYSTEM_REF.CONNECTION_PARAM_NAME%TYPE;
     l_sql        VARCHAR2(4000);
     l_cur        t_ref;
     l_rows       t_iface_tab;
@@ -45,10 +45,10 @@ BEGIN
     p_loaded_cnt   := 0;
     p_rejected_cnt := 0;
 
-    SELECT DB_LINK_NAME
+    SELECT CONNECTION_PARAM_NAME
       INTO l_link_name
       FROM WWI_REF.SOURCE_SYSTEM_REF
-     WHERE SRC_SYSTEM_CD = 'INVSCAN';
+     WHERE SOURCE_SYS_CD = 'INVSCAN';
 
     l_sql := 'SELECT supp_num, invoice_num, invoice_dt, currency_cd, '
           || 'gross_amt, po_num, terms_cd '
@@ -67,7 +67,7 @@ BEGIN
                 SELECT SUPP_ID, REGION_CD
                   INTO l_supp_id, l_region_cd
                   FROM WWI_MDM.SUPP_MASTER
-                 WHERE SUPP_NUM = l_rows(i).supp_num;
+                 WHERE SUPP_NBR = l_rows(i).supp_num;
 
                 IF WWI_FIN.PKG_AP_INVOICE.is_duplicate(l_supp_id,
                                                        l_rows(i).invoice_num) THEN
@@ -82,12 +82,12 @@ BEGIN
                                       ELSE 'N45'
                                   END);
 
-                l_invoice_id := WWI_FIN.SEQ_AP_INVOICE.NEXTVAL;
+                l_invoice_id := WWI_FIN.SEQ_AP_INVOICE_HDR.NEXTVAL;
 
                 INSERT INTO WWI_FIN.AP_INVOICE_HDR
-                    (INVOICE_ID, INVOICE_NUM, SUPP_ID, REGION_CD, INVOICE_DT,
-                     CURRENCY_CD, GROSS_AMT, TAX_AMT, PAYMENT_TERMS_CD, DUE_DT,
-                     STATUS_CD, SRC_SYSTEM_CD, CREATED_DT, CREATED_BY)
+                    (INVOICE_ID, INVOICE_NBR, SUPP_ID, REGION_CD, INVOICE_DT,
+                     INVOICE_CURR_CD, GROSS_AMT, TAX_AMT, PAYMENT_TERMS_CD, DUE_DT,
+                     INVOICE_STATUS_CD, SOURCE_SYS, CREATED_DT, CREATED_BY)
                 VALUES
                     (l_invoice_id, l_rows(i).invoice_num, l_supp_id,
                      NVL(l_region_cd, p_region_cd), l_rows(i).invoice_dt,

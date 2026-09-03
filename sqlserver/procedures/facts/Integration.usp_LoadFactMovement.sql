@@ -146,7 +146,7 @@ BEGIN
                 INNER JOIN Dimension.[Warehouse Site] AS ds
                     ON ds.[Warehouse Site Key] = f.[Warehouse Site Key]
                 WHERE di.[Stock Item Code] = @ItemCode
-                  AND ds.[Site Code] = @SiteCode
+                  AND ds.[Warehouse Site Code] = @SiteCode
                   AND f.[Date Key] < @LoadStartDate;
 
                 SET @PrevItem = @ItemCode;
@@ -213,24 +213,24 @@ BEGIN
         END;
 
         DELETE FROM Fact.[Movement]
-        WHERE [Movement Date Key] >= @LoadStartDate
-          AND [Movement Date Key] <= @LoadEndDate;
+        WHERE [Date Key] >= @LoadStartDate
+          AND [Date Key] <= @LoadEndDate;
 
         SET @DeleteRowCount = @@ROWCOUNT;
 
         INSERT INTO Fact.[Movement]
         (
-            [Date Key], [Movement Date Key], [Stock Item Key], [Warehouse Site Key],
+            [Date Key], [Stock Item Key], [Warehouse Site Key],
             [Customer Key], [Supplier Key], [Transaction Type Key], [WWI Stock Item Transaction ID],
-            [Quantity], [Lineage Key], [Region Code], [Bin Code], [Movement Reason Code],
-            [Movement Direction Code], [Quantity Base UOM], [Quantity Source UOM],
-            [Source UOM Code], [Weighted Average Cost], [Fifo Layer Cost], [Standard Cost],
-            [Purchase Price Variance], [Movement Value], [Costing Method Code],
-            [Invoice Number], [Po Number], [Stocktake Reference], [Natural Key Hash],
+            [Quantity], [Lineage Key], [Region Code], [Bin Location], [Movement Reason Code],
+            [Movement Direction], [Quantity Base UOM],
+            [Source UOM Code], [Weighted Average Cost], [FIFO Layer Cost], [Standard Cost],
+            [Purchase Price Variance], [Movement Value Reporting], [Costing Method Code],
+            [Invoice Number], [Purchase Order Number], [Stock Take Reference], [Natural Key Hash],
             [Batch Id], [Load Datetime]
         )
         SELECT
-            w.MovementDate, w.MovementDate,
+            w.MovementDate,
             ISNULL(item.[Stock Item Key], 0),
             ISNULL(site.[Warehouse Site Key], 0),
             -1, -1,
@@ -240,7 +240,7 @@ BEGIN
             0,
             w.RegionCode, w.BinCode, w.MovementReasonCode,
             CASE WHEN w.Quantity >= 0 THEN N'IN' ELSE N'OUT' END,
-            w.Quantity * w.UomConversionFactor, w.Quantity, w.UomCode,
+            w.Quantity * w.UomConversionFactor, w.UomCode,
             w.WeightedAverageCost, w.FifoLayerCost, w.StandardCost,
             w.PurchasePriceVariance, w.MovementValue, w.CostingMethodCode,
             w.InvoiceNumber, w.PoNumber, w.StocktakeReference,
@@ -251,7 +251,7 @@ BEGIN
             ON item.[Stock Item Code] = w.StockItemCode
            AND w.MovementDate >= item.[Valid From] AND w.MovementDate < item.[Valid To]
         LEFT JOIN Dimension.[Warehouse Site] AS site
-            ON site.[Site Code] = w.WarehouseSiteCode
+            ON site.[Warehouse Site Code] = w.WarehouseSiteCode
         LEFT JOIN Dimension.[Transaction Type] AS tt
             ON tt.[Transaction Type Code] = w.MovementTypeCode;
 

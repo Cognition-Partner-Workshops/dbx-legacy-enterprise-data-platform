@@ -24,7 +24,7 @@ CREATE VIEW Report.vw_PromotionRoi
 AS
 SELECT
     p.[Promotion Code]                                  AS [Promotion Code],
-    promo.[Promotion]                                   AS [Promotion],
+    promo.[Promotion Name]                              AS [Promotion],
     p.[Region Code]                                     AS [Region],
     cat.[Product Category]                              AS [Category],
     ch.[Sales Channel]                                  AS [Channel],

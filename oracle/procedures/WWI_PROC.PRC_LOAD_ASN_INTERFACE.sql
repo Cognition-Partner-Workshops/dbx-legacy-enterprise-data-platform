@@ -23,7 +23,7 @@ IS
     TYPE t_ref IS REF CURSOR;
     TYPE t_asn_rec IS RECORD (
         asn_num       VARCHAR2(40),
-        po_num        WWI_PROC.PURCHASE_ORDER_HDR.PO_NUM%TYPE,
+        po_num        WWI_PROC.PURCHASE_ORDER_HDR.PO_NBR%TYPE,
         supp_item_cd  VARCHAR2(40),
         ship_qty      NUMBER,
         uom_cd        WWI_PROC.PO_RECEIPT_LINE.UOM_CD%TYPE,
@@ -32,7 +32,7 @@ IS
     );
     TYPE t_asn_tab IS TABLE OF t_asn_rec;
 
-    l_link_name  WWI_REF.SOURCE_SYSTEM_REF.DB_LINK_NAME%TYPE;
+    l_link_name  WWI_REF.SOURCE_SYSTEM_REF.CONNECTION_PARAM_NAME%TYPE;
     l_sql        VARCHAR2(4000);
     l_cur        t_ref;
     l_rows       t_asn_tab;
@@ -47,10 +47,10 @@ BEGIN
     p_line_cnt     := 0;
     p_rejected_cnt := 0;
 
-    SELECT DB_LINK_NAME
+    SELECT CONNECTION_PARAM_NAME
       INTO l_link_name
       FROM WWI_REF.SOURCE_SYSTEM_REF
-     WHERE SRC_SYSTEM_CD = 'EDI';
+     WHERE SOURCE_SYS_CD = 'EDI';
 
     l_sql := 'SELECT asn_num, po_num, supp_item_cd, ship_qty, uom_cd, '
           || 'warehouse_cd, ship_dt FROM asn_inbound@' || l_link_name || ' '
@@ -67,7 +67,7 @@ BEGIN
                 SELECT PO_ID
                   INTO l_po_id
                   FROM WWI_PROC.PURCHASE_ORDER_HDR
-                 WHERE PO_NUM = l_rows(i).po_num;
+                 WHERE PO_NBR = l_rows(i).po_num;
 
                 l_product_cd :=
                     WWI_REF.PKG_CODE_TRANSLATION.translate('ITEM_XREF',
@@ -80,8 +80,8 @@ BEGIN
                   JOIN WWI_MDM.PRODUCT_MASTER pm
                     ON pm.PRODUCT_ID = pl.PRODUCT_ID
                  WHERE pl.PO_ID = l_po_id
-                   AND pm.PRODUCT_CD = l_product_cd
-                   AND pl.STATUS_CD = 'OPEN'
+                   AND pm.ITEM_NBR = l_product_cd
+                   AND NVL(pl.LINE_STATUS_CD, 'OP') NOT IN ('CL', 'CA')
                    AND ROWNUM = 1;
 
                 IF l_rows(i).asn_num <> l_prev_asn THEN

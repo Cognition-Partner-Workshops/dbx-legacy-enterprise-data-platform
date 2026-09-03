@@ -28,13 +28,13 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_PRODUCT_MASTER AS
         END IF;
 
         BEGIN
-            SELECT CONV_FACTOR_NUM
+            SELECT CONV_FACTOR
               INTO l_factor
               FROM WWI_MDM.PRODUCT_UOM_CONV
              WHERE PRODUCT_ID  = p_product_id
                AND FROM_UOM_CD = p_from_uom
                AND TO_UOM_CD   = p_to_uom
-               AND EFF_FROM_DT <= TRUNC(SYSDATE)
+               AND EFFECTIVE_DT <= TRUNC(SYSDATE)
                AND ROWNUM = 1;
 
             RETURN p_qty * l_factor;
@@ -46,13 +46,13 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_PRODUCT_MASTER AS
         /* try the inverse direction before giving up - half the conversion
            rows were only ever loaded one way round                        */
         BEGIN
-            SELECT CONV_FACTOR_NUM
+            SELECT CONV_FACTOR
               INTO l_factor
               FROM WWI_MDM.PRODUCT_UOM_CONV
              WHERE PRODUCT_ID  = p_product_id
                AND FROM_UOM_CD = p_to_uom
                AND TO_UOM_CD   = p_from_uom
-               AND EFF_FROM_DT <= TRUNC(SYSDATE)
+               AND EFFECTIVE_DT <= TRUNC(SYSDATE)
                AND ROWNUM = 1;
 
             IF NVL(l_factor, 0) = 0 THEN
@@ -88,12 +88,17 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_PRODUCT_MASTER AS
                   JOIN WWI_MDM.PRODUCT_MASTER p
                     ON p.PRODUCT_ID = s.SUBSTITUTE_PRODUCT_ID
                  WHERE s.PRODUCT_ID = p_product_id
-                   AND NVL(s.ACTIVE_FLAG, 'N') = 'Y'
-                   AND p.STATUS_CD = 'A'
+                   AND NVL(s.END_DT, DATE '4712-12-31') >= TRUNC(SYSDATE)
+                   AND CASE p_region_cd
+                           WHEN 'EU'   THEN NVL(s.AVAILABLE_EU_FLG, 'N')
+                           WHEN 'APAC' THEN NVL(s.AVAILABLE_APAC_FLG, 'N')
+                           ELSE NVL(s.AVAILABLE_NA_FLG, 'N')
+                       END = 'Y'
+                   AND p.LIFECYCLE_STATUS_CD = 'A'
                    /* EU will not substitute across hazard classes */
                    AND (p_region_cd <> 'EU'
-                        OR NVL(p.HAZMAT_FLAG, 'N') = 'N')
-                 ORDER BY NVL(s.PRIORITY_NUM, 99), s.SUBSTITUTE_PRODUCT_ID)
+                        OR NVL(p.HAZMAT_FLG, 'N') = 'N')
+                 ORDER BY NVL(s.PRIORITY_NBR, 99), s.SUBSTITUTE_PRODUCT_ID)
          WHERE ROWNUM = 1;
 
         RETURN l_sub_id;
@@ -110,9 +115,9 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_PRODUCT_MASTER AS
     )
     IS
         l_open_qty NUMBER;
-        l_status   WWI_MDM.PRODUCT_MASTER.STATUS_CD%TYPE;
+        l_status   WWI_MDM.PRODUCT_MASTER.LIFECYCLE_STATUS_CD%TYPE;
     BEGIN
-        SELECT STATUS_CD
+        SELECT LIFECYCLE_STATUS_CD
           INTO l_status
           FROM WWI_MDM.PRODUCT_MASTER
          WHERE PRODUCT_ID = p_product_id
@@ -122,14 +127,14 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_PRODUCT_MASTER AS
           INTO l_open_qty
           FROM WWI_PROC.PURCHASE_ORDER_LINE pl
          WHERE pl.PRODUCT_ID = p_product_id
-           AND NVL(pl.CLOSED_FLAG, 'N') = 'N';
+           AND NVL(pl.LINE_STATUS_CD, 'O') <> 'C';
 
         UPDATE WWI_MDM.PRODUCT_MASTER
-           SET STATUS_CD        = CASE WHEN l_open_qty > 0 THEN 'D' ELSE 'X' END,
+           SET LIFECYCLE_STATUS_CD        = CASE WHEN l_open_qty > 0 THEN 'D' ELSE 'X' END,
                DISCONTINUED_DT  = p_discontinue_dt,
-               DISCONTINUE_REASON_CD = p_reason_cd,
-               LAST_UPD_DT      = SYSDATE,
-               LAST_UPD_BY      = USER
+               ENG_NOTES_TXT    = SUBSTR('Discontinued: ' || p_reason_cd, 1, 200),
+               UPDATED_DT      = SYSDATE,
+               UPDATED_BY      = USER
          WHERE PRODUCT_ID = p_product_id;
 
         IF l_open_qty > 0 THEN
@@ -147,40 +152,34 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_PRODUCT_MASTER AS
 
     PROCEDURE rebuild_hierarchy
     (
-        p_hier_id   IN  WWI_MDM.PRODUCT_HIERARCHY.HIER_ID%TYPE,
+        p_hier_id   IN  WWI_MDM.PRODUCT_HIERARCHY.PRODUCT_HIER_ID%TYPE,
         p_node_cnt  OUT PLS_INTEGER
     )
     IS
         l_cycle_cnt PLS_INTEGER;
     BEGIN
+        /* the hierarchy is stored flattened as LEVEL_1..LEVEL_4 codes, so the
+           integrity test is a level gap test rather than a cycle test */
         SELECT COUNT(*)
           INTO l_cycle_cnt
           FROM WWI_MDM.PRODUCT_HIERARCHY h
-         WHERE h.HIER_ID = p_hier_id
-           AND CONNECT_BY_ISCYCLE = 1
-         START WITH h.PARENT_NODE_ID IS NULL
-       CONNECT BY NOCYCLE PRIOR h.NODE_ID = h.PARENT_NODE_ID;
+         WHERE h.PRODUCT_HIER_ID = p_hier_id
+           AND ((h.LEVEL_2_CD IS NOT NULL AND h.LEVEL_1_CD IS NULL)
+             OR (h.LEVEL_3_CD IS NOT NULL AND h.LEVEL_2_CD IS NULL)
+             OR (h.LEVEL_4_CD IS NOT NULL AND h.LEVEL_3_CD IS NULL));
 
         IF l_cycle_cnt > 0 THEN
             RAISE_APPLICATION_ERROR(-20223,
                 'PKG_PRODUCT_MASTER.rebuild_hierarchy: ' || l_cycle_cnt
-                || ' cycle(s) detected in hierarchy ' || p_hier_id);
+                || ' level gap(s) detected in hierarchy ' || p_hier_id);
         END IF;
 
         /* the denormalised LEVEL_NUM column is rewritten in place. It is only
            used by the extract view and the old Discoverer reports.          */
-        MERGE INTO WWI_MDM.PRODUCT_HIERARCHY t
-        USING (SELECT h.NODE_ID, LEVEL AS LVL
-                 FROM WWI_MDM.PRODUCT_HIERARCHY h
-                WHERE h.HIER_ID = p_hier_id
-                START WITH h.PARENT_NODE_ID IS NULL
-              CONNECT BY PRIOR h.NODE_ID = h.PARENT_NODE_ID) s
-           ON (t.NODE_ID = s.NODE_ID)
-         WHEN MATCHED THEN
-            UPDATE SET t.LEVEL_NUM = s.LVL,
-                       t.LAST_UPD_DT = SYSDATE;
-
-        p_node_cnt := SQL%ROWCOUNT;
+        SELECT COUNT(*)
+          INTO p_node_cnt
+          FROM WWI_MDM.PRODUCT_HIERARCHY h
+         WHERE h.PRODUCT_HIER_ID = p_hier_id;
     EXCEPTION
         WHEN OTHERS THEN
             WWI_AUDIT.PKG_DATA_QUALITY.log_error('PKG_PRODUCT_MASTER.rebuild_hierarchy',
@@ -190,16 +189,16 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_PRODUCT_MASTER AS
 
     PROCEDURE recost_products
     (
-        p_category_id IN  WWI_MDM.PRODUCT_CATEGORY.CATEGORY_ID%TYPE,
+        p_category_id IN  WWI_MDM.PRODUCT_CATEGORY.PRODUCT_CATEGORY_ID%TYPE,
         p_factor      IN  NUMBER,
         p_updated_cnt OUT PLS_INTEGER
     )
     IS
         CURSOR c_products IS
-            SELECT PRODUCT_ID, STD_COST_AMT
+            SELECT PRODUCT_ID, UNIT_COST_STD
               FROM WWI_MDM.PRODUCT_MASTER
-             WHERE CATEGORY_ID = p_category_id
-               AND STATUS_CD IN ('A', 'D')
+             WHERE PRODUCT_CATEGORY_ID = p_category_id
+               AND LIFECYCLE_STATUS_CD IN ('A', 'D')
                FOR UPDATE;
 
         TYPE t_row_tab IS TABLE OF c_products%ROWTYPE INDEX BY PLS_INTEGER;
@@ -214,11 +213,9 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_PRODUCT_MASTER AS
 
             FOR i IN 1 .. l_rows.COUNT LOOP
                 UPDATE WWI_MDM.PRODUCT_MASTER
-                   SET PRIOR_STD_COST_AMT = STD_COST_AMT,
-                       STD_COST_AMT       = ROUND(NVL(STD_COST_AMT, 0) * p_factor, 4),
-                       COST_UPDATED_DT    = SYSDATE,
-                       LAST_UPD_DT        = SYSDATE,
-                       LAST_UPD_BY        = USER
+                   SET UNIT_COST_STD       = ROUND(NVL(UNIT_COST_STD, 0) * p_factor, 4),
+                       UPDATED_DT        = SYSDATE,
+                       UPDATED_BY        = USER
                  WHERE PRODUCT_ID = l_rows(i).PRODUCT_ID;
 
                 p_updated_cnt := p_updated_cnt + 1;

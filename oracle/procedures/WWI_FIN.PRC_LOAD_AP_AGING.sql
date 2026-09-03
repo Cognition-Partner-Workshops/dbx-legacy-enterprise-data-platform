@@ -21,8 +21,8 @@ IS
     TYPE t_region_tab IS TABLE OF VARCHAR2(4);
     l_regions   t_region_tab := t_region_tab('NA', 'EU', 'APAC');
     l_run_id    NUMBER;
-    l_from_val  WWI_AUDIT.EXTRACT_CONTROL.LAST_EXTRACT_VALUE_TXT%TYPE;
-    l_to_val    WWI_AUDIT.EXTRACT_CONTROL.LAST_EXTRACT_VALUE_TXT%TYPE;
+    l_from_val  WWI_AUDIT.V_EXTRACT_WATERMARK.LAST_EXTRACT_VALUE_TXT%TYPE;
+    l_to_val    WWI_AUDIT.V_EXTRACT_WATERMARK.LAST_EXTRACT_VALUE_TXT%TYPE;
     l_region    VARCHAR2(4);
     l_snap_dt   DATE;
     l_cnt       PLS_INTEGER;

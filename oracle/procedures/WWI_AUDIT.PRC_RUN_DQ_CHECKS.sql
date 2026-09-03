@@ -32,7 +32,7 @@ BEGIN
 
     FOR cs IN (SELECT DISTINCT CODE_SET_CD
                  FROM WWI_REF.CODE_TRANSLATION
-                WHERE NVL(ACTIVE_FLAG, 'Y') = 'Y') LOOP
+                WHERE NVL(ACTIVE_FLG, 'Y') = 'Y') LOOP
         WWI_REF.PKG_CODE_TRANSLATION.report_unmapped(cs.CODE_SET_CD, l_set_cnt);
         l_unmapped := l_unmapped + l_set_cnt;
     END LOOP;
@@ -42,9 +42,9 @@ BEGIN
     FOR rec IN (SELECT h.INVOICE_ID, h.GROSS_AMT
                   FROM WWI_FIN.AP_INVOICE_HDR h
                  WHERE h.GROSS_AMT < 0
-                   AND NVL(h.CREDIT_NOTE_FLAG, 'N') <> 'Y'
+                   AND NVL(h.INVOICE_TYPE_CD, 'STD') <> 'CR'
                    AND (p_region_cd IS NULL OR h.REGION_CD = p_region_cd)
-                   AND h.STATUS_CD <> 'CN') LOOP
+                   AND h.INVOICE_STATUS_CD <> 'CN') LOOP
         WWI_AUDIT.PKG_DATA_QUALITY.log_reject(NULL, 'WWI_FIN.AP_INVOICE_HDR',
             TO_CHAR(rec.INVOICE_ID), 'NEGATIVE_NOT_CREDIT',
             'gross ' || rec.GROSS_AMT || ' but credit note flag is not Y', 'W');
@@ -53,14 +53,14 @@ BEGIN
 
     /* the same bank account registered against more than one supplier is a
        fraud signal and is escalated at severity F                        */
-    FOR rec IN (SELECT b.ACCOUNT_MASK_TXT, COUNT(DISTINCT b.SUPP_ID) AS SUPP_CNT
+    FOR rec IN (SELECT b.ACCOUNT_NBR_LAST4, COUNT(DISTINCT b.SUPP_ID) AS SUPP_CNT
                   FROM WWI_MDM.SUPP_BANK_ACCOUNT b
-                 WHERE NVL(b.ACTIVE_FLAG, 'Y') = 'Y'
-                   AND b.ACCOUNT_MASK_TXT IS NOT NULL
-                 GROUP BY b.ACCOUNT_MASK_TXT
+                 WHERE NVL(b.ACTIVE_FLG, 'Y') = 'Y'
+                   AND b.ACCOUNT_NBR_LAST4 IS NOT NULL
+                 GROUP BY b.ACCOUNT_NBR_LAST4
                 HAVING COUNT(DISTINCT b.SUPP_ID) > 1) LOOP
         WWI_AUDIT.PKG_DATA_QUALITY.log_reject(NULL, 'WWI_MDM.SUPP_BANK_ACCOUNT',
-            rec.ACCOUNT_MASK_TXT, 'SHARED_BANK_ACCOUNT',
+            rec.ACCOUNT_NBR_LAST4, 'SHARED_BANK_ACCOUNT',
             'account shared by ' || rec.SUPP_CNT || ' suppliers', 'F');
         l_dup_bank := l_dup_bank + 1;
     END LOOP;

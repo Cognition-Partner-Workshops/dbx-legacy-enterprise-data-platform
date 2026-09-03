@@ -24,7 +24,7 @@ IS
         SELECT h.INVOICE_ID,
                h.SUPP_ID,
                h.REGION_CD,
-               h.CURRENCY_CD,
+               h.INVOICE_CURR_CD AS CURRENCY_CD,
                h.INVOICE_DT,
                h.DUE_DT,
                h.GROSS_AMT,
@@ -32,14 +32,36 @@ IS
                       FROM WWI_FIN.AP_PAYMENT_APPLY a
                      WHERE a.INVOICE_ID = h.INVOICE_ID
                        AND a.APPLY_DT <= p_as_of_dt
-                       AND NVL(a.VOIDED_FLAG, 'N') = 'N'), 0) AS APPLIED_AMT
+                       AND NVL(a.REVERSED_FLG, 'N') = 'N'), 0) AS APPLIED_AMT
           FROM WWI_FIN.AP_INVOICE_HDR h
          WHERE h.REGION_CD = p_region_cd
-           AND h.STATUS_CD NOT IN ('CN', 'PD')
+           AND h.INVOICE_STATUS_CD NOT IN ('CN', 'PD')
            AND h.INVOICE_DT <= p_as_of_dt
          ORDER BY h.SUPP_ID, h.DUE_DT;
 
     TYPE t_inv_tab IS TABLE OF c_open_invoices%ROWTYPE;
+
+    /* the snapshot is held per supplier and currency, so the row by row pass
+       accumulates the buckets before a single row per group is written      */
+    TYPE t_bucket_rec IS RECORD (
+        supp_id      WWI_FIN.AP_INVOICE_HDR.SUPP_ID%TYPE,
+        curr_cd      WWI_FIN.AP_INVOICE_HDR.INVOICE_CURR_CD%TYPE,
+        current_amt  NUMBER := 0,
+        bucket_1_amt NUMBER := 0,
+        bucket_2_amt NUMBER := 0,
+        bucket_3_amt NUMBER := 0,
+        bucket_4_amt NUMBER := 0,
+        total_amt    NUMBER := 0,
+        base_amt     NUMBER := 0,
+        invoice_cnt  PLS_INTEGER := 0,
+        days_sum     NUMBER := 0,
+        oldest_dt    DATE
+    );
+    TYPE t_bucket_tab IS TABLE OF t_bucket_rec INDEX BY VARCHAR2(64);
+
+    l_buckets     t_bucket_tab;
+    l_key         VARCHAR2(64);
+    l_agg         t_bucket_rec;
     l_batch       t_inv_tab;
     l_period_cd   VARCHAR2(10);
     l_open_amt    NUMBER;
@@ -105,23 +127,68 @@ BEGIN
                                                     p_as_of_dt,
                                                     'CORP');
 
-            INSERT INTO WWI_FIN.AP_AGING_SNAPSHOT
-                (AGING_SNAPSHOT_ID, SNAPSHOT_DT, PERIOD_CD, REGION_CD, SUPP_ID,
-                 INVOICE_ID, CURRENCY_CD, OPEN_AMT, BASE_CURRENCY_CD,
-                 BASE_OPEN_AMT, DUE_DT, DAYS_PAST_DUE, AGING_BUCKET_CD,
-                 CREATED_DT, CREATED_BY)
-            VALUES
-                (WWI_FIN.SEQ_AP_AGING_SNAPSHOT.NEXTVAL, p_as_of_dt, l_period_cd,
-                 p_region_cd, l_batch(i).SUPP_ID, l_batch(i).INVOICE_ID,
-                 l_batch(i).CURRENCY_CD, l_open_amt, l_base_ccy, l_base_amt,
-                 l_batch(i).DUE_DT, l_days_late, l_bucket_cd, SYSDATE, USER);
+            l_key := l_batch(i).SUPP_ID || '~' || l_batch(i).CURRENCY_CD;
 
-            p_row_cnt := p_row_cnt + 1;
+            IF l_buckets.EXISTS(l_key) THEN
+                l_agg := l_buckets(l_key);
+            ELSE
+                l_agg.oldest_dt   := NULL;
+                l_agg.supp_id     := l_batch(i).SUPP_ID;
+                l_agg.curr_cd     := l_batch(i).CURRENCY_CD;
+                l_agg.current_amt := 0;
+                l_agg.bucket_1_amt := 0;
+                l_agg.bucket_2_amt := 0;
+                l_agg.bucket_3_amt := 0;
+                l_agg.bucket_4_amt := 0;
+                l_agg.total_amt   := 0;
+                l_agg.base_amt    := 0;
+                l_agg.invoice_cnt := 0;
+                l_agg.days_sum    := 0;
+            END IF;
+
+            CASE
+                WHEN l_days_late <= 0  THEN l_agg.current_amt  := l_agg.current_amt + l_open_amt;
+                WHEN l_days_late <= 30 THEN l_agg.bucket_1_amt := l_agg.bucket_1_amt + l_open_amt;
+                WHEN l_days_late <= 60 THEN l_agg.bucket_2_amt := l_agg.bucket_2_amt + l_open_amt;
+                WHEN l_days_late <= 90 THEN l_agg.bucket_3_amt := l_agg.bucket_3_amt + l_open_amt;
+                ELSE                        l_agg.bucket_4_amt := l_agg.bucket_4_amt + l_open_amt;
+            END CASE;
+
+            l_agg.total_amt   := l_agg.total_amt + l_open_amt;
+            l_agg.base_amt    := l_agg.base_amt + l_base_amt;
+            l_agg.invoice_cnt := l_agg.invoice_cnt + 1;
+            l_agg.days_sum    := l_agg.days_sum + l_days_late;
+            l_agg.oldest_dt   := LEAST(NVL(l_agg.oldest_dt, l_batch(i).INVOICE_DT),
+                                       l_batch(i).INVOICE_DT);
+
+            l_buckets(l_key) := l_agg;
         END LOOP;
-
-        COMMIT;
     END LOOP;
     CLOSE c_open_invoices;
+
+    l_key := l_buckets.FIRST;
+    WHILE l_key IS NOT NULL LOOP
+        l_agg := l_buckets(l_key);
+
+        INSERT INTO WWI_FIN.AP_AGING_SNAPSHOT
+            (SNAPSHOT_ID, SNAPSHOT_DT, PERIOD_CD, SUPP_ID, REGION_CD,
+             BALANCE_CURR_CD, CURRENT_AMT, BUCKET_1_AMT, BUCKET_2_AMT,
+             BUCKET_3_AMT, BUCKET_4_AMT, TOTAL_OUTSTANDING_AMT,
+             OPEN_INVOICE_CNT, OLDEST_INVOICE_DT, AVG_DAYS_OUTSTANDING,
+             BUCKET_DEFINITION_CD, REPORTING_AMT_USD, CALCULATED_DT,
+             CREATED_DT, CREATED_BY)
+        VALUES
+            (WWI_FIN.SEQ_AP_AGING_SNAPSHOT.NEXTVAL, p_as_of_dt, l_period_cd,
+             l_agg.supp_id, p_region_cd, l_agg.curr_cd, l_agg.current_amt,
+             l_agg.bucket_1_amt, l_agg.bucket_2_amt, l_agg.bucket_3_amt,
+             l_agg.bucket_4_amt, l_agg.total_amt, l_agg.invoice_cnt,
+             l_agg.oldest_dt,
+             ROUND(l_agg.days_sum / GREATEST(l_agg.invoice_cnt, 1), 2),
+             'STD-30-60-90', l_agg.base_amt, SYSDATE, SYSDATE, USER);
+
+        p_row_cnt := p_row_cnt + 1;
+        l_key := l_buckets.NEXT(l_key);
+    END LOOP;
 
     COMMIT;
 EXCEPTION

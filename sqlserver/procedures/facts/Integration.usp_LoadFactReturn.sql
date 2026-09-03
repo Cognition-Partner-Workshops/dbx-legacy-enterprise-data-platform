@@ -85,7 +85,7 @@ BEGIN
             [Quantity Returned], [Quantity Restocked], [Quantity Scrapped], [Source UOM Code],
             [Gross Credit Amount], [Restocking Fee Amount], [Tax Credit Amount],
             [Net Credit Amount], [Fx Rate], [Net Credit Reporting],
-            [Cost Of Return Amount], [Margin Reversal Amount], [Days Since Invoice],
+            [Cost Of Returned Goods], [Margin Reversal Amount], [Days Since Invoice],
             [Within Statutory Window Flag], [Statutory Window Days], [Faulty Flag],
             [Disposition Code], [Natural Key Hash], [Inferred Member Flag],
             [Lineage Key], [Batch Id], [Load Datetime]
@@ -155,7 +155,7 @@ BEGIN
         LEFT JOIN Dimension.[Return Reason] AS rr
             ON rr.[Reason Code] = lin.ReturnReasonCode
         LEFT JOIN Dimension.[Warehouse Site] AS site
-            ON site.[Site Code] = hdr.WarehouseSiteCode
+            ON site.[Warehouse Site Code] = hdr.WarehouseSiteCode
         LEFT JOIN Dimension.[Sales Territory] AS terr
             ON terr.[Territory Code] = hdr.SalesTerritoryCode
         LEFT JOIN Dimension.[Salesperson] AS sp
@@ -185,7 +185,7 @@ BEGIN
            goods came back - but they are counted so the RMA team can chase. */
         SELECT @RejectRowCount = COUNT_BIG(*)
         FROM Fact.[Return]
-        WHERE [Batch Id] = @BatchId AND [Cost Of Return Amount] IS NULL;
+        WHERE [Batch Id] = @BatchId AND [Cost Of Returned Goods] IS NULL;
 
         IF @RejectRowCount > 0
             EXECUTE etl.usp_LogRejectedRecord

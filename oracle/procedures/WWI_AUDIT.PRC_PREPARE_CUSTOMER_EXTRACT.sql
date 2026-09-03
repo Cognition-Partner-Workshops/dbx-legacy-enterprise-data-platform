@@ -21,11 +21,11 @@ CREATE OR REPLACE PROCEDURE WWI_AUDIT.PRC_PREPARE_CUSTOMER_EXTRACT
     p_row_est    OUT PLS_INTEGER
 )
 IS
-    l_from_val WWI_AUDIT.EXTRACT_CONTROL.LAST_EXTRACT_VALUE_TXT%TYPE;
-    l_to_val   WWI_AUDIT.EXTRACT_CONTROL.LAST_EXTRACT_VALUE_TXT%TYPE;
+    l_from_val WWI_AUDIT.V_EXTRACT_WATERMARK.LAST_EXTRACT_VALUE_TXT%TYPE;
+    l_to_val   WWI_AUDIT.V_EXTRACT_WATERMARK.LAST_EXTRACT_VALUE_TXT%TYPE;
     l_suppressed PLS_INTEGER;
 BEGIN
-    WWI_AUDIT.PKG_EXTRACT_CONTROL.begin_extract('EXT_ORA_Customer', p_run_id,
+    WWI_AUDIT.PKG_EXTRACT_CONTROL.begin_extract('EXT_ORA_CUSTOMER_MASTER', p_run_id,
                                                 l_from_val, l_to_val);
 
     p_from_dt := NVL(TO_DATE(l_from_val, 'YYYY-MM-DD HH24:MI:SS'),
@@ -35,31 +35,32 @@ BEGIN
     SELECT COUNT(*)
       INTO p_row_est
       FROM WWI_MDM.CUST_MASTER
-     WHERE LAST_UPD_DT > p_from_dt
-       AND LAST_UPD_DT <= p_to_dt;
+     WHERE UPDATED_DT > p_from_dt
+       AND UPDATED_DT <= p_to_dt;
 
     /* consent withdrawals must reach the warehouse as an explicit delete */
     INSERT INTO WWI_AUDIT.CHANGE_LOG
-        (CHANGE_LOG_ID, SRC_SCHEMA_NAME, SRC_OBJECT_NAME, SRC_KEY_TXT,
-         CHANGE_TYPE_CD, CHANGE_DT, CHANGE_DETAIL_TXT, EXTRACTED_FLAG, CHANGED_BY)
+        (CHANGE_LOG_ID, SCHEMA_NAME, TABLE_NAME, PK_VALUE_TXT,
+         OPERATION_CD, CHANGE_TS, REASON_TXT, EXTRACTED_FLG, CHANGED_BY)
     SELECT WWI_AUDIT.SEQ_CHANGE_LOG.NEXTVAL, 'WWI_MDM', 'CUST_MASTER',
-           TO_CHAR(c.CUST_ID), 'D', SYSDATE,
-           'consent withdrawn ' || TO_CHAR(c.CONSENT_WITHDRAWN_DT, 'YYYY-MM-DD'),
+           TO_CHAR(c.CUST_ID), 'D', SYSTIMESTAMP,
+           'consent withdrawn ' || TO_CHAR(c.CONSENT_CAPTURED_DT, 'YYYY-MM-DD'),
            'N', USER
       FROM WWI_MDM.CUST_MASTER c
      WHERE c.REGION_CD = 'EU'
-       AND c.CONSENT_WITHDRAWN_DT > p_from_dt
-       AND c.CONSENT_WITHDRAWN_DT <= p_to_dt
+       AND NVL(c.CONSENT_MARKETING_FLG, 'N') = 'N'
+       AND c.CONSENT_CAPTURED_DT > p_from_dt
+       AND c.CONSENT_CAPTURED_DT <= p_to_dt
        AND NOT EXISTS (SELECT 1
                          FROM WWI_AUDIT.CHANGE_LOG cl
-                        WHERE cl.SRC_OBJECT_NAME = 'CUST_MASTER'
-                          AND cl.SRC_KEY_TXT     = TO_CHAR(c.CUST_ID)
-                          AND cl.CHANGE_TYPE_CD  = 'D');
+                        WHERE cl.TABLE_NAME   = 'CUST_MASTER'
+                          AND cl.PK_VALUE_TXT = TO_CHAR(c.CUST_ID)
+                          AND cl.OPERATION_CD = 'D');
 
     l_suppressed := SQL%ROWCOUNT;
 
     IF l_suppressed > 0 THEN
-        WWI_AUDIT.PKG_DATA_QUALITY.log_reject('EXT_ORA_Customer',
+        WWI_AUDIT.PKG_DATA_QUALITY.log_reject('EXT_ORA_CUSTOMER_MASTER',
             'WWI_MDM.CUST_MASTER', NULL, 'CONSENT_DELETE',
             l_suppressed || ' EU customer(s) queued as downstream deletes', 'W');
     END IF;
@@ -68,7 +69,7 @@ BEGIN
 EXCEPTION
     WHEN OTHERS THEN
         ROLLBACK;
-        WWI_AUDIT.PKG_EXTRACT_CONTROL.fail_extract('EXT_ORA_Customer', p_run_id,
+        WWI_AUDIT.PKG_EXTRACT_CONTROL.fail_extract('EXT_ORA_CUSTOMER_MASTER', p_run_id,
                                                    SQLERRM);
         RAISE;
 END PRC_PREPARE_CUSTOMER_EXTRACT;

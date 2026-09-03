@@ -42,11 +42,29 @@ BEGIN
         [Month]                         NVARCHAR(10)    NOT NULL,
         [Short Month]                   NVARCHAR(3)     NOT NULL,
         [Calendar Month Number]         INT             NOT NULL,
+        [Calendar Month Label]          NVARCHAR(20)    NOT NULL,
         [Calendar Quarter Number]       INT             NOT NULL,
         [Calendar Year]                 INT             NOT NULL,
+        [Calendar Year Label]           NVARCHAR(10)    NOT NULL,
+        [Fiscal Month Number]           INT             NOT NULL,
+        [Fiscal Month Label]            NVARCHAR(20)    NOT NULL,
+        [Fiscal Year]                   INT             NOT NULL,
+        [Fiscal Year Label]             NVARCHAR(10)    NOT NULL,
+        [ISO Week Number]               INT             NOT NULL,
         CONSTRAINT [PK_Dimension_Date] PRIMARY KEY CLUSTERED ([Date] ASC)
     );
 END;
+GO
+
+/* The Microsoft baseline dimension stops at the calendar labels and carries no
+   day-of-week or calendar-quarter attribute, so the estate adds them here rather
+   than in every reader. They are nullable because the baseline rows predate them;
+   Integration.usp_PopulateDateDimension fills them for the rows it owns. */
+IF COL_LENGTH(N'Dimension.Date', N'Day of Week') IS NULL
+    ALTER TABLE [Dimension].[Date] ADD
+        [Day of Week]                   NVARCHAR(20)    NULL,
+        [Day of Week Number]            INT             NULL,
+        [Calendar Quarter Number]       INT             NULL;
 GO
 
 /* Surrogate-key alignment with the reserved ranges in 00_dimension_schemas_and_sequences.sql. */

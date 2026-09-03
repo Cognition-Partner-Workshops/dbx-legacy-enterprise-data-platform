@@ -35,8 +35,8 @@ BEGIN
         SELECT COUNT(*)
           INTO p_change_cnt
           FROM WWI_AUDIT.CHANGE_LOG
-         WHERE CHANGE_DT < TRUNC(SYSDATE) - 90
-           AND NVL(EXTRACTED_FLAG, 'N') = 'Y';
+         WHERE CHANGE_TS < TRUNC(SYSDATE) - 90
+           AND NVL(EXTRACTED_FLG, 'N') = 'Y';
     ELSE
         WWI_AUDIT.PKG_EXTRACT_CONTROL.purge_change_log(90, p_change_cnt);
     END IF;
@@ -45,8 +45,8 @@ BEGIN
        ever - deleting an open reject has burned this team before        */
     IF NVL(p_dry_run, 'Y') <> 'Y' THEN
         DELETE FROM WWI_AUDIT.INTERFACE_ERROR
-         WHERE RESOLVED_DT IS NOT NULL
-           AND RESOLVED_DT < ADD_MONTHS(TRUNC(SYSDATE), -12);
+         WHERE RESOLVED_TS IS NOT NULL
+           AND RESOLVED_TS < ADD_MONTHS(TRUNC(SYSDATE), -12);
 
         p_error_cnt := SQL%ROWCOUNT;
         COMMIT;
@@ -54,8 +54,8 @@ BEGIN
         SELECT COUNT(*)
           INTO p_error_cnt
           FROM WWI_AUDIT.INTERFACE_ERROR
-         WHERE RESOLVED_DT IS NOT NULL
-           AND RESOLVED_DT < ADD_MONTHS(TRUNC(SYSDATE), -12);
+         WHERE RESOLVED_TS IS NOT NULL
+           AND RESOLVED_TS < ADD_MONTHS(TRUNC(SYSDATE), -12);
     END IF;
 
     FOR i IN 1 .. l_regions.COUNT LOOP
@@ -92,8 +92,8 @@ BEGIN
         END LOOP;
 
         INSERT INTO WWI_AUDIT.PURGE_LOG
-            (PURGE_LOG_ID, SRC_SCHEMA_NAME, SRC_OBJECT_NAME, PURGE_DT, CUTOFF_DT,
-             ROW_COUNT, PURGED_BY)
+            (PURGE_LOG_ID, SCHEMA_NAME, TABLE_NAME, PURGE_RUN_TS, CUTOFF_DT,
+             ROWS_PURGED_CNT, RUN_BY)
         VALUES
             (WWI_AUDIT.SEQ_PURGE_LOG.NEXTVAL, 'WWI_FIN', 'AP_AGING_SNAPSHOT',
              SYSDATE, l_cutoff_dt, p_snapshot_cnt, USER);

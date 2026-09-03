@@ -13,7 +13,7 @@
 
 CREATE OR REPLACE PROCEDURE WWI_PROC.PRC_BUILD_SUPPLIER_SCORECARD
 (
-    p_period_cd   IN  WWI_PROC.SUPPLIER_SCORECARD.PERIOD_CD%TYPE DEFAULT NULL,
+    p_period_cd   IN  WWI_PROC.SUPPLIER_SCORECARD.SCORE_PERIOD_CD%TYPE DEFAULT NULL,
     p_region_cd   IN  VARCHAR2 DEFAULT NULL,
     p_built_cnt   OUT PLS_INTEGER,
     p_demoted_cnt OUT PLS_INTEGER
@@ -22,7 +22,7 @@ IS
     TYPE t_region_tab IS TABLE OF VARCHAR2(4);
     l_regions  t_region_tab := t_region_tab('NA', 'EU', 'APAC');
     l_region   VARCHAR2(4);
-    l_period   WWI_PROC.SUPPLIER_SCORECARD.PERIOD_CD%TYPE;
+    l_period   WWI_PROC.SUPPLIER_SCORECARD.SCORE_PERIOD_CD%TYPE;
     l_cnt      PLS_INTEGER;
 BEGIN
     p_built_cnt   := 0;
@@ -51,18 +51,18 @@ BEGIN
         END;
 
         IF l_region IN ('EU', 'APAC') THEN
-            FOR rec IN (SELECT sc.SUPP_ID, sc.RATING_CD, prev.RATING_CD AS PREV_RATING
+            FOR rec IN (SELECT sc.SUPP_ID, sc.SCORE_BAND_CD, prev.SCORE_BAND_CD AS PREV_RATING
                           FROM WWI_PROC.SUPPLIER_SCORECARD sc
                           JOIN WWI_PROC.SUPPLIER_SCORECARD prev
                             ON prev.SUPP_ID = sc.SUPP_ID
-                           AND prev.PERIOD_CD = (SELECT MAX(p2.PERIOD_CD)
+                           AND prev.SCORE_PERIOD_CD = (SELECT MAX(p2.SCORE_PERIOD_CD)
                                                    FROM WWI_PROC.SUPPLIER_SCORECARD p2
                                                   WHERE p2.SUPP_ID = sc.SUPP_ID
-                                                    AND p2.PERIOD_CD < sc.PERIOD_CD)
-                         WHERE sc.PERIOD_CD = l_period
+                                                    AND p2.SCORE_PERIOD_CD < sc.SCORE_PERIOD_CD)
+                         WHERE sc.SCORE_PERIOD_CD = l_period
                            AND sc.REGION_CD = l_region
-                           AND sc.RATING_CD = 'WATCH'
-                           AND prev.RATING_CD IN ('WATCH', 'APPROVED')) LOOP
+                           AND sc.SCORE_BAND_CD = 'WATCH'
+                           AND prev.SCORE_BAND_CD IN ('WATCH', 'APPROVED')) LOOP
 
                 WWI_MDM.PKG_SUPPLIER_MASTER.block_supplier(
                     p_supp_id    => rec.SUPP_ID,

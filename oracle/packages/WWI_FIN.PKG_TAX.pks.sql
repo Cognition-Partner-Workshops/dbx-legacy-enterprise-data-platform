@@ -22,8 +22,8 @@ CREATE OR REPLACE PACKAGE WWI_FIN.PKG_TAX AS
     PRAGMA EXCEPTION_INIT(e_vat_id_invalid,       -20133);
 
     TYPE t_tax_line IS RECORD (
-        tax_cd          WWI_FIN.TAX_RATE.TAX_CD%TYPE,
-        jurisdiction_id WWI_FIN.TAX_JURISDICTION.JURISDICTION_ID%TYPE,
+        tax_cd          WWI_FIN.TAX_RATE.TAX_CODE_CD%TYPE,
+        jurisdiction_id WWI_FIN.TAX_JURISDICTION.TAX_JURISDICTION_ID%TYPE,
         rate_pct        NUMBER,
         taxable_amt     NUMBER,
         tax_amt         NUMBER,
@@ -39,12 +39,12 @@ CREATE OR REPLACE PACKAGE WWI_FIN.PKG_TAX AS
         p_country_cd IN WWI_REF.COUNTRY_REF.COUNTRY_CD%TYPE,
         p_state_cd   IN VARCHAR2 DEFAULT NULL,
         p_postal_cd  IN VARCHAR2 DEFAULT NULL
-    ) RETURN WWI_FIN.TAX_JURISDICTION.JURISDICTION_ID%TYPE;
+    ) RETURN WWI_FIN.TAX_JURISDICTION.TAX_JURISDICTION_ID%TYPE;
 
     FUNCTION resolve_rate
     (
-        p_tax_cd          IN WWI_FIN.TAX_RATE.TAX_CD%TYPE,
-        p_jurisdiction_id IN WWI_FIN.TAX_JURISDICTION.JURISDICTION_ID%TYPE,
+        p_tax_cd          IN WWI_FIN.TAX_RATE.TAX_CODE_CD%TYPE,
+        p_jurisdiction_id IN WWI_FIN.TAX_JURISDICTION.TAX_JURISDICTION_ID%TYPE,
         p_tax_dt          IN DATE DEFAULT SYSDATE
     ) RETURN NUMBER;
 
@@ -65,8 +65,8 @@ CREATE OR REPLACE PACKAGE WWI_FIN.PKG_TAX AS
     (
         p_region_cd       IN  VARCHAR2,
         p_line_amt        IN  NUMBER,
-        p_tax_cd          IN  WWI_FIN.TAX_RATE.TAX_CD%TYPE,
-        p_jurisdiction_id IN  WWI_FIN.TAX_JURISDICTION.JURISDICTION_ID%TYPE,
+        p_tax_cd          IN  WWI_FIN.TAX_RATE.TAX_CODE_CD%TYPE,
+        p_jurisdiction_id IN  WWI_FIN.TAX_JURISDICTION.TAX_JURISDICTION_ID%TYPE,
         p_tax_dt          IN  DATE,
         p_reverse_charge  IN  VARCHAR2,
         p_tax_lines       OUT t_tax_line_tab,

@@ -65,12 +65,12 @@ BEGIN
             [Snapshot Date Key], [Salesperson Key], [Sales Territory Key],
             [Sales Channel Key], [Customer Segment Key], [Region Code],
             [Fiscal Year], [Fiscal Period], [Fiscal Week], [Invoice Count],
-            [Order Line Count], [Distinct Customer Count], [Quantity Sold],
-            [Gross Revenue Amount], [Discount Amount], [Net Revenue Amount],
+            [Line Count], [Distinct Customer Count], [Quantity Sold],
+            [Gross Sales Amount], [Discount Amount], [Net Sales Amount],
             [Tax Amount], [Freight Amount], [Cost Of Sales Amount],
-            [Gross Margin Amount], [Gross Margin Percent], [Return Credit Amount],
-            [Credit Note Amount], [Net Revenue Reporting], [Average Order Value],
-            [Commissionable Revenue], [Commission Rate], [Commission Amount],
+            [Gross Margin Amount], [Margin Percent], [Returns Amount],
+            [Credit Note Amount], [Net Sales Amount Reporting], [Average Order Value],
+            [Commissionable Revenue], [Commission Rate], [Commission Accrued Amount],
             [Lineage Key], [Batch Id], [Load Datetime]
         )
         SELECT
@@ -147,7 +147,7 @@ BEGIN
         SET [Commission Rate] = CASE
                                     WHEN [Region Code] = N'NA'   AND [Commissionable Revenue] > 50000 THEN 0.030
                                     WHEN [Region Code] = N'NA'                                        THEN 0.020
-                                    WHEN [Region Code] = N'EU'   AND [Gross Margin Percent] >= 30     THEN 0.025
+                                    WHEN [Region Code] = N'EU'   AND [Margin Percent] >= 30           THEN 0.025
                                     WHEN [Region Code] = N'EU'                                        THEN 0.015
                                     WHEN [Region Code] = N'APAC'                                      THEN 0.018
                                     ELSE 0.010
@@ -155,7 +155,7 @@ BEGIN
         WHERE [Snapshot Date Key] BETWEEN @FromDate AND @SnapshotDate;
 
         UPDATE Fact.[Daily Sales Snapshot]
-        SET [Commission Amount] = ROUND([Commissionable Revenue] * [Commission Rate], 2)
+        SET [Commission Accrued Amount] = ROUND([Commissionable Revenue] * [Commission Rate], 2)
         WHERE [Snapshot Date Key] BETWEEN @FromDate AND @SnapshotDate;
 
         EXECUTE etl.usp_LogRowCount

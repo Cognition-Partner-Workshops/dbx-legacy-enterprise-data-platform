@@ -46,7 +46,7 @@ CREATE OR REPLACE PACKAGE WWI_PROC.PKG_SUPPLIER_PERF AS
 
     PROCEDURE build_scorecards
     (
-        p_period_cd  IN  WWI_PROC.SUPPLIER_SCORECARD.PERIOD_CD%TYPE,
+        p_period_cd  IN  WWI_PROC.SUPPLIER_SCORECARD.SCORE_PERIOD_CD%TYPE,
         p_region_cd  IN  VARCHAR2,
         p_built_cnt  OUT PLS_INTEGER
     );
