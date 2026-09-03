@@ -1,0 +1,963 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{F182FC1A-1E4D-C2C6-37FD-6C1BCF14DF30}"
+  DTS:Description="Rebuilds Aggregate.Product Performance for the period: sell-through, stock turn, return rate and an ABC classification recalculated from the period's revenue ranking."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="AGG_Refresh_ProductPerformance"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{D3A63C65-329A-552A-804D-F3780D0A3A30}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{A96B331D-A567-01C6-9304-570BDCFCBFF7}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{8AB14573-6992-887C-50F6-C00EB6C1BF0C}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{403F183D-BDCD-EDBE-C802-D2A4C5B10AB2}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{30E60B2D-739F-944B-C6E9-B51A4458560B}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWIDW</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::AccountingPeriodCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="Accounting period (yyyy-MM) to rebuild."
+      DTS:DTSID="{CEF34C1A-D44D-1AAE-A15B-5BB25183F32F}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="AccountingPeriodCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">1900-01</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::RebuildPriorPeriods]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Additional closed periods to rebuild behind the current one."
+      DTS:DTSID="{BCDD5FFA-137F-755F-96D8-CCAFE581ECF4}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="RebuildPriorPeriods"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::AbcThresholdA]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Cumulative revenue percentage that defines class A."
+      DTS:DTSID="{4EF49A9C-CCCB-CF22-7A8B-75F53772E98D}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="AbcThresholdA"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">80</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::AbcThresholdB]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Cumulative revenue percentage that defines class B."
+      DTS:DTSID="{03BD1DA6-4A05-426D-D033-C10C8D5CBFE1}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="AbcThresholdB"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">95</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{2A4A3E3F-C847-8523-98A2-C5258089DDA0}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{F1590F27-035D-D8D5-E71A-0C619C199158}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{22AA92C7-271D-C4B4-A2E2-501FB7EF303C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{B6FAA9EE-85B5-7C2F-95E5-106CA2D22708}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{88F61089-6E11-E661-2693-80931768885B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{5428AC75-2306-A39D-4E0A-1F6A1EFD83F5}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{164899D8-0089-8BF4-2844-E63DA6161F1A}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{0880CD16-F18A-6699-A690-A30E67E098A4}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsAggregated]"
+      DTS:CreationName=""
+      DTS:DTSID="{51E5A526-C95A-8B61-AF0D-901A7C7476FE}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsAggregated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsDeletedForWindow]"
+      DTS:CreationName=""
+      DTS:DTSID="{B096AB62-5CD2-CE87-7AA0-E979AF53C88E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsDeletedForWindow">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ReconciliationVariance]"
+      DTS:CreationName=""
+      DTS:DTSID="{0116249A-F27E-6051-94BA-85E75478EADE}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ReconciliationVariance">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ProductsClassified]"
+      DTS:CreationName=""
+      DTS:DTSID="{62204014-749E-1691-EE84-01ACFF97DC90}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ProductsClassified">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Refresh Period"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{CEDE3108-A491-846A-837A-212A109B618C}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Refresh Period"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression='@[User::WatermarkFrom] = (DT_DBTIMESTAMP)(@[$Package::AccountingPeriodCode] + "-01")' />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Delete Period Rows"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{60DDFD9C-8211-98A4-513C-4FAE965C0620}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Delete Period Rows"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="DELETE FROM [Aggregate].[Product Performance] WHERE [Accounting Period Code] &gt;= FORMAT(DATEADD(MONTH, -1 * ?, CAST(? + '-01' AS date)), 'yyyy-MM') AND [Accounting Period Code] &lt;= ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::RebuildPriorPeriods" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::AccountingPeriodCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::AccountingPeriodCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Rebuild Product Performance"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{F664B726-A350-2F6F-91E7-19416BAAE592}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Rebuild Product Performance"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Rebuild Product Performance\Product Performance Source" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="Product Performance Source" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">7200</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT f.[Stock Item Key] AS StockItemKey, d.[Accounting Period Code] AS AccountingPeriodCode, si.[Product Category Code] AS ProductCategoryCode, SUM(f.[Quantity]) AS QuantitySold, SUM(f.[Net Amount]) AS NetAmount, SUM(f.[Margin Amount]) AS MarginAmount, ISNULL(SUM(r.[Quantity Returned]), 0) AS QuantityReturned, ISNULL(AVG(inv.[Quantity On Hand]), 0) AS AverageStockOnHand, ISNULL(SUM(CASE WHEN inv.[Quantity On Hand] = 0 THEN 1 ELSE 0 END), 0) AS StockOutDayCount FROM [Fact].[Sale] AS f INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Invoice Date Key] INNER JOIN [Dimension].[Stock Item] AS si ON si.[Stock Item Key] = f.[Stock Item Key] LEFT JOIN [Fact].[Return] AS r ON r.[Stock Item Key] = f.[Stock Item Key] LEFT JOIN [Fact].[Daily Inventory Snapshot] AS inv        ON inv.[Stock Item Key] = f.[Stock Item Key] AND inv.[Position Date Key] = d.[Date Key] WHERE d.[Accounting Period Code] = ? GROUP BY f.[Stock Item Key], d.[Accounting Period Code], si.[Product Category Code];</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Product Performance\Product Performance Source.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].Columns[StockItemKey]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].ExternalColumns[StockItemKey]" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].Columns[StockItemKey]" name="StockItemKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].Columns[AccountingPeriodCode]" dataType="wstr" length="7" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].ExternalColumns[AccountingPeriodCode]" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].Columns[AccountingPeriodCode]" name="AccountingPeriodCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].Columns[ProductCategoryCode]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].ExternalColumns[ProductCategoryCode]" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].Columns[ProductCategoryCode]" name="ProductCategoryCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].Columns[QuantitySold]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].ExternalColumns[QuantitySold]" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].Columns[QuantitySold]" name="QuantitySold" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].Columns[NetAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].ExternalColumns[NetAmount]" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].Columns[NetAmount]" name="NetAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].Columns[MarginAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].ExternalColumns[MarginAmount]" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].Columns[MarginAmount]" name="MarginAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].Columns[QuantityReturned]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].ExternalColumns[QuantityReturned]" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].Columns[QuantityReturned]" name="QuantityReturned" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].Columns[AverageStockOnHand]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].ExternalColumns[AverageStockOnHand]" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].Columns[AverageStockOnHand]" name="AverageStockOnHand" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].Columns[StockOutDayCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].ExternalColumns[StockOutDayCount]" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].Columns[StockOutDayCount]" name="StockOutDayCount" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].ExternalColumns[StockItemKey]" dataType="i4" name="StockItemKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].ExternalColumns[ProductCategoryCode]" dataType="wstr" length="12" name="ProductCategoryCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].ExternalColumns[QuantitySold]" dataType="i4" name="QuantitySold" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].ExternalColumns[NetAmount]" dataType="numeric" precision="18" scale="2" name="NetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].ExternalColumns[MarginAmount]" dataType="numeric" precision="18" scale="2" name="MarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].ExternalColumns[QuantityReturned]" dataType="i4" name="QuantityReturned" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].ExternalColumns[AverageStockOnHand]" dataType="numeric" precision="18" scale="2" name="AverageStockOnHand" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output].ExternalColumns[StockOutDayCount]" dataType="i4" name="StockOutDayCount" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[StockItemKey]" dataType="i4" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[StockItemKey]" name="StockItemKey" />
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[AccountingPeriodCode]" dataType="wstr" length="7" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[ProductCategoryCode]" dataType="wstr" length="12" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[ProductCategoryCode]" name="ProductCategoryCode" />
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[QuantitySold]" dataType="i4" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[QuantitySold]" name="QuantitySold" />
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[NetAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[NetAmount]" name="NetAmount" />
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[MarginAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[MarginAmount]" name="MarginAmount" />
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[QuantityReturned]" dataType="i4" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[QuantityReturned]" name="QuantityReturned" />
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[AverageStockOnHand]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[AverageStockOnHand]" name="AverageStockOnHand" />
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[StockOutDayCount]" dataType="i4" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[StockOutDayCount]" name="StockOutDayCount" />
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Product Performance\Derive Product Ratios" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Product Ratios" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Rebuild Product Performance\Derive Product Ratios.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Product Performance\Derive Product Ratios.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Rebuild Product Performance\Derive Product Ratios.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Rebuild Product Performance\Derive Product Ratios.Outputs[Derived Column Output].Columns[ReturnRatePercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\Rebuild Product Performance\Derive Product Ratios.Outputs[Derived Column Output].Columns[ReturnRatePercent]" name="ReturnRatePercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">QuantitySold == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)QuantityReturned / (DT_NUMERIC,9,4)QuantitySold) * 100</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">QuantitySold == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)QuantityReturned / (DT_NUMERIC,9,4)QuantitySold) * 100</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Product Performance\Derive Product Ratios.Outputs[Derived Column Output].Columns[StockTurnRatio]" dataType="numeric" precision="9" scale="4" lineageId="Package\Rebuild Product Performance\Derive Product Ratios.Outputs[Derived Column Output].Columns[StockTurnRatio]" name="StockTurnRatio">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">AverageStockOnHand == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)QuantitySold / (DT_NUMERIC,9,4)AverageStockOnHand)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">AverageStockOnHand == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)QuantitySold / (DT_NUMERIC,9,4)AverageStockOnHand)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Product Performance\Derive Product Ratios.Outputs[Derived Column Output].Columns[MarginPercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\Rebuild Product Performance\Derive Product Ratios.Outputs[Derived Column Output].Columns[MarginPercent]" name="MarginPercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">NetAmount == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)MarginAmount / (DT_NUMERIC,9,4)NetAmount) * 100</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">NetAmount == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)MarginAmount / (DT_NUMERIC,9,4)NetAmount) * 100</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Product Performance\Derive Product Ratios.Outputs[Derived Column Output].Columns[AvailabilityPercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\Rebuild Product Performance\Derive Product Ratios.Outputs[Derived Column Output].Columns[AvailabilityPercent]" name="AvailabilityPercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">((DT_NUMERIC,9,4)30 - (DT_NUMERIC,9,4)StockOutDayCount) / (DT_NUMERIC,9,4)30 * 100</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">((DT_NUMERIC,9,4)30 - (DT_NUMERIC,9,4)StockOutDayCount) / (DT_NUMERIC,9,4)30 * 100</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Product Performance\Derive Product Ratios.Outputs[Derived Column Output].Columns[RefreshedByLineageKey]" dataType="i8" lineageId="Package\Rebuild Product Performance\Derive Product Ratios.Outputs[Derived Column Output].Columns[RefreshedByLineageKey]" name="RefreshedByLineageKey">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Product Performance\Route Product Rows" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Route Product Rows" version="1">
+            <inputs>
+              <input refId="Package\Rebuild Product Performance\Route Product Rows.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Product Performance\Route Product Rows.Outputs[Non Moving]" exclusionGroup="1" name="Non Moving" synchronousInputId="Package\Rebuild Product Performance\Route Product Rows.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">QuantitySold == 0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">QuantitySold == 0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Rebuild Product Performance\Route Product Rows.Outputs[High Return Rate]" exclusionGroup="1" name="High Return Rate" synchronousInputId="Package\Rebuild Product Performance\Route Product Rows.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">ReturnRatePercent &gt; 15</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">ReturnRatePercent &gt; 15</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Rebuild Product Performance\Route Product Rows.Outputs[Standard Rows]" exclusionGroup="1" isDefaultOut="true" name="Standard Rows" synchronousInputId="Package\Rebuild Product Performance\Route Product Rows.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Product Performance\Insert Standard Rows" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert Standard Rows" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Aggregate].[Product Performance]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Product Performance\Insert Standard Rows.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[StockItemKey]" cachedDataType="i4" cachedName="StockItemKey" externalMetadataColumnId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" name="StockItemKey" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[ProductCategoryCode]" cachedDataType="wstr" cachedLength="12" cachedName="ProductCategoryCode" externalMetadataColumnId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[ProductCategoryCode]" name="ProductCategoryCode" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[QuantitySold]" cachedDataType="i4" cachedName="QuantitySold" externalMetadataColumnId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[QuantitySold]" name="QuantitySold" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[NetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="NetAmount" externalMetadataColumnId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" name="NetAmount" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[MarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MarginAmount" externalMetadataColumnId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" name="MarginAmount" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[QuantityReturned]" cachedDataType="i4" cachedName="QuantityReturned" externalMetadataColumnId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[QuantityReturned]" name="QuantityReturned" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[AverageStockOnHand]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AverageStockOnHand" externalMetadataColumnId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[AverageStockOnHand]" name="AverageStockOnHand" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[StockOutDayCount]" cachedDataType="i4" cachedName="StockOutDayCount" externalMetadataColumnId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[StockOutDayCount]" name="StockOutDayCount" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[ReturnRatePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="ReturnRatePercent" externalMetadataColumnId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[ReturnRatePercent]" name="ReturnRatePercent" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[StockTurnRatio]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="StockTurnRatio" externalMetadataColumnId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[StockTurnRatio]" name="StockTurnRatio" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[MarginPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="MarginPercent" externalMetadataColumnId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[MarginPercent]" name="MarginPercent" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[AvailabilityPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="AvailabilityPercent" externalMetadataColumnId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[AvailabilityPercent]" name="AvailabilityPercent" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" dataType="i4" name="StockItemKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[ProductCategoryCode]" dataType="wstr" length="12" name="ProductCategoryCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[QuantitySold]" dataType="i4" name="QuantitySold" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" dataType="numeric" precision="18" scale="2" name="NetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" dataType="numeric" precision="18" scale="2" name="MarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[QuantityReturned]" dataType="i4" name="QuantityReturned" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[AverageStockOnHand]" dataType="numeric" precision="18" scale="2" name="AverageStockOnHand" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[StockOutDayCount]" dataType="i4" name="StockOutDayCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[ReturnRatePercent]" dataType="numeric" precision="9" scale="4" name="ReturnRatePercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[StockTurnRatio]" dataType="numeric" precision="9" scale="4" name="StockTurnRatio" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[MarginPercent]" dataType="numeric" precision="9" scale="4" name="MarginPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[AvailabilityPercent]" dataType="numeric" precision="9" scale="4" name="AvailabilityPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Product Performance\Insert Standard Rows.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Product Performance\Insert High Return Rate" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert High Return Rate" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Aggregate].[Product Performance]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Product Performance\Insert High Return Rate.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].Columns[StockItemKey]" cachedDataType="i4" cachedName="StockItemKey" externalMetadataColumnId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" name="StockItemKey" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].Columns[ProductCategoryCode]" cachedDataType="wstr" cachedLength="12" cachedName="ProductCategoryCode" externalMetadataColumnId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[ProductCategoryCode]" name="ProductCategoryCode" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].Columns[QuantitySold]" cachedDataType="i4" cachedName="QuantitySold" externalMetadataColumnId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[QuantitySold]" name="QuantitySold" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].Columns[NetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="NetAmount" externalMetadataColumnId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" name="NetAmount" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].Columns[MarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MarginAmount" externalMetadataColumnId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" name="MarginAmount" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].Columns[QuantityReturned]" cachedDataType="i4" cachedName="QuantityReturned" externalMetadataColumnId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[QuantityReturned]" name="QuantityReturned" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].Columns[AverageStockOnHand]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AverageStockOnHand" externalMetadataColumnId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[AverageStockOnHand]" name="AverageStockOnHand" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].Columns[StockOutDayCount]" cachedDataType="i4" cachedName="StockOutDayCount" externalMetadataColumnId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[StockOutDayCount]" name="StockOutDayCount" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].Columns[ReturnRatePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="ReturnRatePercent" externalMetadataColumnId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[ReturnRatePercent]" name="ReturnRatePercent" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].Columns[StockTurnRatio]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="StockTurnRatio" externalMetadataColumnId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[StockTurnRatio]" name="StockTurnRatio" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].Columns[MarginPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="MarginPercent" externalMetadataColumnId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[MarginPercent]" name="MarginPercent" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].Columns[AvailabilityPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="AvailabilityPercent" externalMetadataColumnId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[AvailabilityPercent]" name="AvailabilityPercent" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" dataType="i4" name="StockItemKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[ProductCategoryCode]" dataType="wstr" length="12" name="ProductCategoryCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[QuantitySold]" dataType="i4" name="QuantitySold" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" dataType="numeric" precision="18" scale="2" name="NetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" dataType="numeric" precision="18" scale="2" name="MarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[QuantityReturned]" dataType="i4" name="QuantityReturned" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[AverageStockOnHand]" dataType="numeric" precision="18" scale="2" name="AverageStockOnHand" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[StockOutDayCount]" dataType="i4" name="StockOutDayCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[ReturnRatePercent]" dataType="numeric" precision="9" scale="4" name="ReturnRatePercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[StockTurnRatio]" dataType="numeric" precision="9" scale="4" name="StockTurnRatio" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[MarginPercent]" dataType="numeric" precision="9" scale="4" name="MarginPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[AvailabilityPercent]" dataType="numeric" precision="9" scale="4" name="AvailabilityPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Product Performance\Insert High Return Rate.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Product Performance\Reject Non Moving" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Non Moving" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Product Performance\Reject Non Moving.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].Columns[StockItemKey]" cachedDataType="i4" cachedName="StockItemKey" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" name="StockItemKey" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].Columns[ProductCategoryCode]" cachedDataType="wstr" cachedLength="12" cachedName="ProductCategoryCode" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[ProductCategoryCode]" name="ProductCategoryCode" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].Columns[QuantitySold]" cachedDataType="i4" cachedName="QuantitySold" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[QuantitySold]" name="QuantitySold" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].Columns[NetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="NetAmount" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" name="NetAmount" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].Columns[MarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MarginAmount" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" name="MarginAmount" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].Columns[QuantityReturned]" cachedDataType="i4" cachedName="QuantityReturned" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[QuantityReturned]" name="QuantityReturned" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].Columns[AverageStockOnHand]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AverageStockOnHand" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[AverageStockOnHand]" name="AverageStockOnHand" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].Columns[StockOutDayCount]" cachedDataType="i4" cachedName="StockOutDayCount" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[StockOutDayCount]" name="StockOutDayCount" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].Columns[ReturnRatePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="ReturnRatePercent" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[ReturnRatePercent]" name="ReturnRatePercent" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].Columns[StockTurnRatio]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="StockTurnRatio" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[StockTurnRatio]" name="StockTurnRatio" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].Columns[MarginPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="MarginPercent" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[MarginPercent]" name="MarginPercent" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].Columns[AvailabilityPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="AvailabilityPercent" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[AvailabilityPercent]" name="AvailabilityPercent" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" dataType="i4" name="StockItemKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[ProductCategoryCode]" dataType="wstr" length="12" name="ProductCategoryCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[QuantitySold]" dataType="i4" name="QuantitySold" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" dataType="numeric" precision="18" scale="2" name="NetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" dataType="numeric" precision="18" scale="2" name="MarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[QuantityReturned]" dataType="i4" name="QuantityReturned" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[AverageStockOnHand]" dataType="numeric" precision="18" scale="2" name="AverageStockOnHand" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[StockOutDayCount]" dataType="i4" name="StockOutDayCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[ReturnRatePercent]" dataType="numeric" precision="9" scale="4" name="ReturnRatePercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[StockTurnRatio]" dataType="numeric" precision="9" scale="4" name="StockTurnRatio" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[MarginPercent]" dataType="numeric" precision="9" scale="4" name="MarginPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[AvailabilityPercent]" dataType="numeric" precision="9" scale="4" name="AvailabilityPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Product Performance\Reject Non Moving.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Product Performance\Reject Source Errors" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Source Errors" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Product Performance\Reject Source Errors.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[StockItemKey]" cachedDataType="i4" cachedName="StockItemKey" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" name="StockItemKey" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[ProductCategoryCode]" cachedDataType="wstr" cachedLength="12" cachedName="ProductCategoryCode" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ProductCategoryCode]" name="ProductCategoryCode" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[QuantitySold]" cachedDataType="i4" cachedName="QuantitySold" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantitySold]" name="QuantitySold" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[NetAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="NetAmount" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" name="NetAmount" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[MarginAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MarginAmount" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" name="MarginAmount" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[QuantityReturned]" cachedDataType="i4" cachedName="QuantityReturned" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantityReturned]" name="QuantityReturned" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[AverageStockOnHand]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="AverageStockOnHand" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AverageStockOnHand]" name="AverageStockOnHand" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[StockOutDayCount]" cachedDataType="i4" cachedName="StockOutDayCount" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockOutDayCount]" name="StockOutDayCount" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[ReturnRatePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="ReturnRatePercent" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ReturnRatePercent]" name="ReturnRatePercent" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[StockTurnRatio]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="StockTurnRatio" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockTurnRatio]" name="StockTurnRatio" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[MarginPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="MarginPercent" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[MarginPercent]" name="MarginPercent" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[AvailabilityPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="AvailabilityPercent" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AvailabilityPercent]" name="AvailabilityPercent" />
+                  <inputColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" dataType="i4" name="StockItemKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ProductCategoryCode]" dataType="wstr" length="12" name="ProductCategoryCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantitySold]" dataType="i4" name="QuantitySold" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[NetAmount]" dataType="numeric" precision="18" scale="2" name="NetAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[MarginAmount]" dataType="numeric" precision="18" scale="2" name="MarginAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantityReturned]" dataType="i4" name="QuantityReturned" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AverageStockOnHand]" dataType="numeric" precision="18" scale="2" name="AverageStockOnHand" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockOutDayCount]" dataType="i4" name="StockOutDayCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ReturnRatePercent]" dataType="numeric" precision="9" scale="4" name="ReturnRatePercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockTurnRatio]" dataType="numeric" precision="9" scale="4" name="StockTurnRatio" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[MarginPercent]" dataType="numeric" precision="9" scale="4" name="MarginPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AvailabilityPercent]" dataType="numeric" precision="9" scale="4" name="AvailabilityPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Product Performance\Reject Source Errors.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Rebuild Product Performance.Paths[OLE DB Source Output]" endId="Package\Rebuild Product Performance\Derive Product Ratios.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Rebuild Product Performance.Paths[Derived Column Output 1]" endId="Package\Rebuild Product Performance\Route Product Rows.Inputs[Conditional Split Input]" name="Derived Column Output 1" startId="Package\Rebuild Product Performance\Derive Product Ratios.Outputs[Derived Column Output]" />
+          <path refId="Package\Rebuild Product Performance.Paths[Standard Rows 2]" endId="Package\Rebuild Product Performance\Insert Standard Rows.Inputs[OLE DB Destination Input]" name="Standard Rows 2" startId="Package\Rebuild Product Performance\Route Product Rows.Outputs[Standard Rows]" />
+          <path refId="Package\Rebuild Product Performance.Paths[High Return Rate 3]" endId="Package\Rebuild Product Performance\Insert High Return Rate.Inputs[OLE DB Destination Input]" name="High Return Rate 3" startId="Package\Rebuild Product Performance\Route Product Rows.Outputs[High Return Rate]" />
+          <path refId="Package\Rebuild Product Performance.Paths[Non Moving 4]" endId="Package\Rebuild Product Performance\Reject Non Moving.Inputs[OLE DB Destination Input]" name="Non Moving 4" startId="Package\Rebuild Product Performance\Route Product Rows.Outputs[Non Moving]" />
+          <path refId="Package\Rebuild Product Performance.Paths[OLE DB Source Error Output 5]" endId="Package\Rebuild Product Performance\Reject Source Errors.Inputs[OLE DB Destination Input]" name="OLE DB Source Error Output 5" startId="Package\Rebuild Product Performance\Product Performance Source.Outputs[OLE DB Source Error Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Recalculate ABC Classification"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{2005E66D-DC89-BEED-C97F-A72507DCE6D8}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Recalculate ABC Classification"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="WITH ranked AS (  SELECT [Product Performance Key],          SUM([Net Amount]) OVER (PARTITION BY [Accounting Period Code]                                  ORDER BY [Net Amount] DESC                                  ROWS UNBOUNDED PRECEDING) AS RunningNet,          SUM([Net Amount]) OVER (PARTITION BY [Accounting Period Code]) AS PeriodNet   FROM [Aggregate].[Product Performance] WHERE [Accounting Period Code] = ?) UPDATE p SET p.[ABC Class Code] =   CASE WHEN r.PeriodNet = 0 THEN N'C'        WHEN (r.RunningNet / r.PeriodNet) * 100 &lt;= ? THEN N'A'        WHEN (r.RunningNet / r.PeriodNet) * 100 &lt;= ? THEN N'B' ELSE N'C' END FROM [Aggregate].[Product Performance] AS p INNER JOIN ranked AS r ON r.[Product Performance Key] = p.[Product Performance Key];"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::AccountingPeriodCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::AbcThresholdA" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::AbcThresholdB" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Refresh Product Performance Derivations"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{08BB8770-38E7-9DC5-6C69-F319BE9DD163}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Refresh Product Performance Derivations"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="EXEC Integration.RefreshAggregateProductPerformance @AccountingPeriodCode = ?, @LineageKey = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::AccountingPeriodCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Assert Reconciliation"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{939B1D95-86D0-C868-493E-496DC475519B}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Assert Reconciliation"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_AssertRowCountReconciliation @PackageExecutionId = ?, @ObjectName = N'Aggregate.Product Performance', @ExpectedRowCount = ?, @ActualRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Rejected Records"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F451B37A-2258-F381-3E92-62232E0A51C1}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Rejected Records"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @ObjectName = N'Aggregate.Product Performance', @RejectReason = N'Aggregate row failed the summary quality gate', @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Aggregate.Product Performance', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Refresh Period"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Delete Period Rows" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Delete Period Rows"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Rebuild Product Performance" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Rebuild Product Performance"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Recalculate ABC Classification" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Recalculate ABC Classification"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Refresh Product Performance Derivations" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Refresh Product Performance Derivations"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Assert Reconciliation" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Assert Reconciliation"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Rejected Records" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Log Rejected Records"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 8]"
+      DTS:CreationName=""
+      DTS:DTSID="{71A76C5F-1A20-5771-2776-7EF96FD96B90}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 8"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{9A775DD6-497C-DA38-8642-1F5946147B50}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

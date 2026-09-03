@@ -1,0 +1,1119 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{A2809528-C4D0-056D-5B6F-F5F8DEF48C07}"
+  DTS:Description="Month-end correction pass. Reads work.FactRekeyQueue and applies the two correction styles the estate uses: reversal-and-replace rows for Fact.Sale, where the audit trail must show the original, and in-place restatement for Fact.Order and Fact.Payment, where the operational reports only ever show the latest position."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="FACT_Apply_Corrections"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{FCC78A83-B10A-5BDB-26C8-C4F8BED84EC0}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{5018A977-2168-D835-A7E8-E0E43F746DA1}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{325C694F-428C-6C72-7CA5-0DEEFF2F037A}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{5D48275C-9167-1575-B5C3-21031AC9AE26}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{7D628D69-9949-B259-2BF8-F38FB9BAD766}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">SQLSTG</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::CorrectionPeriodCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="Accounting period the corrections are posted into."
+      DTS:DTSID="{3072B5F8-AF87-7FC9-5E45-FC27855684AE}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="CorrectionPeriodCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">1900-01</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::MaxCorrectionsPerRun]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Safety valve after the 2016 runaway correction run."
+      DTS:DTSID="{65B4F37B-BB3C-E53B-648F-1969369C7276}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="MaxCorrectionsPerRun"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">50000</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{B4C9CBEB-80D6-3341-E6A8-29AB0941A8DA}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{122AB26F-C055-F42F-2170-22F073897A86}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{73446DE4-15B6-AB94-475A-EADE5169D8C4}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{0CDFB438-54CE-155B-2DE2-B92E44184C05}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{8BB60B60-7AA2-FD65-93ED-37DD38AD5415}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{18A0DD05-35DF-CBC8-C7E1-EA8799A935D1}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{26C257DA-D989-F1CC-17F5-8A6741597F9A}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{E4B9A28D-65AF-3A4B-68CB-1054C032133A}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUnknownMember]"
+      DTS:CreationName=""
+      DTS:DTSID="{B12ABC97-C2BC-1EA5-6650-23CBDE02194C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUnknownMember">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsHeldForRetry]"
+      DTS:CreationName=""
+      DTS:DTSID="{4C5008B9-FE60-504C-01E3-A0D80C465028}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsHeldForRetry">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BusinessDateFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{8B0B5880-1FE9-75A4-5AA0-CE7D1D857DED}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BusinessDateFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BusinessDateTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{6CAB5928-6282-4675-655A-2B842C35ED3C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BusinessDateTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ReversalRowsWritten]"
+      DTS:CreationName=""
+      DTS:DTSID="{DFCC0CA5-824B-3DE5-8AC9-758EF2353F2A}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ReversalRowsWritten">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RestatedRows]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3560846-55D9-90EF-B49E-4A8527B79C59}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RestatedRows">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Batch Variables"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{647AE7A9-EE4E-0DAF-FBD6-04CEA9DB74E4}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Batch Variables"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::BusinessDateFrom] = (DT_WSTR, 10)(DT_DBDATE)@[User::WatermarkFrom]" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Check Correction Volume"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{A66A21D1-D0C1-F3E4-B7D8-3948FCECC97B}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Check Correction Volume"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="SELECT COUNT_BIG(*) AS PendingCorrections FROM work.FactRekeyQueue WHERE AppliedAt IS NULL;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::RowsRead" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Clear Correction Work Table"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{64BFE454-70BB-C645-269F-4CEE227234AB}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Clear Correction Work Table"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="TRUNCATE TABLE [work].[SaleLineEnriched];"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Classify Corrections"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{A83D31CD-3424-22EF-0737-658D8AD7FBAD}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Classify Corrections"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Classify Corrections\work FactRekeyQueue" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="work FactRekeyQueue" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT q.CorrectionQueueId, q.TargetFactName, q.TargetFactKey, q.CorrectionTypeCode, q.BusinessKey, q.CorrectedAmount, q.CorrectedDimensionKey, q.RaisedByCode, q.RaisedAt FROM work.FactRekeyQueue AS q WHERE q.AppliedAt IS NULL ORDER BY q.RaisedAt;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Classify Corrections\work FactRekeyQueue.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].Columns[CorrectionQueueId]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].ExternalColumns[CorrectionQueueId]" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].Columns[CorrectionQueueId]" name="CorrectionQueueId" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].Columns[TargetFactName]" dataType="wstr" length="40" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].ExternalColumns[TargetFactName]" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].Columns[TargetFactName]" name="TargetFactName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].Columns[TargetFactKey]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].ExternalColumns[TargetFactKey]" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].Columns[TargetFactKey]" name="TargetFactKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].Columns[CorrectionTypeCode]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].ExternalColumns[CorrectionTypeCode]" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].Columns[CorrectionTypeCode]" name="CorrectionTypeCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].Columns[BusinessKey]" dataType="wstr" length="40" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].ExternalColumns[BusinessKey]" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].Columns[BusinessKey]" name="BusinessKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].Columns[CorrectedAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].ExternalColumns[CorrectedAmount]" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].Columns[CorrectedAmount]" name="CorrectedAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].Columns[CorrectedDimensionKey]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].ExternalColumns[CorrectedDimensionKey]" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].Columns[CorrectedDimensionKey]" name="CorrectedDimensionKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].Columns[RaisedByCode]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].ExternalColumns[RaisedByCode]" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].Columns[RaisedByCode]" name="RaisedByCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].Columns[RaisedAt]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].ExternalColumns[RaisedAt]" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].Columns[RaisedAt]" name="RaisedAt" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].ExternalColumns[CorrectionQueueId]" dataType="i8" name="CorrectionQueueId" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].ExternalColumns[TargetFactName]" dataType="wstr" length="40" name="TargetFactName" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].ExternalColumns[TargetFactKey]" dataType="i8" name="TargetFactKey" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].ExternalColumns[CorrectionTypeCode]" dataType="wstr" length="12" name="CorrectionTypeCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].ExternalColumns[BusinessKey]" dataType="wstr" length="40" name="BusinessKey" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].ExternalColumns[CorrectedAmount]" dataType="numeric" precision="18" scale="2" name="CorrectedAmount" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].ExternalColumns[CorrectedDimensionKey]" dataType="i4" name="CorrectedDimensionKey" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].ExternalColumns[RaisedByCode]" dataType="wstr" length="12" name="RaisedByCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output].ExternalColumns[RaisedAt]" dataType="dbTimeStamp" name="RaisedAt" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[CorrectionQueueId]" dataType="i8" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[CorrectionQueueId]" name="CorrectionQueueId" />
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[TargetFactName]" dataType="wstr" length="40" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[TargetFactName]" name="TargetFactName" />
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[TargetFactKey]" dataType="i8" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[TargetFactKey]" name="TargetFactKey" />
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[CorrectionTypeCode]" dataType="wstr" length="12" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[CorrectionTypeCode]" name="CorrectionTypeCode" />
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[BusinessKey]" dataType="wstr" length="40" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[BusinessKey]" name="BusinessKey" />
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[CorrectedAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[CorrectedAmount]" name="CorrectedAmount" />
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[CorrectedDimensionKey]" dataType="i4" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[CorrectedDimensionKey]" name="CorrectedDimensionKey" />
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[RaisedByCode]" dataType="wstr" length="12" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[RaisedByCode]" name="RaisedByCode" />
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[RaisedAt]" dataType="dbTimeStamp" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[RaisedAt]" name="RaisedAt" />
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Classify Corrections\Derive Correction Attributes" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Correction Attributes" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Classify Corrections\Derive Correction Attributes.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Classify Corrections\Derive Correction Attributes.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Classify Corrections\Derive Correction Attributes.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Classify Corrections\Derive Correction Attributes.Outputs[Derived Column Output].Columns[CorrectionAgeDays]" dataType="i4" lineageId="Package\Classify Corrections\Derive Correction Attributes.Outputs[Derived Column Output].Columns[CorrectionAgeDays]" name="CorrectionAgeDays">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">DATEDIFF("Day", RaisedAt, GETDATE())</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">DATEDIFF("Day", RaisedAt, GETDATE())</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Classify Corrections\Derive Correction Attributes.Outputs[Derived Column Output].Columns[CorrectionStyleCode]" dataType="wstr" length="12" lineageId="Package\Classify Corrections\Derive Correction Attributes.Outputs[Derived Column Output].Columns[CorrectionStyleCode]" name="CorrectionStyleCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">TargetFactName == "Fact.Sale" ? "REVERSAL" : "RESTATEMENT"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">TargetFactName == "Fact.Sale" ? "REVERSAL" : "RESTATEMENT"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Classify Corrections\Derive Correction Attributes.Outputs[Derived Column Output].Columns[SignedCorrectionAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Classify Corrections\Derive Correction Attributes.Outputs[Derived Column Output].Columns[SignedCorrectionAmount]" name="SignedCorrectionAmount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">CorrectionTypeCode == "DECREASE" ? CorrectedAmount * -1 : CorrectedAmount</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">CorrectionTypeCode == "DECREASE" ? CorrectedAmount * -1 : CorrectedAmount</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Classify Corrections\Derive Correction Attributes.Outputs[Derived Column Output].Columns[AccountingPeriodCode]" dataType="wstr" length="7" lineageId="Package\Classify Corrections\Derive Correction Attributes.Outputs[Derived Column Output].Columns[AccountingPeriodCode]" name="AccountingPeriodCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[$Package::CorrectionPeriodCode]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[$Package::CorrectionPeriodCode]</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Classify Corrections\Derive Correction Attributes.Outputs[Derived Column Output].Columns[LineageKey]" dataType="i8" lineageId="Package\Classify Corrections\Derive Correction Attributes.Outputs[Derived Column Output].Columns[LineageKey]" name="LineageKey">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Classify Corrections\Route Corrections" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Route Corrections" version="1">
+            <inputs>
+              <input refId="Package\Classify Corrections\Route Corrections.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Classify Corrections\Route Corrections.Outputs[Sale Reversals]" exclusionGroup="1" name="Sale Reversals" synchronousInputId="Package\Classify Corrections\Route Corrections.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">TargetFactName == "Fact.Sale"</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">TargetFactName == "Fact.Sale"</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Classify Corrections\Route Corrections.Outputs[Order Restatements]" exclusionGroup="1" name="Order Restatements" synchronousInputId="Package\Classify Corrections\Route Corrections.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">TargetFactName == "Fact.Order"</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">TargetFactName == "Fact.Order"</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Classify Corrections\Route Corrections.Outputs[Payment Restatements]" exclusionGroup="1" name="Payment Restatements" synchronousInputId="Package\Classify Corrections\Route Corrections.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">TargetFactName == "Fact.Payment"</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">TargetFactName == "Fact.Payment"</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">2</property>
+                </properties>
+              </output>
+              <output refId="Package\Classify Corrections\Route Corrections.Outputs[Unroutable Corrections]" exclusionGroup="1" isDefaultOut="true" name="Unroutable Corrections" synchronousInputId="Package\Classify Corrections\Route Corrections.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Classify Corrections\Stage Sale Reversals" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Stage Sale Reversals" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[SaleLineEnriched]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Classify Corrections\Stage Sale Reversals.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].Columns[CorrectionQueueId]" cachedDataType="i8" cachedName="CorrectionQueueId" externalMetadataColumnId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionQueueId]" name="CorrectionQueueId" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].Columns[TargetFactName]" cachedDataType="wstr" cachedLength="40" cachedName="TargetFactName" externalMetadataColumnId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactName]" name="TargetFactName" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].Columns[TargetFactKey]" cachedDataType="i8" cachedName="TargetFactKey" externalMetadataColumnId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactKey]" name="TargetFactKey" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].Columns[CorrectionTypeCode]" cachedDataType="wstr" cachedLength="12" cachedName="CorrectionTypeCode" externalMetadataColumnId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionTypeCode]" name="CorrectionTypeCode" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].Columns[BusinessKey]" cachedDataType="wstr" cachedLength="40" cachedName="BusinessKey" externalMetadataColumnId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" name="BusinessKey" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].Columns[CorrectedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CorrectedAmount" externalMetadataColumnId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedAmount]" name="CorrectedAmount" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].Columns[CorrectedDimensionKey]" cachedDataType="i4" cachedName="CorrectedDimensionKey" externalMetadataColumnId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedDimensionKey]" name="CorrectedDimensionKey" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].Columns[RaisedByCode]" cachedDataType="wstr" cachedLength="12" cachedName="RaisedByCode" externalMetadataColumnId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[RaisedByCode]" name="RaisedByCode" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].Columns[RaisedAt]" cachedDataType="dbTimeStamp" cachedName="RaisedAt" externalMetadataColumnId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[RaisedAt]" name="RaisedAt" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].Columns[CorrectionAgeDays]" cachedDataType="i4" cachedName="CorrectionAgeDays" externalMetadataColumnId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionAgeDays]" name="CorrectionAgeDays" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].Columns[CorrectionStyleCode]" cachedDataType="wstr" cachedLength="12" cachedName="CorrectionStyleCode" externalMetadataColumnId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionStyleCode]" name="CorrectionStyleCode" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].Columns[SignedCorrectionAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SignedCorrectionAmount" externalMetadataColumnId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[SignedCorrectionAmount]" name="SignedCorrectionAmount" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionQueueId]" dataType="i8" name="CorrectionQueueId" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactName]" dataType="wstr" length="40" name="TargetFactName" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactKey]" dataType="i8" name="TargetFactKey" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionTypeCode]" dataType="wstr" length="12" name="CorrectionTypeCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" dataType="wstr" length="40" name="BusinessKey" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedAmount]" dataType="numeric" precision="18" scale="2" name="CorrectedAmount" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedDimensionKey]" dataType="i4" name="CorrectedDimensionKey" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[RaisedByCode]" dataType="wstr" length="12" name="RaisedByCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[RaisedAt]" dataType="dbTimeStamp" name="RaisedAt" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionAgeDays]" dataType="i4" name="CorrectionAgeDays" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionStyleCode]" dataType="wstr" length="12" name="CorrectionStyleCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[SignedCorrectionAmount]" dataType="numeric" precision="18" scale="2" name="SignedCorrectionAmount" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Classify Corrections\Stage Sale Reversals.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Classify Corrections\Stage Order Restatements" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Stage Order Restatements" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[OrderLineEnriched]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Classify Corrections\Stage Order Restatements.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].Columns[CorrectionQueueId]" cachedDataType="i8" cachedName="CorrectionQueueId" externalMetadataColumnId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionQueueId]" name="CorrectionQueueId" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].Columns[TargetFactName]" cachedDataType="wstr" cachedLength="40" cachedName="TargetFactName" externalMetadataColumnId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactName]" name="TargetFactName" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].Columns[TargetFactKey]" cachedDataType="i8" cachedName="TargetFactKey" externalMetadataColumnId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactKey]" name="TargetFactKey" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].Columns[CorrectionTypeCode]" cachedDataType="wstr" cachedLength="12" cachedName="CorrectionTypeCode" externalMetadataColumnId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionTypeCode]" name="CorrectionTypeCode" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].Columns[BusinessKey]" cachedDataType="wstr" cachedLength="40" cachedName="BusinessKey" externalMetadataColumnId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" name="BusinessKey" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].Columns[CorrectedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CorrectedAmount" externalMetadataColumnId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedAmount]" name="CorrectedAmount" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].Columns[CorrectedDimensionKey]" cachedDataType="i4" cachedName="CorrectedDimensionKey" externalMetadataColumnId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedDimensionKey]" name="CorrectedDimensionKey" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].Columns[RaisedByCode]" cachedDataType="wstr" cachedLength="12" cachedName="RaisedByCode" externalMetadataColumnId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[RaisedByCode]" name="RaisedByCode" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].Columns[RaisedAt]" cachedDataType="dbTimeStamp" cachedName="RaisedAt" externalMetadataColumnId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[RaisedAt]" name="RaisedAt" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].Columns[CorrectionAgeDays]" cachedDataType="i4" cachedName="CorrectionAgeDays" externalMetadataColumnId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionAgeDays]" name="CorrectionAgeDays" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].Columns[CorrectionStyleCode]" cachedDataType="wstr" cachedLength="12" cachedName="CorrectionStyleCode" externalMetadataColumnId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionStyleCode]" name="CorrectionStyleCode" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].Columns[SignedCorrectionAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SignedCorrectionAmount" externalMetadataColumnId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[SignedCorrectionAmount]" name="SignedCorrectionAmount" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionQueueId]" dataType="i8" name="CorrectionQueueId" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactName]" dataType="wstr" length="40" name="TargetFactName" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactKey]" dataType="i8" name="TargetFactKey" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionTypeCode]" dataType="wstr" length="12" name="CorrectionTypeCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" dataType="wstr" length="40" name="BusinessKey" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedAmount]" dataType="numeric" precision="18" scale="2" name="CorrectedAmount" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedDimensionKey]" dataType="i4" name="CorrectedDimensionKey" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[RaisedByCode]" dataType="wstr" length="12" name="RaisedByCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[RaisedAt]" dataType="dbTimeStamp" name="RaisedAt" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionAgeDays]" dataType="i4" name="CorrectionAgeDays" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionStyleCode]" dataType="wstr" length="12" name="CorrectionStyleCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[SignedCorrectionAmount]" dataType="numeric" precision="18" scale="2" name="SignedCorrectionAmount" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Classify Corrections\Stage Order Restatements.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Classify Corrections\Stage Payment Restatements" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Stage Payment Restatements" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[work].[PaymentMatched]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Classify Corrections\Stage Payment Restatements.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].Columns[CorrectionQueueId]" cachedDataType="i8" cachedName="CorrectionQueueId" externalMetadataColumnId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionQueueId]" name="CorrectionQueueId" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].Columns[TargetFactName]" cachedDataType="wstr" cachedLength="40" cachedName="TargetFactName" externalMetadataColumnId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactName]" name="TargetFactName" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].Columns[TargetFactKey]" cachedDataType="i8" cachedName="TargetFactKey" externalMetadataColumnId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactKey]" name="TargetFactKey" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].Columns[CorrectionTypeCode]" cachedDataType="wstr" cachedLength="12" cachedName="CorrectionTypeCode" externalMetadataColumnId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionTypeCode]" name="CorrectionTypeCode" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].Columns[BusinessKey]" cachedDataType="wstr" cachedLength="40" cachedName="BusinessKey" externalMetadataColumnId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" name="BusinessKey" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].Columns[CorrectedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CorrectedAmount" externalMetadataColumnId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedAmount]" name="CorrectedAmount" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].Columns[CorrectedDimensionKey]" cachedDataType="i4" cachedName="CorrectedDimensionKey" externalMetadataColumnId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedDimensionKey]" name="CorrectedDimensionKey" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].Columns[RaisedByCode]" cachedDataType="wstr" cachedLength="12" cachedName="RaisedByCode" externalMetadataColumnId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[RaisedByCode]" name="RaisedByCode" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].Columns[RaisedAt]" cachedDataType="dbTimeStamp" cachedName="RaisedAt" externalMetadataColumnId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[RaisedAt]" name="RaisedAt" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].Columns[CorrectionAgeDays]" cachedDataType="i4" cachedName="CorrectionAgeDays" externalMetadataColumnId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionAgeDays]" name="CorrectionAgeDays" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].Columns[CorrectionStyleCode]" cachedDataType="wstr" cachedLength="12" cachedName="CorrectionStyleCode" externalMetadataColumnId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionStyleCode]" name="CorrectionStyleCode" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].Columns[SignedCorrectionAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SignedCorrectionAmount" externalMetadataColumnId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[SignedCorrectionAmount]" name="SignedCorrectionAmount" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionQueueId]" dataType="i8" name="CorrectionQueueId" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactName]" dataType="wstr" length="40" name="TargetFactName" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactKey]" dataType="i8" name="TargetFactKey" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionTypeCode]" dataType="wstr" length="12" name="CorrectionTypeCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" dataType="wstr" length="40" name="BusinessKey" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedAmount]" dataType="numeric" precision="18" scale="2" name="CorrectedAmount" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedDimensionKey]" dataType="i4" name="CorrectedDimensionKey" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[RaisedByCode]" dataType="wstr" length="12" name="RaisedByCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[RaisedAt]" dataType="dbTimeStamp" name="RaisedAt" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionAgeDays]" dataType="i4" name="CorrectionAgeDays" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionStyleCode]" dataType="wstr" length="12" name="CorrectionStyleCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[SignedCorrectionAmount]" dataType="numeric" precision="18" scale="2" name="SignedCorrectionAmount" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Classify Corrections\Stage Payment Restatements.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Classify Corrections\Reject Unroutable Corrections" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Unroutable Corrections" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Classify Corrections\Reject Unroutable Corrections.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].Columns[CorrectionQueueId]" cachedDataType="i8" cachedName="CorrectionQueueId" externalMetadataColumnId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionQueueId]" name="CorrectionQueueId" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].Columns[TargetFactName]" cachedDataType="wstr" cachedLength="40" cachedName="TargetFactName" externalMetadataColumnId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactName]" name="TargetFactName" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].Columns[TargetFactKey]" cachedDataType="i8" cachedName="TargetFactKey" externalMetadataColumnId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactKey]" name="TargetFactKey" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].Columns[CorrectionTypeCode]" cachedDataType="wstr" cachedLength="12" cachedName="CorrectionTypeCode" externalMetadataColumnId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionTypeCode]" name="CorrectionTypeCode" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].Columns[BusinessKey]" cachedDataType="wstr" cachedLength="40" cachedName="BusinessKey" externalMetadataColumnId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" name="BusinessKey" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].Columns[CorrectedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CorrectedAmount" externalMetadataColumnId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedAmount]" name="CorrectedAmount" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].Columns[CorrectedDimensionKey]" cachedDataType="i4" cachedName="CorrectedDimensionKey" externalMetadataColumnId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedDimensionKey]" name="CorrectedDimensionKey" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].Columns[RaisedByCode]" cachedDataType="wstr" cachedLength="12" cachedName="RaisedByCode" externalMetadataColumnId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[RaisedByCode]" name="RaisedByCode" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].Columns[RaisedAt]" cachedDataType="dbTimeStamp" cachedName="RaisedAt" externalMetadataColumnId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[RaisedAt]" name="RaisedAt" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].Columns[CorrectionAgeDays]" cachedDataType="i4" cachedName="CorrectionAgeDays" externalMetadataColumnId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionAgeDays]" name="CorrectionAgeDays" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].Columns[CorrectionStyleCode]" cachedDataType="wstr" cachedLength="12" cachedName="CorrectionStyleCode" externalMetadataColumnId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionStyleCode]" name="CorrectionStyleCode" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].Columns[SignedCorrectionAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SignedCorrectionAmount" externalMetadataColumnId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[SignedCorrectionAmount]" name="SignedCorrectionAmount" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionQueueId]" dataType="i8" name="CorrectionQueueId" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactName]" dataType="wstr" length="40" name="TargetFactName" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactKey]" dataType="i8" name="TargetFactKey" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionTypeCode]" dataType="wstr" length="12" name="CorrectionTypeCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" dataType="wstr" length="40" name="BusinessKey" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedAmount]" dataType="numeric" precision="18" scale="2" name="CorrectedAmount" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedDimensionKey]" dataType="i4" name="CorrectedDimensionKey" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[RaisedByCode]" dataType="wstr" length="12" name="RaisedByCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[RaisedAt]" dataType="dbTimeStamp" name="RaisedAt" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionAgeDays]" dataType="i4" name="CorrectionAgeDays" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionStyleCode]" dataType="wstr" length="12" name="CorrectionStyleCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[SignedCorrectionAmount]" dataType="numeric" precision="18" scale="2" name="SignedCorrectionAmount" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Classify Corrections\Reject Unroutable Corrections.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Classify Corrections\Reject Source Errors" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Source Errors" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Classify Corrections\Reject Source Errors.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CorrectionQueueId]" cachedDataType="i8" cachedName="CorrectionQueueId" externalMetadataColumnId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionQueueId]" name="CorrectionQueueId" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[TargetFactName]" cachedDataType="wstr" cachedLength="40" cachedName="TargetFactName" externalMetadataColumnId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactName]" name="TargetFactName" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[TargetFactKey]" cachedDataType="i8" cachedName="TargetFactKey" externalMetadataColumnId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactKey]" name="TargetFactKey" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CorrectionTypeCode]" cachedDataType="wstr" cachedLength="12" cachedName="CorrectionTypeCode" externalMetadataColumnId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionTypeCode]" name="CorrectionTypeCode" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[BusinessKey]" cachedDataType="wstr" cachedLength="40" cachedName="BusinessKey" externalMetadataColumnId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" name="BusinessKey" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CorrectedAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="CorrectedAmount" externalMetadataColumnId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedAmount]" name="CorrectedAmount" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CorrectedDimensionKey]" cachedDataType="i4" cachedName="CorrectedDimensionKey" externalMetadataColumnId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedDimensionKey]" name="CorrectedDimensionKey" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[RaisedByCode]" cachedDataType="wstr" cachedLength="12" cachedName="RaisedByCode" externalMetadataColumnId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RaisedByCode]" name="RaisedByCode" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[RaisedAt]" cachedDataType="dbTimeStamp" cachedName="RaisedAt" externalMetadataColumnId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RaisedAt]" name="RaisedAt" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CorrectionAgeDays]" cachedDataType="i4" cachedName="CorrectionAgeDays" externalMetadataColumnId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionAgeDays]" name="CorrectionAgeDays" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CorrectionStyleCode]" cachedDataType="wstr" cachedLength="12" cachedName="CorrectionStyleCode" externalMetadataColumnId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionStyleCode]" name="CorrectionStyleCode" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[SignedCorrectionAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="SignedCorrectionAmount" externalMetadataColumnId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SignedCorrectionAmount]" name="SignedCorrectionAmount" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionQueueId]" dataType="i8" name="CorrectionQueueId" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactName]" dataType="wstr" length="40" name="TargetFactName" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[TargetFactKey]" dataType="i8" name="TargetFactKey" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionTypeCode]" dataType="wstr" length="12" name="CorrectionTypeCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[BusinessKey]" dataType="wstr" length="40" name="BusinessKey" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedAmount]" dataType="numeric" precision="18" scale="2" name="CorrectedAmount" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CorrectedDimensionKey]" dataType="i4" name="CorrectedDimensionKey" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RaisedByCode]" dataType="wstr" length="12" name="RaisedByCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RaisedAt]" dataType="dbTimeStamp" name="RaisedAt" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionAgeDays]" dataType="i4" name="CorrectionAgeDays" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CorrectionStyleCode]" dataType="wstr" length="12" name="CorrectionStyleCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SignedCorrectionAmount]" dataType="numeric" precision="18" scale="2" name="SignedCorrectionAmount" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Classify Corrections\Reject Source Errors.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Classify Corrections.Paths[OLE DB Source Output]" endId="Package\Classify Corrections\Derive Correction Attributes.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Classify Corrections.Paths[Derived Column Output 1]" endId="Package\Classify Corrections\Route Corrections.Inputs[Conditional Split Input]" name="Derived Column Output 1" startId="Package\Classify Corrections\Derive Correction Attributes.Outputs[Derived Column Output]" />
+          <path refId="Package\Classify Corrections.Paths[Sale Reversals 2]" endId="Package\Classify Corrections\Stage Sale Reversals.Inputs[OLE DB Destination Input]" name="Sale Reversals 2" startId="Package\Classify Corrections\Route Corrections.Outputs[Sale Reversals]" />
+          <path refId="Package\Classify Corrections.Paths[Order Restatements 3]" endId="Package\Classify Corrections\Stage Order Restatements.Inputs[OLE DB Destination Input]" name="Order Restatements 3" startId="Package\Classify Corrections\Route Corrections.Outputs[Order Restatements]" />
+          <path refId="Package\Classify Corrections.Paths[Payment Restatements 4]" endId="Package\Classify Corrections\Stage Payment Restatements.Inputs[OLE DB Destination Input]" name="Payment Restatements 4" startId="Package\Classify Corrections\Route Corrections.Outputs[Payment Restatements]" />
+          <path refId="Package\Classify Corrections.Paths[Unroutable Corrections 5]" endId="Package\Classify Corrections\Reject Unroutable Corrections.Inputs[OLE DB Destination Input]" name="Unroutable Corrections 5" startId="Package\Classify Corrections\Route Corrections.Outputs[Unroutable Corrections]" />
+          <path refId="Package\Classify Corrections.Paths[OLE DB Source Error Output 6]" endId="Package\Classify Corrections\Reject Source Errors.Inputs[OLE DB Destination Input]" name="OLE DB Source Error Output 6" startId="Package\Classify Corrections\work FactRekeyQueue.Outputs[OLE DB Source Error Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Apply Corrections"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Reversal rows first, then in-place restatements"
+      DTS:DTSID="{F6DF9A16-6F4C-4B79-F8DD-F7EAC9E06F8A}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Apply Corrections">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package\Apply Corrections\Write Sale Reversal And Replacement Rows"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{FDC1D4A5-D4EB-1109-DA25-D9AF37E9D9C8}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Write Sale Reversal And Replacement Rows"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+            SQLTask:SqlStatementSource="INSERT INTO [Fact].[Sale]     ([Invoice Number], [Invoice Line Number], [Customer Key], [Stock Item Key],      [Invoice Date Key], [Net Amount], [Tax Amount], [Margin Amount],      [Is Reversal], [Reverses Sale Key], [Lineage Key]) SELECT s.[Invoice Number], s.[Invoice Line Number], s.[Customer Key], s.[Stock Item Key],        s.[Invoice Date Key], s.[Net Amount] * -1, s.[Tax Amount] * -1,        s.[Margin Amount] * -1, 1, s.[Sale Key], ? FROM [Fact].[Sale] AS s INNER JOIN work.SaleLineEnriched AS c ON c.TargetFactKey = s.[Sale Key] WHERE s.[Is Reversal] = 0;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Apply Corrections\Restate Order Rows In Place"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{C16DE04A-7DD8-925B-D5C4-28A46627AFC2}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Restate Order Rows In Place"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+            SQLTask:SqlStatementSource="UPDATE f SET f.[Ordered Net Amount] = c.CorrectedAmount,     f.[Customer Key] = COALESCE(NULLIF(c.CorrectedDimensionKey, 0), f.[Customer Key]),     f.[Is Restated] = 1, f.[Restated By Lineage Key] = ? FROM [Fact].[Order] AS f INNER JOIN work.OrderLineEnriched AS c ON c.TargetFactKey = f.[Order Key];"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package\Apply Corrections\Restate Payment Rows In Place"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{0F45933B-5549-3DDD-94CF-813DD9EB45E9}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Restate Payment Rows In Place"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+            SQLTask:SqlStatementSource="UPDATE f SET f.[Payment Amount] = c.CorrectedAmount,     f.[Unapplied Amount] = c.CorrectedAmount - f.[Allocated Amount],     f.[Is Restated] = 1, f.[Restated By Lineage Key] = ? FROM [Fact].[Payment] AS f INNER JOIN work.PaymentMatched AS c ON c.TargetFactKey = f.[Payment Key];"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="False"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Apply Corrections.PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{58F2BD6A-D9A9-5706-067F-6711C45666DE}"
+          DTS:From="Package\Apply Corrections\Write Sale Reversal And Replacement Rows"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:To="Package\Apply Corrections\Restate Order Rows In Place" />
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\Apply Corrections.PrecedenceConstraints[Constraint 1]"
+          DTS:CreationName=""
+          DTS:DTSID="{74B12111-68BE-5F74-993E-065FE46743D4}"
+          DTS:From="Package\Apply Corrections\Restate Order Rows In Place"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint 1"
+          DTS:To="Package\Apply Corrections\Restate Payment Rows In Place" />
+      </DTS:PrecedenceConstraints>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Post Correction Audit Trail"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{A225EFCE-2BE5-93CF-7C14-9E1A6B989DFE}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Post Correction Audit Trail"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="EXEC Integration.ApplyFactCorrections @CorrectionPeriodCode = ?, @MaxCorrections = ?, @LineageKey = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::CorrectionPeriodCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::MaxCorrectionsPerRun" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Close Applied Corrections"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{19EE2341-C4B3-FF5C-9920-40818C7E917F}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Close Applied Corrections"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="UPDATE work.FactRekeyQueue SET AppliedAt = GETDATE(), AppliedByExecutionId = ? WHERE AppliedAt IS NULL;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Rejected Records"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F451B37A-2258-F381-3E92-62232E0A51C1}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Rejected Records"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @ObjectName = N'work.FactRekeyQueue', @RejectReason = N'Routed by the package reject path', @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Fact.Sale', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Batch Variables"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Check Correction Volume" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Check Correction Volume"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Clear Correction Work Table" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Clear Correction Work Table"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Classify Corrections" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Classify Corrections"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Apply Corrections" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Apply Corrections"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Post Correction Audit Trail" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Post Correction Audit Trail"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Close Applied Corrections" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Close Applied Corrections"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Log Rejected Records" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 8]"
+      DTS:CreationName=""
+      DTS:DTSID="{71A76C5F-1A20-5771-2776-7EF96FD96B90}"
+      DTS:From="Package\Log Rejected Records"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 8"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 9]"
+      DTS:CreationName=""
+      DTS:DTSID="{11D92538-705E-DF70-FE3B-5738B6CA45B1}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 9"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{19DD5252-91C0-5DEE-7B30-5B0F4E630677}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

@@ -1,0 +1,859 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{A9FA1896-0C04-CAC5-A890-1FEA290BBF2C}"
+  DTS:Description="SCD Type 2 load of Dimension.Customer Segment. Segment membership is recalculated from RFM scores every run, so the package versions the segment definition and records the migration of customers between segments."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="DIM_Load_CustomerSegment"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{93C73B65-2C39-9197-441D-9F32AAEC32A8}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{46DB3E2A-D38A-31FB-C447-8F406F29E16C}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{70F2CEAA-1990-421B-A6FA-CF0B3FA7DEC1}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{462B5E36-1216-DCA3-3719-E465E627890B}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{59A299A5-46CB-2C15-C120-81846744A08A}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">SQLSTG</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ScoringModelVersion]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="Scoring model release the segment boundaries came from."
+      DTS:DTSID="{86362438-93E9-AA3B-EF73-2B0010C9C008}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ScoringModelVersion"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">RFM-2019.3</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{D8F344B0-1F91-CF75-7DA1-27443AEAFE00}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{5AF664D0-5067-F041-EEE6-5414A17ABDDE}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{223719BB-ED62-5CB8-20DE-33F688203045}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{32E20002-F1D9-83B4-BA7A-0B52B10E931A}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{1F500293-E806-B886-00AA-948036D5D020}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{BCF0AFF9-148C-1ECD-84DE-E97A61772DA7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{2F9B1298-B6F8-3043-58AE-6D48AE68624D}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{481019DC-29C1-6554-F5E4-957C467AECC7}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInferred]"
+      DTS:CreationName=""
+      DTS:DTSID="{1023BCEA-E9D2-3011-BD68-D88D48853008}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInferred">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsClosedOut]"
+      DTS:CreationName=""
+      DTS:DTSID="{408AD780-E65D-AB9D-11C1-97930FFCA7BD}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsClosedOut">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::SourceHashMismatch]"
+      DTS:CreationName=""
+      DTS:DTSID="{6C2C9C30-8A81-C362-C6D7-D83B9619E8FE}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="SourceHashMismatch">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::SegmentMigrations]"
+      DTS:CreationName=""
+      DTS:DTSID="{445F2411-FDFF-C2E9-D8C3-0441DD2682EC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="SegmentMigrations">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Batch Variables"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{647AE7A9-EE4E-0DAF-FBD6-04CEA9DB74E4}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Batch Variables"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::WatermarkTo] = (DT_WSTR, 30)(DT_DBTIMESTAMP) GETDATE()" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Load Customer Segment Versions"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{F7B37FEC-B198-492C-917B-0ABFB03A1B76}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Load Customer Segment Versions"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Load Customer Segment Versions\stg CustomerSegment" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="stg CustomerSegment" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT cs.SegmentCode, cs.SegmentName, cs.RecencyScoreFloor, cs.FrequencyScoreFloor, cs.MonetaryValueFloor, cs.RegionCode, cs.ChurnRiskBand, cs.SourceRowHash FROM stg.CustomerSegment AS cs ORDER BY cs.RegionCode, cs.SegmentCode;</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Customer Segment Versions\stg CustomerSegment.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].Columns[SegmentCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].ExternalColumns[SegmentCode]" lineageId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].Columns[SegmentCode]" name="SegmentCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].Columns[SegmentName]" dataType="wstr" length="60" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].ExternalColumns[SegmentName]" lineageId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].Columns[SegmentName]" name="SegmentName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].Columns[RecencyScoreFloor]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].ExternalColumns[RecencyScoreFloor]" lineageId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].Columns[RecencyScoreFloor]" name="RecencyScoreFloor" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].Columns[FrequencyScoreFloor]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].ExternalColumns[FrequencyScoreFloor]" lineageId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].Columns[FrequencyScoreFloor]" name="FrequencyScoreFloor" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].Columns[MonetaryValueFloor]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].ExternalColumns[MonetaryValueFloor]" lineageId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].Columns[MonetaryValueFloor]" name="MonetaryValueFloor" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].Columns[RegionCode]" dataType="wstr" length="6" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" lineageId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].Columns[RegionCode]" name="RegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].Columns[ChurnRiskBand]" dataType="wstr" length="4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].ExternalColumns[ChurnRiskBand]" lineageId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].Columns[ChurnRiskBand]" name="ChurnRiskBand" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].Columns[SourceRowHash]" dataType="wstr" length="64" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].ExternalColumns[SourceRowHash]" lineageId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].Columns[SourceRowHash]" name="SourceRowHash" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].ExternalColumns[SegmentCode]" dataType="wstr" length="10" name="SegmentCode" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].ExternalColumns[SegmentName]" dataType="wstr" length="60" name="SegmentName" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].ExternalColumns[RecencyScoreFloor]" dataType="i4" name="RecencyScoreFloor" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].ExternalColumns[FrequencyScoreFloor]" dataType="i4" name="FrequencyScoreFloor" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].ExternalColumns[MonetaryValueFloor]" dataType="numeric" precision="18" scale="2" name="MonetaryValueFloor" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].ExternalColumns[ChurnRiskBand]" dataType="wstr" length="4" name="ChurnRiskBand" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output].ExternalColumns[SourceRowHash]" dataType="wstr" length="64" name="SourceRowHash" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[SegmentCode]" dataType="wstr" length="10" lineageId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[SegmentCode]" name="SegmentCode" />
+                  <outputColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[SegmentName]" dataType="wstr" length="60" lineageId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[SegmentName]" name="SegmentName" />
+                  <outputColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[RecencyScoreFloor]" dataType="i4" lineageId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[RecencyScoreFloor]" name="RecencyScoreFloor" />
+                  <outputColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[FrequencyScoreFloor]" dataType="i4" lineageId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[FrequencyScoreFloor]" name="FrequencyScoreFloor" />
+                  <outputColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[MonetaryValueFloor]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[MonetaryValueFloor]" name="MonetaryValueFloor" />
+                  <outputColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[RegionCode]" dataType="wstr" length="6" lineageId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[RegionCode]" name="RegionCode" />
+                  <outputColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[ChurnRiskBand]" dataType="wstr" length="4" lineageId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[ChurnRiskBand]" name="ChurnRiskBand" />
+                  <outputColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[SourceRowHash]" dataType="wstr" length="64" lineageId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[SourceRowHash]" name="SourceRowHash" />
+                  <outputColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Customer Segment Versions\Lookup Current Segment Version" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Current Segment Version" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [Customer Segment Key] AS CustomerSegmentKey, [WWI Segment ID] AS SegmentCode, [Source Row Hash] AS CurrentRowHash, [Row Version] AS CurrentRowVersion FROM [Dimension].[Customer Segment] WHERE [Is Current Row] = 1;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">0</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Customer Segment Versions\Lookup Current Segment Version.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Customer Segment Versions\Lookup Current Segment Version.Inputs[Lookup Input]" errorRowDisposition="RedirectRow" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Customer Segment Versions\Lookup Current Segment Version.Inputs[Lookup Input].Columns[SegmentCode]" cachedName="SegmentCode" name="SegmentCode" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Customer Segment Versions\Lookup Current Segment Version.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Customer Segment Versions\Lookup Current Segment Version.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Customer Segment Versions\Lookup Current Segment Version.Outputs[Lookup Match Output].Columns[CustomerSegmentKey]" dataType="i4" lineageId="Package\Load Customer Segment Versions\Lookup Current Segment Version.Outputs[Lookup Match Output].Columns[CustomerSegmentKey]" name="CustomerSegmentKey" />
+                  <outputColumn refId="Package\Load Customer Segment Versions\Lookup Current Segment Version.Outputs[Lookup Match Output].Columns[CurrentRowHash]" dataType="wstr" length="64" lineageId="Package\Load Customer Segment Versions\Lookup Current Segment Version.Outputs[Lookup Match Output].Columns[CurrentRowHash]" name="CurrentRowHash" />
+                  <outputColumn refId="Package\Load Customer Segment Versions\Lookup Current Segment Version.Outputs[Lookup Match Output].Columns[CurrentRowVersion]" dataType="i4" lineageId="Package\Load Customer Segment Versions\Lookup Current Segment Version.Outputs[Lookup Match Output].Columns[CurrentRowVersion]" name="CurrentRowVersion" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Customer Segment Versions\Lookup Current Segment Version.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Customer Segment Versions\Lookup Current Segment Version.Inputs[Lookup Input]" />
+              <output refId="Package\Load Customer Segment Versions\Lookup Current Segment Version.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Customer Segment Versions\Lookup Current Segment Version.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Customer Segment Versions\Derive Segment Boundaries" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Segment Boundaries" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output].Columns[MonetaryFloorReporting]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output].Columns[MonetaryFloorReporting]" name="MonetaryFloorReporting">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">RegionCode == "EU" ? MonetaryValueFloor * (DT_NUMERIC,18,2)1.08 : RegionCode == "APAC" ? MonetaryValueFloor * (DT_NUMERIC,18,2)0.74 : MonetaryValueFloor</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">RegionCode == "EU" ? MonetaryValueFloor * (DT_NUMERIC,18,2)1.08 : RegionCode == "APAC" ? MonetaryValueFloor * (DT_NUMERIC,18,2)0.74 : MonetaryValueFloor</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output].Columns[SegmentTierCode]" dataType="wstr" length="10" lineageId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output].Columns[SegmentTierCode]" name="SegmentTierCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">RecencyScoreFloor &gt;= 4 &amp;&amp; FrequencyScoreFloor &gt;= 4 ? "PLATINUM" : RecencyScoreFloor &gt;= 3 ? "GOLD" : RecencyScoreFloor &gt;= 2 ? "SILVER" : "BRONZE"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">RecencyScoreFloor &gt;= 4 &amp;&amp; FrequencyScoreFloor &gt;= 4 ? "PLATINUM" : RecencyScoreFloor &gt;= 3 ? "GOLD" : RecencyScoreFloor &gt;= 2 ? "SILVER" : "BRONZE"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output].Columns[ChurnWatchFlag]" dataType="bool" lineageId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output].Columns[ChurnWatchFlag]" name="ChurnWatchFlag">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ChurnRiskBand == "HIGH" || ChurnRiskBand == "CRIT"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ChurnRiskBand == "HIGH" || ChurnRiskBand == "CRIT"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output].Columns[ScoringModelVersion]" dataType="wstr" length="20" lineageId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output].Columns[ScoringModelVersion]" name="ScoringModelVersion">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[$Package::ScoringModelVersion]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[$Package::ScoringModelVersion]</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output].Columns[ValidFrom]" dataType="dbTimeStamp" lineageId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output].Columns[ValidFrom]" name="ValidFrom">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">GETDATE()</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">GETDATE()</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output].Columns[ValidTo]" dataType="dbTimeStamp" lineageId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output].Columns[ValidTo]" name="ValidTo">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_DBTIMESTAMP)"9999-12-31 23:59:59"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_DBTIMESTAMP)"9999-12-31 23:59:59"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output].Columns[IsCurrentRow]" dataType="bool" lineageId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output].Columns[IsCurrentRow]" name="IsCurrentRow">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_BOOL)1</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_BOOL)1</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output].Columns[RowVersion]" dataType="i4" lineageId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output].Columns[RowVersion]" name="RowVersion">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(CurrentRowVersion) ? 1 : CurrentRowVersion + 1</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(CurrentRowVersion) ? 1 : CurrentRowVersion + 1</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output].Columns[LineageKey]" dataType="i8" lineageId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output].Columns[LineageKey]" name="LineageKey">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Customer Segment Versions\Route Segment Change" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Route Segment Change" version="1">
+            <inputs>
+              <input refId="Package\Load Customer Segment Versions\Route Segment Change.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Customer Segment Versions\Route Segment Change.Outputs[New Segment]" exclusionGroup="1" name="New Segment" synchronousInputId="Package\Load Customer Segment Versions\Route Segment Change.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">ISNULL(CustomerSegmentKey)</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">ISNULL(CustomerSegmentKey)</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Load Customer Segment Versions\Route Segment Change.Outputs[Redefined Segment]" exclusionGroup="1" name="Redefined Segment" synchronousInputId="Package\Load Customer Segment Versions\Route Segment Change.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">SourceRowHash != CurrentRowHash</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">SourceRowHash != CurrentRowHash</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Load Customer Segment Versions\Route Segment Change.Outputs[Unchanged]" exclusionGroup="1" isDefaultOut="true" name="Unchanged" synchronousInputId="Package\Load Customer Segment Versions\Route Segment Change.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Customer Segment Versions\Insert New Segment" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert New Segment" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Dimension].[Customer Segment]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Customer Segment Versions\Insert New Segment.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[SegmentCode]" cachedDataType="wstr" cachedLength="10" cachedName="SegmentCode" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[SegmentCode]" name="SegmentCode" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[SegmentName]" cachedDataType="wstr" cachedLength="60" cachedName="SegmentName" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[SegmentName]" name="SegmentName" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[RecencyScoreFloor]" cachedDataType="i4" cachedName="RecencyScoreFloor" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[RecencyScoreFloor]" name="RecencyScoreFloor" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[FrequencyScoreFloor]" cachedDataType="i4" cachedName="FrequencyScoreFloor" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[FrequencyScoreFloor]" name="FrequencyScoreFloor" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[MonetaryValueFloor]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MonetaryValueFloor" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[MonetaryValueFloor]" name="MonetaryValueFloor" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="RegionCode" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[ChurnRiskBand]" cachedDataType="wstr" cachedLength="4" cachedName="ChurnRiskBand" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[ChurnRiskBand]" name="ChurnRiskBand" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[SourceRowHash]" cachedDataType="wstr" cachedLength="64" cachedName="SourceRowHash" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[SourceRowHash]" name="SourceRowHash" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[CustomerSegmentKey]" cachedDataType="i4" cachedName="CustomerSegmentKey" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[CustomerSegmentKey]" name="CustomerSegmentKey" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[CurrentRowHash]" cachedDataType="wstr" cachedLength="64" cachedName="CurrentRowHash" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[CurrentRowHash]" name="CurrentRowHash" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[CurrentRowVersion]" cachedDataType="i4" cachedName="CurrentRowVersion" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[CurrentRowVersion]" name="CurrentRowVersion" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[MonetaryFloorReporting]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MonetaryFloorReporting" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[MonetaryFloorReporting]" name="MonetaryFloorReporting" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[SegmentTierCode]" cachedDataType="wstr" cachedLength="10" cachedName="SegmentTierCode" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[SegmentTierCode]" name="SegmentTierCode" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[ChurnWatchFlag]" cachedDataType="bool" cachedName="ChurnWatchFlag" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[ChurnWatchFlag]" name="ChurnWatchFlag" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[ScoringModelVersion]" cachedDataType="wstr" cachedLength="20" cachedName="ScoringModelVersion" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[ScoringModelVersion]" name="ScoringModelVersion" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[ValidFrom]" cachedDataType="dbTimeStamp" cachedName="ValidFrom" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[ValidFrom]" name="ValidFrom" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[ValidTo]" cachedDataType="dbTimeStamp" cachedName="ValidTo" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[ValidTo]" name="ValidTo" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[IsCurrentRow]" cachedDataType="bool" cachedName="IsCurrentRow" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[IsCurrentRow]" name="IsCurrentRow" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[RowVersion]" cachedDataType="i4" cachedName="RowVersion" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[RowVersion]" name="RowVersion" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[SegmentCode]" dataType="wstr" length="10" name="SegmentCode" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[SegmentName]" dataType="wstr" length="60" name="SegmentName" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[RecencyScoreFloor]" dataType="i4" name="RecencyScoreFloor" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[FrequencyScoreFloor]" dataType="i4" name="FrequencyScoreFloor" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[MonetaryValueFloor]" dataType="numeric" precision="18" scale="2" name="MonetaryValueFloor" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[ChurnRiskBand]" dataType="wstr" length="4" name="ChurnRiskBand" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[SourceRowHash]" dataType="wstr" length="64" name="SourceRowHash" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[CustomerSegmentKey]" dataType="i4" name="CustomerSegmentKey" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[CurrentRowHash]" dataType="wstr" length="64" name="CurrentRowHash" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[CurrentRowVersion]" dataType="i4" name="CurrentRowVersion" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[MonetaryFloorReporting]" dataType="numeric" precision="18" scale="2" name="MonetaryFloorReporting" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[SegmentTierCode]" dataType="wstr" length="10" name="SegmentTierCode" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[ChurnWatchFlag]" dataType="bool" name="ChurnWatchFlag" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[ScoringModelVersion]" dataType="wstr" length="20" name="ScoringModelVersion" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[ValidFrom]" dataType="dbTimeStamp" name="ValidFrom" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[ValidTo]" dataType="dbTimeStamp" name="ValidTo" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[IsCurrentRow]" dataType="bool" name="IsCurrentRow" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[RowVersion]" dataType="i4" name="RowVersion" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Customer Segment Versions\Insert New Segment.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Customer Segment Versions\Insert Redefined Segment" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert Redefined Segment" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Dimension].[Customer Segment]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[SegmentCode]" cachedDataType="wstr" cachedLength="10" cachedName="SegmentCode" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[SegmentCode]" name="SegmentCode" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[SegmentName]" cachedDataType="wstr" cachedLength="60" cachedName="SegmentName" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[SegmentName]" name="SegmentName" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[RecencyScoreFloor]" cachedDataType="i4" cachedName="RecencyScoreFloor" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[RecencyScoreFloor]" name="RecencyScoreFloor" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[FrequencyScoreFloor]" cachedDataType="i4" cachedName="FrequencyScoreFloor" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[FrequencyScoreFloor]" name="FrequencyScoreFloor" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[MonetaryValueFloor]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MonetaryValueFloor" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[MonetaryValueFloor]" name="MonetaryValueFloor" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="RegionCode" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[ChurnRiskBand]" cachedDataType="wstr" cachedLength="4" cachedName="ChurnRiskBand" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[ChurnRiskBand]" name="ChurnRiskBand" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[SourceRowHash]" cachedDataType="wstr" cachedLength="64" cachedName="SourceRowHash" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[SourceRowHash]" name="SourceRowHash" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[CustomerSegmentKey]" cachedDataType="i4" cachedName="CustomerSegmentKey" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[CustomerSegmentKey]" name="CustomerSegmentKey" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[CurrentRowHash]" cachedDataType="wstr" cachedLength="64" cachedName="CurrentRowHash" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[CurrentRowHash]" name="CurrentRowHash" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[CurrentRowVersion]" cachedDataType="i4" cachedName="CurrentRowVersion" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[CurrentRowVersion]" name="CurrentRowVersion" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[MonetaryFloorReporting]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MonetaryFloorReporting" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[MonetaryFloorReporting]" name="MonetaryFloorReporting" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[SegmentTierCode]" cachedDataType="wstr" cachedLength="10" cachedName="SegmentTierCode" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[SegmentTierCode]" name="SegmentTierCode" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[ChurnWatchFlag]" cachedDataType="bool" cachedName="ChurnWatchFlag" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[ChurnWatchFlag]" name="ChurnWatchFlag" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[ScoringModelVersion]" cachedDataType="wstr" cachedLength="20" cachedName="ScoringModelVersion" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[ScoringModelVersion]" name="ScoringModelVersion" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[ValidFrom]" cachedDataType="dbTimeStamp" cachedName="ValidFrom" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[ValidFrom]" name="ValidFrom" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[ValidTo]" cachedDataType="dbTimeStamp" cachedName="ValidTo" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[ValidTo]" name="ValidTo" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[IsCurrentRow]" cachedDataType="bool" cachedName="IsCurrentRow" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[IsCurrentRow]" name="IsCurrentRow" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[RowVersion]" cachedDataType="i4" cachedName="RowVersion" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[RowVersion]" name="RowVersion" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[SegmentCode]" dataType="wstr" length="10" name="SegmentCode" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[SegmentName]" dataType="wstr" length="60" name="SegmentName" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[RecencyScoreFloor]" dataType="i4" name="RecencyScoreFloor" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[FrequencyScoreFloor]" dataType="i4" name="FrequencyScoreFloor" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[MonetaryValueFloor]" dataType="numeric" precision="18" scale="2" name="MonetaryValueFloor" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[ChurnRiskBand]" dataType="wstr" length="4" name="ChurnRiskBand" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[SourceRowHash]" dataType="wstr" length="64" name="SourceRowHash" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[CustomerSegmentKey]" dataType="i4" name="CustomerSegmentKey" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[CurrentRowHash]" dataType="wstr" length="64" name="CurrentRowHash" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[CurrentRowVersion]" dataType="i4" name="CurrentRowVersion" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[MonetaryFloorReporting]" dataType="numeric" precision="18" scale="2" name="MonetaryFloorReporting" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[SegmentTierCode]" dataType="wstr" length="10" name="SegmentTierCode" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[ChurnWatchFlag]" dataType="bool" name="ChurnWatchFlag" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[ScoringModelVersion]" dataType="wstr" length="20" name="ScoringModelVersion" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[ValidFrom]" dataType="dbTimeStamp" name="ValidFrom" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[ValidTo]" dataType="dbTimeStamp" name="ValidTo" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[IsCurrentRow]" dataType="bool" name="IsCurrentRow" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[RowVersion]" dataType="i4" name="RowVersion" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Customer Segment Versions\Insert Redefined Segment.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Customer Segment Versions\Reject Source Errors" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Source Errors" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Customer Segment Versions\Reject Source Errors.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[SegmentCode]" cachedDataType="wstr" cachedLength="10" cachedName="SegmentCode" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SegmentCode]" name="SegmentCode" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[SegmentName]" cachedDataType="wstr" cachedLength="60" cachedName="SegmentName" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SegmentName]" name="SegmentName" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[RecencyScoreFloor]" cachedDataType="i4" cachedName="RecencyScoreFloor" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RecencyScoreFloor]" name="RecencyScoreFloor" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[FrequencyScoreFloor]" cachedDataType="i4" cachedName="FrequencyScoreFloor" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[FrequencyScoreFloor]" name="FrequencyScoreFloor" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[MonetaryValueFloor]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MonetaryValueFloor" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[MonetaryValueFloor]" name="MonetaryValueFloor" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[RegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="RegionCode" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" name="RegionCode" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[ChurnRiskBand]" cachedDataType="wstr" cachedLength="4" cachedName="ChurnRiskBand" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ChurnRiskBand]" name="ChurnRiskBand" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[SourceRowHash]" cachedDataType="wstr" cachedLength="64" cachedName="SourceRowHash" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SourceRowHash]" name="SourceRowHash" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CustomerSegmentKey]" cachedDataType="i4" cachedName="CustomerSegmentKey" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerSegmentKey]" name="CustomerSegmentKey" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CurrentRowHash]" cachedDataType="wstr" cachedLength="64" cachedName="CurrentRowHash" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CurrentRowHash]" name="CurrentRowHash" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CurrentRowVersion]" cachedDataType="i4" cachedName="CurrentRowVersion" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CurrentRowVersion]" name="CurrentRowVersion" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[MonetaryFloorReporting]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="MonetaryFloorReporting" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[MonetaryFloorReporting]" name="MonetaryFloorReporting" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[SegmentTierCode]" cachedDataType="wstr" cachedLength="10" cachedName="SegmentTierCode" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SegmentTierCode]" name="SegmentTierCode" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[ChurnWatchFlag]" cachedDataType="bool" cachedName="ChurnWatchFlag" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ChurnWatchFlag]" name="ChurnWatchFlag" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[ScoringModelVersion]" cachedDataType="wstr" cachedLength="20" cachedName="ScoringModelVersion" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ScoringModelVersion]" name="ScoringModelVersion" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[ValidFrom]" cachedDataType="dbTimeStamp" cachedName="ValidFrom" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ValidFrom]" name="ValidFrom" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[ValidTo]" cachedDataType="dbTimeStamp" cachedName="ValidTo" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ValidTo]" name="ValidTo" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[IsCurrentRow]" cachedDataType="bool" cachedName="IsCurrentRow" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[IsCurrentRow]" name="IsCurrentRow" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[RowVersion]" cachedDataType="i4" cachedName="RowVersion" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RowVersion]" name="RowVersion" />
+                  <inputColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SegmentCode]" dataType="wstr" length="10" name="SegmentCode" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SegmentName]" dataType="wstr" length="60" name="SegmentName" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RecencyScoreFloor]" dataType="i4" name="RecencyScoreFloor" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[FrequencyScoreFloor]" dataType="i4" name="FrequencyScoreFloor" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[MonetaryValueFloor]" dataType="numeric" precision="18" scale="2" name="MonetaryValueFloor" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="6" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ChurnRiskBand]" dataType="wstr" length="4" name="ChurnRiskBand" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SourceRowHash]" dataType="wstr" length="64" name="SourceRowHash" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CustomerSegmentKey]" dataType="i4" name="CustomerSegmentKey" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CurrentRowHash]" dataType="wstr" length="64" name="CurrentRowHash" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CurrentRowVersion]" dataType="i4" name="CurrentRowVersion" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[MonetaryFloorReporting]" dataType="numeric" precision="18" scale="2" name="MonetaryFloorReporting" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SegmentTierCode]" dataType="wstr" length="10" name="SegmentTierCode" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ChurnWatchFlag]" dataType="bool" name="ChurnWatchFlag" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ScoringModelVersion]" dataType="wstr" length="20" name="ScoringModelVersion" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ValidFrom]" dataType="dbTimeStamp" name="ValidFrom" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ValidTo]" dataType="dbTimeStamp" name="ValidTo" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[IsCurrentRow]" dataType="bool" name="IsCurrentRow" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RowVersion]" dataType="i4" name="RowVersion" />
+                  <externalMetadataColumn refId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Customer Segment Versions\Reject Source Errors.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Load Customer Segment Versions.Paths[OLE DB Source Output]" endId="Package\Load Customer Segment Versions\Lookup Current Segment Version.Inputs[Lookup Input]" name="OLE DB Source Output" startId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Load Customer Segment Versions.Paths[Lookup Match Output 1]" endId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Inputs[Derived Column Input]" name="Lookup Match Output 1" startId="Package\Load Customer Segment Versions\Lookup Current Segment Version.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Customer Segment Versions.Paths[Derived Column Output 2]" endId="Package\Load Customer Segment Versions\Route Segment Change.Inputs[Conditional Split Input]" name="Derived Column Output 2" startId="Package\Load Customer Segment Versions\Derive Segment Boundaries.Outputs[Derived Column Output]" />
+          <path refId="Package\Load Customer Segment Versions.Paths[New Segment 3]" endId="Package\Load Customer Segment Versions\Insert New Segment.Inputs[OLE DB Destination Input]" name="New Segment 3" startId="Package\Load Customer Segment Versions\Route Segment Change.Outputs[New Segment]" />
+          <path refId="Package\Load Customer Segment Versions.Paths[Redefined Segment 4]" endId="Package\Load Customer Segment Versions\Insert Redefined Segment.Inputs[OLE DB Destination Input]" name="Redefined Segment 4" startId="Package\Load Customer Segment Versions\Route Segment Change.Outputs[Redefined Segment]" />
+          <path refId="Package\Load Customer Segment Versions.Paths[OLE DB Source Error Output 5]" endId="Package\Load Customer Segment Versions\Reject Source Errors.Inputs[OLE DB Destination Input]" name="OLE DB Source Error Output 5" startId="Package\Load Customer Segment Versions\stg CustomerSegment.Outputs[OLE DB Source Error Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Close Out Superseded Versions"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{334DAD99-E57C-0E3E-D022-77BA1F89D377}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Close Out Superseded Versions"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="UPDATE prior SET prior.[Valid To] = DATEADD(SECOND, -1, current_row.[Valid From]), prior.[Is Current Row] = 0 FROM [Dimension].[Customer Segment] AS prior INNER JOIN [Dimension].[Customer Segment] AS current_row     ON current_row.[WWI Segment ID] = prior.[WWI Segment ID]    AND current_row.[Row Version] = prior.[Row Version] + 1 WHERE prior.[Is Current Row] = 1;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Reassign Customers To Segments"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{744B83A6-4DB4-C620-5210-5F071260EC40}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Reassign Customers To Segments"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="EXEC Integration.MigrateStagedCustomerSegmentData @ScoringModelVersion = ?, @LineageKey = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::ScoringModelVersion" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Dimension.Customer Segment', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Batch Variables"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Load Customer Segment Versions" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Load Customer Segment Versions"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Close Out Superseded Versions" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Close Out Superseded Versions"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Reassign Customers To Segments" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Reassign Customers To Segments"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{D4D5A6A4-2F0C-0B9E-896B-26516D0E0738}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

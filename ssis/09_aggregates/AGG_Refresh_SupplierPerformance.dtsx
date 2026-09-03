@@ -1,0 +1,931 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{CA37EA00-F385-69FE-821A-CB5118EC3BF0}"
+  DTS:Description="Rebuilds Aggregate.Supplier Performance for the period from purchase receipts and supplier payments: on-time-in-full, price variance, quality rejections and days-payable-outstanding per supplier."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="AGG_Refresh_SupplierPerformance"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{09D9DCA3-FB52-1A43-0DE2-359C469DCFFD}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{30D74B40-3359-59CA-369C-CB92E5B126C1}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{1ED62E64-6763-18D4-6A69-AF1165A6C9EC}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{DE0B471D-213A-C7BD-AF9F-C30D92DB3319}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{F9A61EB6-F9F4-0155-0380-9E8D520A7045}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">WWIDW</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::AccountingPeriodCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="Accounting period (yyyy-MM) to rebuild."
+      DTS:DTSID="{23BAF6B1-B3C9-A163-2AF4-923E73368760}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="AccountingPeriodCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">1900-01</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::RebuildPriorPeriods]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Additional closed periods to rebuild behind the current one."
+      DTS:DTSID="{41B88E4F-BAAA-B614-8E0E-EA2A102E7D5A}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="RebuildPriorPeriods"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{785BAE54-F6B2-AB14-92A4-E2F9B69F5493}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{24319AEA-C4EC-46CF-DE71-9CA7871F4CB8}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{30FFF42D-8663-4C67-BB6D-08DDA4F6979C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{E5AB73FE-127A-1C42-636C-C5C1B4B45939}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{FD49892C-F80A-2794-82DC-01CEB50C5DC4}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{A0235505-AD2F-28E0-F1D9-48003C46DFBD}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{3CE33F64-7CAD-A44E-7D8E-2E6E000DA055}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{CCF24452-36FC-BB76-C378-8681822CCFB8}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsAggregated]"
+      DTS:CreationName=""
+      DTS:DTSID="{B59883A6-AC7A-CDFD-5C36-688BA8CD6F5E}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsAggregated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsDeletedForWindow]"
+      DTS:CreationName=""
+      DTS:DTSID="{20A37B1E-F552-D2C5-E5D9-D6F4999D0A46}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsDeletedForWindow">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ReconciliationVariance]"
+      DTS:CreationName=""
+      DTS:DTSID="{057F6A63-D579-B214-BD5E-ACCF59E9303C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ReconciliationVariance">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::SuppliersScored]"
+      DTS:CreationName=""
+      DTS:DTSID="{4561614C-6E5F-1917-DCDC-01E034CE295B}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="SuppliersScored">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Refresh Period"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{CEDE3108-A491-846A-837A-212A109B618C}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Refresh Period"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression='@[User::WatermarkFrom] = (DT_DBTIMESTAMP)(@[$Package::AccountingPeriodCode] + "-01")' />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Delete Period Rows"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{60DDFD9C-8211-98A4-513C-4FAE965C0620}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Delete Period Rows"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="DELETE FROM [Aggregate].[Supplier Performance] WHERE [Accounting Period Code] &gt;= FORMAT(DATEADD(MONTH, -1 * ?, CAST(? + '-01' AS date)), 'yyyy-MM') AND [Accounting Period Code] &lt;= ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::RebuildPriorPeriods" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::AccountingPeriodCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::AccountingPeriodCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Rebuild Supplier Performance"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{F0CD3CC3-9D93-79B1-6349-DFB22C2A3544}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Rebuild Supplier Performance"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Rebuild Supplier Performance\Supplier Performance Source" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="Supplier Performance Source" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">3600</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT f.[Supplier Key] AS SupplierKey, d.[Accounting Period Code] AS AccountingPeriodCode, s.[Region Code] AS SupplierRegionCode, COUNT_BIG(*) AS ReceiptCount, SUM(CASE WHEN f.[Order To Receipt Days] &lt;= s.[Agreed Lead Time Days] THEN 1 ELSE 0 END)     AS OnTimeReceiptCount, SUM(CASE WHEN f.[Quantity Variance] &gt;= 0 THEN 1 ELSE 0 END) AS InFullReceiptCount, SUM(f.[Received Cost Amount]) AS ReceivedCostAmount, SUM(f.[Price Variance Amount]) AS PriceVarianceAmount, ISNULL(SUM(q.[Rejection Count]), 0) AS QualityRejectionCount, ISNULL(AVG(CAST(sp.[Days To Settle] AS decimal(9,2))), 0) AS AverageDaysToPay FROM [Fact].[Purchase Receipt] AS f INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Goods Received Date Key] INNER JOIN [Dimension].[Supplier] AS s ON s.[Supplier Key] = f.[Supplier Key] LEFT JOIN [Aggregate].[Supplier Quality Position] AS q        ON q.[Supplier Key] = f.[Supplier Key]       AND q.[Accounting Period Code] = d.[Accounting Period Code] LEFT JOIN [Fact].[Supplier Payment] AS sp ON sp.[Supplier Key] = f.[Supplier Key] WHERE d.[Accounting Period Code] = ? AND s.[Is Current Row] = 1 GROUP BY f.[Supplier Key], d.[Accounting Period Code], s.[Region Code];</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[SupplierKey]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[SupplierKey]" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[SupplierKey]" name="SupplierKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[AccountingPeriodCode]" dataType="wstr" length="7" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[AccountingPeriodCode]" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[AccountingPeriodCode]" name="AccountingPeriodCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[SupplierRegionCode]" dataType="wstr" length="6" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[SupplierRegionCode]" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[SupplierRegionCode]" name="SupplierRegionCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[ReceiptCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[ReceiptCount]" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[ReceiptCount]" name="ReceiptCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[OnTimeReceiptCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[OnTimeReceiptCount]" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[OnTimeReceiptCount]" name="OnTimeReceiptCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[InFullReceiptCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[InFullReceiptCount]" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[InFullReceiptCount]" name="InFullReceiptCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[ReceivedCostAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[ReceivedCostAmount]" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[ReceivedCostAmount]" name="ReceivedCostAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[PriceVarianceAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[PriceVarianceAmount]" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[PriceVarianceAmount]" name="PriceVarianceAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[QualityRejectionCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[QualityRejectionCount]" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[QualityRejectionCount]" name="QualityRejectionCount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[AverageDaysToPay]" dataType="numeric" precision="9" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[AverageDaysToPay]" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].Columns[AverageDaysToPay]" name="AverageDaysToPay" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[SupplierKey]" dataType="i4" name="SupplierKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[SupplierRegionCode]" dataType="wstr" length="6" name="SupplierRegionCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[ReceiptCount]" dataType="i4" name="ReceiptCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[OnTimeReceiptCount]" dataType="i4" name="OnTimeReceiptCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[InFullReceiptCount]" dataType="i4" name="InFullReceiptCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[ReceivedCostAmount]" dataType="numeric" precision="18" scale="2" name="ReceivedCostAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[PriceVarianceAmount]" dataType="numeric" precision="18" scale="2" name="PriceVarianceAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[QualityRejectionCount]" dataType="i4" name="QualityRejectionCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output].ExternalColumns[AverageDaysToPay]" dataType="numeric" precision="9" scale="2" name="AverageDaysToPay" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[SupplierKey]" dataType="i4" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[SupplierKey]" name="SupplierKey" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[AccountingPeriodCode]" dataType="wstr" length="7" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[SupplierRegionCode]" dataType="wstr" length="6" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[SupplierRegionCode]" name="SupplierRegionCode" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[ReceiptCount]" dataType="i4" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[ReceiptCount]" name="ReceiptCount" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[OnTimeReceiptCount]" dataType="i4" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[OnTimeReceiptCount]" name="OnTimeReceiptCount" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[InFullReceiptCount]" dataType="i4" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[InFullReceiptCount]" name="InFullReceiptCount" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[ReceivedCostAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[ReceivedCostAmount]" name="ReceivedCostAmount" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[PriceVarianceAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[PriceVarianceAmount]" name="PriceVarianceAmount" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[QualityRejectionCount]" dataType="i4" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[QualityRejectionCount]" name="QualityRejectionCount" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[AverageDaysToPay]" dataType="numeric" precision="9" scale="2" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[AverageDaysToPay]" name="AverageDaysToPay" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Supplier Performance\Derive Supplier Scores" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Supplier Scores" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Rebuild Supplier Performance\Derive Supplier Scores.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Supplier Performance\Derive Supplier Scores.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Rebuild Supplier Performance\Derive Supplier Scores.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Derive Supplier Scores.Outputs[Derived Column Output].Columns[OnTimePercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\Rebuild Supplier Performance\Derive Supplier Scores.Outputs[Derived Column Output].Columns[OnTimePercent]" name="OnTimePercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ReceiptCount == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)OnTimeReceiptCount / (DT_NUMERIC,9,4)ReceiptCount) * 100</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ReceiptCount == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)OnTimeReceiptCount / (DT_NUMERIC,9,4)ReceiptCount) * 100</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Derive Supplier Scores.Outputs[Derived Column Output].Columns[OtifPercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\Rebuild Supplier Performance\Derive Supplier Scores.Outputs[Derived Column Output].Columns[OtifPercent]" name="OtifPercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ReceiptCount == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)InFullReceiptCount / (DT_NUMERIC,9,4)ReceiptCount) * 100</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ReceiptCount == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)InFullReceiptCount / (DT_NUMERIC,9,4)ReceiptCount) * 100</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Derive Supplier Scores.Outputs[Derived Column Output].Columns[PriceVariancePercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\Rebuild Supplier Performance\Derive Supplier Scores.Outputs[Derived Column Output].Columns[PriceVariancePercent]" name="PriceVariancePercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ReceivedCostAmount == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)PriceVarianceAmount / (DT_NUMERIC,9,4)ReceivedCostAmount) * 100</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ReceivedCostAmount == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)PriceVarianceAmount / (DT_NUMERIC,9,4)ReceivedCostAmount) * 100</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Derive Supplier Scores.Outputs[Derived Column Output].Columns[QualityRejectionPercent]" dataType="numeric" precision="9" scale="4" lineageId="Package\Rebuild Supplier Performance\Derive Supplier Scores.Outputs[Derived Column Output].Columns[QualityRejectionPercent]" name="QualityRejectionPercent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ReceiptCount == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)QualityRejectionCount / (DT_NUMERIC,9,4)ReceiptCount) * 100</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ReceiptCount == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)QualityRejectionCount / (DT_NUMERIC,9,4)ReceiptCount) * 100</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Derive Supplier Scores.Outputs[Derived Column Output].Columns[SupplierRatingCode]" dataType="wstr" length="12" lineageId="Package\Rebuild Supplier Performance\Derive Supplier Scores.Outputs[Derived Column Output].Columns[SupplierRatingCode]" name="SupplierRatingCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ReceiptCount == 0 ? "NODATA" : (((DT_NUMERIC,9,4)OnTimeReceiptCount / (DT_NUMERIC,9,4)ReceiptCount) * 100) &gt;= 95 &amp;&amp; QualityRejectionCount == 0 ? "PREFERRED" : (((DT_NUMERIC,9,4)OnTimeReceiptCount / (DT_NUMERIC,9,4)ReceiptCount) * 100) &gt;= 85 ? "APPROVED" : "REVIEW"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ReceiptCount == 0 ? "NODATA" : (((DT_NUMERIC,9,4)OnTimeReceiptCount / (DT_NUMERIC,9,4)ReceiptCount) * 100) &gt;= 95 &amp;&amp; QualityRejectionCount == 0 ? "PREFERRED" : (((DT_NUMERIC,9,4)OnTimeReceiptCount / (DT_NUMERIC,9,4)ReceiptCount) * 100) &gt;= 85 ? "APPROVED" : "REVIEW"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Rebuild Supplier Performance\Derive Supplier Scores.Outputs[Derived Column Output].Columns[RefreshedByLineageKey]" dataType="i8" lineageId="Package\Rebuild Supplier Performance\Derive Supplier Scores.Outputs[Derived Column Output].Columns[RefreshedByLineageKey]" name="RefreshedByLineageKey">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Supplier Performance\Route Supplier Rows" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Route Supplier Rows" version="1">
+            <inputs>
+              <input refId="Package\Rebuild Supplier Performance\Route Supplier Rows.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Supplier Performance\Route Supplier Rows.Outputs[No Receipts]" exclusionGroup="1" name="No Receipts" synchronousInputId="Package\Rebuild Supplier Performance\Route Supplier Rows.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">ReceiptCount == 0</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">ReceiptCount == 0</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Rebuild Supplier Performance\Route Supplier Rows.Outputs[Under Review]" exclusionGroup="1" name="Under Review" synchronousInputId="Package\Rebuild Supplier Performance\Route Supplier Rows.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">SupplierRatingCode == "REVIEW"</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">SupplierRatingCode == "REVIEW"</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Rebuild Supplier Performance\Route Supplier Rows.Outputs[Standard Rows]" exclusionGroup="1" isDefaultOut="true" name="Standard Rows" synchronousInputId="Package\Rebuild Supplier Performance\Route Supplier Rows.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Supplier Performance\Insert Standard Rows" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert Standard Rows" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Aggregate].[Supplier Performance]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[SupplierKey]" cachedDataType="i4" cachedName="SupplierKey" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[SupplierKey]" name="SupplierKey" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[SupplierRegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="SupplierRegionCode" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[SupplierRegionCode]" name="SupplierRegionCode" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[ReceiptCount]" cachedDataType="i4" cachedName="ReceiptCount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptCount]" name="ReceiptCount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[OnTimeReceiptCount]" cachedDataType="i4" cachedName="OnTimeReceiptCount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[OnTimeReceiptCount]" name="OnTimeReceiptCount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[InFullReceiptCount]" cachedDataType="i4" cachedName="InFullReceiptCount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[InFullReceiptCount]" name="InFullReceiptCount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[ReceivedCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ReceivedCostAmount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedCostAmount]" name="ReceivedCostAmount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[PriceVarianceAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PriceVarianceAmount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[PriceVarianceAmount]" name="PriceVarianceAmount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[QualityRejectionCount]" cachedDataType="i4" cachedName="QualityRejectionCount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[QualityRejectionCount]" name="QualityRejectionCount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[AverageDaysToPay]" cachedDataType="numeric" cachedPrecision="9" cachedScale="2" cachedName="AverageDaysToPay" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[AverageDaysToPay]" name="AverageDaysToPay" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[OnTimePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="OnTimePercent" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[OnTimePercent]" name="OnTimePercent" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[OtifPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="OtifPercent" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[OtifPercent]" name="OtifPercent" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[PriceVariancePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="PriceVariancePercent" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[PriceVariancePercent]" name="PriceVariancePercent" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[QualityRejectionPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="QualityRejectionPercent" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[QualityRejectionPercent]" name="QualityRejectionPercent" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[SupplierRatingCode]" cachedDataType="wstr" cachedLength="12" cachedName="SupplierRatingCode" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[SupplierRatingCode]" name="SupplierRatingCode" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[SupplierKey]" dataType="i4" name="SupplierKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[SupplierRegionCode]" dataType="wstr" length="6" name="SupplierRegionCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptCount]" dataType="i4" name="ReceiptCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[OnTimeReceiptCount]" dataType="i4" name="OnTimeReceiptCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[InFullReceiptCount]" dataType="i4" name="InFullReceiptCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedCostAmount]" dataType="numeric" precision="18" scale="2" name="ReceivedCostAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[PriceVarianceAmount]" dataType="numeric" precision="18" scale="2" name="PriceVarianceAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[QualityRejectionCount]" dataType="i4" name="QualityRejectionCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[AverageDaysToPay]" dataType="numeric" precision="9" scale="2" name="AverageDaysToPay" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[OnTimePercent]" dataType="numeric" precision="9" scale="4" name="OnTimePercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[OtifPercent]" dataType="numeric" precision="9" scale="4" name="OtifPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[PriceVariancePercent]" dataType="numeric" precision="9" scale="4" name="PriceVariancePercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[QualityRejectionPercent]" dataType="numeric" precision="9" scale="4" name="QualityRejectionPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[SupplierRatingCode]" dataType="wstr" length="12" name="SupplierRatingCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Supplier Performance\Insert Standard Rows.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Supplier Performance\Insert Under Review" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert Under Review" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Aggregate].[Supplier Performance]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Supplier Performance\Insert Under Review.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].Columns[SupplierKey]" cachedDataType="i4" cachedName="SupplierKey" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[SupplierKey]" name="SupplierKey" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].Columns[SupplierRegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="SupplierRegionCode" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[SupplierRegionCode]" name="SupplierRegionCode" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].Columns[ReceiptCount]" cachedDataType="i4" cachedName="ReceiptCount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptCount]" name="ReceiptCount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].Columns[OnTimeReceiptCount]" cachedDataType="i4" cachedName="OnTimeReceiptCount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[OnTimeReceiptCount]" name="OnTimeReceiptCount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].Columns[InFullReceiptCount]" cachedDataType="i4" cachedName="InFullReceiptCount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[InFullReceiptCount]" name="InFullReceiptCount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].Columns[ReceivedCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ReceivedCostAmount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedCostAmount]" name="ReceivedCostAmount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].Columns[PriceVarianceAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PriceVarianceAmount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[PriceVarianceAmount]" name="PriceVarianceAmount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].Columns[QualityRejectionCount]" cachedDataType="i4" cachedName="QualityRejectionCount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[QualityRejectionCount]" name="QualityRejectionCount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].Columns[AverageDaysToPay]" cachedDataType="numeric" cachedPrecision="9" cachedScale="2" cachedName="AverageDaysToPay" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[AverageDaysToPay]" name="AverageDaysToPay" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].Columns[OnTimePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="OnTimePercent" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[OnTimePercent]" name="OnTimePercent" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].Columns[OtifPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="OtifPercent" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[OtifPercent]" name="OtifPercent" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].Columns[PriceVariancePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="PriceVariancePercent" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[PriceVariancePercent]" name="PriceVariancePercent" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].Columns[QualityRejectionPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="QualityRejectionPercent" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[QualityRejectionPercent]" name="QualityRejectionPercent" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].Columns[SupplierRatingCode]" cachedDataType="wstr" cachedLength="12" cachedName="SupplierRatingCode" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[SupplierRatingCode]" name="SupplierRatingCode" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[SupplierKey]" dataType="i4" name="SupplierKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[SupplierRegionCode]" dataType="wstr" length="6" name="SupplierRegionCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptCount]" dataType="i4" name="ReceiptCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[OnTimeReceiptCount]" dataType="i4" name="OnTimeReceiptCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[InFullReceiptCount]" dataType="i4" name="InFullReceiptCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedCostAmount]" dataType="numeric" precision="18" scale="2" name="ReceivedCostAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[PriceVarianceAmount]" dataType="numeric" precision="18" scale="2" name="PriceVarianceAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[QualityRejectionCount]" dataType="i4" name="QualityRejectionCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[AverageDaysToPay]" dataType="numeric" precision="9" scale="2" name="AverageDaysToPay" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[OnTimePercent]" dataType="numeric" precision="9" scale="4" name="OnTimePercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[OtifPercent]" dataType="numeric" precision="9" scale="4" name="OtifPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[PriceVariancePercent]" dataType="numeric" precision="9" scale="4" name="PriceVariancePercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[QualityRejectionPercent]" dataType="numeric" precision="9" scale="4" name="QualityRejectionPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[SupplierRatingCode]" dataType="wstr" length="12" name="SupplierRatingCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Supplier Performance\Insert Under Review.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Supplier Performance\Reject No Receipts" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject No Receipts" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Supplier Performance\Reject No Receipts.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].Columns[SupplierKey]" cachedDataType="i4" cachedName="SupplierKey" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[SupplierKey]" name="SupplierKey" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].Columns[SupplierRegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="SupplierRegionCode" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[SupplierRegionCode]" name="SupplierRegionCode" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].Columns[ReceiptCount]" cachedDataType="i4" cachedName="ReceiptCount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptCount]" name="ReceiptCount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].Columns[OnTimeReceiptCount]" cachedDataType="i4" cachedName="OnTimeReceiptCount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[OnTimeReceiptCount]" name="OnTimeReceiptCount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].Columns[InFullReceiptCount]" cachedDataType="i4" cachedName="InFullReceiptCount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[InFullReceiptCount]" name="InFullReceiptCount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].Columns[ReceivedCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ReceivedCostAmount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedCostAmount]" name="ReceivedCostAmount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].Columns[PriceVarianceAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PriceVarianceAmount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[PriceVarianceAmount]" name="PriceVarianceAmount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].Columns[QualityRejectionCount]" cachedDataType="i4" cachedName="QualityRejectionCount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[QualityRejectionCount]" name="QualityRejectionCount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].Columns[AverageDaysToPay]" cachedDataType="numeric" cachedPrecision="9" cachedScale="2" cachedName="AverageDaysToPay" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[AverageDaysToPay]" name="AverageDaysToPay" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].Columns[OnTimePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="OnTimePercent" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[OnTimePercent]" name="OnTimePercent" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].Columns[OtifPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="OtifPercent" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[OtifPercent]" name="OtifPercent" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].Columns[PriceVariancePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="PriceVariancePercent" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[PriceVariancePercent]" name="PriceVariancePercent" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].Columns[QualityRejectionPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="QualityRejectionPercent" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[QualityRejectionPercent]" name="QualityRejectionPercent" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].Columns[SupplierRatingCode]" cachedDataType="wstr" cachedLength="12" cachedName="SupplierRatingCode" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[SupplierRatingCode]" name="SupplierRatingCode" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[SupplierKey]" dataType="i4" name="SupplierKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[SupplierRegionCode]" dataType="wstr" length="6" name="SupplierRegionCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptCount]" dataType="i4" name="ReceiptCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[OnTimeReceiptCount]" dataType="i4" name="OnTimeReceiptCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[InFullReceiptCount]" dataType="i4" name="InFullReceiptCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedCostAmount]" dataType="numeric" precision="18" scale="2" name="ReceivedCostAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[PriceVarianceAmount]" dataType="numeric" precision="18" scale="2" name="PriceVarianceAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[QualityRejectionCount]" dataType="i4" name="QualityRejectionCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[AverageDaysToPay]" dataType="numeric" precision="9" scale="2" name="AverageDaysToPay" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[OnTimePercent]" dataType="numeric" precision="9" scale="4" name="OnTimePercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[OtifPercent]" dataType="numeric" precision="9" scale="4" name="OtifPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[PriceVariancePercent]" dataType="numeric" precision="9" scale="4" name="PriceVariancePercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[QualityRejectionPercent]" dataType="numeric" precision="9" scale="4" name="QualityRejectionPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[SupplierRatingCode]" dataType="wstr" length="12" name="SupplierRatingCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Supplier Performance\Reject No Receipts.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Rebuild Supplier Performance\Reject Source Errors" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Source Errors" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Rebuild Supplier Performance\Reject Source Errors.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[SupplierKey]" cachedDataType="i4" cachedName="SupplierKey" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SupplierKey]" name="SupplierKey" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[AccountingPeriodCode]" cachedDataType="wstr" cachedLength="7" cachedName="AccountingPeriodCode" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" name="AccountingPeriodCode" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[SupplierRegionCode]" cachedDataType="wstr" cachedLength="6" cachedName="SupplierRegionCode" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SupplierRegionCode]" name="SupplierRegionCode" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[ReceiptCount]" cachedDataType="i4" cachedName="ReceiptCount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptCount]" name="ReceiptCount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OnTimeReceiptCount]" cachedDataType="i4" cachedName="OnTimeReceiptCount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OnTimeReceiptCount]" name="OnTimeReceiptCount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[InFullReceiptCount]" cachedDataType="i4" cachedName="InFullReceiptCount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[InFullReceiptCount]" name="InFullReceiptCount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[ReceivedCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="ReceivedCostAmount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedCostAmount]" name="ReceivedCostAmount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PriceVarianceAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="PriceVarianceAmount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PriceVarianceAmount]" name="PriceVarianceAmount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[QualityRejectionCount]" cachedDataType="i4" cachedName="QualityRejectionCount" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QualityRejectionCount]" name="QualityRejectionCount" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[AverageDaysToPay]" cachedDataType="numeric" cachedPrecision="9" cachedScale="2" cachedName="AverageDaysToPay" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AverageDaysToPay]" name="AverageDaysToPay" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OnTimePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="OnTimePercent" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OnTimePercent]" name="OnTimePercent" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[OtifPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="OtifPercent" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OtifPercent]" name="OtifPercent" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PriceVariancePercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="PriceVariancePercent" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PriceVariancePercent]" name="PriceVariancePercent" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[QualityRejectionPercent]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="QualityRejectionPercent" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QualityRejectionPercent]" name="QualityRejectionPercent" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[SupplierRatingCode]" cachedDataType="wstr" cachedLength="12" cachedName="SupplierRatingCode" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SupplierRatingCode]" name="SupplierRatingCode" />
+                  <inputColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[RefreshedByLineageKey]" cachedDataType="i8" cachedName="RefreshedByLineageKey" externalMetadataColumnId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" name="RefreshedByLineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SupplierKey]" dataType="i4" name="SupplierKey" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AccountingPeriodCode]" dataType="wstr" length="7" name="AccountingPeriodCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SupplierRegionCode]" dataType="wstr" length="6" name="SupplierRegionCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ReceiptCount]" dataType="i4" name="ReceiptCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OnTimeReceiptCount]" dataType="i4" name="OnTimeReceiptCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[InFullReceiptCount]" dataType="i4" name="InFullReceiptCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ReceivedCostAmount]" dataType="numeric" precision="18" scale="2" name="ReceivedCostAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PriceVarianceAmount]" dataType="numeric" precision="18" scale="2" name="PriceVarianceAmount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QualityRejectionCount]" dataType="i4" name="QualityRejectionCount" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[AverageDaysToPay]" dataType="numeric" precision="9" scale="2" name="AverageDaysToPay" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OnTimePercent]" dataType="numeric" precision="9" scale="4" name="OnTimePercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[OtifPercent]" dataType="numeric" precision="9" scale="4" name="OtifPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PriceVariancePercent]" dataType="numeric" precision="9" scale="4" name="PriceVariancePercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QualityRejectionPercent]" dataType="numeric" precision="9" scale="4" name="QualityRejectionPercent" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[SupplierRatingCode]" dataType="wstr" length="12" name="SupplierRatingCode" />
+                  <externalMetadataColumn refId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[RefreshedByLineageKey]" dataType="i8" name="RefreshedByLineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Rebuild Supplier Performance\Reject Source Errors.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Rebuild Supplier Performance.Paths[OLE DB Source Output]" endId="Package\Rebuild Supplier Performance\Derive Supplier Scores.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Rebuild Supplier Performance.Paths[Derived Column Output 1]" endId="Package\Rebuild Supplier Performance\Route Supplier Rows.Inputs[Conditional Split Input]" name="Derived Column Output 1" startId="Package\Rebuild Supplier Performance\Derive Supplier Scores.Outputs[Derived Column Output]" />
+          <path refId="Package\Rebuild Supplier Performance.Paths[Standard Rows 2]" endId="Package\Rebuild Supplier Performance\Insert Standard Rows.Inputs[OLE DB Destination Input]" name="Standard Rows 2" startId="Package\Rebuild Supplier Performance\Route Supplier Rows.Outputs[Standard Rows]" />
+          <path refId="Package\Rebuild Supplier Performance.Paths[Under Review 3]" endId="Package\Rebuild Supplier Performance\Insert Under Review.Inputs[OLE DB Destination Input]" name="Under Review 3" startId="Package\Rebuild Supplier Performance\Route Supplier Rows.Outputs[Under Review]" />
+          <path refId="Package\Rebuild Supplier Performance.Paths[No Receipts 4]" endId="Package\Rebuild Supplier Performance\Reject No Receipts.Inputs[OLE DB Destination Input]" name="No Receipts 4" startId="Package\Rebuild Supplier Performance\Route Supplier Rows.Outputs[No Receipts]" />
+          <path refId="Package\Rebuild Supplier Performance.Paths[OLE DB Source Error Output 5]" endId="Package\Rebuild Supplier Performance\Reject Source Errors.Inputs[OLE DB Destination Input]" name="OLE DB Source Error Output 5" startId="Package\Rebuild Supplier Performance\Supplier Performance Source.Outputs[OLE DB Source Error Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Refresh Supplier Scorecards"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{2BFA328D-D653-CED2-DBD0-290548431CE3}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Refresh Supplier Scorecards"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="EXEC Integration.RefreshAggregateSupplierPerformance @AccountingPeriodCode = ?, @LineageKey = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::AccountingPeriodCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Assert Reconciliation"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{939B1D95-86D0-C868-493E-496DC475519B}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Assert Reconciliation"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_AssertRowCountReconciliation @PackageExecutionId = ?, @ObjectName = N'Aggregate.Supplier Performance', @ExpectedRowCount = ?, @ActualRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Rejected Records"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F451B37A-2258-F381-3E92-62232E0A51C1}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Rejected Records"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @ObjectName = N'Aggregate.Supplier Performance', @RejectReason = N'Aggregate row failed the summary quality gate', @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Aggregate.Supplier Performance', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Refresh Period"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Delete Period Rows" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Delete Period Rows"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Rebuild Supplier Performance" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Rebuild Supplier Performance"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Refresh Supplier Scorecards" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Refresh Supplier Scorecards"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Assert Reconciliation" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Assert Reconciliation"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Rejected Records" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Log Rejected Records"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 7]"
+      DTS:CreationName=""
+      DTS:DTSID="{C63F95BF-8C6D-EC28-5C0F-41525AC4E203}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 7"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{389D3C6F-2482-79A3-A25E-CC402F41E73B}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

@@ -1,0 +1,993 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="6/14/2011 9:02:41 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="WWIBUILD01"
+  DTS:CreatorName="WWI\etl_build"
+  DTS:DTSID="{2708689E-7BE7-1CF3-B29F-F0559DE5403B}"
+  DTS:Description="Periodic-snapshot load of Fact.Stock Holding. The snapshot for the requested position date is deleted and rebuilt, so a failed overnight run can simply be repeated without producing duplicate positions."
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="13.0.4001.0"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="FACT_Load_StockHolding"
+  DTS:PackageType="5"
+  DTS:ProtectionLevel="0"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{B9BA6F10-1C49-F9FE-71EE-2F1DCD185C06}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:refId="Package.LogProviders[SSIS log provider for SQL Server]"
+      DTS:ConfigString="WWI_Staging_DB"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:DTSID="{2E13CBA4-3682-5F5C-CB79-74DA23C60AB9}"
+      DTS:ObjectName="SSIS log provider for SQL Server" />
+  </DTS:LogProviders>
+  <DTS:PackageParameters>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::BatchId]"
+      DTS:CreationName=""
+      DTS:DataType="9"
+      DTS:Description="Batch identifier supplied by the master package."
+      DTS:DTSID="{96210A01-BA03-1B5F-D9DB-37656224E90C}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="BatchId"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">0</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::ReloadFullHistory]"
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:Description="When True the package ignores the stored watermark and reloads all history."
+      DTS:DTSID="{F545DD77-ABB6-D976-4740-6320A164536E}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="ReloadFullHistory"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">False</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SourceSystemCode]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="etl.SourceSystem code used for watermark and audit lookups."
+      DTS:DTSID="{1332809F-EA90-009A-D9B7-D6EAA4A045A5}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SourceSystemCode"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">SQLSTG</DTS:Property>
+    </DTS:PackageParameter>
+    <DTS:PackageParameter
+      DTS:refId="Package.Variables[$Package::SnapshotDate]"
+      DTS:CreationName=""
+      DTS:DataType="18"
+      DTS:Description="Position date to rebuild; the master package passes yesterday's date."
+      DTS:DTSID="{164AB9CF-BCA3-87F6-6A57-6A354CE42198}"
+      DTS:Namespace="Package"
+      DTS:ObjectName="SnapshotDate"
+      DTS:Required="False"
+      DTS:Sensitive="False">
+      <DTS:Property DTS:Name="ParameterValue" xml:space="preserve">1900-01-01</DTS:Property>
+    </DTS:PackageParameter>
+  </DTS:PackageParameters>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_Staging_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+      DTS:ObjectName="WWI_Staging_DB"
+      DTS:ProjectReference="True" />
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[WWI_DW_Destination_DB]"
+      DTS:ConnectionString=""
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+      DTS:ObjectName="WWI_DW_Destination_DB"
+      DTS:ProjectReference="True" />
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::PackageExecutionId]"
+      DTS:CreationName=""
+      DTS:DTSID="{92982CC8-4BFD-C6D1-14F7-C11EDCF6BE68}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionId">
+      <DTS:VariableValue DTS:DataType="20" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRead]"
+      DTS:CreationName=""
+      DTS:DTSID="{8DD1A818-0DBF-B9AD-9742-180DBEF298DC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRead">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsInserted]"
+      DTS:CreationName=""
+      DTS:DTSID="{BD5461E6-6E42-3110-6DEC-7A2F3166C407}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsInserted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUpdated]"
+      DTS:CreationName=""
+      DTS:DTSID="{A9363B55-8471-F056-7069-7077C070A266}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUpdated">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsRejected]"
+      DTS:CreationName=""
+      DTS:DTSID="{D7888FB3-4FC8-F977-75B6-1A388E984990}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsRejected">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{B80B6485-1A6C-6C74-00D3-9AF1A5E3E4DD}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::WatermarkTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{BF999D9D-8F47-4C7A-3FCB-B315443ABB21}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="WatermarkTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::ErrorMessage]"
+      DTS:CreationName=""
+      DTS:DTSID="{FAB6BE74-712D-246F-3657-08324002DB2C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorMessage">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve"></DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsUnknownMember]"
+      DTS:CreationName=""
+      DTS:DTSID="{E734C0C5-3B4C-0CE8-039E-B4310711E2FC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsUnknownMember">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::RowsHeldForRetry]"
+      DTS:CreationName=""
+      DTS:DTSID="{F818CBCB-31CF-581C-8A42-4C6234392B39}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="RowsHeldForRetry">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BusinessDateFrom]"
+      DTS:CreationName=""
+      DTS:DTSID="{12814408-47CE-9919-B906-173AED20089C}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BusinessDateFrom">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::BusinessDateTo]"
+      DTS:CreationName=""
+      DTS:DTSID="{40CEDB4F-0AE5-293E-2538-7E425F069794}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="BusinessDateTo">
+      <DTS:VariableValue DTS:DataType="8" xml:space="preserve">1900-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable
+      DTS:refId="Package.Variables[User::SnapshotRowsDeleted]"
+      DTS:CreationName=""
+      DTS:DTSID="{F66741FF-F0A1-F8A8-57C3-FDBFBF96CBE8}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="SnapshotRowsDeleted">
+      <DTS:VariableValue DTS:DataType="3" xml:space="preserve">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Init Snapshot Date"
+      DTS:CreationName="Microsoft.ExpressionTask"
+      DTS:Description="Expression Task"
+      DTS:DTSID="{CDE5B405-9DE7-BB0D-38E5-A1672EEB07D8}"
+      DTS:ExecutableType="Microsoft.ExpressionTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Init Snapshot Date"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <ExpressionTask Expression="@[User::BusinessDateTo] = @[$Package::SnapshotDate]" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Start"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{96FC3B55-0E93-CA83-AF5B-5378451DDAB5}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Start"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageStart @BatchId = ?, @PackageName = ?, @PackageExecutionId = ? OUTPUT;"
+        SQLTask:ResultType="ResultSetType_SingleRow"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="System::PackageName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ResultBinding SQLTask:ResultName="0" SQLTask:DtsVariableName="User::PackageExecutionId" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Delete Existing Snapshot For Date"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{DFD23F4F-407A-32A8-1E47-B338FC9CCD6A}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Delete Existing Snapshot For Date"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="DELETE f FROM [Fact].[Stock Holding] AS f INNER JOIN Dimension.Date AS d ON d.[Date Key] = f.[Position Date Key] WHERE d.[Date] = CAST(? AS date);"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="False"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SnapshotDate" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Load Fact Stock Holding"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{31BBE396-15B3-8C8F-2DBE-37A14F304475}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Load Fact Stock Holding"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <pipeline version="1">
+        <components>
+          <component refId="Package\Load Fact Stock Holding\stg StockHolding" componentClassID="Microsoft.OLEDBSource" contactInfo="OLE DB Source" description="OLE DB Source" name="stg StockHolding" usesDispositions="true" version="7">
+            <properties>
+              <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">2400</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT sh.StockItemBusinessKey, sh.WarehouseCode, sh.PositionDate, sh.QuantityOnHand, sh.QuantityAllocated, sh.QuantityOnOrder, sh.UnitCostAmount, sh.ReorderLevel, sh.TargetStockLevel, sh.LastStocktakeDate FROM stg.StockHolding AS sh WHERE sh.PositionDate = CAST(? AS date);</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Stock Holding\stg StockHolding.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
+            </connections>
+            <outputs>
+              <output refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[StockItemBusinessKey]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[StockItemBusinessKey]" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[StockItemBusinessKey]" name="StockItemBusinessKey" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[WarehouseCode]" dataType="wstr" length="12" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[WarehouseCode]" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[WarehouseCode]" name="WarehouseCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[PositionDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[PositionDate]" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[PositionDate]" name="PositionDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[QuantityOnHand]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[QuantityOnHand]" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[QuantityOnHand]" name="QuantityOnHand" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[QuantityAllocated]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[QuantityAllocated]" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[QuantityAllocated]" name="QuantityAllocated" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[QuantityOnOrder]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[QuantityOnOrder]" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[QuantityOnOrder]" name="QuantityOnOrder" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[UnitCostAmount]" dataType="numeric" precision="18" scale="2" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[UnitCostAmount]" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[UnitCostAmount]" name="UnitCostAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[ReorderLevel]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[ReorderLevel]" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[ReorderLevel]" name="ReorderLevel" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[TargetStockLevel]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[TargetStockLevel]" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[TargetStockLevel]" name="TargetStockLevel" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[LastStocktakeDate]" dataType="dbTimeStamp" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[LastStocktakeDate]" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].Columns[LastStocktakeDate]" name="LastStocktakeDate" truncationRowDisposition="RedirectRow" />
+                </outputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[StockItemBusinessKey]" dataType="i8" name="StockItemBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[WarehouseCode]" dataType="wstr" length="12" name="WarehouseCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[PositionDate]" dataType="dbTimeStamp" name="PositionDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[QuantityOnHand]" dataType="i4" name="QuantityOnHand" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[QuantityAllocated]" dataType="i4" name="QuantityAllocated" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[QuantityOnOrder]" dataType="i4" name="QuantityOnOrder" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[UnitCostAmount]" dataType="numeric" precision="18" scale="2" name="UnitCostAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[ReorderLevel]" dataType="i4" name="ReorderLevel" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[TargetStockLevel]" dataType="i4" name="TargetStockLevel" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output].ExternalColumns[LastStocktakeDate]" dataType="dbTimeStamp" name="LastStocktakeDate" />
+                </externalMetadataColumns>
+              </output>
+              <output refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[StockItemBusinessKey]" dataType="i8" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[StockItemBusinessKey]" name="StockItemBusinessKey" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[WarehouseCode]" dataType="wstr" length="12" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[WarehouseCode]" name="WarehouseCode" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[PositionDate]" dataType="dbTimeStamp" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[PositionDate]" name="PositionDate" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[QuantityOnHand]" dataType="i4" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[QuantityOnHand]" name="QuantityOnHand" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[QuantityAllocated]" dataType="i4" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[QuantityAllocated]" name="QuantityAllocated" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[QuantityOnOrder]" dataType="i4" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[QuantityOnOrder]" name="QuantityOnOrder" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[UnitCostAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[UnitCostAmount]" name="UnitCostAmount" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[ReorderLevel]" dataType="i4" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[ReorderLevel]" name="ReorderLevel" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[TargetStockLevel]" dataType="i4" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[TargetStockLevel]" name="TargetStockLevel" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[LastStocktakeDate]" dataType="dbTimeStamp" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[LastStocktakeDate]" name="LastStocktakeDate" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Stock Holding\Lookup Stock Item Key" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Stock Item Key" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [Stock Item Key] AS StockItemKey, [WWI Stock Item ID] AS StockItemBusinessKey FROM [Dimension].[Stock Item] WHERE [Is Current Row] = 1;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">0</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Stock Holding\Lookup Stock Item Key.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Stock Holding\Lookup Stock Item Key.Inputs[Lookup Input]" errorRowDisposition="RedirectRow" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Stock Holding\Lookup Stock Item Key.Inputs[Lookup Input].Columns[StockItemBusinessKey]" cachedName="StockItemBusinessKey" name="StockItemBusinessKey" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Stock Holding\Lookup Stock Item Key.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Fact Stock Holding\Lookup Stock Item Key.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Stock Holding\Lookup Stock Item Key.Outputs[Lookup Match Output].Columns[StockItemKey]" dataType="i4" lineageId="Package\Load Fact Stock Holding\Lookup Stock Item Key.Outputs[Lookup Match Output].Columns[StockItemKey]" name="StockItemKey" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Fact Stock Holding\Lookup Stock Item Key.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Fact Stock Holding\Lookup Stock Item Key.Inputs[Lookup Input]" />
+              <output refId="Package\Load Fact Stock Holding\Lookup Stock Item Key.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Fact Stock Holding\Lookup Stock Item Key.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Stock Holding\Lookup Position Date Key" componentClassID="Microsoft.Lookup" description="Lookup" name="Lookup Position Date Key" usesDispositions="true" version="5">
+            <properties>
+              <property dataType="System.String" description="The SQL command used to populate the lookup cache." name="SqlCommand">SELECT [Date] AS PositionDate, [Date Key] AS PositionDateKey FROM Dimension.Date;</property>
+              <property dataType="System.Int32" description="Determines the behaviour when a lookup finds no match." name="NoMatchBehavior">1</property>
+              <property dataType="System.Int32" description="Full cache." name="CacheType">0</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Stock Holding\Lookup Position Date Key.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Stock Holding\Lookup Position Date Key.Inputs[Lookup Input]" errorRowDisposition="FailComponent" name="Lookup Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Stock Holding\Lookup Position Date Key.Inputs[Lookup Input].Columns[PositionDate]" cachedName="PositionDate" name="PositionDate" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Stock Holding\Lookup Position Date Key.Outputs[Lookup Match Output]" name="Lookup Match Output" synchronousInputId="Package\Load Fact Stock Holding\Lookup Position Date Key.Inputs[Lookup Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Stock Holding\Lookup Position Date Key.Outputs[Lookup Match Output].Columns[PositionDateKey]" dataType="i4" lineageId="Package\Load Fact Stock Holding\Lookup Position Date Key.Outputs[Lookup Match Output].Columns[PositionDateKey]" name="PositionDateKey" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\Load Fact Stock Holding\Lookup Position Date Key.Outputs[Lookup No Match Output]" name="Lookup No Match Output" synchronousInputId="Package\Load Fact Stock Holding\Lookup Position Date Key.Inputs[Lookup Input]" />
+              <output refId="Package\Load Fact Stock Holding\Lookup Position Date Key.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" synchronousInputId="Package\Load Fact Stock Holding\Lookup Position Date Key.Inputs[Lookup Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Stock Holding\Derive Position Measures" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Derive Position Measures" usesDispositions="true" version="1">
+            <inputs>
+              <input refId="Package\Load Fact Stock Holding\Derive Position Measures.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Stock Holding\Derive Position Measures.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\Load Fact Stock Holding\Derive Position Measures.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\Load Fact Stock Holding\Derive Position Measures.Outputs[Derived Column Output].Columns[StockItemKeyResolved]" dataType="i4" lineageId="Package\Load Fact Stock Holding\Derive Position Measures.Outputs[Derived Column Output].Columns[StockItemKeyResolved]" name="StockItemKeyResolved">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(StockItemKey) ? 0 : StockItemKey</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(StockItemKey) ? 0 : StockItemKey</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Stock Holding\Derive Position Measures.Outputs[Derived Column Output].Columns[QuantityAvailable]" dataType="i4" lineageId="Package\Load Fact Stock Holding\Derive Position Measures.Outputs[Derived Column Output].Columns[QuantityAvailable]" name="QuantityAvailable">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">QuantityOnHand - QuantityAllocated</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">QuantityOnHand - QuantityAllocated</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Stock Holding\Derive Position Measures.Outputs[Derived Column Output].Columns[StockValueAmount]" dataType="numeric" precision="18" scale="2" lineageId="Package\Load Fact Stock Holding\Derive Position Measures.Outputs[Derived Column Output].Columns[StockValueAmount]" name="StockValueAmount">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">(DT_NUMERIC,18,2)QuantityOnHand * UnitCostAmount</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(DT_NUMERIC,18,2)QuantityOnHand * UnitCostAmount</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Stock Holding\Derive Position Measures.Outputs[Derived Column Output].Columns[IsBelowReorderLevel]" dataType="bool" lineageId="Package\Load Fact Stock Holding\Derive Position Measures.Outputs[Derived Column Output].Columns[IsBelowReorderLevel]" name="IsBelowReorderLevel">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">(QuantityOnHand - QuantityAllocated) &lt; ReorderLevel</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">(QuantityOnHand - QuantityAllocated) &lt; ReorderLevel</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Stock Holding\Derive Position Measures.Outputs[Derived Column Output].Columns[CoverRatio]" dataType="numeric" precision="9" scale="4" lineageId="Package\Load Fact Stock Holding\Derive Position Measures.Outputs[Derived Column Output].Columns[CoverRatio]" name="CoverRatio">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">TargetStockLevel == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)QuantityOnHand / (DT_NUMERIC,9,4)TargetStockLevel)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">TargetStockLevel == 0 ? (DT_NUMERIC,9,4)0 : ((DT_NUMERIC,9,4)QuantityOnHand / (DT_NUMERIC,9,4)TargetStockLevel)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Stock Holding\Derive Position Measures.Outputs[Derived Column Output].Columns[DaysSinceStocktake]" dataType="i4" lineageId="Package\Load Fact Stock Holding\Derive Position Measures.Outputs[Derived Column Output].Columns[DaysSinceStocktake]" name="DaysSinceStocktake">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">DATEDIFF("Day", LastStocktakeDate, PositionDate)</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">DATEDIFF("Day", LastStocktakeDate, PositionDate)</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Stock Holding\Derive Position Measures.Outputs[Derived Column Output].Columns[StockStatusCode]" dataType="wstr" length="12" lineageId="Package\Load Fact Stock Holding\Derive Position Measures.Outputs[Derived Column Output].Columns[StockStatusCode]" name="StockStatusCode">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">QuantityOnHand == 0 ? "OUTOFSTOCK" : (QuantityOnHand - QuantityAllocated) &lt; 0 ? "OVERSOLD" : (QuantityOnHand - QuantityAllocated) &lt; ReorderLevel ? "REORDER" : "HEALTHY"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">QuantityOnHand == 0 ? "OUTOFSTOCK" : (QuantityOnHand - QuantityAllocated) &lt; 0 ? "OVERSOLD" : (QuantityOnHand - QuantityAllocated) &lt; ReorderLevel ? "REORDER" : "HEALTHY"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\Load Fact Stock Holding\Derive Position Measures.Outputs[Derived Column Output].Columns[LineageKey]" dataType="i8" lineageId="Package\Load Fact Stock Holding\Derive Position Measures.Outputs[Derived Column Output].Columns[LineageKey]" name="LineageKey">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Stock Holding\Route Positions" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Route Positions" version="1">
+            <inputs>
+              <input refId="Package\Load Fact Stock Holding\Route Positions.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Stock Holding\Route Positions.Outputs[Unknown Stock Item]" exclusionGroup="1" name="Unknown Stock Item" synchronousInputId="Package\Load Fact Stock Holding\Route Positions.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">ISNULL(StockItemKey)</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">ISNULL(StockItemKey)</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
+                </properties>
+              </output>
+              <output refId="Package\Load Fact Stock Holding\Route Positions.Outputs[Oversold Positions]" exclusionGroup="1" name="Oversold Positions" synchronousInputId="Package\Load Fact Stock Holding\Route Positions.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">StockStatusCode == "OVERSOLD"</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">StockStatusCode == "OVERSOLD"</property>
+                  <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
+                </properties>
+              </output>
+              <output refId="Package\Load Fact Stock Holding\Route Positions.Outputs[Normal Positions]" exclusionGroup="1" isDefaultOut="true" name="Normal Positions" synchronousInputId="Package\Load Fact Stock Holding\Route Positions.Inputs[Conditional Split Input]" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Stock Holding\Insert Normal Positions" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert Normal Positions" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Fact].[Stock Holding]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Stock Holding\Insert Normal Positions.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[StockItemBusinessKey]" cachedDataType="i8" cachedName="StockItemBusinessKey" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" name="StockItemBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[WarehouseCode]" cachedDataType="wstr" cachedLength="12" cachedName="WarehouseCode" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseCode]" name="WarehouseCode" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[PositionDate]" cachedDataType="dbTimeStamp" cachedName="PositionDate" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[PositionDate]" name="PositionDate" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[QuantityOnHand]" cachedDataType="i4" cachedName="QuantityOnHand" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnHand]" name="QuantityOnHand" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[QuantityAllocated]" cachedDataType="i4" cachedName="QuantityAllocated" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAllocated]" name="QuantityAllocated" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[QuantityOnOrder]" cachedDataType="i4" cachedName="QuantityOnOrder" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnOrder]" name="QuantityOnOrder" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[UnitCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitCostAmount" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[UnitCostAmount]" name="UnitCostAmount" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[ReorderLevel]" cachedDataType="i4" cachedName="ReorderLevel" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[ReorderLevel]" name="ReorderLevel" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[TargetStockLevel]" cachedDataType="i4" cachedName="TargetStockLevel" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[TargetStockLevel]" name="TargetStockLevel" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[LastStocktakeDate]" cachedDataType="dbTimeStamp" cachedName="LastStocktakeDate" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[LastStocktakeDate]" name="LastStocktakeDate" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[StockItemKey]" cachedDataType="i4" cachedName="StockItemKey" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" name="StockItemKey" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[PositionDateKey]" cachedDataType="i4" cachedName="PositionDateKey" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[PositionDateKey]" name="PositionDateKey" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[StockItemKeyResolved]" cachedDataType="i4" cachedName="StockItemKeyResolved" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" name="StockItemKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[QuantityAvailable]" cachedDataType="i4" cachedName="QuantityAvailable" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAvailable]" name="QuantityAvailable" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[StockValueAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="StockValueAmount" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockValueAmount]" name="StockValueAmount" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[IsBelowReorderLevel]" cachedDataType="bool" cachedName="IsBelowReorderLevel" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[IsBelowReorderLevel]" name="IsBelowReorderLevel" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[CoverRatio]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="CoverRatio" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[CoverRatio]" name="CoverRatio" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[DaysSinceStocktake]" cachedDataType="i4" cachedName="DaysSinceStocktake" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[DaysSinceStocktake]" name="DaysSinceStocktake" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[StockStatusCode]" cachedDataType="wstr" cachedLength="12" cachedName="StockStatusCode" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockStatusCode]" name="StockStatusCode" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" dataType="i8" name="StockItemBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseCode]" dataType="wstr" length="12" name="WarehouseCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[PositionDate]" dataType="dbTimeStamp" name="PositionDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnHand]" dataType="i4" name="QuantityOnHand" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAllocated]" dataType="i4" name="QuantityAllocated" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnOrder]" dataType="i4" name="QuantityOnOrder" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[UnitCostAmount]" dataType="numeric" precision="18" scale="2" name="UnitCostAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[ReorderLevel]" dataType="i4" name="ReorderLevel" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[TargetStockLevel]" dataType="i4" name="TargetStockLevel" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[LastStocktakeDate]" dataType="dbTimeStamp" name="LastStocktakeDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" dataType="i4" name="StockItemKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[PositionDateKey]" dataType="i4" name="PositionDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" dataType="i4" name="StockItemKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAvailable]" dataType="i4" name="QuantityAvailable" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockValueAmount]" dataType="numeric" precision="18" scale="2" name="StockValueAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[IsBelowReorderLevel]" dataType="bool" name="IsBelowReorderLevel" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[CoverRatio]" dataType="numeric" precision="9" scale="4" name="CoverRatio" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[DaysSinceStocktake]" dataType="i4" name="DaysSinceStocktake" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockStatusCode]" dataType="wstr" length="12" name="StockStatusCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Stock Holding\Insert Normal Positions.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Stock Holding\Insert Oversold Positions" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Insert Oversold Positions" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[Fact].[Stock Holding]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Connections[OleDbConnection]" connectionManagerID="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_DW_Destination_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[StockItemBusinessKey]" cachedDataType="i8" cachedName="StockItemBusinessKey" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" name="StockItemBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[WarehouseCode]" cachedDataType="wstr" cachedLength="12" cachedName="WarehouseCode" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseCode]" name="WarehouseCode" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[PositionDate]" cachedDataType="dbTimeStamp" cachedName="PositionDate" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[PositionDate]" name="PositionDate" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[QuantityOnHand]" cachedDataType="i4" cachedName="QuantityOnHand" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnHand]" name="QuantityOnHand" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[QuantityAllocated]" cachedDataType="i4" cachedName="QuantityAllocated" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAllocated]" name="QuantityAllocated" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[QuantityOnOrder]" cachedDataType="i4" cachedName="QuantityOnOrder" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnOrder]" name="QuantityOnOrder" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[UnitCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitCostAmount" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[UnitCostAmount]" name="UnitCostAmount" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[ReorderLevel]" cachedDataType="i4" cachedName="ReorderLevel" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[ReorderLevel]" name="ReorderLevel" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[TargetStockLevel]" cachedDataType="i4" cachedName="TargetStockLevel" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[TargetStockLevel]" name="TargetStockLevel" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[LastStocktakeDate]" cachedDataType="dbTimeStamp" cachedName="LastStocktakeDate" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[LastStocktakeDate]" name="LastStocktakeDate" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[StockItemKey]" cachedDataType="i4" cachedName="StockItemKey" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" name="StockItemKey" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[PositionDateKey]" cachedDataType="i4" cachedName="PositionDateKey" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[PositionDateKey]" name="PositionDateKey" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[StockItemKeyResolved]" cachedDataType="i4" cachedName="StockItemKeyResolved" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" name="StockItemKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[QuantityAvailable]" cachedDataType="i4" cachedName="QuantityAvailable" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAvailable]" name="QuantityAvailable" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[StockValueAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="StockValueAmount" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockValueAmount]" name="StockValueAmount" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[IsBelowReorderLevel]" cachedDataType="bool" cachedName="IsBelowReorderLevel" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[IsBelowReorderLevel]" name="IsBelowReorderLevel" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[CoverRatio]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="CoverRatio" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[CoverRatio]" name="CoverRatio" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[DaysSinceStocktake]" cachedDataType="i4" cachedName="DaysSinceStocktake" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[DaysSinceStocktake]" name="DaysSinceStocktake" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[StockStatusCode]" cachedDataType="wstr" cachedLength="12" cachedName="StockStatusCode" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockStatusCode]" name="StockStatusCode" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" dataType="i8" name="StockItemBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseCode]" dataType="wstr" length="12" name="WarehouseCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[PositionDate]" dataType="dbTimeStamp" name="PositionDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnHand]" dataType="i4" name="QuantityOnHand" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAllocated]" dataType="i4" name="QuantityAllocated" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnOrder]" dataType="i4" name="QuantityOnOrder" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[UnitCostAmount]" dataType="numeric" precision="18" scale="2" name="UnitCostAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[ReorderLevel]" dataType="i4" name="ReorderLevel" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[TargetStockLevel]" dataType="i4" name="TargetStockLevel" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[LastStocktakeDate]" dataType="dbTimeStamp" name="LastStocktakeDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" dataType="i4" name="StockItemKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[PositionDateKey]" dataType="i4" name="PositionDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" dataType="i4" name="StockItemKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAvailable]" dataType="i4" name="QuantityAvailable" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockValueAmount]" dataType="numeric" precision="18" scale="2" name="StockValueAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[IsBelowReorderLevel]" dataType="bool" name="IsBelowReorderLevel" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[CoverRatio]" dataType="numeric" precision="9" scale="4" name="CoverRatio" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[DaysSinceStocktake]" dataType="i4" name="DaysSinceStocktake" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[StockStatusCode]" dataType="wstr" length="12" name="StockStatusCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Stock Holding\Insert Oversold Positions.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Unknown Stock Item" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedLookupFailure]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">10000</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[StockItemBusinessKey]" cachedDataType="i8" cachedName="StockItemBusinessKey" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" name="StockItemBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[WarehouseCode]" cachedDataType="wstr" cachedLength="12" cachedName="WarehouseCode" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseCode]" name="WarehouseCode" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[PositionDate]" cachedDataType="dbTimeStamp" cachedName="PositionDate" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[PositionDate]" name="PositionDate" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[QuantityOnHand]" cachedDataType="i4" cachedName="QuantityOnHand" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnHand]" name="QuantityOnHand" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[QuantityAllocated]" cachedDataType="i4" cachedName="QuantityAllocated" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAllocated]" name="QuantityAllocated" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[QuantityOnOrder]" cachedDataType="i4" cachedName="QuantityOnOrder" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnOrder]" name="QuantityOnOrder" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[UnitCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitCostAmount" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[UnitCostAmount]" name="UnitCostAmount" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[ReorderLevel]" cachedDataType="i4" cachedName="ReorderLevel" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[ReorderLevel]" name="ReorderLevel" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[TargetStockLevel]" cachedDataType="i4" cachedName="TargetStockLevel" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[TargetStockLevel]" name="TargetStockLevel" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[LastStocktakeDate]" cachedDataType="dbTimeStamp" cachedName="LastStocktakeDate" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[LastStocktakeDate]" name="LastStocktakeDate" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[StockItemKey]" cachedDataType="i4" cachedName="StockItemKey" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" name="StockItemKey" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[PositionDateKey]" cachedDataType="i4" cachedName="PositionDateKey" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[PositionDateKey]" name="PositionDateKey" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[StockItemKeyResolved]" cachedDataType="i4" cachedName="StockItemKeyResolved" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" name="StockItemKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[QuantityAvailable]" cachedDataType="i4" cachedName="QuantityAvailable" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAvailable]" name="QuantityAvailable" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[StockValueAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="StockValueAmount" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[StockValueAmount]" name="StockValueAmount" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[IsBelowReorderLevel]" cachedDataType="bool" cachedName="IsBelowReorderLevel" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[IsBelowReorderLevel]" name="IsBelowReorderLevel" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[CoverRatio]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="CoverRatio" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[CoverRatio]" name="CoverRatio" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[DaysSinceStocktake]" cachedDataType="i4" cachedName="DaysSinceStocktake" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[DaysSinceStocktake]" name="DaysSinceStocktake" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[StockStatusCode]" cachedDataType="wstr" cachedLength="12" cachedName="StockStatusCode" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[StockStatusCode]" name="StockStatusCode" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" dataType="i8" name="StockItemBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseCode]" dataType="wstr" length="12" name="WarehouseCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[PositionDate]" dataType="dbTimeStamp" name="PositionDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnHand]" dataType="i4" name="QuantityOnHand" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAllocated]" dataType="i4" name="QuantityAllocated" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnOrder]" dataType="i4" name="QuantityOnOrder" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[UnitCostAmount]" dataType="numeric" precision="18" scale="2" name="UnitCostAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[ReorderLevel]" dataType="i4" name="ReorderLevel" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[TargetStockLevel]" dataType="i4" name="TargetStockLevel" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[LastStocktakeDate]" dataType="dbTimeStamp" name="LastStocktakeDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" dataType="i4" name="StockItemKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[PositionDateKey]" dataType="i4" name="PositionDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" dataType="i4" name="StockItemKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAvailable]" dataType="i4" name="QuantityAvailable" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[StockValueAmount]" dataType="numeric" precision="18" scale="2" name="StockValueAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[IsBelowReorderLevel]" dataType="bool" name="IsBelowReorderLevel" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[CoverRatio]" dataType="numeric" precision="9" scale="4" name="CoverRatio" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[DaysSinceStocktake]" dataType="i4" name="DaysSinceStocktake" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[StockStatusCode]" dataType="wstr" length="12" name="StockStatusCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+          <component refId="Package\Load Fact Stock Holding\Reject Source Errors" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="Reject Source Errors" usesDispositions="true" version="4">
+            <properties>
+              <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
+              <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedConstraintViolation]</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">0</property>
+              <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
+              <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              <property dataType="System.Int32" description="Commit size during data insertion." name="FastLoadMaxInsertCommitSize">0</property>
+              <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
+            </properties>
+            <connections>
+              <connection refId="Package\Load Fact Stock Holding\Reject Source Errors.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+            </connections>
+            <inputs>
+              <input refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+                <inputColumns>
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[StockItemBusinessKey]" cachedDataType="i8" cachedName="StockItemBusinessKey" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" name="StockItemBusinessKey" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[WarehouseCode]" cachedDataType="wstr" cachedLength="12" cachedName="WarehouseCode" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseCode]" name="WarehouseCode" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PositionDate]" cachedDataType="dbTimeStamp" cachedName="PositionDate" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PositionDate]" name="PositionDate" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[QuantityOnHand]" cachedDataType="i4" cachedName="QuantityOnHand" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnHand]" name="QuantityOnHand" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[QuantityAllocated]" cachedDataType="i4" cachedName="QuantityAllocated" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAllocated]" name="QuantityAllocated" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[QuantityOnOrder]" cachedDataType="i4" cachedName="QuantityOnOrder" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnOrder]" name="QuantityOnOrder" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[UnitCostAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="UnitCostAmount" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[UnitCostAmount]" name="UnitCostAmount" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[ReorderLevel]" cachedDataType="i4" cachedName="ReorderLevel" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ReorderLevel]" name="ReorderLevel" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[TargetStockLevel]" cachedDataType="i4" cachedName="TargetStockLevel" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[TargetStockLevel]" name="TargetStockLevel" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[LastStocktakeDate]" cachedDataType="dbTimeStamp" cachedName="LastStocktakeDate" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LastStocktakeDate]" name="LastStocktakeDate" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[StockItemKey]" cachedDataType="i4" cachedName="StockItemKey" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" name="StockItemKey" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[PositionDateKey]" cachedDataType="i4" cachedName="PositionDateKey" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PositionDateKey]" name="PositionDateKey" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[StockItemKeyResolved]" cachedDataType="i4" cachedName="StockItemKeyResolved" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" name="StockItemKeyResolved" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[QuantityAvailable]" cachedDataType="i4" cachedName="QuantityAvailable" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAvailable]" name="QuantityAvailable" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[StockValueAmount]" cachedDataType="numeric" cachedPrecision="18" cachedScale="2" cachedName="StockValueAmount" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockValueAmount]" name="StockValueAmount" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[IsBelowReorderLevel]" cachedDataType="bool" cachedName="IsBelowReorderLevel" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[IsBelowReorderLevel]" name="IsBelowReorderLevel" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[CoverRatio]" cachedDataType="numeric" cachedPrecision="9" cachedScale="4" cachedName="CoverRatio" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CoverRatio]" name="CoverRatio" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[DaysSinceStocktake]" cachedDataType="i4" cachedName="DaysSinceStocktake" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[DaysSinceStocktake]" name="DaysSinceStocktake" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[StockStatusCode]" cachedDataType="wstr" cachedLength="12" cachedName="StockStatusCode" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockStatusCode]" name="StockStatusCode" />
+                  <inputColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].Columns[LineageKey]" cachedDataType="i8" cachedName="LineageKey" externalMetadataColumnId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" name="LineageKey" />
+                </inputColumns>
+                <externalMetadataColumns isUsed="True">
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockItemBusinessKey]" dataType="i8" name="StockItemBusinessKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[WarehouseCode]" dataType="wstr" length="12" name="WarehouseCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PositionDate]" dataType="dbTimeStamp" name="PositionDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnHand]" dataType="i4" name="QuantityOnHand" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAllocated]" dataType="i4" name="QuantityAllocated" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantityOnOrder]" dataType="i4" name="QuantityOnOrder" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[UnitCostAmount]" dataType="numeric" precision="18" scale="2" name="UnitCostAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[ReorderLevel]" dataType="i4" name="ReorderLevel" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[TargetStockLevel]" dataType="i4" name="TargetStockLevel" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LastStocktakeDate]" dataType="dbTimeStamp" name="LastStocktakeDate" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKey]" dataType="i4" name="StockItemKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[PositionDateKey]" dataType="i4" name="PositionDateKey" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockItemKeyResolved]" dataType="i4" name="StockItemKeyResolved" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[QuantityAvailable]" dataType="i4" name="QuantityAvailable" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockValueAmount]" dataType="numeric" precision="18" scale="2" name="StockValueAmount" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[IsBelowReorderLevel]" dataType="bool" name="IsBelowReorderLevel" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[CoverRatio]" dataType="numeric" precision="9" scale="4" name="CoverRatio" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[DaysSinceStocktake]" dataType="i4" name="DaysSinceStocktake" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[StockStatusCode]" dataType="wstr" length="12" name="StockStatusCode" />
+                  <externalMetadataColumn refId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input].ExternalColumns[LineageKey]" dataType="i8" name="LineageKey" />
+                </externalMetadataColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\Load Fact Stock Holding\Reject Source Errors.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+            </outputs>
+          </component>
+        </components>
+        <paths>
+          <path refId="Package\Load Fact Stock Holding.Paths[OLE DB Source Output]" endId="Package\Load Fact Stock Holding\Lookup Stock Item Key.Inputs[Lookup Input]" name="OLE DB Source Output" startId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Output]" />
+          <path refId="Package\Load Fact Stock Holding.Paths[Lookup Match Output 1]" endId="Package\Load Fact Stock Holding\Lookup Position Date Key.Inputs[Lookup Input]" name="Lookup Match Output 1" startId="Package\Load Fact Stock Holding\Lookup Stock Item Key.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Fact Stock Holding.Paths[Lookup Match Output 2]" endId="Package\Load Fact Stock Holding\Derive Position Measures.Inputs[Derived Column Input]" name="Lookup Match Output 2" startId="Package\Load Fact Stock Holding\Lookup Position Date Key.Outputs[Lookup Match Output]" />
+          <path refId="Package\Load Fact Stock Holding.Paths[Derived Column Output 3]" endId="Package\Load Fact Stock Holding\Route Positions.Inputs[Conditional Split Input]" name="Derived Column Output 3" startId="Package\Load Fact Stock Holding\Derive Position Measures.Outputs[Derived Column Output]" />
+          <path refId="Package\Load Fact Stock Holding.Paths[Normal Positions 4]" endId="Package\Load Fact Stock Holding\Insert Normal Positions.Inputs[OLE DB Destination Input]" name="Normal Positions 4" startId="Package\Load Fact Stock Holding\Route Positions.Outputs[Normal Positions]" />
+          <path refId="Package\Load Fact Stock Holding.Paths[Oversold Positions 5]" endId="Package\Load Fact Stock Holding\Insert Oversold Positions.Inputs[OLE DB Destination Input]" name="Oversold Positions 5" startId="Package\Load Fact Stock Holding\Route Positions.Outputs[Oversold Positions]" />
+          <path refId="Package\Load Fact Stock Holding.Paths[Unknown Stock Item 6]" endId="Package\Load Fact Stock Holding\Reject Unknown Stock Item.Inputs[OLE DB Destination Input]" name="Unknown Stock Item 6" startId="Package\Load Fact Stock Holding\Route Positions.Outputs[Unknown Stock Item]" />
+          <path refId="Package\Load Fact Stock Holding.Paths[OLE DB Source Error Output 7]" endId="Package\Load Fact Stock Holding\Reject Source Errors.Inputs[OLE DB Destination Input]" name="OLE DB Source Error Output 7" startId="Package\Load Fact Stock Holding\stg StockHolding.Outputs[OLE DB Source Error Output]" />
+        </paths>
+      </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Recalculate Inventory Health Flags"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30DD2C28-BAB8-88D8-431E-A35A32E8CD21}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Recalculate Inventory Health Flags"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{2BB319B7-7A7E-B779-78E6-6455B6FCA6FB}"
+        SQLTask:SqlStatementSource="EXEC Integration.LoadFactStockHolding @PositionDate = ?, @LineageKey = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::SnapshotDate" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Rejected Records"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F451B37A-2258-F381-3E92-62232E0A51C1}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Rejected Records"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @ObjectName = N'Fact.Stock Holding', @RejectReason = N'Routed by the package reject path', @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Row Counts"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{F41C9678-F52A-5CFF-3FAA-181DE511DC84}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Row Counts"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogRowCount @PackageExecutionId = ?, @ObjectName = N'Fact.Stock Holding', @SourceRowCount = ?, @TargetRowCount = ?, @RejectRowCount = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Log Package Success"
+      DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:Description="Execute SQL Task"
+      DTS:DTSID="{30785D7E-121A-D8F5-BBB8-772E105F812C}"
+      DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Log Package Success"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+      <SQLTask:SqlTaskData
+        SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+        SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Succeeded', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+        SQLTask:ResultType="ResultSetType_None"
+        SQLTask:TimeOut="0"
+        SQLTask:SqlStmtSourceType="DirectInput"
+        SQLTask:IsStoredProc="True"
+        xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+        <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+      </SQLTask:SqlTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint]"
+      DTS:CreationName=""
+      DTS:DTSID="{6D77F5A9-0525-BBBD-494A-136BE9C5FA87}"
+      DTS:From="Package\Init Snapshot Date"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint"
+      DTS:To="Package\Log Package Start" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 1]"
+      DTS:CreationName=""
+      DTS:DTSID="{0D182C67-8760-D56F-50B8-77E142FFEE5D}"
+      DTS:From="Package\Log Package Start"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 1"
+      DTS:To="Package\Delete Existing Snapshot For Date" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 2]"
+      DTS:CreationName=""
+      DTS:DTSID="{B3534BC6-13C3-33E1-C627-B4DBDEEEA5CC}"
+      DTS:From="Package\Delete Existing Snapshot For Date"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 2"
+      DTS:To="Package\Load Fact Stock Holding" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 3]"
+      DTS:CreationName=""
+      DTS:DTSID="{5B897FA5-BE11-1E41-AA50-6A2FE5F67F36}"
+      DTS:From="Package\Load Fact Stock Holding"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 3"
+      DTS:To="Package\Recalculate Inventory Health Flags" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
+      DTS:CreationName=""
+      DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
+      DTS:From="Package\Recalculate Inventory Health Flags"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 4"
+      DTS:To="Package\Log Rejected Records" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 5]"
+      DTS:CreationName=""
+      DTS:DTSID="{3E9E830A-DA85-9299-811C-DE7CC8FB0EE5}"
+      DTS:From="Package\Log Rejected Records"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 5"
+      DTS:To="Package\Log Row Counts" />
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[Constraint 6]"
+      DTS:CreationName=""
+      DTS:DTSID="{58F3CD31-28FB-C976-F52A-57F58EEC490F}"
+      DTS:From="Package\Log Row Counts"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="Constraint 6"
+      DTS:To="Package\Log Package Success" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{776259DF-AF62-7708-A8A9-8414EDA30DA9}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      <DTS:Variables />
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Log Error"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{F31E6167-57EC-D9B5-9549-548BAADCF15D}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Log Error"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogError @PackageExecutionId = ?, @BatchId = ?, @ErrorCode = ?, @ErrorDescription = ?, @SourceName = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="System::ErrorCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="System::ErrorDescription" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="System::SourceName" SQLTask:ParameterDirection="Input" SQLTask:DataType="NVARCHAR" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Mark Execution Failed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute SQL Task"
+          DTS:DTSID="{88C44CB6-F1DF-5E43-72F8-6A41F2F1DA53}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Mark Execution Failed"
+          DTS:ThreadHint="0">
+          <DTS:Variables />
+          <DTS:ObjectData>
+          <SQLTask:SqlTaskData
+            SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
+            SQLTask:SqlStatementSource="EXEC etl.usp_LogPackageEnd @PackageExecutionId = ?, @Status = 'Failed', @RowsRead = ?, @RowsInserted = ?, @RowsUpdated = ?, @RowsRejected = ?;"
+            SQLTask:ResultType="ResultSetType_None"
+            SQLTask:TimeOut="0"
+            SQLTask:SqlStmtSourceType="DirectInput"
+            SQLTask:IsStoredProc="True"
+            xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+            <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::RowsRead" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="User::RowsInserted" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="User::RowsUpdated" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+            <SQLTask:ParameterBinding SQLTask:ParameterName="4" SQLTask:DtsVariableName="User::RowsRejected" SQLTask:ParameterDirection="Input" SQLTask:DataType="LONG" SQLTask:ParameterSize="-1" />
+          </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[Constraint]"
+          DTS:CreationName=""
+          DTS:DTSID="{6D330032-2973-485A-4A53-0F798EBA52C5}"
+          DTS:From="Package.EventHandlers[OnError]\Log Error"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint"
+          DTS:Value="2"
+          DTS:To="Package.EventHandlers[OnError]\Mark Execution Failed" />
+      </DTS:PrecedenceConstraints>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>
