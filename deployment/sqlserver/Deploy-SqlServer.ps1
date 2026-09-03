@@ -89,7 +89,9 @@ function Get-SqlcmdVariableArguments {
         # be left out; a script that needs it fails on the reference instead.
         if ([string]::IsNullOrWhiteSpace($sqlcmdVariables[$key])) { continue }
         $args += '-v'
-        $args += ("{0}={1}" -f $key, $sqlcmdVariables[$key])
+        # The value is quoted because sqlcmd otherwise splits paths such as
+        # D:\WWI\Logs\Agent and rejects the remainder as an unknown argument.
+        $args += ('{0}="{1}"' -f $key, $sqlcmdVariables[$key])
     }
     return $args
 }
