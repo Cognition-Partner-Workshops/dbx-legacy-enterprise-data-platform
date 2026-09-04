@@ -68,6 +68,22 @@ class RunConfig:
     def history_days(self) -> int:
         return (self.history_end - self.history_start).days
 
+    # -- load identity ---------------------------------------------------
+
+    @property
+    def batch_id(self) -> int:
+        """The batch every generated extract of this run belongs to.
+
+        Derived from the run identity, so a regenerated run reproduces its
+        own batch number and two scales never share one.
+        """
+        return int("%s%02d" % (self.snapshot_date.strftime("%Y%m%d"),
+                               SCALE_MODES.index(self.scale) + 1))
+
+    @property
+    def loaded_at_utc(self) -> datetime.datetime:
+        return datetime.datetime.combine(self.snapshot_date, datetime.time(2, 0, 0))
+
     def signature(self) -> dict:
         """Identity of this run, recorded in the manifest and resume markers."""
         return {

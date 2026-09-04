@@ -21,10 +21,12 @@ generators/output/<scale>/
   data/sqlserver/Sales/Orders.dat
   data/file/landing/partner_sales_eu.csv      the landing-zone feeds, as they arrive
   loaders/oracle/WWI_MDM/*.ctl                SQL*Loader control file per table
-  loaders/oracle/WWI_MDM/load_wwi_mdm.sh      sqlldr driver per schema
-  loaders/sqlserver/formats/*.fmt             bcp format file per table
-  loaders/sqlserver/load_sales.sql            BULK INSERT script per schema
-  loaders/sqlserver/load_all.sh               sqlcmd driver
+  loaders/oracle/Load-Oracle.ps1              sqlldr driver, foreign-key order
+  loaders/sqlserver/formats/*.fmt             bcp format file per landed table
+  loaders/sqlserver/Load-SqlServer.ps1        client-side bcp driver
+  loaders/sqlserver/unlanded.txt              extracts with no landing table
+  loaders/landing/Stage-LandingZone.ps1       feeds -> $WWI_LANDING_ROOT
+  loaders/landing/feeds.csv                   feed -> landing path, per the yaml
   manifest.json                               table, file, rows, bytes, sha256, seed, scale
   .markers/<table>.json                       per-table resume markers
 ```
@@ -140,28 +142,45 @@ return-reason code sets per region.
 Nothing below has been executed. These are the artefacts the generator emits and
 the commands they are written to be run with.
 
-Oracle, per schema:
+Oracle, every schema, in foreign-key order:
 
-```bash
-export ORACLE_HOST=... ORACLE_PORT=1521 ORACLE_SERVICE=... ORACLE_USER=...
-export ORACLE_PASSWORD=...        # from the secret store, never checked in
-cd generators/output/small/loaders/oracle/WWI_MDM
-./load_wwi_mdm.sh                 # sqlldr, one control file per table, direct path
+```powershell
+$env:ORACLE_HOST = '...'; $env:ORACLE_PORT = '1521'; $env:ORACLE_SERVICE = '...'
+# WWI_MDM_SECRET WWI_PROC_SECRET WWI_FIN_SECRET WWI_REF_SECRET WWI_AUDIT_SECRET
+# come from the secret store; each schema is loaded as its own owner.
+.\generators\output\small\loaders\oracle\Load-Oracle.ps1 -ListOnly
+.\generators\output\small\loaders\oracle\Load-Oracle.ps1
 ```
 
-SQL Server, per schema, into the staging database:
+SQL Server, into the staging database, with **client-side bcp**:
 
-```bash
-export SQLSERVER_HOST=... SQLSERVER_PORT=1433 SQLSERVER_USER=...
-export SQLSERVER_PASSWORD=... SQLSERVER_STAGING_DB=...
-cd generators/output/small/loaders/sqlserver
-./load_all.sh                     # sqlcmd, BULK INSERT with the emitted .fmt files
+```powershell
+$env:SQLSERVER_HOST = '...'; $env:SQLSERVER_PORT = '1433'
+$env:SQLSERVER_USER = '...'; $env:SQLSERVER_STAGING_DB = '...'
+# SQLSERVER_PASSWORD comes from the secret store.
+.\generators\output\small\loaders\sqlserver\Load-SqlServer.ps1 -ListOnly
+.\generators\output\small\loaders\sqlserver\Load-SqlServer.ps1
 ```
 
-The BULK INSERT scripts target the staging/raw objects named in each table's
-`target_object`, use the emitted format files, and route rejected rows to an error
-file per table rather than failing the batch. Load order is masters, then
-transactions, then feeds; the drivers already emit them in that order.
+The instance is not the machine the extracts are written on, so a server-side
+`BULK INSERT` can never see them: bcp reads each file locally and sends the rows
+over the client connection. Each format file maps the extract's fields onto the
+landing table's own column ordinals, so the columns the extract does not carry
+keep their `DEFAULT`. Rejected rows go to `loaders/sqlserver/errors/<table>.err`
+rather than failing the batch.
+
+An extract with no landing table in `sqlserver/staging` gets no loader; it is
+listed in `loaders/sqlserver/unlanded.txt`. Landing it would mean adding a raw
+table, which is a schema change rather than a generator change.
+
+The file feeds are placed under the landing zone, whose layout, filename
+patterns and encodings are `config/landing-zone.yaml`:
+
+```powershell
+$env:WWI_LANDING_ROOT = 'C:\WWI\DEV'
+.\generators\output\small\loaders\landing\Stage-LandingZone.ps1 -ListOnly
+.\generators\output\small\loaders\landing\Stage-LandingZone.ps1
+```
 
 No credential value appears anywhere in this directory or in anything it
 generates - only the environment variable names above.

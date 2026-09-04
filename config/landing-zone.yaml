@@ -18,35 +18,69 @@ directories:
     purpose: Feeds drop here. Polled every 15 minutes by "WWI - File Ingestion".
     permissions: 'WWI_FileOps_Proxy account: read/write. Feed providers: write only.'
     retention_days: 0        # moved to archive or quarantine on processing
+    # One entry per feed the estate actually ingests. The directory, the file
+    # specification and the encoding are the ones the ING_FILE_* packages
+    # enumerate, and `raw_table` is where the package lands the rows; a feed
+    # that appears here and nowhere else would be a feed nothing reads.
     subdirectories:
-      - path: inbound/carrier
-        feeds: [CARRIER_MANIFEST, CARRIER_POD]
-        pattern: '{feed}_{yyyyMMdd}_{seq3}.csv'
+      - path: inbound/partner/na
+        feeds: [partner_sales_na]
+        pattern: 'partner_sales_na_{yyyyMMdd}_{seq3}.csv'
         encoding: windows-1252
-        notes: >-
-          The two carriers still send windows-1252 despite eight years of asking.
-          The ingestion package transcodes; do not change the encoding here.
-      - path: inbound/bank
-        feeds: [BANK_STATEMENT_NA, BANK_STATEMENT_EU, BANK_STATEMENT_APAC]
-        pattern: '{feed}_{yyyyMMdd}.txt'
+        delimiter: ','
+        header: true
+        raw_table: raw.FilePartnerSales
+        consumed_by: ING_FILE_PartnerSales_NA
+        notes: US date format, and a T footer carrying the row count.
+      - path: inbound/partner/eu
+        feeds: [partner_sales_eu]
+        pattern: 'partner_sales_eu_{yyyyMMdd}_{seq3}.csv'
         encoding: utf-8
+        delimiter: ','
+        header: true
+        raw_table: raw.FilePartnerSales
+        consumed_by: ING_FILE_PartnerSales_EU
+        notes: Day-first dates and a 9 footer carrying the amount sum.
+      - path: inbound/partner/apac
+        feeds: [partner_sales_apac]
+        pattern: 'partner_sales_apac_{yyyyMMdd}_{seq3}.txt'
+        encoding: iso-8859-1
+        delimiter: "\t"
+        header: false
+        raw_table: raw.FilePartnerSales
+        consumed_by: ING_FILE_PartnerSales_APAC
         notes: >-
-          Fixed-width, and the three regions use different record layouts: NA is
-          BAI2, EU is CAMT.053 flattened to fixed width by the bank's own tool,
-          APAC is a bespoke layout the local bank has never versioned.
-      - path: inbound/partner
-        feeds: [PARTNER_PRICELIST, PARTNER_STOCK]
-        pattern: '{partner_code}_{feed}_{yyyyMMddHHmm}.xml'
-        encoding: utf-8
-        notes: Partner code is the legacy four-character code, not the customer ID.
-      - path: inbound/tax
-        feeds: [TAX_JURISDICTION_NA, TAX_VAT_EU, TAX_GST_APAC]
-        pattern: '{feed}_{yyyyMM}.csv'
-        encoding: utf-8
+          Tab separated and Latin-1 despite the interface spec saying UTF-8.
+          The package transcodes; do not change the encoding here.
+      - path: inbound/carrier
+        feeds: [carrier_scan]
+        pattern: 'carrier_scan_{yyyyMMdd}_{seq3}.csv'
+        encoding: windows-1252
+        delimiter: ','
+        header: true
+        raw_table: raw.FileCarrierScan
+        consumed_by: ING_FILE_CarrierScan
         notes: >-
-          Three regimes, three cadences: NA weekly, EU on notice from the tax
-          team, APAC quarterly. The weekly reference job checks staleness per
-          region against Reference.<REGION>.StaleDays.
+          The carrier still sends windows-1252 despite eight years of asking,
+          with local timestamps and no UTC offset.
+      - path: inbound/supplier
+        feeds: [supplier_catalog]
+        pattern: 'supplier_catalog_{yyyyMMdd}_{seq3}.psv'
+        encoding: iso-8859-1
+        delimiter: '|'
+        header: true
+        raw_table: raw.FileSupplierCatalog
+        consumed_by: ING_FILE_SupplierCatalog
+        notes: Quarterly price lists, pipe separated, with a TRL footer.
+      - path: inbound/treasury
+        feeds: [fx_override]
+        pattern: 'fx_override_{yyyyMMdd}_{seq3}.csv'
+        encoding: windows-1252
+        delimiter: ','
+        header: true
+        raw_table: raw.FileFxOverride
+        consumed_by: ING_FILE_FxOverride
+        notes: Rate overrides pasted out of a spreadsheet, with a checksum line.
 
   archive:
     purpose: Successfully processed files, moved out of inbound by MNT_Archive_ProcessedFiles.
@@ -63,6 +97,18 @@ directories:
     permissions: 'WWI_FileOps_Proxy account: read/write. Data stewards: read/write.'
     retention_days: 90
     layout: 'quarantine/{feed}/{yyyyMMdd}/{original_filename}'
+    subdirectories:
+      - path: quarantine
+        feeds: [quarantine_rejects]
+        pattern: 'quarantine_rejects_{yyyyMMdd}_{seq3}.dat'
+        encoding: utf-8
+        delimiter: '|'
+        header: true
+        raw_table: err.RejectedFileRow
+        consumed_by: ING_FILE_QuarantineMalformed
+        notes: >-
+          The expected reject set for every feed. It is a reconciliation input,
+          not an inbound feed, which is why it sits under quarantine.
     regional_overrides:
       EU:
         retention_days: 30
