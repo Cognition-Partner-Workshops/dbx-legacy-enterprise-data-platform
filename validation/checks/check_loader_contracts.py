@@ -56,6 +56,7 @@ INFILE_RE = re.compile(r"^INFILE '([^']+)'", re.M)
 DATA_ENTRY_RE = re.compile(r"Data = '([^']+)'")
 DATA_ROOT_RE = re.compile(r"\$DataRoot = Join-Path \$LoaderRoot '([^']+)'")
 FORMAT_HEADER_RE = re.compile(r"^\d+\s+SQLCHAR\s+\d+\s+\d+\s+\"[^\"]*\"\s+(\d+)\s+(\S+)", re.M)
+PROPERTY_ARGUMENT_RE = re.compile(r"(?<![\"'])\b[A-Za-z][\w-]*=\$\w+\.\w+")
 
 # Types that can hold the extract's serialised form of the other.
 COMPATIBLE = {
@@ -277,9 +278,39 @@ def check_paths(report, specs, cfg):
                              "generators/wwigen/loaders/bcp.py",
                              "the driver does not read the password from the environment")
 
+        check_driver_arguments(report, scratch, oracle_specs, sql_specs)
         check_formats(report, scratch, sql_specs)
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
+
+
+def check_driver_arguments(report, scratch, oracle_specs, sql_specs):
+    """A keyword argument may not interpolate a property.
+
+    PowerShell expands only the bare variable in an argument written as
+    ``control=$load.Control``, so sqlldr received
+    ``control=System.Collections.Hashtable.Control`` and every table failed.
+    """
+    drivers = []
+    if oracle_specs:
+        drivers.append((os.path.join(scratch, "loaders", "oracle", "Load-Oracle.ps1"),
+                        "generators/wwigen/loaders/sqlloader.py"))
+    if sql_specs:
+        drivers.append((os.path.join(scratch, "loaders", "sqlserver", "Load-SqlServer.ps1"),
+                        "generators/wwigen/loaders/bcp.py"))
+    for path, owner in drivers:
+        if not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+        for line in text.splitlines():
+            if line.lstrip().startswith("#"):
+                continue
+            for match in PROPERTY_ARGUMENT_RE.finditer(line):
+                report.error("loader-driver", owner,
+                             "%s interpolates a property in the argument %s, which "
+                             "PowerShell expands as the object's type name"
+                             % (os.path.basename(path), match.group(0).strip()))
 
 
 def check_formats(report, scratch, specs):
