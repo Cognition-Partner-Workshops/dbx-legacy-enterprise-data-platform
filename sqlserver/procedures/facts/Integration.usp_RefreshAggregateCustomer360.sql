@@ -99,10 +99,10 @@ BEGIN
             pay.AverageDaysToPay,
             ISNULL(bal.ClosingBalanceReporting, 0),
             ISNULL(bal.OverdueBalanceReporting, 0),
-            c.[Credit Limit],
-            CASE WHEN ISNULL(c.[Credit Limit], 0) = 0 THEN NULL
+            c.[Credit Limit Amount],
+            CASE WHEN ISNULL(c.[Credit Limit Amount], 0) = 0 THEN NULL
                  ELSE ROUND(100.0 * ISNULL(bal.ClosingBalanceReporting, 0)
-                            / c.[Credit Limit], 2) END,
+                            / c.[Credit Limit Amount], 2) END,
             ISNULL(loyalty.PointBalance, 0),
             ISNULL(web.SessionCount, 0),
             DATEDIFF(DAY, sales.LastOrderDate, @Today),
@@ -111,9 +111,9 @@ BEGIN
             CASE c.[Region Code]
                 WHEN N'APAC' THEN CASE WHEN c.[Marketing Consent Flag] = 1 THEN 1 ELSE 0 END
                 WHEN N'EU'   THEN CASE WHEN ISNULL(c.[Marketing Consent Flag], 0) = 1
-                                            AND ISNULL(c.[Consent Withdrawn Flag], 0) = 0
+                                            AND c.[Erasure Requested On] IS NULL
                                        THEN 1 ELSE 0 END
-                ELSE CASE WHEN ISNULL(c.[Opt Out Flag], 0) = 1 THEN 0 ELSE 1 END
+                ELSE CASE WHEN ISNULL(c.[Marketing Consent Flag], 1) = 0 THEN 0 ELSE 1 END
             END,
             CASE c.[Region Code]
                 WHEN N'EU'   THEN DATEADD(YEAR, 7, ISNULL(sales.LastOrderDate, @Today))
@@ -262,25 +262,30 @@ BEGIN
             UPDATE roll
             SET [Rolling 12 Month Revenue] = win.Revenue12,
                 [Rolling 12 Month Margin]  = win.Margin12,
-                [Rolling 3 Month Revenue]  = win.Revenue3,
+                [Rolling 3 Month Revenue]  = win3.Revenue3,
                 [Revenue Trend Percent]   =
                     CASE WHEN ISNULL(win.Revenue12, 0) = 0 THEN NULL
-                         ELSE ROUND(100.0 * (win.Revenue3 * 4.0 - win.Revenue12)
+                         ELSE ROUND(100.0 * (win3.Revenue3 * 4.0 - win.Revenue12)
                                     / win.Revenue12, 2) END,
                 [Inactive Month Flag] = CASE WHEN roll.[Order Count] = 0 THEN 1 ELSE 0 END
             FROM Aggregate.[Customer Rolling 12 Month] AS roll
             CROSS APPLY
             (
                 SELECT SUM(x.[Net Revenue Reporting]) AS Revenue12,
-                       SUM(x.[Gross Margin Reporting]) AS Margin12,
-                       SUM(CASE WHEN x.[Calendar Month]
-                                     > DATEADD(MONTH, -3, roll.[Calendar Month])
-                                THEN x.[Net Revenue Reporting] ELSE 0 END) AS Revenue3
+                       SUM(x.[Gross Margin Reporting]) AS Margin12
                 FROM Aggregate.[Customer Rolling 12 Month] AS x
                 WHERE x.[Customer Key] = roll.[Customer Key]
                   AND x.[Calendar Month] <= roll.[Calendar Month]
                   AND x.[Calendar Month] > DATEADD(MONTH, -12, roll.[Calendar Month])
             ) AS win
+            CROSS APPLY
+            (
+                SELECT SUM(x3.[Net Revenue Reporting]) AS Revenue3
+                FROM Aggregate.[Customer Rolling 12 Month] AS x3
+                WHERE x3.[Customer Key] = roll.[Customer Key]
+                  AND x3.[Calendar Month] <= roll.[Calendar Month]
+                  AND x3.[Calendar Month] > DATEADD(MONTH, -3, roll.[Calendar Month])
+            ) AS win3
             WHERE roll.[Calendar Month] >= @RollingFrom;
         END;
 

@@ -94,7 +94,7 @@ BEGIN
         LEFT JOIN Dimension.[Carrier] AS car
             ON car.[Carrier Code] = c.CarrierCode
         LEFT JOIN Dimension.[Warehouse Site] AS site
-            ON site.[Site Code] = c.WarehouseSiteCode
+            ON site.[Warehouse Site Code] = c.WarehouseSiteCode
         LEFT JOIN Dimension.[City] AS city
             ON city.[City Code] = c.DeliveryCityCode
            AND city.[Valid To] = CONVERT(DATETIME2(7), '9999-12-31')

@@ -23,19 +23,25 @@ CREATE OR REPLACE PROCEDURE WWI_AUDIT.PRC_ADVANCE_WATERMARKS
 IS
     CURSOR c_running IS
         SELECT ec.EXTRACT_NAME,
-               ec.CURRENT_RUN_ID,
-               ec.RUN_STARTED_DT,
-               ec.WATERMARK_TYPE_CD,
-               ec.SRC_SCHEMA_NAME,
-               ec.SRC_OBJECT_NAME,
-               NVL(ec.SLA_HOURS_NUM, 26) AS SLA_HOURS_NUM
+               TO_NUMBER(ec.LOCKED_BY_TXT)          AS CURRENT_RUN_ID,
+               CAST(ec.LAST_EXTRACT_START_TS AS DATE) AS RUN_STARTED_DT,
+               CASE
+                   WHEN UPPER(NVL(ec.WATERMARK_COLUMN_NAME, 'X')) LIKE '%\_ID' ESCAPE '\'
+                     OR UPPER(NVL(ec.WATERMARK_COLUMN_NAME, 'X')) LIKE '%\_NBR' ESCAPE '\'
+                     OR UPPER(NVL(ec.WATERMARK_COLUMN_NAME, 'X')) LIKE '%\_SEQ' ESCAPE '\'
+                   THEN 'KEY'
+                   ELSE 'DATE'
+               END                                  AS WATERMARK_TYPE_CD,
+               ec.SOURCE_SCHEMA_NAME                AS SOURCE_SCHEMA_NAME,
+               ec.SOURCE_OBJECT_NAME                AS SOURCE_OBJECT_NAME,
+               NVL(ec.SLA_MINUTES, 1560) / 60       AS SLA_HOURS_NUM
           FROM WWI_AUDIT.EXTRACT_CONTROL ec
          WHERE ec.LAST_STATUS_CD = 'RUNNING'
            AND (p_extract_name IS NULL OR ec.EXTRACT_NAME = p_extract_name)
          ORDER BY ec.EXTRACT_NAME;
 
     l_marked PLS_INTEGER;
-    l_to_val WWI_AUDIT.EXTRACT_CONTROL.LAST_EXTRACT_VALUE_TXT%TYPE;
+    l_to_val WWI_AUDIT.V_EXTRACT_WATERMARK.LAST_EXTRACT_VALUE_TXT%TYPE;
 BEGIN
     p_advanced_cnt := 0;
     p_stuck_cnt    := 0;
@@ -75,9 +81,9 @@ BEGIN
                                                   rec.CURRENT_RUN_ID,
                                                   NVL(p_row_count, 0), l_to_val);
 
-        IF rec.SRC_SCHEMA_NAME IS NOT NULL AND rec.WATERMARK_TYPE_CD = 'DATE' THEN
+        IF rec.SOURCE_SCHEMA_NAME IS NOT NULL AND rec.WATERMARK_TYPE_CD = 'DATE' THEN
             WWI_AUDIT.PKG_EXTRACT_CONTROL.mark_changes_extracted(
-                rec.SRC_SCHEMA_NAME, rec.SRC_OBJECT_NAME,
+                rec.SOURCE_SCHEMA_NAME, rec.SOURCE_OBJECT_NAME,
                 TO_DATE(l_to_val, 'YYYY-MM-DD HH24:MI:SS'), l_marked);
         END IF;
 

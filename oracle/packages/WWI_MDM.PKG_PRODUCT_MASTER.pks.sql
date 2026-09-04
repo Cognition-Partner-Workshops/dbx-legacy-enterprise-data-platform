@@ -44,13 +44,13 @@ CREATE OR REPLACE PACKAGE WWI_MDM.PKG_PRODUCT_MASTER AS
 
     PROCEDURE rebuild_hierarchy
     (
-        p_hier_id   IN  WWI_MDM.PRODUCT_HIERARCHY.HIER_ID%TYPE,
+        p_hier_id   IN  WWI_MDM.PRODUCT_HIERARCHY.PRODUCT_HIER_ID%TYPE,
         p_node_cnt  OUT PLS_INTEGER
     );
 
     PROCEDURE recost_products
     (
-        p_category_id IN  WWI_MDM.PRODUCT_CATEGORY.CATEGORY_ID%TYPE,
+        p_category_id IN  WWI_MDM.PRODUCT_CATEGORY.PRODUCT_CATEGORY_ID%TYPE,
         p_factor      IN  NUMBER,
         p_updated_cnt OUT PLS_INTEGER
     );

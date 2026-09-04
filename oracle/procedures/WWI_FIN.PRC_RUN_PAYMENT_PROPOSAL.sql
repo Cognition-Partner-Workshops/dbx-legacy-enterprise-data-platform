@@ -16,7 +16,7 @@ CREATE OR REPLACE PROCEDURE WWI_FIN.PRC_RUN_PAYMENT_PROPOSAL
 (
     p_region_cd    IN  VARCHAR2,
     p_pay_thru_dt  IN  DATE DEFAULT TRUNC(SYSDATE) + 7,
-    p_run_id       OUT WWI_FIN.AP_PAYMENT.PAYMENT_RUN_ID%TYPE,
+    p_run_id       OUT WWI_FIN.AP_PAYMENT.PAYMENT_BATCH_NBR%TYPE,
     p_selected_cnt OUT PLS_INTEGER,
     p_dropped_cnt  OUT PLS_INTEGER
 )
@@ -24,8 +24,8 @@ IS
     CURSOR c_proposed (p_run NUMBER) IS
         SELECT p.PAYMENT_ID, p.SUPP_ID, p.PAYMENT_AMT, p.PAYMENT_METHOD_CD
           FROM WWI_FIN.AP_PAYMENT p
-         WHERE p.PAYMENT_RUN_ID = p_run
-           AND p.STATUS_CD = 'PROP'
+         WHERE p.PAYMENT_BATCH_NBR = p_run
+           AND p.PAYMENT_STATUS_CD = 'PROP'
          ORDER BY p.SUPP_ID;
 
     l_total_amt   NUMBER;
@@ -51,14 +51,14 @@ BEGIN
           INTO l_bank_cnt
           FROM WWI_MDM.SUPP_BANK_ACCOUNT b
          WHERE b.SUPP_ID = rec.SUPP_ID
-           AND NVL(b.ACTIVE_FLAG, 'Y') = 'Y'
-           AND NVL(b.VERIFIED_FLAG, 'N') = 'Y';
+           AND NVL(b.ACTIVE_FLG, 'Y') = 'Y'
+           AND NVL(b.VALIDATED_FLG, 'N') = 'Y';
 
         IF l_bank_cnt = 0 AND rec.PAYMENT_METHOD_CD <> 'CHECK' THEN
             UPDATE WWI_FIN.AP_PAYMENT
-               SET STATUS_CD      = 'DROP',
+               SET PAYMENT_STATUS_CD = 'DROP',
                    VOID_REASON_CD = 'NO_VERIFIED_BANK',
-                   LAST_UPD_DT    = SYSDATE
+                   UPDATED_DT    = SYSDATE
              WHERE PAYMENT_ID = rec.PAYMENT_ID;
 
             p_dropped_cnt := p_dropped_cnt + 1;
@@ -70,8 +70,8 @@ BEGIN
 
         IF NVL(rec.PAYMENT_AMT, 0) > l_max_amt THEN
             UPDATE WWI_FIN.AP_PAYMENT
-               SET STATUS_CD      = 'MANUAL',
-                   LAST_UPD_DT    = SYSDATE
+               SET PAYMENT_STATUS_CD = 'MANUAL',
+                   UPDATED_DT    = SYSDATE
              WHERE PAYMENT_ID = rec.PAYMENT_ID;
 
             p_dropped_cnt := p_dropped_cnt + 1;
@@ -86,9 +86,9 @@ BEGIN
 
             IF l_cert_status IN ('MISSING', 'EXPIRED') THEN
                 UPDATE WWI_FIN.AP_PAYMENT
-                   SET STATUS_CD      = 'DROP',
+                   SET PAYMENT_STATUS_CD = 'DROP',
                        VOID_REASON_CD = 'CERT_' || l_cert_status,
-                       LAST_UPD_DT    = SYSDATE
+                       UPDATED_DT    = SYSDATE
                  WHERE PAYMENT_ID = rec.PAYMENT_ID;
 
                 p_dropped_cnt := p_dropped_cnt + 1;

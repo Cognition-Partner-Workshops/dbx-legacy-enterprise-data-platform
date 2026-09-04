@@ -64,7 +64,7 @@ SELECT
                                                         AS [Year Basis],
     ytd.[Supplier Key]                                   AS [Supplier Key],
     s.[Supplier]                                        AS [Supplier],
-    s.[Supplier Category]                               AS [Supplier Category],
+    s.[Category]                                        AS [Supplier Category],
     s.[Payment Days]                                    AS [Payment Terms Days],
     ytd.CommittedSpend                                  AS [Committed Spend YTD],
     ytd.RecognisedSpend                                 AS [Recognised Spend YTD],

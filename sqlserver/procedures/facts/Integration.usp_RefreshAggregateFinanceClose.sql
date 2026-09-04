@@ -82,7 +82,7 @@ BEGIN
             @FiscalPeriod,
             g.[Ledger Code],
             g.[Region Code],
-            ISNULL(acct.[Account Group Code], N'UNCL'),
+            ISNULL(acct.[Account Class Code], N'UNCL'),
             MAX(g.[Ledger Currency Code]),
             MAX(g.[Posting Date Key]),
             0,
@@ -111,7 +111,7 @@ BEGIN
             ON acct.[Gl Account Key] = g.[Gl Account Key]
         WHERE g.[Fiscal Year] = @FiscalYear
           AND g.[Fiscal Period] = @FiscalPeriod
-        GROUP BY g.[Ledger Code], g.[Region Code], acct.[Account Group Code];
+        GROUP BY g.[Ledger Code], g.[Region Code], acct.[Account Class Code];
 
         SET @InsertRowCount = @@ROWCOUNT;
         SET @SourceRowCount = @InsertRowCount;

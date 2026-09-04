@@ -14,7 +14,7 @@
 
 CREATE OR REPLACE PROCEDURE WWI_MDM.PRC_LOAD_CUSTOMER_INTERFACE
 (
-    p_src_system_cd IN  WWI_REF.SOURCE_SYSTEM_REF.SRC_SYSTEM_CD%TYPE DEFAULT 'CRM',
+    p_src_system_cd IN  WWI_REF.SOURCE_SYSTEM_REF.SOURCE_SYS_CD%TYPE DEFAULT 'CRM',
     p_max_rows      IN  PLS_INTEGER DEFAULT 20000,
     p_applied_cnt   OUT PLS_INTEGER,
     p_rejected_cnt  OUT PLS_INTEGER
@@ -22,22 +22,22 @@ CREATE OR REPLACE PROCEDURE WWI_MDM.PRC_LOAD_CUSTOMER_INTERFACE
 IS
     TYPE t_ref IS REF CURSOR;
     TYPE t_feed_rec IS RECORD (
-        ext_party_id WWI_MDM.PARTY_XREF.EXT_PARTY_ID%TYPE,
-        cust_num     WWI_MDM.CUST_MASTER.CUST_NUM%TYPE,
+        ext_party_id WWI_MDM.PARTY_XREF.SOURCE_KEY_TXT%TYPE,
+        cust_num     WWI_MDM.CUST_MASTER.CUST_NBR%TYPE,
         cust_name    WWI_MDM.CUST_MASTER.CUST_NAME%TYPE,
         region_cd    WWI_MDM.CUST_MASTER.REGION_CD%TYPE,
         country_cd   WWI_MDM.CUST_MASTER.COUNTRY_CD%TYPE,
-        segment_cd   WWI_MDM.CUST_MASTER.SEGMENT_CD%TYPE,
-        line1_txt    WWI_MDM.CUST_ADDRESS.ADDRESS_LINE1_TXT%TYPE,
-        line2_txt    WWI_MDM.CUST_ADDRESS.ADDRESS_LINE2_TXT%TYPE,
-        city_name    WWI_MDM.CUST_ADDRESS.CITY_NAME%TYPE,
-        state_cd     WWI_MDM.CUST_ADDRESS.STATE_PROVINCE_CD%TYPE,
+        segment_cd   WWI_MDM.CUST_SEGMENT_ASSIGN.SEGMENT_CD%TYPE,
+        line1_txt    WWI_MDM.CUST_ADDRESS.ADDR_LINE_1%TYPE,
+        line2_txt    WWI_MDM.CUST_ADDRESS.ADDR_LINE_2%TYPE,
+        city_name    WWI_MDM.CUST_ADDRESS.CITY_TXT%TYPE,
+        state_cd     WWI_MDM.CUST_ADDRESS.STATE_PROV_CD%TYPE,
         postal_cd    WWI_MDM.CUST_ADDRESS.POSTAL_CD%TYPE,
         changed_dt   DATE
     );
     TYPE t_feed_tab IS TABLE OF t_feed_rec;
 
-    l_link_name WWI_REF.SOURCE_SYSTEM_REF.DB_LINK_NAME%TYPE;
+    l_link_name WWI_REF.SOURCE_SYSTEM_REF.CONNECTION_PARAM_NAME%TYPE;
     l_sql       VARCHAR2(4000);
     l_cur       t_ref;
     l_rows      t_feed_tab;
@@ -48,10 +48,10 @@ BEGIN
     p_applied_cnt  := 0;
     p_rejected_cnt := 0;
 
-    SELECT DB_LINK_NAME
+    SELECT CONNECTION_PARAM_NAME
       INTO l_link_name
       FROM WWI_REF.SOURCE_SYSTEM_REF
-     WHERE SRC_SYSTEM_CD = p_src_system_cd;
+     WHERE SOURCE_SYS_CD = p_src_system_cd;
 
     l_sql := 'SELECT ext_party_id, cust_num, cust_name, region_cd, country_cd, '
           || 'segment_cd, addr_line1, addr_line2, city, state_cd, postal_cd, '
@@ -97,13 +97,13 @@ BEGIN
                 SELECT COUNT(*)
                   INTO l_xref_cnt
                   FROM WWI_MDM.PARTY_XREF
-                 WHERE SRC_SYSTEM_CD = p_src_system_cd
-                   AND EXT_PARTY_ID  = l_rows(i).ext_party_id;
+                 WHERE SOURCE_SYS_CD = p_src_system_cd
+                   AND SOURCE_KEY_TXT  = l_rows(i).ext_party_id;
 
                 IF l_xref_cnt = 0 THEN
                     INSERT INTO WWI_MDM.PARTY_XREF
-                        (PARTY_XREF_ID, PARTY_TYPE_CD, PARTY_ID, SRC_SYSTEM_CD,
-                         EXT_PARTY_ID, ACTIVE_FLAG, CREATED_DT, CREATED_BY)
+                        (PARTY_XREF_ID, PARTY_TYPE_CD, CUST_ID, SOURCE_SYS_CD,
+                         SOURCE_KEY_TXT, ACTIVE_FLG, CREATED_DT, CREATED_BY)
                     VALUES
                         (WWI_MDM.SEQ_PARTY_XREF.NEXTVAL, 'CUST', l_cust_id,
                          p_src_system_cd, l_rows(i).ext_party_id, 'Y', SYSDATE,
@@ -111,8 +111,8 @@ BEGIN
                 END IF;
 
                 INSERT INTO WWI_AUDIT.CHANGE_LOG
-                    (CHANGE_LOG_ID, SRC_SCHEMA_NAME, SRC_OBJECT_NAME, SRC_KEY_TXT,
-                     CHANGE_TYPE_CD, CHANGE_DT, CHANGE_DETAIL_TXT, EXTRACTED_FLAG,
+                    (CHANGE_LOG_ID, SCHEMA_NAME, TABLE_NAME, PK_VALUE_TXT,
+                     OPERATION_CD, CHANGE_TS, NEW_VALUE_TXT, EXTRACTED_FLG,
                      CHANGED_BY)
                 VALUES
                     (WWI_AUDIT.SEQ_CHANGE_LOG.NEXTVAL, 'WWI_MDM', 'CUST_MASTER',

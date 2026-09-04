@@ -22,14 +22,14 @@ CREATE OR REPLACE FUNCTION WWI_MDM.FN_PRODUCT_ACTIVE_FLAG
 )
 RETURN VARCHAR2
 IS
-    l_status_cd        WWI_MDM.PRODUCT_MASTER.STATUS_CD%TYPE;
+    l_status_cd        WWI_MDM.PRODUCT_MASTER.LIFECYCLE_STATUS_CD%TYPE;
     l_discontinued_dt  WWI_MDM.PRODUCT_MASTER.DISCONTINUED_DT%TYPE;
-    l_hazmat_flag      WWI_MDM.PRODUCT_MASTER.HAZMAT_FLAG%TYPE;
+    l_hazmat_flag      WWI_MDM.PRODUCT_MASTER.HAZMAT_FLG%TYPE;
     l_open_qty         NUMBER := 0;
     l_sub_count        PLS_INTEGER := 0;
     l_grace_days       PLS_INTEGER;
 BEGIN
-    SELECT p.STATUS_CD, p.DISCONTINUED_DT, p.HAZMAT_FLAG
+    SELECT p.LIFECYCLE_STATUS_CD, p.DISCONTINUED_DT, p.HAZMAT_FLG
       INTO l_status_cd, l_discontinued_dt, l_hazmat_flag
       FROM WWI_MDM.PRODUCT_MASTER p
      WHERE p.PRODUCT_ID = p_product_id;
@@ -44,7 +44,7 @@ BEGIN
             ELSE 180
         END;
 
-    IF l_status_cd = 'D' AND l_discontinued_dt IS NULL THEN
+    IF l_status_cd = 'OBSL' AND l_discontinued_dt IS NULL THEN
         RETURN 'N';
     END IF;
 
@@ -58,14 +58,19 @@ BEGIN
           INTO l_open_qty
           FROM WWI_PROC.PURCHASE_ORDER_LINE pl
          WHERE pl.PRODUCT_ID = p_product_id
-           AND NVL(pl.CLOSED_FLAG, 'N') = 'N';
+           AND pl.LINE_STATUS_CD NOT IN ('CLSD', 'CANC');
 
         SELECT COUNT(*)
           INTO l_sub_count
           FROM WWI_MDM.PRODUCT_SUBSTITUTE s
          WHERE s.PRODUCT_ID = p_product_id
-           AND NVL(s.ACTIVE_FLAG, 'N') = 'Y'
-           AND (s.REGION_CD = p_region_cd OR s.REGION_CD IS NULL);
+           AND p_as_of_dt BETWEEN s.EFFECTIVE_DT
+                              AND NVL(s.END_DT, DATE '4712-12-31')
+           AND CASE UPPER(p_region_cd)
+                   WHEN 'EU'   THEN s.AVAILABLE_EU_FLG
+                   WHEN 'APAC' THEN s.AVAILABLE_APAC_FLG
+                   ELSE             s.AVAILABLE_NA_FLG
+               END = 'Y';
 
         IF l_open_qty > 0 OR l_sub_count = 0 THEN
             RETURN 'R';
@@ -73,7 +78,7 @@ BEGIN
         RETURN 'N';
     END IF;
 
-    RETURN CASE WHEN l_status_cd IN ('A', 'N') THEN 'Y' ELSE 'N' END;
+    RETURN CASE WHEN l_status_cd IN ('ACT', 'NEW') THEN 'Y' ELSE 'N' END;
 EXCEPTION
     WHEN NO_DATA_FOUND THEN
         RETURN 'N';

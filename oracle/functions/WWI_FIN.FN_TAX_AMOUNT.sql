@@ -19,8 +19,8 @@ CREATE OR REPLACE FUNCTION WWI_FIN.FN_TAX_AMOUNT
 (
     p_line_amt            IN NUMBER,
     p_region_cd           IN VARCHAR2,
-    p_tax_cd              IN WWI_FIN.TAX_RATE.TAX_CD%TYPE,
-    p_jurisdiction_id     IN WWI_FIN.TAX_JURISDICTION.JURISDICTION_ID%TYPE DEFAULT NULL,
+    p_tax_cd              IN WWI_FIN.TAX_RATE.TAX_CODE_CD%TYPE,
+    p_jurisdiction_cd     IN WWI_FIN.TAX_JURISDICTION.JURISDICTION_CD%TYPE DEFAULT NULL,
     p_tax_dt              IN DATE DEFAULT SYSDATE,
     p_reverse_charge_flag IN VARCHAR2 DEFAULT 'N'
 )
@@ -38,22 +38,28 @@ BEGIN
 
         WHEN 'NA' THEN
             /* Sum every level that covers the jurisdiction. The CONNECT BY walks
-               city -> county -> state -> country; rates are additive. */
+               city -> county -> state; rates are additive while each child
+               stacks with its parent. The starting jurisdiction is the one
+               carrying the quoted tax code when the caller does not name it. */
             SELECT NVL(SUM(tr.RATE_PCT), 0)
               INTO l_total_pct
-              FROM WWI_FIN.TAX_JURISDICTION j
-              JOIN WWI_FIN.TAX_RATE tr
-                ON tr.JURISDICTION_ID = j.JURISDICTION_ID
-               AND tr.TAX_TYPE_CD     = 'SALES'
-               AND tr.TAX_CD          = p_tax_cd
-               AND TRUNC(p_tax_dt) BETWEEN tr.EFF_FROM_DT AND NVL(tr.EFF_TO_DT, DATE '4712-12-31')
-             WHERE j.JURISDICTION_ID IN (
-                       SELECT jj.JURISDICTION_ID
+              FROM WWI_FIN.TAX_RATE tr
+             WHERE tr.TAX_REGIME_CD = 'SALES'
+               AND tr.ACTIVE_FLG    = 'Y'
+               AND TRUNC(p_tax_dt) BETWEEN tr.EFFECTIVE_FROM_DT
+                                       AND NVL(tr.EFFECTIVE_TO_DT, DATE '4712-12-31')
+               AND tr.JURISDICTION_CD IN (
+                       SELECT jj.JURISDICTION_CD
                          FROM WWI_FIN.TAX_JURISDICTION jj
-                        START WITH jj.JURISDICTION_ID = p_jurisdiction_id
-                      CONNECT BY PRIOR jj.COUNTRY_CD = jj.COUNTRY_CD
-                              AND PRIOR jj.LEVEL_CD <> jj.LEVEL_CD
-                              AND LEVEL <= 4);
+                        START WITH jj.JURISDICTION_CD =
+                                   NVL(p_jurisdiction_cd,
+                                       (SELECT MIN(r.JURISDICTION_CD)
+                                          FROM WWI_FIN.TAX_RATE r
+                                         WHERE r.TAX_CODE_CD = p_tax_cd
+                                           AND r.REGION_CD   = 'NA'))
+                      CONNECT BY PRIOR jj.PARENT_JURISDICTION_CD = jj.JURISDICTION_CD
+                             AND PRIOR jj.STACKS_WITH_PARENT_FLG = 'Y'
+                             AND LEVEL <= 4);
             l_tax_amt := ROUND(p_line_amt * l_total_pct / 100, 2);
 
         WHEN 'EU' THEN
@@ -66,11 +72,12 @@ BEGIN
                 SELECT tr.RATE_PCT
                   INTO l_rate_pct
                   FROM WWI_FIN.TAX_RATE tr
-                 WHERE tr.TAX_CD      = p_tax_cd
-                   AND tr.TAX_TYPE_CD = 'VAT'
-                   AND tr.REGION_CD   = 'EU'
-                   AND TRUNC(p_tax_dt) BETWEEN tr.EFF_FROM_DT
-                                           AND NVL(tr.EFF_TO_DT, DATE '4712-12-31')
+                 WHERE tr.TAX_CODE_CD   = p_tax_cd
+                   AND tr.TAX_REGIME_CD = 'VAT'
+                   AND tr.REGION_CD     = 'EU'
+                   AND tr.ACTIVE_FLG    = 'Y'
+                   AND TRUNC(p_tax_dt) BETWEEN tr.EFFECTIVE_FROM_DT
+                                           AND NVL(tr.EFFECTIVE_TO_DT, DATE '4712-12-31')
                    AND ROWNUM = 1;
             EXCEPTION
                 WHEN NO_DATA_FOUND THEN
@@ -90,11 +97,12 @@ BEGIN
                 SELECT tr.RATE_PCT
                   INTO l_rate_pct
                   FROM WWI_FIN.TAX_RATE tr
-                 WHERE tr.TAX_CD      = p_tax_cd
-                   AND tr.TAX_TYPE_CD = 'GST'
-                   AND tr.REGION_CD   = 'APAC'
-                   AND TRUNC(p_tax_dt) BETWEEN tr.EFF_FROM_DT
-                                           AND NVL(tr.EFF_TO_DT, DATE '4712-12-31')
+                 WHERE tr.TAX_CODE_CD   = p_tax_cd
+                   AND tr.TAX_REGIME_CD = 'GST'
+                   AND tr.REGION_CD     = 'APAC'
+                   AND tr.ACTIVE_FLG    = 'Y'
+                   AND TRUNC(p_tax_dt) BETWEEN tr.EFFECTIVE_FROM_DT
+                                           AND NVL(tr.EFFECTIVE_TO_DT, DATE '4712-12-31')
                    AND ROWNUM = 1;
             EXCEPTION
                 WHEN NO_DATA_FOUND THEN

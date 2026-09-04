@@ -303,9 +303,9 @@ BEGIN
            5. Early-arriving facts. A sale for a customer the MDM extract has
               not delivered yet gets an inferred dimension member so the
               revenue is not lost; the dimension load back-fills the attributes
-              on the next run and clears [Is Inferred].
+              on the next run and clears [Is Inferred Member].
            ------------------------------------------------------------------ */
-        INSERT INTO Dimension.[Customer] ([WWI Customer ID], [Customer], [Is Inferred],
+        INSERT INTO Dimension.[Customer] ([WWI Customer ID], [Customer], [Is Inferred Member],
                                           [Valid From], [Valid To], [Lineage Key])
         SELECT DISTINCT
             TRY_CONVERT(INT, w.[Customer Business Key]),

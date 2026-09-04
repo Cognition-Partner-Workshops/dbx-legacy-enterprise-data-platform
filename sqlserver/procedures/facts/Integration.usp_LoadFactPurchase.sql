@@ -143,14 +143,14 @@ BEGIN
         WHERE UnitPrice IS NULL OR QuantityOrdered IS NULL OR QuantityOrdered <= 0;
 
         DELETE FROM Fact.[Purchase]
-        WHERE [Purchase Date Key] >= @LoadStartDate
-          AND [Purchase Date Key] <= @LoadEndDate;
+        WHERE [Date Key] >= @LoadStartDate
+          AND [Date Key] <= @LoadEndDate;
 
         SET @DeleteRowCount = @@ROWCOUNT;
 
         INSERT INTO Fact.[Purchase]
         (
-            [Purchase Date Key], [Expected Receipt Date], [Supplier Key], [Stock Item Key],
+            [Date Key], [Expected Receipt Date], [Supplier Key], [Stock Item Key],
             [Cost Center Key], [Warehouse Site Key], [Buyer Employee Key], [Vendor Contract Key],
             [Payment Terms Key], [Po Number], [Po Line Number], [Region Code], [Incoterm Code],
             [Transaction Currency Code], [Fx Rate], [Quantity Ordered], [Quantity Base UOM],
@@ -212,7 +212,7 @@ BEGIN
             ON cc.[Cost Center Code] = w.CostCenterCode
            AND w.PoDate >= cc.[Valid From] AND w.PoDate < cc.[Valid To]
         LEFT JOIN Dimension.[Warehouse Site] AS site
-            ON site.[Site Code] = w.WarehouseSiteCode
+            ON site.[Warehouse Site Code] = w.WarehouseSiteCode
         LEFT JOIN Dimension.[Employee] AS emp
             ON emp.[Employee Code] = w.BuyerCode
            AND w.PoDate >= emp.[Valid From] AND w.PoDate < emp.[Valid To]

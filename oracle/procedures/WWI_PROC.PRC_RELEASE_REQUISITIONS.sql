@@ -23,30 +23,32 @@ IS
     CURSOR c_lines IS
         SELECT rl.REQ_LINE_ID,
                rh.REQ_ID,
-               rh.REQUESTER_ID,
-               rh.BUYER_ID,
-               rl.SUPP_ID,
+               rh.REQUESTOR_CD,
+               rh.APPROVER_1_CD        AS BUYER_ID,
+               rl.SUGGESTED_SUPP_ID    AS SUPP_ID,
                rl.PRODUCT_ID,
                rl.REQ_QTY,
                rl.UOM_CD,
                rl.NEED_BY_DT,
-               rl.CONTRACT_ID,
-               rh.CURRENCY_CD
+               vc.CONTRACT_ID,
+               rh.ESTIMATED_CURR_CD    AS CURRENCY_CD
           FROM WWI_PROC.REQUISITION_LINE rl
           JOIN WWI_PROC.REQUISITION_HDR rh
             ON rh.REQ_ID = rl.REQ_ID
+          LEFT JOIN WWI_PROC.VENDOR_CONTRACT vc
+            ON vc.CONTRACT_NBR = rl.CONTRACT_NBR
          WHERE rh.REGION_CD = p_region_cd
-           AND rh.STATUS_CD = 'APPROVED'
-           AND NVL(rl.RELEASED_FLAG, 'N') = 'N'
-           AND rl.SUPP_ID IS NOT NULL
-         ORDER BY rl.SUPP_ID, rh.CURRENCY_CD, rl.REQ_LINE_ID;
+           AND rh.REQ_STATUS_CD = 'APPROVED'
+           AND rl.CONVERTED_PO_ID IS NULL
+           AND rl.SUGGESTED_SUPP_ID IS NOT NULL
+         ORDER BY rl.SUGGESTED_SUPP_ID, rh.ESTIMATED_CURR_CD, rl.REQ_LINE_ID;
 
-    l_prev_supp   WWI_PROC.REQUISITION_LINE.SUPP_ID%TYPE := -1;
-    l_prev_ccy    WWI_PROC.REQUISITION_HDR.CURRENCY_CD%TYPE := '~';
+    l_prev_supp   WWI_PROC.REQUISITION_LINE.SUGGESTED_SUPP_ID%TYPE := -1;
+    l_prev_ccy    WWI_PROC.REQUISITION_HDR.ESTIMATED_CURR_CD%TYPE := '~';
     l_po_id       WWI_PROC.PURCHASE_ORDER_HDR.PO_ID%TYPE;
     l_po_line_id  WWI_PROC.PURCHASE_ORDER_LINE.PO_LINE_ID%TYPE;
     l_price       NUMBER;
-    l_approved    VARCHAR2(1);
+    l_approved    VARCHAR2(20);
 BEGIN
     p_po_cnt   := 0;
     p_line_cnt := 0;
@@ -65,7 +67,7 @@ BEGIN
         l_approved := WWI_MDM.PKG_SUPPLIER_MASTER.is_approved_for_po(rec.SUPP_ID,
                                                                      p_region_cd);
 
-        IF l_approved <> 'Y' THEN
+        IF l_approved <> 'APPROVED' THEN
             p_held_cnt := p_held_cnt + 1;
             WWI_AUDIT.PKG_DATA_QUALITY.log_reject(NULL,
                 'WWI_PROC.REQUISITION_LINE', TO_CHAR(rec.REQ_LINE_ID),
@@ -108,10 +110,10 @@ BEGIN
                 p_po_line_id => l_po_line_id);
 
             UPDATE WWI_PROC.REQUISITION_LINE
-               SET RELEASED_FLAG = 'Y',
-                   RELEASED_DT   = SYSDATE,
-                   PO_LINE_ID    = l_po_line_id,
-                   LAST_UPD_DT   = SYSDATE
+               SET LINE_STATUS_CD   = 'C',
+                   CONVERTED_PO_ID  = l_po_id,
+                   CONVERTED_DT     = SYSDATE,
+                   UPDATED_DT   = SYSDATE
              WHERE REQ_LINE_ID = rec.REQ_LINE_ID;
 
             p_line_cnt := p_line_cnt + 1;

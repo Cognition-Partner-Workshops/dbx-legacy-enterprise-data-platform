@@ -121,7 +121,7 @@ BEGIN
             ON item.[Stock Item Code] = sp.StockItemCode
            AND item.[Valid To] = CONVERT(DATETIME2(7), ''9999-12-31'')
         LEFT JOIN Dimension.[Warehouse Site] AS site
-            ON site.[Site Code] = sp.WarehouseSiteCode;';
+            ON site.[Warehouse Site Code] = sp.WarehouseSiteCode;';
 
         EXECUTE sp_executesql @Sql,
             N'@AsAtDate DATE, @BatchId BIGINT',

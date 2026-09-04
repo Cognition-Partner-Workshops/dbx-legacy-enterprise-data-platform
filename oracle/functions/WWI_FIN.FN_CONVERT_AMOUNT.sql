@@ -17,18 +17,18 @@
 CREATE OR REPLACE FUNCTION WWI_FIN.FN_CONVERT_AMOUNT
 (
     p_amount        IN NUMBER,
-    p_from_ccy      IN WWI_REF.CURRENCY_CODE.CURRENCY_CD%TYPE,
-    p_to_ccy        IN WWI_REF.CURRENCY_CODE.CURRENCY_CD%TYPE,
+    p_from_ccy      IN WWI_REF.CURRENCY_CODE.CURR_CD%TYPE,
+    p_to_ccy        IN WWI_REF.CURRENCY_CODE.CURR_CD%TYPE,
     p_rate_dt       IN DATE,
     p_rate_type_cd  IN WWI_REF.FX_RATE_DAILY.RATE_TYPE_CD%TYPE DEFAULT 'CORP',
     p_max_back_days IN PLS_INTEGER DEFAULT 7
 )
 RETURN NUMBER
 IS
-    l_rate       WWI_REF.FX_RATE_DAILY.RATE_NUM%TYPE;
-    l_rate_from  WWI_REF.FX_RATE_DAILY.RATE_NUM%TYPE;
-    l_rate_to    WWI_REF.FX_RATE_DAILY.RATE_NUM%TYPE;
-    l_minor_unit WWI_REF.CURRENCY_CODE.MINOR_UNIT_NUM%TYPE;
+    l_rate       WWI_REF.FX_RATE_DAILY.RATE%TYPE;
+    l_rate_from  WWI_REF.FX_RATE_DAILY.RATE%TYPE;
+    l_rate_to    WWI_REF.FX_RATE_DAILY.RATE%TYPE;
+    l_minor_unit WWI_REF.CURRENCY_CODE.MINOR_UNIT_DIGITS%TYPE;
 BEGIN
     IF p_amount IS NULL THEN
         RETURN NULL;
@@ -39,10 +39,10 @@ BEGIN
     END IF;
 
     BEGIN
-        SELECT MINOR_UNIT_NUM
+        SELECT MINOR_UNIT_DIGITS
           INTO l_minor_unit
           FROM WWI_REF.CURRENCY_CODE
-         WHERE CURRENCY_CD = p_to_ccy;
+         WHERE CURR_CD = p_to_ccy;
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
             l_minor_unit := 2;
@@ -50,33 +50,33 @@ BEGIN
 
     /* 1. exact date, requested rate type */
     BEGIN
-        SELECT r.RATE_NUM
+        SELECT r.RATE
           INTO l_rate
           FROM WWI_REF.FX_RATE_DAILY r
-         WHERE r.FROM_CURRENCY_CD = p_from_ccy
-           AND r.TO_CURRENCY_CD   = p_to_ccy
+         WHERE r.FROM_CURR_CD = p_from_ccy
+           AND r.TO_CURR_CD   = p_to_ccy
            AND r.RATE_TYPE_CD     = p_rate_type_cd
            AND r.RATE_DT          = TRUNC(p_rate_dt);
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
             l_rate := NULL;
         WHEN TOO_MANY_ROWS THEN
-            SELECT MAX(r.RATE_NUM)
+            SELECT MAX(r.RATE)
               INTO l_rate
               FROM WWI_REF.FX_RATE_DAILY r
-             WHERE r.FROM_CURRENCY_CD = p_from_ccy
-               AND r.TO_CURRENCY_CD   = p_to_ccy
+             WHERE r.FROM_CURR_CD = p_from_ccy
+               AND r.TO_CURR_CD   = p_to_ccy
                AND r.RATE_TYPE_CD     = p_rate_type_cd
                AND r.RATE_DT          = TRUNC(p_rate_dt);
     END;
 
     /* 2. most recent rate inside the back-off window */
     IF l_rate IS NULL THEN
-        SELECT MAX(r.RATE_NUM) KEEP (DENSE_RANK LAST ORDER BY r.RATE_DT)
+        SELECT MAX(r.RATE) KEEP (DENSE_RANK LAST ORDER BY r.RATE_DT)
           INTO l_rate
           FROM WWI_REF.FX_RATE_DAILY r
-         WHERE r.FROM_CURRENCY_CD = p_from_ccy
-           AND r.TO_CURRENCY_CD   = p_to_ccy
+         WHERE r.FROM_CURR_CD = p_from_ccy
+           AND r.TO_CURR_CD   = p_to_ccy
            AND r.RATE_TYPE_CD     = p_rate_type_cd
            AND r.RATE_DT BETWEEN TRUNC(p_rate_dt) - NVL(p_max_back_days, 7)
                              AND TRUNC(p_rate_dt);
@@ -84,11 +84,11 @@ BEGIN
 
     /* 3. inverse quote */
     IF l_rate IS NULL THEN
-        SELECT MAX(r.RATE_NUM) KEEP (DENSE_RANK LAST ORDER BY r.RATE_DT)
+        SELECT MAX(r.RATE) KEEP (DENSE_RANK LAST ORDER BY r.RATE_DT)
           INTO l_rate
           FROM WWI_REF.FX_RATE_DAILY r
-         WHERE r.FROM_CURRENCY_CD = p_to_ccy
-           AND r.TO_CURRENCY_CD   = p_from_ccy
+         WHERE r.FROM_CURR_CD = p_to_ccy
+           AND r.TO_CURR_CD   = p_from_ccy
            AND r.RATE_TYPE_CD     = p_rate_type_cd
            AND r.RATE_DT BETWEEN TRUNC(p_rate_dt) - NVL(p_max_back_days, 7)
                              AND TRUNC(p_rate_dt);
@@ -99,19 +99,19 @@ BEGIN
 
     /* 4. triangulate through USD - added for the 2008 APAC roll-out */
     IF l_rate IS NULL THEN
-        SELECT MAX(r.RATE_NUM) KEEP (DENSE_RANK LAST ORDER BY r.RATE_DT)
+        SELECT MAX(r.RATE) KEEP (DENSE_RANK LAST ORDER BY r.RATE_DT)
           INTO l_rate_from
           FROM WWI_REF.FX_RATE_DAILY r
-         WHERE r.FROM_CURRENCY_CD = p_from_ccy
-           AND r.TO_CURRENCY_CD   = 'USD'
+         WHERE r.FROM_CURR_CD = p_from_ccy
+           AND r.TO_CURR_CD   = 'USD'
            AND r.RATE_TYPE_CD     = p_rate_type_cd
            AND r.RATE_DT BETWEEN TRUNC(p_rate_dt) - 30 AND TRUNC(p_rate_dt);
 
-        SELECT MAX(r.RATE_NUM) KEEP (DENSE_RANK LAST ORDER BY r.RATE_DT)
+        SELECT MAX(r.RATE) KEEP (DENSE_RANK LAST ORDER BY r.RATE_DT)
           INTO l_rate_to
           FROM WWI_REF.FX_RATE_DAILY r
-         WHERE r.FROM_CURRENCY_CD = 'USD'
-           AND r.TO_CURRENCY_CD   = p_to_ccy
+         WHERE r.FROM_CURR_CD = 'USD'
+           AND r.TO_CURR_CD   = p_to_ccy
            AND r.RATE_TYPE_CD     = p_rate_type_cd
            AND r.RATE_DT BETWEEN TRUNC(p_rate_dt) - 30 AND TRUNC(p_rate_dt);
 

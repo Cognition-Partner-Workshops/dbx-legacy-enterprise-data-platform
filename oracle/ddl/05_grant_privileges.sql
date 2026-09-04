@@ -212,3 +212,95 @@ GRANT SELECT ON WWI_FIN.AP_INVOICE_LINE        TO WWI_PROC
 /* WWI_REF.V_PAYMENT_TERMS_EXTRACT */
 GRANT SELECT ON WWI_FIN.PAYMENT_TERMS          TO WWI_REF
 /
+
+/* --- cross-schema reads required to compile the scalar functions ----
+ * Same rule as the view grants above: a stored function body resolves its
+ * references with direct privileges only.
+ * ------------------------------------------------------------------- */
+
+/* WWI_FIN.FN_CONVERT_AMOUNT */
+GRANT SELECT ON WWI_REF.CURRENCY_CODE          TO WWI_FIN
+/
+GRANT SELECT ON WWI_REF.FX_RATE_DAILY          TO WWI_FIN
+/
+
+/* WWI_MDM.FN_PRODUCT_ACTIVE_FLAG */
+GRANT SELECT ON WWI_PROC.PURCHASE_ORDER_LINE   TO WWI_MDM
+/
+
+/* WWI_PROC.FN_RECEIPT_VARIANCE_PCT */
+GRANT SELECT ON WWI_MDM.PRODUCT_UOM_CONV       TO WWI_PROC
+/
+
+/* --- cross-schema privileges required to compile the packages and
+ * procedures ---------------------------------------------------------
+ * Same rule again: a stored PL/SQL body resolves its references with direct
+ * privileges only, and the extract/purge/audit bodies write across schema
+ * boundaries as well as read.
+ * ------------------------------------------------------------------- */
+
+/* WWI_FIN and WWI_MDM write change/purge history through WWI_AUDIT */
+GRANT SELECT, INSERT ON WWI_AUDIT.CHANGE_LOG   TO WWI_FIN
+/
+GRANT SELECT, INSERT ON WWI_AUDIT.CHANGE_LOG   TO WWI_MDM
+/
+GRANT SELECT, INSERT ON WWI_AUDIT.PURGE_LOG    TO WWI_MDM
+/
+GRANT SELECT ON WWI_AUDIT.EXTRACT_CONTROL      TO WWI_FIN
+/
+GRANT SELECT ON WWI_AUDIT.SEQ_CHANGE_LOG       TO WWI_FIN
+/
+GRANT SELECT ON WWI_AUDIT.SEQ_CHANGE_LOG       TO WWI_MDM
+/
+GRANT SELECT ON WWI_AUDIT.SEQ_PURGE_LOG        TO WWI_MDM
+/
+
+/* WWI_AUDIT extract preparation and quarterly purge */
+GRANT SELECT, DELETE ON WWI_FIN.AP_AGING_SNAPSHOT TO WWI_AUDIT
+/
+GRANT SELECT ON WWI_FIN.AP_INVOICE_HDR         TO WWI_AUDIT
+/
+GRANT SELECT ON WWI_FIN.GL_PERIOD_STATUS       TO WWI_AUDIT
+/
+GRANT SELECT ON WWI_MDM.CUST_MASTER            TO WWI_AUDIT
+/
+GRANT SELECT ON WWI_MDM.CUST_ADDRESS           TO WWI_AUDIT
+/
+GRANT SELECT ON WWI_MDM.PRODUCT_MASTER         TO WWI_AUDIT
+/
+GRANT SELECT ON WWI_MDM.SUPP_MASTER            TO WWI_AUDIT
+/
+GRANT SELECT ON WWI_MDM.SUPP_BANK_ACCOUNT      TO WWI_AUDIT
+/
+GRANT SELECT ON WWI_PROC.PURCHASE_ORDER_LINE   TO WWI_AUDIT
+/
+GRANT SELECT ON WWI_REF.CODE_TRANSLATION       TO WWI_AUDIT
+/
+
+/* WWI_FIN AP matching, payment and supplier maintenance */
+GRANT SELECT ON WWI_MDM.SUPP_BANK_ACCOUNT      TO WWI_FIN
+/
+GRANT SELECT ON WWI_MDM.SUPP_CONTACT           TO WWI_FIN
+/
+GRANT UPDATE ON WWI_MDM.SUPP_MASTER            TO WWI_FIN
+/
+GRANT SELECT ON WWI_PROC.PO_RECEIPT_HDR        TO WWI_FIN
+/
+GRANT SELECT, UPDATE ON WWI_PROC.PO_RECEIPT_LINE TO WWI_FIN
+/
+GRANT SELECT ON WWI_PROC.PURCHASE_ORDER_HDR    TO WWI_FIN
+/
+GRANT SELECT ON WWI_PROC.PURCHASE_ORDER_LINE   TO WWI_FIN
+/
+GRANT SELECT ON WWI_REF.COUNTRY_REF            TO WWI_FIN
+/
+GRANT SELECT ON WWI_REF.SOURCE_SYSTEM_REF      TO WWI_FIN
+/
+
+/* WWI_MDM and WWI_PROC read the source-system register and PO history */
+GRANT SELECT ON WWI_PROC.PURCHASE_ORDER_HDR    TO WWI_MDM
+/
+GRANT SELECT ON WWI_REF.SOURCE_SYSTEM_REF      TO WWI_MDM
+/
+GRANT SELECT ON WWI_REF.SOURCE_SYSTEM_REF      TO WWI_PROC
+/

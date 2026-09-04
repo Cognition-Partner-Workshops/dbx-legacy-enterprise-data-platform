@@ -22,8 +22,9 @@ CREATE OR REPLACE FUNCTION WWI_FIN.FN_DUE_DATE
 RETURN DATE
 IS
     l_net_days      WWI_FIN.PAYMENT_TERMS.NET_DAYS%TYPE;
-    l_day_of_month  WWI_FIN.PAYMENT_TERMS.DAY_OF_MONTH_DUE%TYPE;
-    l_proximo_flag  WWI_FIN.PAYMENT_TERMS.PROXIMO_FLAG%TYPE;
+    l_day_of_month  WWI_FIN.PAYMENT_TERMS.DUE_DAY_OF_MONTH_NBR%TYPE;
+    l_months_fwd    WWI_FIN.PAYMENT_TERMS.MONTHS_FORWARD_NBR%TYPE;
+    l_term_basis_cd WWI_FIN.PAYMENT_TERMS.TERM_BASIS_CD%TYPE;
     l_due_dt        DATE;
     l_day_name      VARCHAR2(12);
 BEGIN
@@ -32,21 +33,26 @@ BEGIN
     END IF;
 
     BEGIN
-        SELECT t.NET_DAYS, t.DAY_OF_MONTH_DUE, NVL(t.PROXIMO_FLAG, 'N')
-          INTO l_net_days, l_day_of_month, l_proximo_flag
+        SELECT t.NET_DAYS, t.DUE_DAY_OF_MONTH_NBR, t.MONTHS_FORWARD_NBR, t.TERM_BASIS_CD
+          INTO l_net_days, l_day_of_month, l_months_fwd, l_term_basis_cd
           FROM WWI_FIN.PAYMENT_TERMS t
          WHERE t.PAYMENT_TERMS_CD = p_payment_terms_cd
-           AND NVL(t.ACTIVE_FLAG, 'Y') = 'Y';
+           AND NVL(t.ACTIVE_FLG, 'Y') = 'Y';
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
             RAISE_APPLICATION_ERROR(-20051,
                 'FN_DUE_DATE: unknown payment terms ' || p_payment_terms_cd);
     END;
 
-    IF l_proximo_flag = 'Y' THEN
-        /* proximo: day N of the following month, or month end if shorter */
-        l_due_dt := LEAST(ADD_MONTHS(TRUNC(p_base_dt, 'MM'), 1) + (NVL(l_day_of_month, 1) - 1),
-                          LAST_DAY(ADD_MONTHS(p_base_dt, 1)));
+    IF l_term_basis_cd = 'PREPAY' THEN
+        l_due_dt := TRUNC(p_base_dt);
+    ELSIF l_term_basis_cd = 'DOM' THEN
+        /* proximo: day N of the Nth month forward, or month end if shorter */
+        l_due_dt := LEAST(ADD_MONTHS(TRUNC(p_base_dt, 'MM'), NVL(l_months_fwd, 1))
+                              + (NVL(l_day_of_month, 1) - 1),
+                          LAST_DAY(ADD_MONTHS(p_base_dt, NVL(l_months_fwd, 1))));
+    ELSIF l_term_basis_cd = 'EOM' THEN
+        l_due_dt := LAST_DAY(ADD_MONTHS(TRUNC(p_base_dt), NVL(l_months_fwd, 1)));
     ELSIF UPPER(p_region_cd) = 'EU' AND l_day_of_month IS NOT NULL THEN
         /* EU: net days counted from month end, then pinned to the terms day */
         l_due_dt := LAST_DAY(p_base_dt) + NVL(l_net_days, 0);

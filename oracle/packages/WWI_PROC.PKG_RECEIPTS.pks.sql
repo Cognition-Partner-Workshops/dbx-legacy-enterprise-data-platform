@@ -29,10 +29,10 @@ CREATE OR REPLACE PACKAGE WWI_PROC.PKG_RECEIPTS AS
 
     PROCEDURE create_receipt
     (
-        p_po_id        IN  WWI_PROC.PO_RECEIPT_HDR.PO_ID%TYPE,
+        p_po_id        IN  WWI_PROC.PURCHASE_ORDER_HDR.PO_ID%TYPE,
         p_warehouse_cd IN  WWI_PROC.PO_RECEIPT_HDR.WAREHOUSE_CD%TYPE,
-        p_packing_slip IN  WWI_PROC.PO_RECEIPT_HDR.PACKING_SLIP_NUM%TYPE,
-        p_received_by  IN  WWI_PROC.PO_RECEIPT_HDR.RECEIVED_BY%TYPE,
+        p_packing_slip IN  WWI_PROC.PO_RECEIPT_HDR.PACKING_SLIP_NBR%TYPE,
+        p_received_by  IN  WWI_PROC.PO_RECEIPT_HDR.RECEIVED_BY_CD%TYPE,
         p_receipt_id   OUT WWI_PROC.PO_RECEIPT_HDR.RECEIPT_ID%TYPE
     );
 
@@ -58,7 +58,7 @@ CREATE OR REPLACE PACKAGE WWI_PROC.PKG_RECEIPTS AS
     (
         p_receipt_line_id IN  WWI_PROC.GOODS_RETURN_LINE.RECEIPT_LINE_ID%TYPE,
         p_return_qty      IN  WWI_PROC.GOODS_RETURN_LINE.RETURN_QTY%TYPE,
-        p_reason_cd       IN  WWI_PROC.GOODS_RETURN_LINE.REASON_CD%TYPE,
+        p_reason_cd       IN  WWI_PROC.GOODS_RETURN_LINE.DEFECT_CODE_CD%TYPE,
         p_returned_by     IN  VARCHAR2,
         p_return_line_id  OUT WWI_PROC.GOODS_RETURN_LINE.RETURN_LINE_ID%TYPE
     );

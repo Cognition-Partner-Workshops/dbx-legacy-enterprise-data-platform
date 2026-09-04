@@ -63,6 +63,7 @@ GO
 IF COL_LENGTH(N'Dimension.Stock Item', N'Source System Code') IS NULL
     ALTER TABLE [Dimension].[Stock Item] ADD
         [Source System Code]            NVARCHAR(20)    NULL,
+        [Stock Item Code]               NVARCHAR(50)    NULL,
         [Source Product Reference]      NVARCHAR(50)    NULL,
         [Manufacturer Part Number]      NVARCHAR(50)    NULL,
         [Global Trade Item Number]      NVARCHAR(14)    NULL,

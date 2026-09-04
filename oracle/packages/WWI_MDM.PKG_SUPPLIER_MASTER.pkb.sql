@@ -14,7 +14,7 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_SUPPLIER_MASTER AS
     FUNCTION certification_status
     (
         p_supp_id IN WWI_MDM.SUPP_MASTER.SUPP_ID%TYPE,
-        p_cert_cd IN WWI_MDM.SUPP_CERTIFICATION.CERT_CD%TYPE
+        p_cert_cd IN WWI_MDM.SUPP_CERTIFICATION.CERT_TYPE_CD%TYPE
     ) RETURN VARCHAR2
     IS
         l_expiry_dt WWI_MDM.SUPP_CERTIFICATION.EXPIRY_DT%TYPE;
@@ -23,8 +23,8 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_SUPPLIER_MASTER AS
           INTO l_expiry_dt
           FROM WWI_MDM.SUPP_CERTIFICATION
          WHERE SUPP_ID = p_supp_id
-           AND CERT_CD = p_cert_cd
-           AND NVL(REVOKED_FLAG, 'N') = 'N';
+           AND CERT_TYPE_CD = p_cert_cd
+           AND NVL(CERT_STATUS_CD, 'ACTIVE') <> 'REVOKED';
 
         IF l_expiry_dt IS NULL THEN
             RETURN 'MISSING';
@@ -44,12 +44,12 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_SUPPLIER_MASTER AS
         p_amount    IN NUMBER DEFAULT 0
     ) RETURN VARCHAR2
     IS
-        l_status    WWI_MDM.SUPP_MASTER.STATUS_CD%TYPE;
-        l_blocked   WWI_MDM.SUPP_MASTER.BLOCK_REASON_CD%TYPE;
-        l_tax_reg   WWI_MDM.SUPP_MASTER.TAX_REG_NUM%TYPE;
+        l_status    WWI_MDM.SUPP_MASTER.SUPP_STATUS_CD%TYPE;
+        l_blocked   WWI_MDM.SUPP_MASTER.HOLD_REASON_CD%TYPE;
+        l_tax_reg   WWI_MDM.SUPP_MASTER.TAX_ID_NBR%TYPE;
         l_country   WWI_MDM.SUPP_MASTER.COUNTRY_CD%TYPE;
     BEGIN
-        SELECT STATUS_CD, BLOCK_REASON_CD, TAX_REG_NUM, COUNTRY_CD
+        SELECT SUPP_STATUS_CD, HOLD_REASON_CD, TAX_ID_NBR, COUNTRY_CD
           INTO l_status, l_blocked, l_tax_reg, l_country
           FROM WWI_MDM.SUPP_MASTER
          WHERE SUPP_ID = p_supp_id;
@@ -91,11 +91,11 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_SUPPLIER_MASTER AS
 
     PROCEDURE onboard_supplier
     (
-        p_supp_num    IN  WWI_MDM.SUPP_MASTER.SUPP_NUM%TYPE,
+        p_supp_num    IN  WWI_MDM.SUPP_MASTER.SUPP_NBR%TYPE,
         p_supp_name   IN  WWI_MDM.SUPP_MASTER.SUPP_NAME%TYPE,
         p_region_cd   IN  WWI_MDM.SUPP_MASTER.REGION_CD%TYPE,
         p_country_cd  IN  WWI_MDM.SUPP_MASTER.COUNTRY_CD%TYPE,
-        p_tax_reg_num IN  WWI_MDM.SUPP_MASTER.TAX_REG_NUM%TYPE,
+        p_tax_reg_num IN  WWI_MDM.SUPP_MASTER.TAX_ID_NBR%TYPE,
         p_supp_id     OUT WWI_MDM.SUPP_MASTER.SUPP_ID%TYPE
     )
     IS
@@ -106,14 +106,14 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_SUPPLIER_MASTER AS
           FROM WWI_MDM.SUPP_MASTER
          WHERE SUPP_NAME_NORM = WWI_MDM.FN_NORMALIZE_NAME(p_supp_name, p_region_cd)
            AND COUNTRY_CD     = p_country_cd
-           AND STATUS_CD     <> 'T';
+           AND SUPP_STATUS_CD     <> 'T';
 
-        p_supp_id := WWI_MDM.SEQ_SUPP.NEXTVAL;
+        p_supp_id := WWI_MDM.SEQ_SUPP_MASTER.NEXTVAL;
 
         INSERT INTO WWI_MDM.SUPP_MASTER
-            (SUPP_ID, SUPP_NUM, SUPP_NAME, SUPP_NAME_NORM, REGION_CD, COUNTRY_CD,
-             TAX_REG_NUM, STATUS_CD, WITHHOLDING_EXEMPT_FLAG, ONBOARDED_DT,
-             CREATED_DT, CREATED_BY, LAST_UPD_DT, LAST_UPD_BY)
+            (SUPP_ID, SUPP_NBR, SUPP_NAME, SUPP_NAME_NORM, REGION_CD, COUNTRY_CD,
+             TAX_ID_NBR, SUPP_STATUS_CD, WITHHOLDING_FLG, APPROVED_DT,
+             CREATED_DT, CREATED_BY, UPDATED_DT, UPDATED_BY)
         VALUES
             (p_supp_id, p_supp_num, p_supp_name,
              WWI_MDM.FN_NORMALIZE_NAME(p_supp_name, p_region_cd),
@@ -141,9 +141,9 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_SUPPLIER_MASTER AS
         p_bank_name    IN  WWI_MDM.SUPP_BANK_ACCOUNT.BANK_NAME%TYPE,
         p_acct_num     IN  VARCHAR2,
         p_iban         IN  VARCHAR2 DEFAULT NULL,
-        p_swift_cd     IN  WWI_MDM.SUPP_BANK_ACCOUNT.SWIFT_CD%TYPE DEFAULT NULL,
-        p_currency_cd  IN  WWI_MDM.SUPP_BANK_ACCOUNT.CURRENCY_CD%TYPE,
-        p_bank_acct_id OUT WWI_MDM.SUPP_BANK_ACCOUNT.BANK_ACCT_ID%TYPE
+        p_swift_cd     IN  WWI_MDM.SUPP_BANK_ACCOUNT.BIC_CD%TYPE DEFAULT NULL,
+        p_currency_cd  IN  WWI_MDM.SUPP_BANK_ACCOUNT.ACCOUNT_CURR_CD%TYPE,
+        p_bank_acct_id OUT WWI_MDM.SUPP_BANK_ACCOUNT.SUPP_BANK_ID%TYPE
     )
     IS
         l_region_cd WWI_MDM.SUPP_MASTER.REGION_CD%TYPE;
@@ -169,12 +169,12 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_SUPPLIER_MASTER AS
                                  || SUBSTR(p_iban, -4)
                        END;
 
-        p_bank_acct_id := WWI_MDM.SEQ_SUPP_BANK.NEXTVAL;
+        p_bank_acct_id := WWI_MDM.SEQ_SUPP_BANK_ACCOUNT.NEXTVAL;
 
         INSERT INTO WWI_MDM.SUPP_BANK_ACCOUNT
-            (BANK_ACCT_ID, SUPP_ID, BANK_NAME, ACCT_NUM_MASKED, IBAN_MASKED,
-             SWIFT_CD, CURRENCY_CD, ACTIVE_FLAG, VERIFIED_FLAG,
-             CREATED_DT, LAST_UPD_DT, LAST_UPD_BY)
+            (SUPP_BANK_ID, SUPP_ID, BANK_NAME, ACCOUNT_NBR_ENC, IBAN_TXT,
+             BIC_CD, ACCOUNT_CURR_CD, ACTIVE_FLG, VALIDATED_FLG,
+             CREATED_DT, UPDATED_DT, UPDATED_BY)
         VALUES
             (p_bank_acct_id, p_supp_id, p_bank_name, l_masked, l_iban_mask,
              p_swift_cd, p_currency_cd, 'Y', 'N', SYSDATE, SYSDATE, USER);
@@ -187,7 +187,7 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_SUPPLIER_MASTER AS
     PROCEDURE block_supplier
     (
         p_supp_id    IN WWI_MDM.SUPP_MASTER.SUPP_ID%TYPE,
-        p_reason_cd  IN WWI_MDM.SUPP_MASTER.BLOCK_REASON_CD%TYPE,
+        p_reason_cd  IN WWI_MDM.SUPP_MASTER.HOLD_REASON_CD%TYPE,
         p_blocked_by IN VARCHAR2
     )
     IS
@@ -197,14 +197,14 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_SUPPLIER_MASTER AS
           INTO l_open_po
           FROM WWI_PROC.PURCHASE_ORDER_HDR
          WHERE SUPP_ID = p_supp_id
-           AND STATUS_CD IN ('AP', 'OP');
+           AND PO_STATUS_CD IN ('AP', 'OP');
 
         UPDATE WWI_MDM.SUPP_MASTER
-           SET BLOCK_REASON_CD = p_reason_cd,
-               BLOCKED_DT      = SYSDATE,
-               STATUS_CD       = 'B',
-               LAST_UPD_DT     = SYSDATE,
-               LAST_UPD_BY     = p_blocked_by
+           SET HOLD_REASON_CD = p_reason_cd,
+               HOLD_ALL_FLG    = 'Y',
+               SUPP_STATUS_CD       = 'B',
+               UPDATED_DT     = SYSDATE,
+               UPDATED_BY     = p_blocked_by
          WHERE SUPP_ID = p_supp_id;
 
         IF SQL%ROWCOUNT = 0 THEN
@@ -228,26 +228,25 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_SUPPLIER_MASTER AS
     IS
     BEGIN
         UPDATE WWI_MDM.SUPP_CERTIFICATION
-           SET STATUS_CD   = 'EXPIRED',
-               LAST_UPD_DT = SYSDATE,
-               LAST_UPD_BY = USER
+           SET CERT_STATUS_CD = 'EXPIRED',
+               UPDATED_DT = SYSDATE,
+               UPDATED_BY = USER
          WHERE EXPIRY_DT < TRUNC(SYSDATE)
-           AND NVL(STATUS_CD, 'ACTIVE') <> 'EXPIRED'
-           AND NVL(REVOKED_FLAG, 'N') = 'N';
+           AND NVL(CERT_STATUS_CD, 'ACTIVE') NOT IN ('EXPIRED', 'REVOKED');
 
         p_expired_cnt := SQL%ROWCOUNT;
 
         /* APAC suppliers lose approval as soon as the local registration
            lapses; the other regions only get a warning on the scorecard   */
         UPDATE WWI_MDM.SUPP_MASTER s
-           SET s.STATUS_CD   = 'P',
-               s.LAST_UPD_DT = SYSDATE
+           SET s.SUPP_STATUS_CD   = 'P',
+               s.UPDATED_DT = SYSDATE
          WHERE s.REGION_CD = 'APAC'
-           AND s.STATUS_CD = 'A'
+           AND s.SUPP_STATUS_CD = 'A'
            AND EXISTS (SELECT 1
                          FROM WWI_MDM.SUPP_CERTIFICATION c
                         WHERE c.SUPP_ID = s.SUPP_ID
-                          AND c.CERT_CD = 'LOCALREG'
+                          AND c.CERT_TYPE_CD = 'LOCALREG'
                           AND c.EXPIRY_DT < TRUNC(SYSDATE));
     EXCEPTION
         WHEN OTHERS THEN

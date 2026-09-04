@@ -27,7 +27,7 @@ SELECT
     ap.[Region Code]                                    AS [Region],
     ap.[Supplier Key]                                   AS [Supplier Key],
     s.[Supplier]                                        AS [Supplier],
-    s.[Supplier Category]                               AS [Supplier Category],
+    s.[Category]                                        AS [Supplier Category],
     ap.[Aging Bucket Code]                              AS [Aging Bucket],
     ap.[Aging Bucket Sort Order]                        AS [Bucket Order],
     ap.[Open Invoice Count]                             AS [Open Invoices],

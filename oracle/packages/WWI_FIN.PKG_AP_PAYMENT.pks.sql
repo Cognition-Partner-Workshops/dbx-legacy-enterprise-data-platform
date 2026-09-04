@@ -43,7 +43,7 @@ CREATE OR REPLACE PACKAGE WWI_FIN.PKG_AP_PAYMENT AS
     (
         p_region_cd    IN  VARCHAR2,
         p_pay_thru_dt  IN  DATE,
-        p_run_id       OUT WWI_FIN.AP_PAYMENT.PAYMENT_RUN_ID%TYPE,
+        p_run_id       OUT WWI_FIN.AP_PAYMENT.PAYMENT_BATCH_NBR%TYPE,
         p_selected_cnt OUT PLS_INTEGER,
         p_total_amt    OUT NUMBER
     );
@@ -66,7 +66,7 @@ CREATE OR REPLACE PACKAGE WWI_FIN.PKG_AP_PAYMENT AS
     (
         p_payment_id  IN WWI_FIN.AP_PAYMENT.PAYMENT_ID%TYPE,
         p_reason_cd   IN WWI_FIN.AP_PAYMENT.VOID_REASON_CD%TYPE,
-        p_voided_by   IN WWI_FIN.AP_PAYMENT.LAST_UPD_BY%TYPE
+        p_voided_by   IN WWI_FIN.AP_PAYMENT.UPDATED_BY%TYPE
     );
 
 END PKG_AP_PAYMENT;

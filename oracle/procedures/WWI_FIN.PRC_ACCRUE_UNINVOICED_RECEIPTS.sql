@@ -24,12 +24,12 @@ IS
         SELECT rl.RECEIPT_LINE_ID,
                rl.PO_LINE_ID,
                pl.PRODUCT_ID,
-               pl.UNIT_PRICE_AMT,
-               ph.CURRENCY_CD,
+               pl.UNIT_PRICE,
+               ph.ORDER_CURR_CD AS CURRENCY_CD,
                ph.PO_ID,
-               pl.ACCRUAL_ACCOUNT_CD,
+               pl.GL_ACCOUNT_CD AS ACCRUAL_ACCOUNT_CD,
                NVL(rl.ACCEPTED_QTY, rl.RECEIVED_QTY) AS ACCRUABLE_QTY,
-               NVL((SELECT SUM(il.MATCHED_QTY)
+               NVL((SELECT SUM(il.QUANTITY)
                       FROM WWI_FIN.AP_INVOICE_LINE il
                      WHERE il.PO_LINE_ID = rl.PO_LINE_ID), 0) AS INVOICED_QTY
           FROM WWI_PROC.PO_RECEIPT_LINE rl
@@ -42,7 +42,7 @@ IS
          WHERE ph.REGION_CD = p_region_cd
            AND rh.RECEIPT_DT <= LAST_DAY(TO_DATE(SUBSTR(p_period_cd, 1, 7)
                                                  || '-01', 'YYYY-MM-DD'))
-           AND NVL(rl.ACCRUAL_POSTED_FLAG, 'N') = 'N'
+           AND NVL(rl.LINE_STATUS_CD, 'OPEN') <> 'ACCRUED'
            AND NVL(rl.ACCEPTED_QTY, rl.RECEIVED_QTY) > 0
          ORDER BY rl.RECEIPT_LINE_ID;
 
@@ -94,7 +94,7 @@ BEGIN
                 CONTINUE;
             END IF;
 
-            l_accr_amt := ROUND(l_open_qty * NVL(l_batch(i).UNIT_PRICE_AMT, 0), 2);
+            l_accr_amt := ROUND(l_open_qty * NVL(l_batch(i).UNIT_PRICE, 0), 2);
 
             IF l_accr_amt < l_min_amt THEN
                 CONTINUE;
@@ -141,9 +141,8 @@ BEGIN
 
     FORALL i IN 1 .. l_posted_ids.COUNT
         UPDATE WWI_PROC.PO_RECEIPT_LINE
-           SET ACCRUAL_POSTED_FLAG = 'Y',
-               ACCRUAL_PERIOD_CD   = p_period_cd,
-               LAST_UPD_DT         = SYSDATE
+           SET LINE_STATUS_CD = 'ACCRUED',
+               UPDATED_DT         = SYSDATE
          WHERE RECEIPT_LINE_ID = l_posted_ids(i);
 
     COMMIT;

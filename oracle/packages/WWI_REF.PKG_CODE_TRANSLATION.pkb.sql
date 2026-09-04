@@ -11,7 +11,7 @@ CREATE OR REPLACE PACKAGE BODY WWI_REF.PKG_CODE_TRANSLATION AS
 
     /* small session cache: the extract views call translate() per row and the
        cross-reference table has never been indexed on REGION_CD             */
-    TYPE t_cache IS TABLE OF WWI_REF.CODE_TRANSLATION.TGT_CODE%TYPE INDEX BY VARCHAR2(200);
+    TYPE t_cache IS TABLE OF WWI_REF.CODE_TRANSLATION.TARGET_VALUE_TXT%TYPE INDEX BY VARCHAR2(200);
     g_cache t_cache;
 
     FUNCTION cache_key
@@ -30,13 +30,13 @@ CREATE OR REPLACE PACKAGE BODY WWI_REF.PKG_CODE_TRANSLATION AS
     FUNCTION translate
     (
         p_code_set_cd IN WWI_REF.CODE_TRANSLATION.CODE_SET_CD%TYPE,
-        p_src_code    IN WWI_REF.CODE_TRANSLATION.SRC_CODE%TYPE,
-        p_src_system  IN WWI_REF.CODE_TRANSLATION.SRC_SYSTEM_CD%TYPE DEFAULT 'ERP',
+        p_src_code    IN WWI_REF.CODE_TRANSLATION.SOURCE_VALUE_TXT%TYPE,
+        p_src_system  IN WWI_REF.CODE_TRANSLATION.SOURCE_SYS_CD%TYPE DEFAULT 'ERP',
         p_region_cd   IN VARCHAR2 DEFAULT NULL
-    ) RETURN WWI_REF.CODE_TRANSLATION.TGT_CODE%TYPE
+    ) RETURN WWI_REF.CODE_TRANSLATION.TARGET_VALUE_TXT%TYPE
     IS
         l_key      VARCHAR2(200);
-        l_tgt      WWI_REF.CODE_TRANSLATION.TGT_CODE%TYPE;
+        l_tgt      WWI_REF.CODE_TRANSLATION.TARGET_VALUE_TXT%TYPE;
         l_hit_cnt  PLS_INTEGER;
     BEGIN
         l_key := cache_key(p_code_set_cd, p_src_system, p_src_code, p_region_cd);
@@ -49,10 +49,10 @@ CREATE OR REPLACE PACKAGE BODY WWI_REF.PKG_CODE_TRANSLATION AS
           INTO l_hit_cnt
           FROM WWI_REF.CODE_TRANSLATION x
          WHERE x.CODE_SET_CD   = p_code_set_cd
-           AND x.SRC_SYSTEM_CD = p_src_system
-           AND x.SRC_CODE      = p_src_code
+           AND x.SOURCE_SYS_CD = p_src_system
+           AND x.SOURCE_VALUE_TXT      = p_src_code
            AND NVL(x.REGION_CD, NVL(p_region_cd, '*')) = NVL(p_region_cd, '*')
-           AND NVL(x.ACTIVE_FLAG, 'Y') = 'Y';
+           AND NVL(x.ACTIVE_FLG, 'Y') = 'Y';
 
         IF l_hit_cnt = 0 THEN
             /* legacy behaviour: an unmapped code is passed through unchanged
@@ -64,17 +64,17 @@ CREATE OR REPLACE PACKAGE BODY WWI_REF.PKG_CODE_TRANSLATION AS
             RETURN p_src_code;
         END IF;
 
-        SELECT TGT_CODE
+        SELECT TARGET_VALUE_TXT
           INTO l_tgt
-          FROM (SELECT x.TGT_CODE
+          FROM (SELECT x.TARGET_VALUE_TXT
                   FROM WWI_REF.CODE_TRANSLATION x
                  WHERE x.CODE_SET_CD   = p_code_set_cd
-                   AND x.SRC_SYSTEM_CD = p_src_system
-                   AND x.SRC_CODE      = p_src_code
+                   AND x.SOURCE_SYS_CD = p_src_system
+                   AND x.SOURCE_VALUE_TXT      = p_src_code
                    AND NVL(x.REGION_CD, NVL(p_region_cd, '*')) = NVL(p_region_cd, '*')
-                   AND NVL(x.ACTIVE_FLAG, 'Y') = 'Y'
+                   AND NVL(x.ACTIVE_FLG, 'Y') = 'Y'
                  /* region specific rows win over the generic row */
-                 ORDER BY NVL2(x.REGION_CD, 0, 1), x.EFF_FROM_DT DESC)
+                 ORDER BY NVL2(x.REGION_CD, 0, 1), x.EFFECTIVE_FROM_DT DESC)
          WHERE ROWNUM = 1;
 
         IF l_hit_cnt > 1 THEN
@@ -91,19 +91,19 @@ CREATE OR REPLACE PACKAGE BODY WWI_REF.PKG_CODE_TRANSLATION AS
     FUNCTION reverse_translate
     (
         p_code_set_cd IN WWI_REF.CODE_TRANSLATION.CODE_SET_CD%TYPE,
-        p_tgt_code    IN WWI_REF.CODE_TRANSLATION.TGT_CODE%TYPE,
-        p_src_system  IN WWI_REF.CODE_TRANSLATION.SRC_SYSTEM_CD%TYPE DEFAULT 'ERP'
-    ) RETURN WWI_REF.CODE_TRANSLATION.SRC_CODE%TYPE
+        p_tgt_code    IN WWI_REF.CODE_TRANSLATION.TARGET_VALUE_TXT%TYPE,
+        p_src_system  IN WWI_REF.CODE_TRANSLATION.SOURCE_SYS_CD%TYPE DEFAULT 'ERP'
+    ) RETURN WWI_REF.CODE_TRANSLATION.SOURCE_VALUE_TXT%TYPE
     IS
-        l_src WWI_REF.CODE_TRANSLATION.SRC_CODE%TYPE;
+        l_src WWI_REF.CODE_TRANSLATION.SOURCE_VALUE_TXT%TYPE;
     BEGIN
-        SELECT MIN(x.SRC_CODE)
+        SELECT MIN(x.SOURCE_VALUE_TXT)
           INTO l_src
           FROM WWI_REF.CODE_TRANSLATION x
          WHERE x.CODE_SET_CD   = p_code_set_cd
-           AND x.SRC_SYSTEM_CD = p_src_system
-           AND x.TGT_CODE      = p_tgt_code
-           AND NVL(x.ACTIVE_FLAG, 'Y') = 'Y';
+           AND x.SOURCE_SYS_CD = p_src_system
+           AND x.TARGET_VALUE_TXT      = p_tgt_code
+           AND NVL(x.ACTIVE_FLG, 'Y') = 'Y';
 
         IF l_src IS NULL THEN
             RAISE_APPLICATION_ERROR(-20412,
@@ -117,9 +117,9 @@ CREATE OR REPLACE PACKAGE BODY WWI_REF.PKG_CODE_TRANSLATION AS
     PROCEDURE register_mapping
     (
         p_code_set_cd IN WWI_REF.CODE_TRANSLATION.CODE_SET_CD%TYPE,
-        p_src_system  IN WWI_REF.CODE_TRANSLATION.SRC_SYSTEM_CD%TYPE,
-        p_src_code    IN WWI_REF.CODE_TRANSLATION.SRC_CODE%TYPE,
-        p_tgt_code    IN WWI_REF.CODE_TRANSLATION.TGT_CODE%TYPE,
+        p_src_system  IN WWI_REF.CODE_TRANSLATION.SOURCE_SYS_CD%TYPE,
+        p_src_code    IN WWI_REF.CODE_TRANSLATION.SOURCE_VALUE_TXT%TYPE,
+        p_tgt_code    IN WWI_REF.CODE_TRANSLATION.TARGET_VALUE_TXT%TYPE,
         p_region_cd   IN WWI_REF.CODE_TRANSLATION.REGION_CD%TYPE DEFAULT NULL
     )
     IS
@@ -128,7 +128,7 @@ CREATE OR REPLACE PACKAGE BODY WWI_REF.PKG_CODE_TRANSLATION AS
         SELECT COUNT(*)
           INTO l_set_cnt
           FROM WWI_REF.STATUS_CODE_REF
-         WHERE CODE_SET_CD = p_code_set_cd;
+         WHERE ENTITY_CD = p_code_set_cd;
 
         IF l_set_cnt = 0 THEN
             RAISE_APPLICATION_ERROR(-20411,
@@ -137,18 +137,18 @@ CREATE OR REPLACE PACKAGE BODY WWI_REF.PKG_CODE_TRANSLATION AS
         END IF;
 
         UPDATE WWI_REF.CODE_TRANSLATION
-           SET ACTIVE_FLAG = 'N',
-               EFF_TO_DT   = TRUNC(SYSDATE) - 1,
-               LAST_UPD_DT = SYSDATE
+           SET ACTIVE_FLG = 'N',
+               EFFECTIVE_TO_DT   = TRUNC(SYSDATE) - 1,
+               UPDATED_DT = SYSDATE
          WHERE CODE_SET_CD   = p_code_set_cd
-           AND SRC_SYSTEM_CD = p_src_system
-           AND SRC_CODE      = p_src_code
+           AND SOURCE_SYS_CD = p_src_system
+           AND SOURCE_VALUE_TXT      = p_src_code
            AND NVL(REGION_CD, '*') = NVL(p_region_cd, '*')
-           AND NVL(ACTIVE_FLAG, 'Y') = 'Y';
+           AND NVL(ACTIVE_FLG, 'Y') = 'Y';
 
         INSERT INTO WWI_REF.CODE_TRANSLATION
-            (CODE_TRANSLATION_ID, CODE_SET_CD, SRC_SYSTEM_CD, SRC_CODE, TGT_CODE,
-             REGION_CD, ACTIVE_FLAG, EFF_FROM_DT, EFF_TO_DT, CREATED_DT, LAST_UPD_DT)
+            (TRANSLATION_ID, CODE_SET_CD, SOURCE_SYS_CD, SOURCE_VALUE_TXT, TARGET_VALUE_TXT,
+             REGION_CD, ACTIVE_FLG, EFFECTIVE_FROM_DT, EFFECTIVE_TO_DT, CREATED_DT, UPDATED_DT)
         VALUES
             (WWI_REF.SEQ_CODE_TRANSLATION.NEXTVAL, p_code_set_cd, p_src_system, p_src_code,
              p_tgt_code, p_region_cd, 'Y', TRUNC(SYSDATE), NULL, SYSDATE, SYSDATE);
@@ -167,12 +167,12 @@ CREATE OR REPLACE PACKAGE BODY WWI_REF.PKG_CODE_TRANSLATION AS
         SELECT COUNT(DISTINCT s.STATUS_CD)
           INTO p_unmapped_cnt
           FROM WWI_REF.STATUS_CODE_REF s
-         WHERE s.CODE_SET_CD = p_code_set_cd
+         WHERE s.ENTITY_CD = p_code_set_cd
            AND NOT EXISTS (SELECT 1
                              FROM WWI_REF.CODE_TRANSLATION x
-                            WHERE x.CODE_SET_CD = s.CODE_SET_CD
-                              AND x.SRC_CODE    = s.STATUS_CD
-                              AND NVL(x.ACTIVE_FLAG, 'Y') = 'Y');
+                            WHERE x.CODE_SET_CD = s.ENTITY_CD
+                              AND x.SOURCE_VALUE_TXT    = s.STATUS_CD
+                              AND NVL(x.ACTIVE_FLG, 'Y') = 'Y');
 
         IF p_unmapped_cnt > 0 THEN
             WWI_AUDIT.PKG_DATA_QUALITY.log_error('PKG_CODE_TRANSLATION.report_unmapped',

@@ -87,7 +87,9 @@ IF COL_LENGTH(N'Dimension.Customer', N'Account Opened Date') IS NULL
         [Standard Discount Percentage]  DECIMAL(9, 4)   NULL,
         [Primary Salesperson Reference] NVARCHAR(50)    NULL,
         [Website URL]                   NVARCHAR(256)   NULL,
-        [Phone Number Standardized]     NVARCHAR(30)    NULL;
+        [Phone Number Standardized]     NVARCHAR(30)    NULL,
+        [Primary Contact Email]         NVARCHAR(256)   NULL,
+        [Account Manager Employee Key]  INT             NULL;
 GO
 
 /*

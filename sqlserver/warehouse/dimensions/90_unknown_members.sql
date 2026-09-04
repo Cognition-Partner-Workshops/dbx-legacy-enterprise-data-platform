@@ -182,20 +182,28 @@ DECLARE @ValidFrom  DATETIME2(7) = CONVERT(DATETIME2(7), N'1900-01-01T00:00:00')
 IF NOT EXISTS (SELECT 1 FROM [Dimension].[Date] WHERE [Date] = CONVERT(DATE, N'1900-01-01'))
     INSERT INTO [Dimension].[Date]
         ([Date], [Day Number], [Day], [Day of Week], [Day of Week Number],
-         [Month], [Short Month], [Calendar Month Number], [Calendar Quarter Number],
-         [Calendar Year], [Is Reserved Member], [Reserved Member Description])
+         [Month], [Short Month], [Calendar Month Number], [Calendar Month Label],
+         [Calendar Quarter Number], [Calendar Year], [Calendar Year Label],
+         [Fiscal Month Number], [Fiscal Month Label], [Fiscal Year], [Fiscal Year Label],
+         [ISO Week Number], [Is Reserved Member], [Reserved Member Description])
     VALUES
-        (CONVERT(DATE, @ValidFrom), 0, N'Unknown', N'Unknown', 0, N'Unknown', N'UNK',
-         0, 0, 1900, 1, N'Unknown date');
+        (CONVERT(DATE, @ValidFrom), 0, N'Unknown', N'Unknown', 0,
+         N'Unknown', N'UNK', 0, N'Unknown', 0, 1900, N'CY1900',
+         0, N'Unknown', 1900, N'FY1900',
+         0, 1, N'Unknown date');
 
 IF NOT EXISTS (SELECT 1 FROM [Dimension].[Date] WHERE [Date] = CONVERT(DATE, N'1900-01-02'))
     INSERT INTO [Dimension].[Date]
         ([Date], [Day Number], [Day], [Day of Week], [Day of Week Number],
-         [Month], [Short Month], [Calendar Month Number], [Calendar Quarter Number],
-         [Calendar Year], [Is Reserved Member], [Reserved Member Description])
+         [Month], [Short Month], [Calendar Month Number], [Calendar Month Label],
+         [Calendar Quarter Number], [Calendar Year], [Calendar Year Label],
+         [Fiscal Month Number], [Fiscal Month Label], [Fiscal Year], [Fiscal Year Label],
+         [ISO Week Number], [Is Reserved Member], [Reserved Member Description])
     VALUES
-        (CONVERT(DATE, N'1900-01-02'), 0, N'N/A', N'N/A', 0, N'N/A', N'N/A',
-         0, 0, 1900, 1, N'Not applicable - no date for this role');
+        (CONVERT(DATE, N'1900-01-02'), 0, N'N/A', N'N/A', 0,
+         N'N/A', N'N/A', 0, N'N/A', 0, 1900, N'CY1900',
+         0, N'N/A', 1900, N'FY1900',
+         0, 1, N'Not applicable - no date for this role');
 
 IF NOT EXISTS (SELECT 1 FROM [Dimension].[Time] WHERE [Time Key] = -1)
     INSERT INTO [Dimension].[Time] ([Time Key], [Is Reserved Member], [Reserved Member Description])

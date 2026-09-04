@@ -110,7 +110,7 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_SUPPLIER_PERF AS
 
     PROCEDURE build_scorecards
     (
-        p_period_cd  IN  WWI_PROC.SUPPLIER_SCORECARD.PERIOD_CD%TYPE,
+        p_period_cd  IN  WWI_PROC.SUPPLIER_SCORECARD.SCORE_PERIOD_CD%TYPE,
         p_region_cd  IN  VARCHAR2,
         p_built_cnt  OUT PLS_INTEGER
     )
@@ -119,7 +119,7 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_SUPPLIER_PERF AS
             SELECT s.SUPP_ID, s.REGION_CD
               FROM WWI_MDM.SUPP_MASTER s
              WHERE s.REGION_CD = p_region_cd
-               AND s.STATUS_CD IN ('A', 'P')
+               AND s.SUPP_STATUS_CD IN ('A', 'P')
              ORDER BY s.SUPP_ID;
 
         TYPE t_supp_tab IS TABLE OF c_suppliers%ROWTYPE INDEX BY PLS_INTEGER;
@@ -192,22 +192,22 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_SUPPLIER_PERF AS
 
                 MERGE INTO WWI_PROC.SUPPLIER_SCORECARD t
                 USING (SELECT l_supps(i).SUPP_ID AS SUPP_ID,
-                              p_period_cd        AS PERIOD_CD
+                              p_period_cd        AS SCORE_PERIOD_CD
                          FROM DUAL) s
-                   ON (t.SUPP_ID = s.SUPP_ID AND t.PERIOD_CD = s.PERIOD_CD)
+                   ON (t.SUPP_ID = s.SUPP_ID AND t.SCORE_PERIOD_CD = s.SCORE_PERIOD_CD)
                  WHEN MATCHED THEN
-                    UPDATE SET t.ON_TIME_PCT     = l_on_time,
-                               t.QUALITY_PCT     = l_quality,
-                               t.PRICE_VAR_PCT   = l_price,
-                               t.COMPOSITE_SCORE = l_score,
-                               t.RATING_CD       = l_rating,
-                               t.LAST_UPD_DT     = SYSDATE
+                    UPDATE SET t.OTIF_PCT           = l_on_time,
+                               t.QUALITY_REJECT_PCT = l_quality,
+                               t.PRICE_VARIANCE_PCT = l_price,
+                               t.OVERALL_SCORE      = l_score,
+                               t.SCORE_BAND_CD       = l_rating,
+                               t.UPDATED_DT     = SYSDATE
                  WHEN NOT MATCHED THEN
-                    INSERT (SCORECARD_ID, SUPP_ID, PERIOD_CD, REGION_CD, ON_TIME_PCT,
-                            QUALITY_PCT, PRICE_VAR_PCT, COMPOSITE_SCORE, RATING_CD,
-                            CREATED_DT, LAST_UPD_DT)
+                    INSERT (SCORECARD_ID, SUPP_ID, SCORE_PERIOD_CD, REGION_CD, OTIF_PCT,
+                            QUALITY_REJECT_PCT, PRICE_VARIANCE_PCT, OVERALL_SCORE, SCORE_BAND_CD,
+                            CREATED_DT, UPDATED_DT)
                     VALUES (WWI_PROC.SEQ_SUPPLIER_SCORECARD.NEXTVAL, s.SUPP_ID,
-                            s.PERIOD_CD, l_supps(i).REGION_CD, l_on_time, l_quality,
+                            s.SCORE_PERIOD_CD, l_supps(i).REGION_CD, l_on_time, l_quality,
                             l_price, l_score, l_rating, SYSDATE, SYSDATE);
 
                 p_built_cnt := p_built_cnt + 1;

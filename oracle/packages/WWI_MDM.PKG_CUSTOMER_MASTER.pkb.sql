@@ -39,20 +39,20 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_CUSTOMER_MASTER AS
             l_score := l_score + 10;
         END IF;
 
-        IF l_a.TAX_REG_NUM IS NOT NULL AND l_a.TAX_REG_NUM = l_b.TAX_REG_NUM THEN
+        IF l_a.TAX_REG_NBR IS NOT NULL AND l_a.TAX_REG_NBR = l_b.TAX_REG_NBR THEN
             l_score := l_score + 30;
         END IF;
 
         BEGIN
             SELECT MAX(POSTAL_CD) INTO l_pa
               FROM WWI_MDM.CUST_ADDRESS
-             WHERE CUST_ID = p_cust_id_a AND ADDRESS_TYPE_CD = 'BILL'
-               AND NVL(CURRENT_FLAG, 'Y') = 'Y';
+             WHERE CUST_ID = p_cust_id_a AND ADDR_TYPE_CD = 'BILL'
+               AND NVL(PRIMARY_FLG, 'Y') = 'Y';
 
             SELECT MAX(POSTAL_CD) INTO l_pb
               FROM WWI_MDM.CUST_ADDRESS
-             WHERE CUST_ID = p_cust_id_b AND ADDRESS_TYPE_CD = 'BILL'
-               AND NVL(CURRENT_FLAG, 'Y') = 'Y';
+             WHERE CUST_ID = p_cust_id_b AND ADDR_TYPE_CD = 'BILL'
+               AND NVL(PRIMARY_FLG, 'Y') = 'Y';
 
             IF l_pa IS NOT NULL AND l_pa = l_pb THEN
                 l_score := l_score + 10;
@@ -75,10 +75,10 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_CUSTOMER_MASTER AS
     ) RETURN DATE
     IS
         l_region_cd  WWI_MDM.CUST_MASTER.REGION_CD%TYPE;
-        l_closed_dt  WWI_MDM.CUST_MASTER.CLOSED_DT%TYPE;
+        l_closed_dt  WWI_MDM.CUST_MASTER.RETENTION_UNTIL_DT%TYPE;
         l_months     PLS_INTEGER;
     BEGIN
-        SELECT REGION_CD, CLOSED_DT
+        SELECT REGION_CD, RETENTION_UNTIL_DT
           INTO l_region_cd, l_closed_dt
           FROM WWI_MDM.CUST_MASTER
          WHERE CUST_ID = p_cust_id;
@@ -102,12 +102,12 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_CUSTOMER_MASTER AS
 
     PROCEDURE upsert_customer
     (
-        p_cust_num   IN  WWI_MDM.CUST_MASTER.CUST_NUM%TYPE,
+        p_cust_num   IN  WWI_MDM.CUST_MASTER.CUST_NBR%TYPE,
         p_cust_name  IN  WWI_MDM.CUST_MASTER.CUST_NAME%TYPE,
         p_region_cd  IN  WWI_MDM.CUST_MASTER.REGION_CD%TYPE,
         p_country_cd IN  WWI_MDM.CUST_MASTER.COUNTRY_CD%TYPE,
-        p_segment_cd IN  WWI_MDM.CUST_MASTER.SEGMENT_CD%TYPE DEFAULT NULL,
-        p_src_system IN  WWI_MDM.CUST_MASTER.SRC_SYSTEM_CD%TYPE DEFAULT 'CRM',
+        p_segment_cd IN  WWI_MDM.CUST_SEGMENT_ASSIGN.SEGMENT_CD%TYPE DEFAULT NULL,
+        p_src_system IN  WWI_MDM.CUST_MASTER.SOURCE_SYS%TYPE DEFAULT 'CRM',
         p_cust_id    OUT WWI_MDM.CUST_MASTER.CUST_ID%TYPE,
         p_action_cd  OUT VARCHAR2
     )
@@ -118,24 +118,24 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_CUSTOMER_MASTER AS
             SELECT CUST_ID
               INTO l_existing_id
               FROM WWI_MDM.CUST_MASTER
-             WHERE CUST_NUM = p_cust_num;
+             WHERE CUST_NBR = p_cust_num;
         EXCEPTION
             WHEN NO_DATA_FOUND THEN
                 l_existing_id := NULL;
         END;
 
         IF l_existing_id IS NULL THEN
-            p_cust_id   := WWI_MDM.SEQ_CUST.NEXTVAL;
+            p_cust_id   := WWI_MDM.SEQ_CUST_MASTER.NEXTVAL;
             p_action_cd := 'INSERT';
 
             INSERT INTO WWI_MDM.CUST_MASTER
-                (CUST_ID, CUST_NUM, CUST_NAME, CUST_NAME_NORM, REGION_CD, COUNTRY_CD,
-                 SEGMENT_CD, STATUS_CD, CONSENT_FLAG, SRC_SYSTEM_CD,
-                 CREATED_DT, CREATED_BY, LAST_UPD_DT, LAST_UPD_BY)
+                (CUST_ID, CUST_NBR, CUST_NAME, CUST_NAME_ALT, REGION_CD, COUNTRY_CD,
+                 CUST_STATUS_CD, CONSENT_MARKETING_FLG, SOURCE_SYS,
+                 CREATED_DT, CREATED_BY, UPDATED_DT, UPDATED_BY)
             VALUES
                 (p_cust_id, p_cust_num, p_cust_name,
                  WWI_MDM.FN_NORMALIZE_NAME(p_cust_name, p_region_cd),
-                 p_region_cd, p_country_cd, p_segment_cd, 'A',
+                 p_region_cd, p_country_cd, 'A',
                  CASE WHEN p_region_cd = 'EU' THEN 'N' ELSE 'Y' END,
                  p_src_system, SYSDATE, USER, SYSDATE, USER);
         ELSE
@@ -144,13 +144,27 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_CUSTOMER_MASTER AS
 
             UPDATE WWI_MDM.CUST_MASTER
                SET CUST_NAME      = p_cust_name,
-                   CUST_NAME_NORM = WWI_MDM.FN_NORMALIZE_NAME(p_cust_name, p_region_cd),
+                   CUST_NAME_ALT  = WWI_MDM.FN_NORMALIZE_NAME(p_cust_name, p_region_cd),
                    REGION_CD      = p_region_cd,
                    COUNTRY_CD     = p_country_cd,
-                   SEGMENT_CD     = NVL(p_segment_cd, SEGMENT_CD),
-                   LAST_UPD_DT    = SYSDATE,
-                   LAST_UPD_BY    = USER
+                   UPDATED_DT    = SYSDATE,
+                   UPDATED_BY    = USER
              WHERE CUST_ID = l_existing_id;
+        END IF;
+
+        /* segmentation is an assignment, not an attribute of the master row */
+        IF p_segment_cd IS NOT NULL THEN
+            MERGE INTO WWI_MDM.CUST_SEGMENT_ASSIGN t
+            USING (SELECT p_cust_id AS CUST_ID, p_segment_cd AS SEGMENT_CD FROM DUAL) s
+               ON (t.CUST_ID = s.CUST_ID AND t.SEGMENT_MODEL_CD = 'SOURCE')
+             WHEN MATCHED THEN
+                UPDATE SET t.SEGMENT_CD = s.SEGMENT_CD,
+                           t.UPDATED_DT = SYSDATE
+             WHEN NOT MATCHED THEN
+                INSERT (SEGMENT_ASSIGN_ID, CUST_ID, REGION_CD, SEGMENT_MODEL_CD,
+                        SEGMENT_CD, EFFECTIVE_DT, CREATED_DT, UPDATED_DT)
+                VALUES (WWI_MDM.SEQ_CUST_SEGMENT_ASSIGN.NEXTVAL, s.CUST_ID, p_region_cd,
+                        'SOURCE', s.SEGMENT_CD, TRUNC(SYSDATE), SYSDATE, SYSDATE);
         END IF;
     EXCEPTION
         WHEN DUP_VAL_ON_INDEX THEN
@@ -162,11 +176,11 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_CUSTOMER_MASTER AS
     PROCEDURE apply_address_change
     (
         p_cust_id      IN WWI_MDM.CUST_ADDRESS.CUST_ID%TYPE,
-        p_address_type IN WWI_MDM.CUST_ADDRESS.ADDRESS_TYPE_CD%TYPE,
-        p_line1_txt    IN WWI_MDM.CUST_ADDRESS.ADDRESS_LINE1_TXT%TYPE,
-        p_line2_txt    IN WWI_MDM.CUST_ADDRESS.ADDRESS_LINE2_TXT%TYPE,
-        p_city_name    IN WWI_MDM.CUST_ADDRESS.CITY_NAME%TYPE,
-        p_state_cd     IN WWI_MDM.CUST_ADDRESS.STATE_PROVINCE_CD%TYPE,
+        p_address_type IN WWI_MDM.CUST_ADDRESS.ADDR_TYPE_CD%TYPE,
+        p_line1_txt    IN WWI_MDM.CUST_ADDRESS.ADDR_LINE_1%TYPE,
+        p_line2_txt    IN WWI_MDM.CUST_ADDRESS.ADDR_LINE_2%TYPE,
+        p_city_name    IN WWI_MDM.CUST_ADDRESS.CITY_TXT%TYPE,
+        p_state_cd     IN WWI_MDM.CUST_ADDRESS.STATE_PROV_CD%TYPE,
         p_postal_cd    IN WWI_MDM.CUST_ADDRESS.POSTAL_CD%TYPE,
         p_country_cd   IN WWI_MDM.CUST_ADDRESS.COUNTRY_CD%TYPE,
         p_eff_dt       IN DATE DEFAULT TRUNC(SYSDATE)
@@ -195,17 +209,17 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_CUSTOMER_MASTER AS
               INTO l_current
               FROM WWI_MDM.CUST_ADDRESS
              WHERE CUST_ID         = p_cust_id
-               AND ADDRESS_TYPE_CD = p_address_type
-               AND NVL(CURRENT_FLAG, 'Y') = 'Y'
+               AND ADDR_TYPE_CD = p_address_type
+               AND NVL(PRIMARY_FLG, 'Y') = 'Y'
                AND ROWNUM = 1;
 
-            l_changed := NVL(l_current.ADDRESS_LINE1_TXT, '~') <> NVL(p_line1_txt, '~')
-                      OR NVL(l_current.CITY_NAME, '~')         <> NVL(p_city_name, '~')
+            l_changed := NVL(l_current.ADDR_LINE_1, '~') <> NVL(p_line1_txt, '~')
+                      OR NVL(l_current.CITY_TXT, '~')    <> NVL(p_city_name, '~')
                       OR NVL(l_current.POSTAL_CD, '~')         <> NVL(l_postal_cd, '~')
                       OR NVL(l_current.COUNTRY_CD, '~')        <> NVL(p_country_cd, '~');
         EXCEPTION
             WHEN NO_DATA_FOUND THEN
-                l_current.ADDRESS_ID := NULL;
+                l_current.CUST_ADDR_ID := NULL;
                 l_changed            := TRUE;
         END;
 
@@ -214,19 +228,19 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_CUSTOMER_MASTER AS
         END IF;
 
         /* hand-rolled type 2: close the old row, open a new one */
-        IF l_current.ADDRESS_ID IS NOT NULL THEN
+        IF l_current.CUST_ADDR_ID IS NOT NULL THEN
             UPDATE WWI_MDM.CUST_ADDRESS
-               SET CURRENT_FLAG = 'N',
+               SET PRIMARY_FLG = 'N',
                    VALID_TO_DT  = p_eff_dt - 1,
-                   LAST_UPD_DT  = SYSDATE,
-                   LAST_UPD_BY  = USER
-             WHERE ADDRESS_ID = l_current.ADDRESS_ID;
+                   UPDATED_DT  = SYSDATE,
+                   UPDATED_BY  = USER
+             WHERE CUST_ADDR_ID = l_current.CUST_ADDR_ID;
         END IF;
 
         INSERT INTO WWI_MDM.CUST_ADDRESS
-            (ADDRESS_ID, CUST_ID, ADDRESS_TYPE_CD, ADDRESS_LINE1_TXT, ADDRESS_LINE2_TXT,
-             CITY_NAME, STATE_PROVINCE_CD, POSTAL_CD, COUNTRY_CD,
-             CURRENT_FLAG, VALID_FROM_DT, VALID_TO_DT, CREATED_DT, LAST_UPD_DT, LAST_UPD_BY)
+            (CUST_ADDR_ID, CUST_ID, ADDR_TYPE_CD, ADDR_LINE_1, ADDR_LINE_2,
+             CITY_TXT, STATE_PROV_CD, POSTAL_CD, COUNTRY_CD,
+             PRIMARY_FLG, VALID_FROM_DT, VALID_TO_DT, CREATED_DT, UPDATED_DT, UPDATED_BY)
         VALUES
             (WWI_MDM.SEQ_CUST_ADDRESS.NEXTVAL, p_cust_id, p_address_type,
              p_line1_txt, p_line2_txt, p_city_name, p_state_cd, l_postal_cd, p_country_cd,
@@ -242,7 +256,7 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_CUSTOMER_MASTER AS
     (
         p_cust_id     IN WWI_MDM.CUST_CREDIT_PROFILE.CUST_ID%TYPE,
         p_limit_amt   IN WWI_MDM.CUST_CREDIT_PROFILE.CREDIT_LIMIT_AMT%TYPE,
-        p_currency_cd IN WWI_MDM.CUST_CREDIT_PROFILE.CURRENCY_CD%TYPE,
+        p_currency_cd IN WWI_MDM.CUST_CREDIT_PROFILE.CREDIT_LIMIT_CURR_CD%TYPE,
         p_approved_by IN VARCHAR2
     )
     IS
@@ -250,21 +264,22 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_CUSTOMER_MASTER AS
     BEGIN
         UPDATE WWI_MDM.CUST_CREDIT_PROFILE
            SET CREDIT_LIMIT_AMT = p_limit_amt,
-               CURRENCY_CD      = p_currency_cd,
-               LIMIT_APPROVED_BY = p_approved_by,
-               LIMIT_APPROVED_DT = SYSDATE,
-               LAST_UPD_DT      = SYSDATE,
-               LAST_UPD_BY      = p_approved_by
+               CREDIT_LIMIT_CURR_CD      = p_currency_cd,
+               REVIEWED_BY_CD = p_approved_by,
+               LAST_REVIEW_DT = SYSDATE,
+               UPDATED_DT      = SYSDATE,
+               UPDATED_BY      = p_approved_by
          WHERE CUST_ID = p_cust_id;
 
         l_rows := SQL%ROWCOUNT;
 
         IF l_rows = 0 THEN
             INSERT INTO WWI_MDM.CUST_CREDIT_PROFILE
-                (CUST_ID, CREDIT_LIMIT_AMT, CURRENCY_CD, CREDIT_HOLD_FLAG,
-                 LIMIT_APPROVED_BY, LIMIT_APPROVED_DT, CREATED_DT, LAST_UPD_DT, LAST_UPD_BY)
+                (CREDIT_PROFILE_ID, CUST_ID, CREDIT_LIMIT_AMT, CREDIT_LIMIT_CURR_CD,
+                 REVIEWED_BY_CD, LAST_REVIEW_DT, CREATED_DT, UPDATED_DT, UPDATED_BY)
             VALUES
-                (p_cust_id, p_limit_amt, p_currency_cd, 'N',
+                (WWI_MDM.SEQ_CUST_CREDIT_PROFILE.NEXTVAL,
+                 p_cust_id, p_limit_amt, p_currency_cd,
                  p_approved_by, SYSDATE, SYSDATE, SYSDATE, p_approved_by);
         END IF;
     END set_credit_limit;
@@ -278,8 +293,8 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_CUSTOMER_MASTER AS
     )
     IS
         l_score       NUMBER;
-        l_surv_status WWI_MDM.CUST_MASTER.STATUS_CD%TYPE;
-        l_merge_status WWI_MDM.CUST_MASTER.STATUS_CD%TYPE;
+        l_surv_status WWI_MDM.CUST_MASTER.CUST_STATUS_CD%TYPE;
+        l_merge_status WWI_MDM.CUST_MASTER.CUST_STATUS_CD%TYPE;
         l_moved_addr  PLS_INTEGER := 0;
         l_moved_cont  PLS_INTEGER := 0;
     BEGIN
@@ -288,9 +303,9 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_CUSTOMER_MASTER AS
                 'PKG_CUSTOMER_MASTER.merge_customer: cannot merge a customer into itself');
         END IF;
 
-        SELECT STATUS_CD INTO l_surv_status
+        SELECT CUST_STATUS_CD INTO l_surv_status
           FROM WWI_MDM.CUST_MASTER WHERE CUST_ID = p_surviving_id FOR UPDATE;
-        SELECT STATUS_CD INTO l_merge_status
+        SELECT CUST_STATUS_CD INTO l_merge_status
           FROM WWI_MDM.CUST_MASTER WHERE CUST_ID = p_merged_id FOR UPDATE;
 
         IF l_surv_status = 'M' THEN
@@ -308,34 +323,34 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_CUSTOMER_MASTER AS
 
         UPDATE WWI_MDM.CUST_ADDRESS
            SET CUST_ID      = p_surviving_id,
-               CURRENT_FLAG = 'N',
+               PRIMARY_FLG = 'N',
                VALID_TO_DT  = TRUNC(SYSDATE),
-               LAST_UPD_DT  = SYSDATE,
-               LAST_UPD_BY  = p_merged_by
+               UPDATED_DT  = SYSDATE,
+               UPDATED_BY  = p_merged_by
          WHERE CUST_ID = p_merged_id;
         l_moved_addr := SQL%ROWCOUNT;
 
         UPDATE WWI_MDM.CUST_CONTACT
            SET CUST_ID     = p_surviving_id,
-               LAST_UPD_DT = SYSDATE,
-               LAST_UPD_BY = p_merged_by
+               UPDATED_DT = SYSDATE,
+               UPDATED_BY = p_merged_by
          WHERE CUST_ID = p_merged_id;
         l_moved_cont := SQL%ROWCOUNT;
 
         UPDATE WWI_MDM.CUST_MASTER
-           SET STATUS_CD         = 'M',
-               MERGED_INTO_ID    = p_surviving_id,
-               MERGED_DT         = SYSDATE,
-               LAST_UPD_DT       = SYSDATE,
-               LAST_UPD_BY       = p_merged_by
+           SET CUST_STATUS_CD         = 'M',
+               UPDATED_DT       = SYSDATE,
+               UPDATED_BY       = p_merged_by
          WHERE CUST_ID = p_merged_id;
 
         INSERT INTO WWI_MDM.MDM_MERGE_HISTORY
-            (MERGE_LOG_ID, SURVIVING_CUST_ID, MERGED_CUST_ID, MATCH_SCORE,
-             ADDRESS_MOVED_CNT, CONTACT_MOVED_CNT, REASON_TXT, MERGED_BY, MERGED_DT)
+            (MERGE_ID, PARTY_TYPE_CD, SURVIVOR_PARTY_ID, MERGED_PARTY_ID,
+             MERGE_RULE_TXT, ATTRIBUTES_MOVED_TXT, MERGED_BY_CD, MERGE_DT)
         VALUES
-            (WWI_MDM.SEQ_MDM_MERGE_HISTORY.NEXTVAL, p_surviving_id, p_merged_id, l_score,
-             l_moved_addr, l_moved_cont, p_reason_txt, p_merged_by, SYSDATE);
+            (WWI_MDM.SEQ_MDM_MERGE_HISTORY.NEXTVAL, 'CUST', p_surviving_id, p_merged_id,
+             'score=' || l_score || '; ' || p_reason_txt,
+             'addresses=' || l_moved_addr || '; contacts=' || l_moved_cont,
+             p_merged_by, SYSDATE);
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
             RAISE_APPLICATION_ERROR(-20201,
@@ -358,7 +373,7 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_CUSTOMER_MASTER AS
             SELECT c.CUST_ID
               FROM WWI_MDM.CUST_MASTER c
              WHERE c.REGION_CD = p_region_cd
-               AND c.STATUS_CD IN ('C', 'M')
+               AND c.CUST_STATUS_CD IN ('C', 'M')
                AND retention_expiry_dt(c.CUST_ID) < TRUNC(SYSDATE)
              ORDER BY c.CUST_ID;
 
@@ -380,24 +395,22 @@ CREATE OR REPLACE PACKAGE BODY WWI_MDM.PKG_CUSTOMER_MASTER AS
                         DELETE FROM WWI_MDM.CUST_CONTACT WHERE CUST_ID = l_ids(i);
 
                         UPDATE WWI_MDM.CUST_MASTER
-                           SET CUST_NAME      = 'PURGED-' || l_ids(i),
-                               CUST_NAME_NORM = NULL,
-                               TAX_REG_NUM    = NULL,
-                               PURGED_FLAG    = 'Y',
-                               PURGED_DT      = SYSDATE,
-                               LAST_UPD_DT    = SYSDATE
+                           SET CUST_NAME     = 'PURGED-' || l_ids(i),
+                               CUST_NAME_ALT = NULL,
+                               TAX_REG_NBR   = NULL,
+                               DELETED_FLG   = 'Y',
+                               UPDATED_DT    = SYSDATE
                          WHERE CUST_ID = l_ids(i);
                     ELSE
                         UPDATE WWI_MDM.CUST_CONTACT
-                           SET EMAIL_TXT  = NULL,
-                               PHONE_TXT  = NULL,
-                               LAST_UPD_DT = SYSDATE
+                           SET EMAIL_ADDR = NULL,
+                               PHONE_NBR  = NULL,
+                               UPDATED_DT = SYSDATE
                          WHERE CUST_ID = l_ids(i);
 
                         UPDATE WWI_MDM.CUST_MASTER
-                           SET PURGED_FLAG = 'Y',
-                               PURGED_DT   = SYSDATE,
-                               LAST_UPD_DT = SYSDATE
+                           SET DELETED_FLG = 'Y',
+                               UPDATED_DT  = SYSDATE
                          WHERE CUST_ID = l_ids(i);
                     END IF;
                 END IF;

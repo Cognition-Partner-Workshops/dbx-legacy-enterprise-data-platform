@@ -26,33 +26,33 @@ CREATE OR REPLACE PACKAGE WWI_REF.PKG_FX AS
 
     FUNCTION get_rate
     (
-        p_from_ccy     IN WWI_REF.FX_RATE_DAILY.FROM_CURRENCY_CD%TYPE,
-        p_to_ccy       IN WWI_REF.FX_RATE_DAILY.TO_CURRENCY_CD%TYPE,
+        p_from_ccy     IN WWI_REF.FX_RATE_DAILY.FROM_CURR_CD%TYPE,
+        p_to_ccy       IN WWI_REF.FX_RATE_DAILY.TO_CURR_CD%TYPE,
         p_rate_dt      IN DATE DEFAULT TRUNC(SYSDATE),
         p_rate_type_cd IN WWI_REF.FX_RATE_DAILY.RATE_TYPE_CD%TYPE DEFAULT 'CORP'
     ) RETURN NUMBER;
 
     FUNCTION month_end_rate
     (
-        p_from_ccy  IN WWI_REF.FX_RATE_DAILY.FROM_CURRENCY_CD%TYPE,
-        p_to_ccy    IN WWI_REF.FX_RATE_DAILY.TO_CURRENCY_CD%TYPE,
+        p_from_ccy  IN WWI_REF.FX_RATE_DAILY.FROM_CURR_CD%TYPE,
+        p_to_ccy    IN WWI_REF.FX_RATE_DAILY.TO_CURR_CD%TYPE,
         p_period_cd IN VARCHAR2
     ) RETURN NUMBER;
 
     FUNCTION round_to_minor_unit
     (
         p_amount      IN NUMBER,
-        p_currency_cd IN WWI_REF.CURRENCY_CODE.CURRENCY_CD%TYPE
+        p_currency_cd IN WWI_REF.CURRENCY_CODE.CURR_CD%TYPE
     ) RETURN NUMBER;
 
     PROCEDURE upsert_rate
     (
-        p_from_ccy     IN WWI_REF.FX_RATE_DAILY.FROM_CURRENCY_CD%TYPE,
-        p_to_ccy       IN WWI_REF.FX_RATE_DAILY.TO_CURRENCY_CD%TYPE,
+        p_from_ccy     IN WWI_REF.FX_RATE_DAILY.FROM_CURR_CD%TYPE,
+        p_to_ccy       IN WWI_REF.FX_RATE_DAILY.TO_CURR_CD%TYPE,
         p_rate_dt      IN DATE,
         p_rate_type_cd IN WWI_REF.FX_RATE_DAILY.RATE_TYPE_CD%TYPE,
-        p_rate_num     IN WWI_REF.FX_RATE_DAILY.RATE_NUM%TYPE,
-        p_src_system_cd    IN WWI_REF.FX_RATE_DAILY.SRC_SYSTEM_CD%TYPE
+        p_rate_num     IN WWI_REF.FX_RATE_DAILY.RATE%TYPE,
+        p_src_system_cd    IN WWI_REF.FX_RATE_DAILY.SOURCE_SYS%TYPE
     );
 
     PROCEDURE check_rate_freshness

@@ -12,16 +12,16 @@ CREATE OR REPLACE PACKAGE BODY WWI_AUDIT.PKG_DATA_QUALITY AS
 
     PROCEDURE log_error
     (
-        p_source_txt IN WWI_AUDIT.INTERFACE_ERROR.SRC_OBJECT_NAME%TYPE,
-        p_key_txt    IN WWI_AUDIT.INTERFACE_ERROR.SRC_KEY_TXT%TYPE,
-        p_message    IN WWI_AUDIT.INTERFACE_ERROR.ERROR_MSG_TXT%TYPE
+        p_source_txt IN WWI_AUDIT.INTERFACE_ERROR.TARGET_OBJECT_NAME%TYPE,
+        p_key_txt    IN WWI_AUDIT.INTERFACE_ERROR.RECORD_KEY_TXT%TYPE,
+        p_message    IN WWI_AUDIT.INTERFACE_ERROR.ERROR_MESSAGE_TXT%TYPE
     )
     IS
         PRAGMA AUTONOMOUS_TRANSACTION;
     BEGIN
         INSERT INTO WWI_AUDIT.INTERFACE_ERROR
-            (INTERFACE_ERROR_ID, EXTRACT_NAME, SRC_OBJECT_NAME, SRC_KEY_TXT,
-             RULE_CD, SEVERITY_CD, ERROR_MSG_TXT, ERROR_DT, RESOLVED_DT, CREATED_BY)
+            (INTERFACE_ERROR_ID, INTERFACE_NAME, TARGET_OBJECT_NAME, RECORD_KEY_TXT,
+             ERROR_CODE_CD, SEVERITY_CD, ERROR_MESSAGE_TXT, ERROR_TS, RESOLVED_TS, CREATED_BY)
         VALUES
             (WWI_AUDIT.SEQ_INTERFACE_ERROR.NEXTVAL, NULL, p_source_txt, p_key_txt,
              'RUNTIME', 'E', SUBSTR(p_message, 1, 2000), SYSDATE, NULL, USER);
@@ -34,19 +34,19 @@ CREATE OR REPLACE PACKAGE BODY WWI_AUDIT.PKG_DATA_QUALITY AS
 
     PROCEDURE log_reject
     (
-        p_extract_name IN WWI_AUDIT.INTERFACE_ERROR.EXTRACT_NAME%TYPE,
-        p_source_txt   IN WWI_AUDIT.INTERFACE_ERROR.SRC_OBJECT_NAME%TYPE,
-        p_key_txt      IN WWI_AUDIT.INTERFACE_ERROR.SRC_KEY_TXT%TYPE,
-        p_rule_cd      IN WWI_AUDIT.INTERFACE_ERROR.RULE_CD%TYPE,
-        p_message      IN WWI_AUDIT.INTERFACE_ERROR.ERROR_MSG_TXT%TYPE,
+        p_extract_name IN WWI_AUDIT.INTERFACE_ERROR.INTERFACE_NAME%TYPE,
+        p_source_txt   IN WWI_AUDIT.INTERFACE_ERROR.TARGET_OBJECT_NAME%TYPE,
+        p_key_txt      IN WWI_AUDIT.INTERFACE_ERROR.RECORD_KEY_TXT%TYPE,
+        p_rule_cd      IN WWI_AUDIT.INTERFACE_ERROR.ERROR_CODE_CD%TYPE,
+        p_message      IN WWI_AUDIT.INTERFACE_ERROR.ERROR_MESSAGE_TXT%TYPE,
         p_severity_cd  IN WWI_AUDIT.INTERFACE_ERROR.SEVERITY_CD%TYPE DEFAULT 'W'
     )
     IS
         PRAGMA AUTONOMOUS_TRANSACTION;
     BEGIN
         INSERT INTO WWI_AUDIT.INTERFACE_ERROR
-            (INTERFACE_ERROR_ID, EXTRACT_NAME, SRC_OBJECT_NAME, SRC_KEY_TXT,
-             RULE_CD, SEVERITY_CD, ERROR_MSG_TXT, ERROR_DT, RESOLVED_DT, CREATED_BY)
+            (INTERFACE_ERROR_ID, INTERFACE_NAME, TARGET_OBJECT_NAME, RECORD_KEY_TXT,
+             ERROR_CODE_CD, SEVERITY_CD, ERROR_MESSAGE_TXT, ERROR_TS, RESOLVED_TS, CREATED_BY)
         VALUES
             (WWI_AUDIT.SEQ_INTERFACE_ERROR.NEXTVAL, p_extract_name, p_source_txt,
              p_key_txt, p_rule_cd, p_severity_cd, SUBSTR(p_message, 1, 2000),
@@ -59,17 +59,17 @@ CREATE OR REPLACE PACKAGE BODY WWI_AUDIT.PKG_DATA_QUALITY AS
 
     PROCEDURE resolve_errors
     (
-        p_extract_name IN  WWI_AUDIT.INTERFACE_ERROR.EXTRACT_NAME%TYPE,
+        p_extract_name IN  WWI_AUDIT.INTERFACE_ERROR.INTERFACE_NAME%TYPE,
         p_resolved_by  IN  VARCHAR2,
         p_resolved_cnt OUT PLS_INTEGER
     )
     IS
     BEGIN
         UPDATE WWI_AUDIT.INTERFACE_ERROR
-           SET RESOLVED_DT = SYSDATE,
+           SET RESOLVED_TS = SYSDATE,
                RESOLVED_BY = p_resolved_by
-         WHERE EXTRACT_NAME = p_extract_name
-           AND RESOLVED_DT IS NULL
+         WHERE INTERFACE_NAME = p_extract_name
+           AND RESOLVED_TS IS NULL
            AND SEVERITY_CD <> 'F';
 
         p_resolved_cnt := SQL%ROWCOUNT;
@@ -118,13 +118,13 @@ CREATE OR REPLACE PACKAGE BODY WWI_AUDIT.PKG_DATA_QUALITY AS
            blocking issue because the invoice cannot be issued            */
         FOR rec IN (SELECT c.CUST_ID, c.REGION_CD
                       FROM WWI_MDM.CUST_MASTER c
-                     WHERE c.STATUS_CD = 'A'
+                     WHERE c.CUST_STATUS_CD = 'A'
                        AND (p_region_cd IS NULL OR c.REGION_CD = p_region_cd)
                        AND NOT EXISTS (SELECT 1
                                          FROM WWI_MDM.CUST_ADDRESS a
                                         WHERE a.CUST_ID = c.CUST_ID
-                                          AND a.ADDRESS_TYPE_CD = 'BILL'
-                                          AND NVL(a.CURRENT_FLAG, 'Y') = 'Y')) LOOP
+                                          AND a.ADDR_TYPE_CD = 'BILL'
+                                          AND NVL(a.PRIMARY_FLG, 'Y') = 'Y')) LOOP
             log_reject(NULL, 'WWI_MDM.CUST_MASTER', TO_CHAR(rec.CUST_ID),
                        'NO_BILL_ADDRESS', 'active customer without a billing address',
                        CASE WHEN rec.REGION_CD = 'EU' THEN 'F' ELSE 'W' END);
@@ -134,7 +134,7 @@ CREATE OR REPLACE PACKAGE BODY WWI_AUDIT.PKG_DATA_QUALITY AS
 
     PROCEDURE assert_reject_rate
     (
-        p_extract_name IN WWI_AUDIT.INTERFACE_ERROR.EXTRACT_NAME%TYPE,
+        p_extract_name IN WWI_AUDIT.INTERFACE_ERROR.INTERFACE_NAME%TYPE,
         p_row_count    IN NUMBER,
         p_max_pct      IN NUMBER DEFAULT 2
     )
@@ -149,9 +149,9 @@ CREATE OR REPLACE PACKAGE BODY WWI_AUDIT.PKG_DATA_QUALITY AS
         SELECT COUNT(*)
           INTO l_rejects
           FROM WWI_AUDIT.INTERFACE_ERROR
-         WHERE EXTRACT_NAME = p_extract_name
-           AND RESOLVED_DT IS NULL
-           AND ERROR_DT >= TRUNC(SYSDATE);
+         WHERE INTERFACE_NAME = p_extract_name
+           AND RESOLVED_TS IS NULL
+           AND ERROR_TS >= TRUNC(SYSDATE);
 
         l_pct := ROUND(l_rejects * 100 / p_row_count, 2);
 

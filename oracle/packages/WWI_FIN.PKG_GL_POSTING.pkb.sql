@@ -25,9 +25,9 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_GL_POSTING AS
         p_region_cd IN VARCHAR2
     ) RETURN VARCHAR2
     IS
-        l_status WWI_FIN.GL_PERIOD_STATUS.STATUS_CD%TYPE;
+        l_status WWI_FIN.GL_PERIOD_STATUS.GL_STATUS_CD%TYPE;
     BEGIN
-        SELECT STATUS_CD
+        SELECT GL_STATUS_CD
           INTO l_status
           FROM WWI_FIN.GL_PERIOD_STATUS
          WHERE PERIOD_CD = p_period_cd
@@ -50,7 +50,7 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_GL_POSTING AS
           INTO l_id
           FROM WWI_FIN.GL_ACCOUNT
          WHERE ACCOUNT_CD = p_account_cd
-           AND NVL(ACTIVE_FLAG, 'Y') = 'Y';
+           AND NVL(POSTING_ALLOWED_FLG, 'Y') = 'Y';
 
         RETURN l_id;
     EXCEPTION
@@ -80,12 +80,12 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_GL_POSTING AS
                 || ' is not open for ' || p_region_cd);
         END IF;
 
-        l_journal_id := WWI_FIN.SEQ_GL_JOURNAL.NEXTVAL;
+        l_journal_id := WWI_FIN.SEQ_GL_JOURNAL_HDR.NEXTVAL;
 
         INSERT INTO WWI_FIN.GL_JOURNAL_HDR
-            (JOURNAL_ID, JOURNAL_NUM, JOURNAL_SOURCE_CD, JOURNAL_CATEGORY_CD,
-             REGION_CD, PERIOD_CD, GL_DATE, POSTED_FLAG, ACCRUAL_FLAG,
-             REVERSAL_FLAG, CREATED_DT, CREATED_BY, LAST_UPD_DT)
+            (JOURNAL_ID, JOURNAL_NBR, JOURNAL_SOURCE_CD, JOURNAL_CATEGORY_CD,
+             REGION_CD, PERIOD_CD, ACCOUNTING_DT, POSTING_STATUS_CD, ACCRUAL_FLG,
+             REVERSAL_FLG, CREATED_DT, CREATED_BY, UPDATED_DT)
         VALUES
             (l_journal_id,
              p_source_cd || '-' || TO_CHAR(l_journal_id),
@@ -100,21 +100,21 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_GL_POSTING AS
     (
         p_journal_id     IN WWI_FIN.GL_JOURNAL_HDR.JOURNAL_ID%TYPE,
         p_account_cd     IN WWI_FIN.GL_ACCOUNT.ACCOUNT_CD%TYPE,
-        p_cost_center_id IN WWI_FIN.GL_JOURNAL_LINE.COST_CENTER_ID%TYPE,
-        p_currency_cd    IN WWI_FIN.GL_JOURNAL_LINE.CURRENCY_CD%TYPE,
+        p_cost_center_id IN WWI_FIN.GL_JOURNAL_LINE.COST_CENTER_CD%TYPE,
+        p_currency_cd    IN WWI_FIN.GL_JOURNAL_LINE.ENTERED_CURR_CD%TYPE,
         p_debit_amt      IN NUMBER,
         p_credit_amt     IN NUMBER,
         p_line_desc      IN WWI_FIN.GL_JOURNAL_LINE.LINE_DESC%TYPE DEFAULT NULL,
-        p_src_doc_type   IN WWI_FIN.GL_JOURNAL_LINE.SRC_DOC_TYPE_CD%TYPE DEFAULT NULL,
-        p_src_doc_id     IN WWI_FIN.GL_JOURNAL_LINE.SRC_DOC_ID%TYPE DEFAULT NULL
+        p_src_doc_type   IN WWI_FIN.GL_JOURNAL_LINE.SOURCE_DOC_TYPE_CD%TYPE DEFAULT NULL,
+        p_src_doc_id     IN WWI_FIN.GL_JOURNAL_LINE.SOURCE_DOC_ID%TYPE DEFAULT NULL
     )
     IS
         l_line_num   PLS_INTEGER;
         l_account_id WWI_FIN.GL_ACCOUNT.GL_ACCOUNT_ID%TYPE;
-        l_gl_date    WWI_FIN.GL_JOURNAL_HDR.GL_DATE%TYPE;
-        l_posted     WWI_FIN.GL_JOURNAL_HDR.POSTED_FLAG%TYPE;
+        l_gl_date    WWI_FIN.GL_JOURNAL_HDR.ACCOUNTING_DT%TYPE;
+        l_posted     WWI_FIN.GL_JOURNAL_HDR.POSTING_STATUS_CD%TYPE;
     BEGIN
-        SELECT GL_DATE, NVL(POSTED_FLAG, 'N')
+        SELECT ACCOUNTING_DT, NVL(POSTING_STATUS_CD, 'N')
           INTO l_gl_date, l_posted
           FROM WWI_FIN.GL_JOURNAL_HDR
          WHERE JOURNAL_ID = p_journal_id;
@@ -137,15 +137,15 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_GL_POSTING AS
                                                      'posted to suspense: ' || SQLERRM);
         END;
 
-        SELECT NVL(MAX(LINE_NUM), 0) + 10
+        SELECT NVL(MAX(LINE_NBR), 0) + 10
           INTO l_line_num
           FROM WWI_FIN.GL_JOURNAL_LINE
          WHERE JOURNAL_ID = p_journal_id;
 
         INSERT INTO WWI_FIN.GL_JOURNAL_LINE
-            (JOURNAL_LINE_ID, JOURNAL_ID, LINE_NUM, GL_ACCOUNT_ID, COST_CENTER_ID,
-             CURRENCY_CD, DEBIT_AMT, CREDIT_AMT, BASE_DEBIT_AMT, BASE_CREDIT_AMT,
-             LINE_DESC, SRC_DOC_TYPE_CD, SRC_DOC_ID, CREATED_DT)
+            (JOURNAL_LINE_ID, JOURNAL_ID, LINE_NBR, ACCOUNT_CD, COST_CENTER_CD,
+             ENTERED_CURR_CD, ENTERED_DEBIT_AMT, ENTERED_CREDIT_AMT, ACCOUNTED_DEBIT_AMT, ACCOUNTED_CREDIT_AMT,
+             LINE_DESC, SOURCE_DOC_TYPE_CD, SOURCE_DOC_ID, CREATED_DT)
         VALUES
             (WWI_FIN.SEQ_GL_JOURNAL_LINE.NEXTVAL, p_journal_id, l_line_num,
              l_account_id, p_cost_center_id, p_currency_cd,
@@ -178,17 +178,17 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_GL_POSTING AS
         l_journal_id := create_journal_header('AP', 'INVOICE', l_hdr.REGION_CD,
                                               NVL(l_hdr.GL_DATE, l_hdr.INVOICE_DT));
 
-        FOR r IN (SELECT il.LINE_AMT, il.GL_ACCOUNT_CD, il.COST_CENTER_ID, il.LINE_NUM
+        FOR r IN (SELECT il.LINE_AMT, il.ACCOUNT_CD, il.COST_CENTER_CD, il.LINE_NBR
                     FROM WWI_FIN.AP_INVOICE_LINE il
                    WHERE il.INVOICE_ID = p_invoice_id
-                   ORDER BY il.LINE_NUM) LOOP
+                   ORDER BY il.LINE_NBR) LOOP
 
             add_journal_line(l_journal_id,
-                             NVL(r.GL_ACCOUNT_CD, c_suspense_acct),
-                             r.COST_CENTER_ID,
-                             l_hdr.CURRENCY_CD,
+                             NVL(r.ACCOUNT_CD, c_suspense_acct),
+                             r.COST_CENTER_CD,
+                             l_hdr.INVOICE_CURR_CD,
                              r.LINE_AMT, 0,
-                             'AP invoice ' || l_hdr.INVOICE_NUM || ' line ' || r.LINE_NUM,
+                             'AP invoice ' || l_hdr.INVOICE_NBR || ' line ' || r.LINE_NBR,
                              'AP_INV', p_invoice_id);
         END LOOP;
 
@@ -200,23 +200,23 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_GL_POSTING AS
                       END;
 
         IF NVL(l_hdr.TAX_AMT, 0) <> 0
-           AND NVL(l_hdr.REVERSE_CHARGE_FLAG, 'N') = 'N' THEN
-            add_journal_line(l_journal_id, l_tax_acct, NULL, l_hdr.CURRENCY_CD,
+           AND NVL(l_hdr.EU_SELF_BILLING_FLG, 'N') = 'N' THEN
+            add_journal_line(l_journal_id, l_tax_acct, NULL, l_hdr.INVOICE_CURR_CD,
                              l_hdr.TAX_AMT, 0,
-                             'Input tax on ' || l_hdr.INVOICE_NUM, 'AP_INV', p_invoice_id);
-        ELSIF NVL(l_hdr.REVERSE_CHARGE_FLAG, 'N') = 'Y' THEN
+                             'Input tax on ' || l_hdr.INVOICE_NBR, 'AP_INV', p_invoice_id);
+        ELSIF NVL(l_hdr.EU_SELF_BILLING_FLG, 'N') = 'Y' THEN
             /* EU reverse charge books input and output tax simultaneously */
-            add_journal_line(l_journal_id, c_vat_input_acct, NULL, l_hdr.CURRENCY_CD,
-                             NVL(l_hdr.CALC_TAX_AMT, 0), 0,
+            add_journal_line(l_journal_id, c_vat_input_acct, NULL, l_hdr.INVOICE_CURR_CD,
+                             NVL(l_hdr.TAX_AMT, 0), 0,
                              'Reverse charge input VAT', 'AP_INV', p_invoice_id);
-            add_journal_line(l_journal_id, '2350', NULL, l_hdr.CURRENCY_CD,
-                             0, NVL(l_hdr.CALC_TAX_AMT, 0),
+            add_journal_line(l_journal_id, '2350', NULL, l_hdr.INVOICE_CURR_CD,
+                             0, NVL(l_hdr.TAX_AMT, 0),
                              'Reverse charge output VAT', 'AP_INV', p_invoice_id);
         END IF;
 
-        add_journal_line(l_journal_id, c_ap_liability_acct, NULL, l_hdr.CURRENCY_CD,
-                         0, NVL(l_hdr.INVOICE_AMT, 0),
-                         'AP liability ' || l_hdr.INVOICE_NUM, 'AP_INV', p_invoice_id);
+        add_journal_line(l_journal_id, c_ap_liability_acct, NULL, l_hdr.INVOICE_CURR_CD,
+                         0, NVL(l_hdr.GROSS_AMT, 0),
+                         'AP liability ' || l_hdr.INVOICE_NBR, 'AP_INV', p_invoice_id);
 
         post_journal(l_journal_id);
     EXCEPTION
@@ -233,11 +233,11 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_GL_POSTING AS
     IS
         l_debit   NUMBER;
         l_credit  NUMBER;
-        l_posted  WWI_FIN.GL_JOURNAL_HDR.POSTED_FLAG%TYPE;
+        l_posted  WWI_FIN.GL_JOURNAL_HDR.POSTING_STATUS_CD%TYPE;
         l_period  WWI_FIN.GL_JOURNAL_HDR.PERIOD_CD%TYPE;
         l_region  WWI_FIN.GL_JOURNAL_HDR.REGION_CD%TYPE;
     BEGIN
-        SELECT NVL(POSTED_FLAG, 'N'), PERIOD_CD, REGION_CD
+        SELECT NVL(POSTING_STATUS_CD, 'N'), PERIOD_CD, REGION_CD
           INTO l_posted, l_period, l_region
           FROM WWI_FIN.GL_JOURNAL_HDR
          WHERE JOURNAL_ID = p_journal_id
@@ -253,7 +253,7 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_GL_POSTING AS
                 'PKG_GL_POSTING.post_journal: period ' || l_period || ' not open');
         END IF;
 
-        SELECT NVL(SUM(BASE_DEBIT_AMT), 0), NVL(SUM(BASE_CREDIT_AMT), 0)
+        SELECT NVL(SUM(ACCOUNTED_DEBIT_AMT), 0), NVL(SUM(ACCOUNTED_CREDIT_AMT), 0)
           INTO l_debit, l_credit
           FROM WWI_FIN.GL_JOURNAL_LINE
          WHERE JOURNAL_ID = p_journal_id;
@@ -265,10 +265,10 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_GL_POSTING AS
         END IF;
 
         UPDATE WWI_FIN.GL_JOURNAL_HDR
-           SET POSTED_FLAG = 'Y',
+           SET POSTING_STATUS_CD = 'Y',
                POSTED_DT   = SYSDATE,
-               POSTED_BY   = USER,
-               LAST_UPD_DT = SYSDATE
+               POSTED_BY_CD   = USER,
+               UPDATED_DT = SYSDATE
          WHERE JOURNAL_ID = p_journal_id;
     END post_journal;
 
@@ -283,7 +283,7 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_GL_POSTING AS
         CURSOR c_pending IS
             SELECT JOURNAL_ID
               FROM WWI_FIN.GL_JOURNAL_HDR
-             WHERE NVL(POSTED_FLAG, 'N') = 'N'
+             WHERE NVL(POSTING_STATUS_CD, 'N') = 'N'
                AND REGION_CD = p_region_cd
                AND PERIOD_CD = p_period_cd
              ORDER BY JOURNAL_ID;
@@ -326,8 +326,8 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_GL_POSTING AS
 
     PROCEDURE reverse_document_journal
     (
-        p_doc_type_cd IN WWI_FIN.GL_JOURNAL_LINE.SRC_DOC_TYPE_CD%TYPE,
-        p_doc_id      IN WWI_FIN.GL_JOURNAL_LINE.SRC_DOC_ID%TYPE,
+        p_doc_type_cd IN WWI_FIN.GL_JOURNAL_LINE.SOURCE_DOC_TYPE_CD%TYPE,
+        p_doc_id      IN WWI_FIN.GL_JOURNAL_LINE.SOURCE_DOC_ID%TYPE,
         p_reason_txt  IN VARCHAR2
     )
     IS
@@ -341,9 +341,9 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_GL_POSTING AS
          WHERE EXISTS (SELECT 1
                          FROM WWI_FIN.GL_JOURNAL_LINE jl
                         WHERE jl.JOURNAL_ID      = jh.JOURNAL_ID
-                          AND jl.SRC_DOC_TYPE_CD = p_doc_type_cd
-                          AND jl.SRC_DOC_ID      = p_doc_id)
-           AND NVL(jh.REVERSAL_FLAG, 'N') = 'N';
+                          AND jl.SOURCE_DOC_TYPE_CD = p_doc_type_cd
+                          AND jl.SOURCE_DOC_ID      = p_doc_id)
+           AND NVL(jh.REVERSAL_FLG, 'N') = 'N';
 
         IF l_orig_id IS NULL THEN
             RETURN;
@@ -351,23 +351,21 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_GL_POSTING AS
 
         l_journal_id := create_journal_header('AP', 'REVERSAL', l_region_cd, TRUNC(SYSDATE));
 
-        FOR r IN (SELECT jl.GL_ACCOUNT_ID, jl.COST_CENTER_ID, jl.CURRENCY_CD,
-                         jl.DEBIT_AMT, jl.CREDIT_AMT, ga.ACCOUNT_CD
+        FOR r IN (SELECT jl.ACCOUNT_CD, jl.COST_CENTER_CD, jl.ENTERED_CURR_CD,
+                         jl.ENTERED_DEBIT_AMT, jl.ENTERED_CREDIT_AMT
                     FROM WWI_FIN.GL_JOURNAL_LINE jl
-                    JOIN WWI_FIN.GL_ACCOUNT ga
-                      ON ga.GL_ACCOUNT_ID = jl.GL_ACCOUNT_ID
                    WHERE jl.JOURNAL_ID = l_orig_id
-                   ORDER BY jl.LINE_NUM) LOOP
+                   ORDER BY jl.LINE_NBR) LOOP
 
-            add_journal_line(l_journal_id, r.ACCOUNT_CD, r.COST_CENTER_ID,
-                             r.CURRENCY_CD, r.CREDIT_AMT, r.DEBIT_AMT,
+            add_journal_line(l_journal_id, r.ACCOUNT_CD, r.COST_CENTER_CD,
+                             r.ENTERED_CURR_CD, r.ENTERED_CREDIT_AMT, r.ENTERED_DEBIT_AMT,
                              SUBSTR(p_reason_txt, 1, 200), p_doc_type_cd, p_doc_id);
         END LOOP;
 
         UPDATE WWI_FIN.GL_JOURNAL_HDR
-           SET REVERSAL_FLAG       = 'Y',
-               REVERSED_JOURNAL_ID = l_orig_id,
-               LAST_UPD_DT         = SYSDATE
+           SET REVERSAL_FLG       = 'Y',
+               REVERSAL_OF_JOURNAL_ID = l_orig_id,
+               UPDATED_DT         = SYSDATE
          WHERE JOURNAL_ID = l_journal_id;
 
         post_journal(l_journal_id);
@@ -391,35 +389,33 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_GL_POSTING AS
 
         FOR a IN (SELECT jh.JOURNAL_ID
                     FROM WWI_FIN.GL_JOURNAL_HDR jh
-                   WHERE jh.ACCRUAL_FLAG = 'Y'
-                     AND NVL(jh.POSTED_FLAG, 'N') = 'Y'
+                   WHERE jh.ACCRUAL_FLG = 'Y'
+                     AND NVL(jh.POSTING_STATUS_CD, 'N') = 'Y'
                      AND jh.PERIOD_CD = p_period_cd
                      AND jh.REGION_CD = p_region_cd
                      AND NOT EXISTS (SELECT 1
                                        FROM WWI_FIN.GL_JOURNAL_HDR r
-                                      WHERE r.REVERSED_JOURNAL_ID = jh.JOURNAL_ID)
+                                      WHERE r.REVERSAL_OF_JOURNAL_ID = jh.JOURNAL_ID)
                    ORDER BY jh.JOURNAL_ID) LOOP
 
             l_journal_id := create_journal_header('AP', 'ACCRUAL_REV', p_region_cd,
                                                   TRUNC(SYSDATE));
 
-            FOR r IN (SELECT ga.ACCOUNT_CD, jl.COST_CENTER_ID, jl.CURRENCY_CD,
-                             jl.DEBIT_AMT, jl.CREDIT_AMT
+            FOR r IN (SELECT jl.ACCOUNT_CD, jl.COST_CENTER_CD, jl.ENTERED_CURR_CD,
+                             jl.ENTERED_DEBIT_AMT, jl.ENTERED_CREDIT_AMT
                         FROM WWI_FIN.GL_JOURNAL_LINE jl
-                        JOIN WWI_FIN.GL_ACCOUNT ga
-                          ON ga.GL_ACCOUNT_ID = jl.GL_ACCOUNT_ID
                        WHERE jl.JOURNAL_ID = a.JOURNAL_ID) LOOP
 
-                add_journal_line(l_journal_id, r.ACCOUNT_CD, r.COST_CENTER_ID,
-                                 r.CURRENCY_CD, r.CREDIT_AMT, r.DEBIT_AMT,
+                add_journal_line(l_journal_id, r.ACCOUNT_CD, r.COST_CENTER_CD,
+                                 r.ENTERED_CURR_CD, r.ENTERED_CREDIT_AMT, r.ENTERED_DEBIT_AMT,
                                  'Accrual reversal for period ' || p_period_cd,
                                  'ACCRUAL', a.JOURNAL_ID);
             END LOOP;
 
             UPDATE WWI_FIN.GL_JOURNAL_HDR
-               SET REVERSAL_FLAG       = 'Y',
-                   REVERSED_JOURNAL_ID = a.JOURNAL_ID,
-                   LAST_UPD_DT         = SYSDATE
+               SET REVERSAL_FLG       = 'Y',
+                   REVERSAL_OF_JOURNAL_ID = a.JOURNAL_ID,
+                   UPDATED_DT         = SYSDATE
              WHERE JOURNAL_ID = l_journal_id;
 
             post_journal(l_journal_id);

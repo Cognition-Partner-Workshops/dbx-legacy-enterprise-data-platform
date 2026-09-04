@@ -57,13 +57,13 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_PURCHASE_ORDER AS
     IS
         l_price NUMBER;
     BEGIN
-        SELECT CONTRACT_PRICE_AMT
+        SELECT CONTRACT_PRICE
           INTO l_price
           FROM WWI_PROC.VENDOR_CONTRACT_LINE
          WHERE CONTRACT_ID = p_contract_id
            AND PRODUCT_ID  = p_product_id
-           AND TRUNC(p_order_dt) BETWEEN EFF_FROM_DT
-                                     AND NVL(EFF_TO_DT, DATE '4712-12-31')
+           AND TRUNC(p_order_dt) BETWEEN PRICE_EFFECTIVE_DT
+                                     AND NVL(PRICE_END_DT, DATE '4712-12-31')
            AND ROWNUM = 1;
 
         RETURN l_price;
@@ -76,8 +76,8 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_PURCHASE_ORDER AS
     (
         p_supp_id     IN  WWI_PROC.PURCHASE_ORDER_HDR.SUPP_ID%TYPE,
         p_region_cd   IN  WWI_PROC.PURCHASE_ORDER_HDR.REGION_CD%TYPE,
-        p_currency_cd IN  WWI_PROC.PURCHASE_ORDER_HDR.CURRENCY_CD%TYPE,
-        p_buyer_id    IN  WWI_PROC.PURCHASE_ORDER_HDR.BUYER_ID%TYPE,
+        p_currency_cd IN  WWI_PROC.PURCHASE_ORDER_HDR.ORDER_CURR_CD%TYPE,
+        p_buyer_id    IN  WWI_PROC.PURCHASE_ORDER_HDR.BUYER_CD%TYPE,
         p_contract_id IN  WWI_PROC.PURCHASE_ORDER_HDR.CONTRACT_ID%TYPE DEFAULT NULL,
         p_po_id       OUT WWI_PROC.PURCHASE_ORDER_HDR.PO_ID%TYPE
     )
@@ -93,18 +93,18 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_PURCHASE_ORDER AS
                 || ' is not approved (' || l_supplier_state || ')');
         END IF;
 
-        p_po_id := WWI_PROC.SEQ_PO.NEXTVAL;
+        p_po_id := WWI_PROC.SEQ_PURCHASE_ORDER_HDR.NEXTVAL;
 
         INSERT INTO WWI_PROC.PURCHASE_ORDER_HDR
-            (PO_ID, PO_NUM, SUPP_ID, REGION_CD, ORG_CD, CURRENCY_CD, STATUS_CD,
-             ORDER_DT, BUYER_ID, CONTRACT_ID, TOTAL_AMT, TAX_AMT,
-             PAYMENT_TERMS_CD, INCOTERM_CD, CREATED_DT, CREATED_BY, LAST_UPD_DT)
+            (PO_ID, PO_NBR, SUPP_ID, REGION_CD, ORDER_CURR_CD, PO_STATUS_CD,
+             ORDER_DT, BUYER_CD, CONTRACT_ID, TOTAL_AMT, TAX_AMT,
+             PAYMENT_TERMS_CD, INCOTERM_CD, CREATED_DT, CREATED_BY, UPDATED_DT)
         VALUES
             (p_po_id,
              /* PO numbers carry a regional prefix; the DW still parses it */
              CASE p_region_cd WHEN 'EU' THEN 'EU' WHEN 'APAC' THEN 'AP' ELSE 'US' END
              || TO_CHAR(p_po_id),
-             p_supp_id, p_region_cd, p_region_cd || '01', p_currency_cd, 'DR',
+             p_supp_id, p_region_cd, p_currency_cd, 'DR',
              TRUNC(SYSDATE), p_buyer_id, p_contract_id, 0, 0,
              CASE p_region_cd WHEN 'EU' THEN 'NET30EOM'
                               WHEN 'APAC' THEN 'NET60' ELSE 'NET30' END,
@@ -118,7 +118,7 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_PURCHASE_ORDER AS
         p_product_id  IN  WWI_PROC.PURCHASE_ORDER_LINE.PRODUCT_ID%TYPE,
         p_order_qty   IN  WWI_PROC.PURCHASE_ORDER_LINE.ORDER_QTY%TYPE,
         p_uom_cd      IN  WWI_PROC.PURCHASE_ORDER_LINE.UOM_CD%TYPE,
-        p_unit_price  IN  WWI_PROC.PURCHASE_ORDER_LINE.UNIT_PRICE_AMT%TYPE DEFAULT NULL,
+        p_unit_price  IN  WWI_PROC.PURCHASE_ORDER_LINE.UNIT_PRICE%TYPE DEFAULT NULL,
         p_need_by_dt  IN  DATE DEFAULT NULL,
         p_po_line_id  OUT WWI_PROC.PURCHASE_ORDER_LINE.PO_LINE_ID%TYPE
     )
@@ -126,7 +126,7 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_PURCHASE_ORDER AS
         l_hdr        WWI_PROC.PURCHASE_ORDER_HDR%ROWTYPE;
         l_price      NUMBER;
         l_line_num   PLS_INTEGER;
-        l_lead_days  WWI_MDM.PRODUCT_MASTER.LEAD_TIME_DAYS%TYPE;
+        l_lead_days  WWI_PROC.SUPPLIER_SCORECARD.AVG_LEAD_TIME_DAYS%TYPE;
         l_tax_cd     VARCHAR2(20);
     BEGIN
         SELECT * INTO l_hdr
@@ -134,22 +134,22 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_PURCHASE_ORDER AS
          WHERE PO_ID = p_po_id
            FOR UPDATE;
 
-        IF l_hdr.STATUS_CD NOT IN ('DR', 'AP') THEN
+        IF l_hdr.PO_STATUS_CD NOT IN ('DR', 'AP') THEN
             RAISE_APPLICATION_ERROR(-20302,
                 'PKG_PURCHASE_ORDER.add_po_line: cannot add lines to a PO in status '
-                || l_hdr.STATUS_CD);
+                || l_hdr.PO_STATUS_CD);
         END IF;
 
         SELECT NVL(LEAD_TIME_DAYS, 14)
           INTO l_lead_days
-          FROM WWI_MDM.PRODUCT_MASTER
-         WHERE PRODUCT_ID = p_product_id;
+          FROM WWI_MDM.SUPP_MASTER
+         WHERE SUPP_ID = l_hdr.SUPP_ID;
 
         l_price := NVL(p_unit_price,
                        contract_price(l_hdr.CONTRACT_ID, p_product_id, l_hdr.ORDER_DT));
 
         IF l_price IS NULL THEN
-            SELECT STD_COST_AMT
+            SELECT UNIT_COST_STD
               INTO l_price
               FROM WWI_MDM.PRODUCT_MASTER
              WHERE PRODUCT_ID = p_product_id;
@@ -163,28 +163,28 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_PURCHASE_ORDER AS
                         ELSE 'ST_STD'
                     END;
 
-        SELECT NVL(MAX(LINE_NUM), 0) + 1
+        SELECT NVL(MAX(LINE_NBR), 0) + 1
           INTO l_line_num
           FROM WWI_PROC.PURCHASE_ORDER_LINE
          WHERE PO_ID = p_po_id;
 
-        p_po_line_id := WWI_PROC.SEQ_PO_LINE.NEXTVAL;
+        p_po_line_id := WWI_PROC.SEQ_PURCHASE_ORDER_LINE.NEXTVAL;
 
         INSERT INTO WWI_PROC.PURCHASE_ORDER_LINE
-            (PO_LINE_ID, PO_ID, LINE_NUM, PRODUCT_ID, ORDER_QTY, RECEIVED_QTY,
-             INVOICED_QTY, CANCELLED_QTY, UOM_CD, UNIT_PRICE_AMT, LINE_AMT,
-             TAX_CD, NEED_BY_DT, STATUS_CD, CLOSED_FLAG, CREATED_DT, LAST_UPD_DT)
+            (PO_LINE_ID, PO_ID, LINE_NBR, PRODUCT_ID, ORDER_QTY, RECEIVED_QTY,
+             BILLED_QTY, CANCELLED_QTY, UOM_CD, UNIT_PRICE, LINE_AMT,
+             TAX_CODE_CD, NEED_BY_DT, LINE_STATUS_CD, CREATED_DT, UPDATED_DT)
         VALUES
             (p_po_line_id, p_po_id, l_line_num, p_product_id, p_order_qty, 0,
              0, 0, p_uom_cd, l_price, ROUND(p_order_qty * l_price, 2),
              l_tax_cd, NVL(p_need_by_dt, TRUNC(SYSDATE) + l_lead_days),
-             'OP', 'N', SYSDATE, SYSDATE);
+             'OP', SYSDATE, SYSDATE);
 
         UPDATE WWI_PROC.PURCHASE_ORDER_HDR
            SET TOTAL_AMT   = NVL(TOTAL_AMT, 0) + ROUND(p_order_qty * l_price, 2),
                PROMISED_DT = GREATEST(NVL(PROMISED_DT, TRUNC(SYSDATE)),
                                       NVL(p_need_by_dt, TRUNC(SYSDATE) + l_lead_days)),
-               LAST_UPD_DT = SYSDATE
+               UPDATED_DT = SYSDATE
          WHERE PO_ID = p_po_id;
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
@@ -195,7 +195,7 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_PURCHASE_ORDER AS
     PROCEDURE approve_po
     (
         p_po_id       IN WWI_PROC.PURCHASE_ORDER_HDR.PO_ID%TYPE,
-        p_approved_by IN WWI_PROC.PURCHASE_ORDER_HDR.APPROVED_BY%TYPE
+        p_approved_by IN WWI_PROC.PURCHASE_ORDER_HDR.UPDATED_BY%TYPE
     )
     IS
         l_hdr       WWI_PROC.PURCHASE_ORDER_HDR%ROWTYPE;
@@ -208,10 +208,10 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_PURCHASE_ORDER AS
          WHERE PO_ID = p_po_id
            FOR UPDATE;
 
-        IF l_hdr.STATUS_CD <> 'DR' THEN
+        IF l_hdr.PO_STATUS_CD <> 'DR' THEN
             RAISE_APPLICATION_ERROR(-20302,
                 'PKG_PURCHASE_ORDER.approve_po: PO ' || p_po_id
-                || ' is in status ' || l_hdr.STATUS_CD);
+                || ' is in status ' || l_hdr.PO_STATUS_CD);
         END IF;
 
         SELECT COUNT(*)
@@ -232,14 +232,13 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_PURCHASE_ORDER AS
                 'PKG_PURCHASE_ORDER.approve_po: supplier check returned ' || l_supplier);
         END IF;
 
-        l_level := approval_level(l_hdr.REGION_CD, l_hdr.TOTAL_AMT, l_hdr.CURRENCY_CD);
+        l_level := approval_level(l_hdr.REGION_CD, l_hdr.TOTAL_AMT, l_hdr.ORDER_CURR_CD);
 
         UPDATE WWI_PROC.PURCHASE_ORDER_HDR
-           SET STATUS_CD          = 'AP',
-               APPROVED_BY        = p_approved_by,
-               APPROVED_DT        = SYSDATE,
-               APPROVAL_LEVEL_CD  = l_level,
-               LAST_UPD_DT        = SYSDATE
+           SET PO_STATUS_CD          = 'AP',
+               UPDATED_BY        = p_approved_by,
+               APPROVAL_STATUS_CD  = l_level,
+               UPDATED_DT        = SYSDATE
          WHERE PO_ID = p_po_id;
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
@@ -251,8 +250,8 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_PURCHASE_ORDER AS
     (
         p_po_line_id  IN WWI_PROC.PURCHASE_ORDER_LINE.PO_LINE_ID%TYPE,
         p_new_qty     IN WWI_PROC.PURCHASE_ORDER_LINE.ORDER_QTY%TYPE,
-        p_new_price   IN WWI_PROC.PURCHASE_ORDER_LINE.UNIT_PRICE_AMT%TYPE,
-        p_reason_cd   IN WWI_PROC.PO_CHANGE_ORDER.REASON_CD%TYPE,
+        p_new_price   IN WWI_PROC.PURCHASE_ORDER_LINE.UNIT_PRICE%TYPE,
+        p_reason_cd   IN WWI_PROC.PO_CHANGE_ORDER.CHANGE_REASON_CD%TYPE,
         p_changed_by  IN VARCHAR2
     )
     IS
@@ -267,7 +266,7 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_PURCHASE_ORDER AS
          WHERE PO_LINE_ID = p_po_line_id
            FOR UPDATE;
 
-        IF NVL(l_line.CLOSED_FLAG, 'N') = 'Y' THEN
+        IF NVL(l_line.LINE_STATUS_CD, 'OP') = 'C' THEN
             RAISE_APPLICATION_ERROR(-20304,
                 'PKG_PURCHASE_ORDER.apply_change_order: line ' || p_po_line_id
                 || ' is closed');
@@ -285,33 +284,36 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_PURCHASE_ORDER AS
         END IF;
 
         l_old_amt := NVL(l_line.LINE_AMT, 0);
-        l_new_amt := ROUND(p_new_qty * NVL(p_new_price, l_line.UNIT_PRICE_AMT), 2);
+        l_new_amt := ROUND(p_new_qty * NVL(p_new_price, l_line.UNIT_PRICE), 2);
 
         INSERT INTO WWI_PROC.PO_CHANGE_ORDER
-            (CHANGE_ID, PO_ID, PO_LINE_ID, CHANGE_DT, REASON_CD,
-             OLD_QTY, NEW_QTY, OLD_PRICE_AMT, NEW_PRICE_AMT,
-             APPROVED_FLAG, CHANGED_BY)
+            (CHANGE_ID, PO_ID, PO_LINE_ID, REQUESTED_DT, CHANGE_TYPE_CD,
+             CHANGE_REASON_CD, OLD_VALUE_TXT, NEW_VALUE_TXT,
+             QTY_DELTA, AMOUNT_DELTA, CHANGE_STATUS_CD, REQUESTED_BY_CD)
         VALUES
-            (WWI_PROC.SEQ_PO_CHANGE.NEXTVAL, l_line.PO_ID, p_po_line_id, SYSDATE,
-             p_reason_cd, l_line.ORDER_QTY, p_new_qty,
-             l_line.UNIT_PRICE_AMT, NVL(p_new_price, l_line.UNIT_PRICE_AMT),
+            (WWI_PROC.SEQ_PO_CHANGE_ORDER.NEXTVAL, l_line.PO_ID, p_po_line_id, SYSDATE,
+             'QTYPRICE', p_reason_cd,
+             'qty=' || l_line.ORDER_QTY || '; price=' || l_line.UNIT_PRICE,
+             'qty=' || p_new_qty || '; price='
+                    || NVL(p_new_price, l_line.UNIT_PRICE),
+             p_new_qty - NVL(l_line.ORDER_QTY, 0), l_new_amt - l_old_amt,
              /* EU change orders above 10% need re-approval; elsewhere the
                 change is auto-approved on entry                            */
              CASE WHEN l_region_cd = 'EU'
                        AND ABS(l_new_amt - l_old_amt) > l_old_amt * 0.10
-                  THEN 'N' ELSE 'Y' END,
+                  THEN 'PENDING' ELSE 'APPROVED' END,
              p_changed_by);
 
         UPDATE WWI_PROC.PURCHASE_ORDER_LINE
            SET ORDER_QTY      = p_new_qty,
-               UNIT_PRICE_AMT = NVL(p_new_price, UNIT_PRICE_AMT),
+               UNIT_PRICE = NVL(p_new_price, UNIT_PRICE),
                LINE_AMT       = l_new_amt,
-               LAST_UPD_DT    = SYSDATE
+               UPDATED_DT    = SYSDATE
          WHERE PO_LINE_ID = p_po_line_id;
 
         UPDATE WWI_PROC.PURCHASE_ORDER_HDR
            SET TOTAL_AMT   = NVL(TOTAL_AMT, 0) - l_old_amt + l_new_amt,
-               LAST_UPD_DT = SYSDATE
+               UPDATED_DT = SYSDATE
          WHERE PO_ID = l_line.PO_ID;
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
@@ -333,8 +335,8 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_PURCHASE_ORDER AS
               JOIN WWI_PROC.PURCHASE_ORDER_LINE l
                 ON l.PO_ID = h.PO_ID
              WHERE h.REGION_CD = p_region_cd
-               AND h.STATUS_CD IN ('AP', 'OP')
-               AND NVL(l.CLOSED_FLAG, 'N') = 'N'
+               AND h.PO_STATUS_CD IN ('AP', 'OP')
+               AND NVL(l.LINE_STATUS_CD, 'OP') <> 'CL'
                AND h.ORDER_DT < TRUNC(SYSDATE) - p_stale_days
                AND WWI_PROC.FN_PO_OPEN_QTY(l.PO_LINE_ID) <= 0
              ORDER BY h.PO_ID, l.PO_LINE_ID;
@@ -351,10 +353,9 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_PURCHASE_ORDER AS
 
             FOR i IN 1 .. l_rows.COUNT LOOP
                 UPDATE WWI_PROC.PURCHASE_ORDER_LINE
-                   SET CLOSED_FLAG = 'Y',
-                       STATUS_CD   = 'CL',
-                       CLOSED_DT   = SYSDATE,
-                       LAST_UPD_DT = SYSDATE
+                   SET LINE_STATUS_CD  = 'CL',
+                       CLOSE_REASON_CD = 'STALE',
+                       UPDATED_DT = SYSDATE
                  WHERE PO_LINE_ID = l_rows(i).PO_LINE_ID;
 
                 p_closed_cnt := p_closed_cnt + 1;
@@ -366,14 +367,14 @@ CREATE OR REPLACE PACKAGE BODY WWI_PROC.PKG_PURCHASE_ORDER AS
         CLOSE c_stale;
 
         UPDATE WWI_PROC.PURCHASE_ORDER_HDR h
-           SET h.STATUS_CD   = 'CL',
-               h.LAST_UPD_DT = SYSDATE
+           SET h.PO_STATUS_CD   = 'CL',
+               h.UPDATED_DT = SYSDATE
          WHERE h.REGION_CD = p_region_cd
-           AND h.STATUS_CD IN ('AP', 'OP')
+           AND h.PO_STATUS_CD IN ('AP', 'OP')
            AND NOT EXISTS (SELECT 1
                              FROM WWI_PROC.PURCHASE_ORDER_LINE l
                             WHERE l.PO_ID = h.PO_ID
-                              AND NVL(l.CLOSED_FLAG, 'N') = 'N');
+                              AND NVL(l.LINE_STATUS_CD, 'OP') <> 'CL');
     EXCEPTION
         WHEN OTHERS THEN
             IF c_stale%ISOPEN THEN

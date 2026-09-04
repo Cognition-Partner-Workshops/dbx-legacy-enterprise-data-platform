@@ -61,12 +61,11 @@ BEGIN
 
         INSERT INTO Fact.[Loyalty Points]
         (
-            [Movement Date Key], [Expiry Date Key], [Customer Key], [Loyalty Scheme Key],
+            [Movement Date Key], [Points Expiry Date Key], [Customer Key], [Loyalty Scheme Key],
             [Loyalty Tier Key], [Sales Channel Key], [Promotion Key], [Region Code],
-            [Loyalty Card Number], [Movement Reference], [Invoice Number],
-            [Movement Type Code], [Points Earned], [Points Redeemed], [Points Adjusted],
-            [Points Expired], [Net Points], [Points Balance After], [Redemption Value Amount],
-            [Redemption Currency Code], [Earn Rate], [Tier Multiplier], [Consent Marketing Flag],
+            [Loyalty Account Number], [Movement Reference], [Invoice Number],
+            [Movement Type Code], [Points Delta], [Points Balance After],
+            [Redemption Value Amount], [Bonus Multiplier], [Marketing Consent Flag],
             [Natural Key Hash], [Lineage Key], [Batch Id], [Load Datetime]
         )
         SELECT
@@ -87,15 +86,9 @@ BEGIN
             t.MovementReference,
             t.InvoiceNumber,
             t.MovementTypeCode,
-            CASE WHEN t.MovementTypeCode = N'EARN'   THEN t.Points ELSE 0 END,
-            CASE WHEN t.MovementTypeCode = N'REDEEM' THEN -ABS(t.Points) ELSE 0 END,
-            CASE WHEN t.MovementTypeCode = N'ADJUST' THEN t.Points ELSE 0 END,
-            0,
             CASE WHEN t.MovementTypeCode = N'REDEEM' THEN -ABS(t.Points) ELSE t.Points END,
             NULL,
             t.RedemptionValueAmount,
-            t.RedemptionCurrencyCode,
-            sch.[Earn Rate],
             ISNULL(tier.[Point Multiplier], 1.0),
             ISNULL(cust.[Marketing Consent Flag], 0),
             CONVERT(VARBINARY(32), HASHBYTES('SHA2_256', t.MovementReference)),
@@ -126,16 +119,16 @@ BEGIN
             INSERT INTO Fact.[Loyalty Points]
             (
                 [Movement Date Key], [Customer Key], [Loyalty Scheme Key], [Loyalty Tier Key],
-                [Sales Channel Key], [Promotion Key], [Region Code], [Loyalty Card Number],
-                [Movement Reference], [Movement Type Code], [Points Earned], [Points Redeemed],
-                [Points Adjusted], [Points Expired], [Net Points], [Consent Marketing Flag],
+                [Sales Channel Key], [Promotion Key], [Region Code], [Loyalty Account Number],
+                [Movement Reference], [Movement Type Code], [Points Delta],
+                [Marketing Consent Flag],
                 [Natural Key Hash], [Lineage Key], [Batch Id], [Load Datetime]
             )
             SELECT
                 f.[Points Expiry Date Key], f.[Customer Key], f.[Loyalty Scheme Key], f.[Loyalty Tier Key],
                 -1, -1, f.[Region Code], f.[Loyalty Account Number],
-                CONCAT(N'EXP-', f.[Movement Reference]), N'EXPIRE', 0, 0, 0,
-                -ABS(f.[Points Delta]), -ABS(f.[Points Delta]), f.[Marketing Consent Flag],
+                CONCAT(N'EXP-', f.[Movement Reference]), N'EXPIRE',
+                -ABS(f.[Points Delta]), f.[Marketing Consent Flag],
                 CONVERT(VARBINARY(32), HASHBYTES('SHA2_256',
                     CONCAT(N'EXP-', f.[Movement Reference]))),
                 0, @BatchId, SYSDATETIME()
@@ -155,13 +148,13 @@ BEGIN
         ;WITH bal AS
         (
             SELECT [Loyalty Points Key],
-                   SUM([Net Points]) OVER (PARTITION BY [Loyalty Card Number]
-                                           ORDER BY [Movement Date Key], [Loyalty Points Key]
-                                           ROWS UNBOUNDED PRECEDING) AS RunningBalance
+                   SUM([Points Delta]) OVER (PARTITION BY [Loyalty Account Number]
+                                             ORDER BY [Movement Date Key], [Loyalty Points Key]
+                                             ROWS UNBOUNDED PRECEDING) AS RunningBalance
             FROM Fact.[Loyalty Points]
-            WHERE [Loyalty Card Number] IN
+            WHERE [Loyalty Account Number] IN
             (
-                SELECT DISTINCT [Loyalty Card Number]
+                SELECT DISTINCT [Loyalty Account Number]
                 FROM Fact.[Loyalty Points]
                 WHERE [Batch Id] = @BatchId
             )

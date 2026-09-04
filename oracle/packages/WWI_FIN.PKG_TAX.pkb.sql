@@ -16,9 +16,9 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_TAX AS
         p_country_cd IN WWI_REF.COUNTRY_REF.COUNTRY_CD%TYPE,
         p_state_cd   IN VARCHAR2 DEFAULT NULL,
         p_postal_cd  IN VARCHAR2 DEFAULT NULL
-    ) RETURN WWI_FIN.TAX_JURISDICTION.JURISDICTION_ID%TYPE
+    ) RETURN WWI_FIN.TAX_JURISDICTION.TAX_JURISDICTION_ID%TYPE
     IS
-        l_id WWI_FIN.TAX_JURISDICTION.JURISDICTION_ID%TYPE;
+        l_id WWI_FIN.TAX_JURISDICTION.TAX_JURISDICTION_ID%TYPE;
     BEGIN
         IF p_region_cd = 'NA' THEN
             /* NA resolves to the most specific jurisdiction that matches the
@@ -26,17 +26,17 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_TAX AS
                is loaded from a vendor file that stopped being refreshed in
                2019 - see the note in the AP runbook.                        */
             BEGIN
-                SELECT JURISDICTION_ID
+                SELECT TAX_JURISDICTION_ID
                   INTO l_id
-                  FROM (SELECT j.JURISDICTION_ID
+                  FROM (SELECT j.TAX_JURISDICTION_ID
                           FROM WWI_FIN.TAX_JURISDICTION j
                          WHERE j.COUNTRY_CD = p_country_cd
-                           AND (j.STATE_CD  = p_state_cd OR j.STATE_CD IS NULL)
+                           AND (j.STATE_PROV_CD  = p_state_cd OR j.STATE_PROV_CD IS NULL)
                            AND (p_postal_cd IS NULL
-                                OR j.POSTAL_PREFIX_TXT IS NULL
-                                OR p_postal_cd LIKE j.POSTAL_PREFIX_TXT || '%')
-                         ORDER BY NVL(LENGTH(j.POSTAL_PREFIX_TXT), 0) DESC,
-                                  NVL2(j.STATE_CD, 0, 1))
+                                OR j.POSTAL_FROM_CD IS NULL
+                                OR p_postal_cd LIKE j.POSTAL_FROM_CD || '%')
+                         ORDER BY NVL(LENGTH(j.POSTAL_FROM_CD), 0) DESC,
+                                  NVL2(j.STATE_PROV_CD, 0, 1))
                  WHERE ROWNUM = 1;
             EXCEPTION
                 WHEN NO_DATA_FOUND THEN
@@ -47,11 +47,11 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_TAX AS
         ELSE
             /* EU and APAC are country-level only */
             BEGIN
-                SELECT j.JURISDICTION_ID
+                SELECT j.TAX_JURISDICTION_ID
                   INTO l_id
                   FROM WWI_FIN.TAX_JURISDICTION j
                  WHERE j.COUNTRY_CD = p_country_cd
-                   AND j.STATE_CD IS NULL
+                   AND j.STATE_PROV_CD IS NULL
                    AND ROWNUM = 1;
             EXCEPTION
                 WHEN NO_DATA_FOUND THEN
@@ -66,8 +66,8 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_TAX AS
 
     FUNCTION resolve_rate
     (
-        p_tax_cd          IN WWI_FIN.TAX_RATE.TAX_CD%TYPE,
-        p_jurisdiction_id IN WWI_FIN.TAX_JURISDICTION.JURISDICTION_ID%TYPE,
+        p_tax_cd          IN WWI_FIN.TAX_RATE.TAX_CODE_CD%TYPE,
+        p_jurisdiction_id IN WWI_FIN.TAX_JURISDICTION.TAX_JURISDICTION_ID%TYPE,
         p_tax_dt          IN DATE DEFAULT SYSDATE
     ) RETURN NUMBER
     IS
@@ -76,11 +76,11 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_TAX AS
         SELECT r.RATE_PCT
           INTO l_rate
           FROM WWI_FIN.TAX_RATE r
-         WHERE r.TAX_CD = p_tax_cd
-           AND NVL(r.JURISDICTION_ID, NVL(p_jurisdiction_id, -1))
+         WHERE r.TAX_CODE_CD = p_tax_cd
+           AND NVL(r.JURISDICTION_CD, NVL(p_jurisdiction_id, -1))
                = NVL(p_jurisdiction_id, -1)
-           AND TRUNC(p_tax_dt) BETWEEN r.EFF_FROM_DT
-                                   AND NVL(r.EFF_TO_DT, DATE '4712-12-31')
+           AND TRUNC(p_tax_dt) BETWEEN r.EFFECTIVE_FROM_DT
+                                   AND NVL(r.EFFECTIVE_TO_DT, DATE '4712-12-31')
            AND ROWNUM = 1;
 
         RETURN l_rate;
@@ -100,18 +100,18 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_TAX AS
     ) RETURN VARCHAR2
     IS
         l_supp_ctry  WWI_MDM.SUPP_MASTER.COUNTRY_CD%TYPE;
-        l_supp_vat   WWI_MDM.SUPP_MASTER.TAX_REG_NUM%TYPE;
-        l_supp_eu    WWI_REF.COUNTRY_REF.EU_MEMBER_FLAG%TYPE;
-        l_buyer_eu   WWI_REF.COUNTRY_REF.EU_MEMBER_FLAG%TYPE;
+        l_supp_vat   WWI_MDM.SUPP_MASTER.TAX_ID_NBR%TYPE;
+        l_supp_eu    WWI_REF.COUNTRY_REF.EU_MEMBER_FLG%TYPE;
+        l_buyer_eu   WWI_REF.COUNTRY_REF.EU_MEMBER_FLG%TYPE;
     BEGIN
-        SELECT s.COUNTRY_CD, s.TAX_REG_NUM, NVL(c.EU_MEMBER_FLAG, 'N')
+        SELECT s.COUNTRY_CD, s.TAX_ID_NBR, NVL(c.EU_MEMBER_FLG, 'N')
           INTO l_supp_ctry, l_supp_vat, l_supp_eu
           FROM WWI_MDM.SUPP_MASTER s
           LEFT OUTER JOIN WWI_REF.COUNTRY_REF c
             ON c.COUNTRY_CD = s.COUNTRY_CD
          WHERE s.SUPP_ID = p_supp_id;
 
-        SELECT NVL(EU_MEMBER_FLAG, 'N')
+        SELECT NVL(EU_MEMBER_FLG, 'N')
           INTO l_buyer_eu
           FROM WWI_REF.COUNTRY_REF
          WHERE COUNTRY_CD = p_buyer_ctry;
@@ -167,8 +167,8 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_TAX AS
     (
         p_region_cd       IN  VARCHAR2,
         p_line_amt        IN  NUMBER,
-        p_tax_cd          IN  WWI_FIN.TAX_RATE.TAX_CD%TYPE,
-        p_jurisdiction_id IN  WWI_FIN.TAX_JURISDICTION.JURISDICTION_ID%TYPE,
+        p_tax_cd          IN  WWI_FIN.TAX_RATE.TAX_CODE_CD%TYPE,
+        p_jurisdiction_id IN  WWI_FIN.TAX_JURISDICTION.TAX_JURISDICTION_ID%TYPE,
         p_tax_dt          IN  DATE,
         p_reverse_charge  IN  VARCHAR2,
         p_tax_lines       OUT t_tax_line_tab,
@@ -184,13 +184,13 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_TAX AS
         IF p_region_cd = 'NA' THEN
             /* sales tax is additive across state, county and city rows in
                the jurisdiction table; each contributes its own tax line     */
-            FOR j IN (SELECT j.JURISDICTION_ID, j.JURISDICTION_LEVEL_CD
+            FOR j IN (SELECT j.TAX_JURISDICTION_ID, j.JURISDICTION_LEVEL_CD
                         FROM WWI_FIN.TAX_JURISDICTION j
-                       START WITH j.JURISDICTION_ID = p_jurisdiction_id
-                     CONNECT BY PRIOR j.PARENT_JURISDICTION_ID = j.JURISDICTION_ID) LOOP
+                       START WITH j.TAX_JURISDICTION_ID = p_jurisdiction_id
+                     CONNECT BY PRIOR j.PARENT_JURISDICTION_CD = j.TAX_JURISDICTION_ID) LOOP
 
                 BEGIN
-                    l_rate := resolve_rate(p_tax_cd, j.JURISDICTION_ID, p_tax_dt);
+                    l_rate := resolve_rate(p_tax_cd, j.TAX_JURISDICTION_ID, p_tax_dt);
                 EXCEPTION
                     WHEN OTHERS THEN
                         l_rate := 0;
@@ -199,7 +199,7 @@ CREATE OR REPLACE PACKAGE BODY WWI_FIN.PKG_TAX AS
                 IF l_rate <> 0 THEN
                     l_idx := l_idx + 1;
                     l_line.tax_cd          := p_tax_cd;
-                    l_line.jurisdiction_id := j.JURISDICTION_ID;
+                    l_line.jurisdiction_id := j.TAX_JURISDICTION_ID;
                     l_line.rate_pct        := l_rate;
                     l_line.taxable_amt     := p_line_amt;
                     l_line.tax_amt         := ROUND(p_line_amt * l_rate / 100, 2);

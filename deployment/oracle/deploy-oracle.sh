@@ -63,24 +63,46 @@ SCHEMA_SECRET_VARIABLES=(
     "WWI_EXTRACT_SECRET"
 )
 
+# An undefined substitution variable makes SQL*Plus read its value from the next
+# line of standard input, so a missing secret silently creates the account with a
+# fragment of the script as its password instead of failing. Require them all.
+if ! wwi_is_dry_run && [[ -z "${ONLY_DIR}" || "${ONLY_DIR}" == "ddl" ]]; then
+    wwi_require_env "${SCHEMA_SECRET_VARIABLES[@]}"
+fi
+
 # 05_grant_privileges.sql and 07_create_synonyms.sql name the objects in
 # oracle/tables one by one, so they run as their own "grants" stage after those
 # exist and before the views and packages that compile against them. Each entry
 # is "stage name:directory".
 LATE_DDL_FILES=("05_grant_privileges.sql" "07_create_synonyms.sql")
 
+# 08_grant_function_execute.sql grants EXECUTE on the scalar functions, so it
+# runs as its own "funcgrants" stage between the functions and the views that
+# call them.
+FUNC_DDL_FILES=("08_grant_function_execute.sql")
+
+# 09_grant_package_execute.sql grants EXECUTE on the packages, so it runs as its
+# own "pkggrants" stage between the package specifications and the bodies and
+# procedures that call across schemas.
+PKG_DDL_FILES=("09_grant_package_execute.sql")
+
 # ZZ_add_future_partitions.sql is the December runbook script, run by hand
 # against a populated estate; it is not part of creating the objects.
 HAND_RUN_FILES=("ZZ_add_future_partitions.sql")
 
+# Views select through the scalar functions in oracle/functions, so functions
+# compile first.
 ORACLE_STAGES=(
     "ddl:ddl"
     "tables:tables"
     "grants:ddl"
-    "views:views"
     "functions:functions"
+    "funcgrants:ddl"
+    "views:views"
+    "pkgspecs:packages"
+    "pkggrants:ddl"
+    "pkgbodies:packages"
     "procedures:procedures"
-    "packages:packages"
     "reference:reference"
     "seed:seed"
 )
@@ -118,7 +140,7 @@ run_sql_file() {
     local name value
     for name in "${SCHEMA_SECRET_VARIABLES[@]}"; do
         value="${!name:-}"
-        [[ -n "${value}" ]] && defines+="DEFINE ${name} = \"${value}\""$'\n'
+        defines+="DEFINE ${name} = \"${value}\""$'\n'
         undefines+="UNDEFINE ${name}"$'\n'
     done
 
@@ -165,9 +187,21 @@ for stage in "${ORACLE_STAGES[@]}"; do
         if [[ "${dir}" == "ddl" ]]; then
             if [[ "${stage_name}" == "grants" ]]; then
                 file_is_in "${sql_file}" "${LATE_DDL_FILES[@]}" || continue
+            elif [[ "${stage_name}" == "funcgrants" ]]; then
+                file_is_in "${sql_file}" "${FUNC_DDL_FILES[@]}" || continue
+            elif [[ "${stage_name}" == "pkggrants" ]]; then
+                file_is_in "${sql_file}" "${PKG_DDL_FILES[@]}" || continue
             else
                 file_is_in "${sql_file}" "${LATE_DDL_FILES[@]}" && continue
+                file_is_in "${sql_file}" "${FUNC_DDL_FILES[@]}" && continue
+                file_is_in "${sql_file}" "${PKG_DDL_FILES[@]}" && continue
             fi
+        fi
+        if [[ "${dir}" == "packages" ]]; then
+            case "${stage_name}" in
+                pkgspecs)  [[ "${sql_file}" == *.pks.sql ]] || continue ;;
+                pkgbodies) [[ "${sql_file}" == *.pkb.sql ]] || continue ;;
+            esac
         fi
         if [[ "${dir}" == "tables" ]] && file_is_in "${sql_file}" "${HAND_RUN_FILES[@]}"; then
             continue

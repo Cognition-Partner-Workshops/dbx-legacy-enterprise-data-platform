@@ -43,13 +43,13 @@ CREATE OR REPLACE PACKAGE WWI_FIN.PKG_GL_POSTING AS
     (
         p_journal_id     IN WWI_FIN.GL_JOURNAL_HDR.JOURNAL_ID%TYPE,
         p_account_cd     IN WWI_FIN.GL_ACCOUNT.ACCOUNT_CD%TYPE,
-        p_cost_center_id IN WWI_FIN.GL_JOURNAL_LINE.COST_CENTER_ID%TYPE,
-        p_currency_cd    IN WWI_FIN.GL_JOURNAL_LINE.CURRENCY_CD%TYPE,
+        p_cost_center_id IN WWI_FIN.GL_JOURNAL_LINE.COST_CENTER_CD%TYPE,
+        p_currency_cd    IN WWI_FIN.GL_JOURNAL_LINE.ENTERED_CURR_CD%TYPE,
         p_debit_amt      IN NUMBER,
         p_credit_amt     IN NUMBER,
         p_line_desc      IN WWI_FIN.GL_JOURNAL_LINE.LINE_DESC%TYPE DEFAULT NULL,
-        p_src_doc_type   IN WWI_FIN.GL_JOURNAL_LINE.SRC_DOC_TYPE_CD%TYPE DEFAULT NULL,
-        p_src_doc_id     IN WWI_FIN.GL_JOURNAL_LINE.SRC_DOC_ID%TYPE DEFAULT NULL
+        p_src_doc_type   IN WWI_FIN.GL_JOURNAL_LINE.SOURCE_DOC_TYPE_CD%TYPE DEFAULT NULL,
+        p_src_doc_id     IN WWI_FIN.GL_JOURNAL_LINE.SOURCE_DOC_ID%TYPE DEFAULT NULL
     );
 
     PROCEDURE create_invoice_journal
@@ -72,8 +72,8 @@ CREATE OR REPLACE PACKAGE WWI_FIN.PKG_GL_POSTING AS
 
     PROCEDURE reverse_document_journal
     (
-        p_doc_type_cd IN WWI_FIN.GL_JOURNAL_LINE.SRC_DOC_TYPE_CD%TYPE,
-        p_doc_id      IN WWI_FIN.GL_JOURNAL_LINE.SRC_DOC_ID%TYPE,
+        p_doc_type_cd IN WWI_FIN.GL_JOURNAL_LINE.SOURCE_DOC_TYPE_CD%TYPE,
+        p_doc_id      IN WWI_FIN.GL_JOURNAL_LINE.SOURCE_DOC_ID%TYPE,
         p_reason_txt  IN VARCHAR2
     );
 

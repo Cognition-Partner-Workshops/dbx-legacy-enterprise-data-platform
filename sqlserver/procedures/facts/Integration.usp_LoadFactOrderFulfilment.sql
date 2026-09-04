@@ -55,9 +55,9 @@ BEGIN
         (
             [Order Date Key], [Customer Key], [Sales Territory Key], [Sales Channel Key],
             [Salesperson Key], [Warehouse Site Key], [Region Code], [Order Number],
-            [Order Line Count], [Order Value Amount], [Transaction Currency Code],
-            [Cycle Complete Flag], [Current Milestone Code], [Lineage Key],
-            [Batch Id], [Load Datetime], [Last Milestone Update Datetime]
+            [Order Line Number], [Order Line Count], [Order Value Reporting],
+            [Transaction Currency Code], [Cycle Complete Flag], [Pipeline Status Code],
+            [Lineage Key], [Batch Id], [Load Datetime], [Last Milestone Update]
         )
         SELECT
             o.[Order Date Key],
@@ -68,6 +68,7 @@ BEGIN
             -1,
             MAX(o.[Region Code]),
             o.[Order Number],
+            0,
             COUNT_BIG(*),
             SUM(o.[Net Order Amount]),
             MAX(o.[Transaction Currency Code]),
@@ -88,24 +89,24 @@ BEGIN
             [Despatch Date Key] = COALESCE(f.[Despatch Date Key], sh.DespatchDate),
             [Delivery Date Key] = COALESCE(f.[Delivery Date Key], sh.DeliveryDate),
             [Invoice Date Key]  = COALESCE(f.[Invoice Date Key], inv.InvoiceDate),
-            [Cash Date Key]     = COALESCE(f.[Cash Applied Date Key], cash.PaymentDate),
+            [Cash Applied Date Key] = COALESCE(f.[Cash Applied Date Key], cash.PaymentDate),
             [Invoice Number]    = COALESCE(f.[Invoice Number], inv.InvoiceNumber),
-            [Consignment Number] = COALESCE(f.[Despatch Note Number], sh.ConsignmentNumber),
-            [Invoiced Amount]   = COALESCE(f.[Invoiced Value Reporting], inv.InvoicedAmount),
-            [Cash Received Amount] = COALESCE(cash.CashAmount, f.[Cash Applied Reporting]),
-            [Order To Pick Days]      = DATEDIFF(DAY, f.[Order Date Key],
+            [Despatch Note Number] = COALESCE(f.[Despatch Note Number], sh.ConsignmentNumber),
+            [Invoiced Value Reporting] = COALESCE(f.[Invoiced Value Reporting], inv.InvoicedAmount),
+            [Cash Applied Reporting] = COALESCE(cash.CashAmount, f.[Cash Applied Reporting]),
+            [Order To Pick Lag Days]      = DATEDIFF(DAY, f.[Order Date Key],
                                                  COALESCE(f.[Pick Date Key], sh.PickDate)),
-            [Pick To Despatch Days]   = DATEDIFF(DAY, COALESCE(f.[Pick Date Key], sh.PickDate),
+            [Pick To Despatch Lag Days]   = DATEDIFF(DAY, COALESCE(f.[Pick Date Key], sh.PickDate),
                                                  COALESCE(f.[Despatch Date Key], sh.DespatchDate)),
-            [Despatch To Delivery Days] = DATEDIFF(DAY, COALESCE(f.[Despatch Date Key], sh.DespatchDate),
+            [Despatch To Delivery Lag Days] = DATEDIFF(DAY, COALESCE(f.[Despatch Date Key], sh.DespatchDate),
                                                  COALESCE(f.[Delivery Date Key], sh.DeliveryDate)),
-            [Delivery To Invoice Days]  = DATEDIFF(DAY, COALESCE(f.[Delivery Date Key], sh.DeliveryDate),
+            [Delivery To Invoice Lag Days]  = DATEDIFF(DAY, COALESCE(f.[Delivery Date Key], sh.DeliveryDate),
                                                  COALESCE(f.[Invoice Date Key], inv.InvoiceDate)),
-            [Invoice To Cash Days]      = DATEDIFF(DAY, COALESCE(f.[Invoice Date Key], inv.InvoiceDate),
+            [Invoice To Cash Lag Days]      = DATEDIFF(DAY, COALESCE(f.[Invoice Date Key], inv.InvoiceDate),
                                                  COALESCE(f.[Cash Applied Date Key], cash.PaymentDate)),
-            [Order To Cash Days]        = DATEDIFF(DAY, f.[Order Date Key],
+            [Order To Cash Cycle Days]      = DATEDIFF(DAY, f.[Order Date Key],
                                                  COALESCE(f.[Cash Applied Date Key], cash.PaymentDate)),
-            [Current Milestone Code] = CASE
+            [Pipeline Status Code] = CASE
                                            WHEN COALESCE(f.[Cash Applied Date Key], cash.PaymentDate) IS NOT NULL THEN N'CASH'
                                            WHEN COALESCE(f.[Invoice Date Key], inv.InvoiceDate) IS NOT NULL THEN N'INVOICED'
                                            WHEN COALESCE(f.[Delivery Date Key], sh.DeliveryDate) IS NOT NULL THEN N'DELIVERED'
@@ -116,12 +117,13 @@ BEGIN
             [Cycle Complete Flag] = CASE WHEN COALESCE(f.[Cash Applied Date Key], cash.PaymentDate) IS NOT NULL
                                          THEN 1 ELSE 0 END,
             [Batch Id] = @BatchId,
-            [Last Milestone Update Datetime] = SYSDATETIME()
+            [Last Milestone Update] = SYSDATETIME()
         FROM Fact.[Order Fulfilment] AS f
         OUTER APPLY
         (
             SELECT TOP (1)
-                   s.[Despatch Note Number], s.[Picked Date Key] AS PickDate,
+                   s.[Despatch Note Number] AS ConsignmentNumber,
+                   s.[Picked Date Key] AS PickDate,
                    s.[Despatch Date Key] AS DespatchDate,
                    s.[Delivery Confirmed Date Key] AS DeliveryDate
             FROM Fact.[Shipment] AS s
@@ -130,7 +132,8 @@ BEGIN
         ) AS sh
         OUTER APPLY
         (
-            SELECT TOP (1) i.[Invoice Number], i.[Invoice Date Key] AS InvoiceDate,
+            SELECT TOP (1) i.[Invoice Number] AS InvoiceNumber,
+                   i.[Invoice Date Key] AS InvoiceDate,
                    SUM(i.[Net Amount]) OVER (PARTITION BY i.[Invoice Number]) AS InvoicedAmount
             FROM Fact.[Sale] AS i
             WHERE i.[Order Number] = f.[Order Number]
