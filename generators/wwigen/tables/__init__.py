@@ -8,14 +8,18 @@ output, and required by the load order in the emitted loader scripts.
 
 from __future__ import annotations
 
+from .. import contracts
 from . import (file_feeds, oracle_fin, oracle_mdm, oracle_proc, oracle_ref,
                sqlserver_ops, sqlserver_sales)
 
 MODULES = (oracle_ref, oracle_mdm, oracle_proc, oracle_fin,
            sqlserver_sales, sqlserver_ops, file_feeds)
 
+_CONFORMED = {}
 
-def all_specs() -> tuple:
+
+def raw_specs() -> tuple:
+    """The specs as the producers declare them, before the schema contract."""
     specs = []
     for module in MODULES:
         specs.extend(module.SPECS)
@@ -24,6 +28,13 @@ def all_specs() -> tuple:
     if duplicates:
         raise RuntimeError("duplicate table keys in the registry: %s" % ", ".join(duplicates))
     return tuple(specs)
+
+
+def all_specs() -> tuple:
+    """The registry projected onto the schema the estate actually deploys."""
+    if not _CONFORMED:
+        _CONFORMED["specs"] = contracts.conform_all(raw_specs())
+    return _CONFORMED["specs"]
 
 
 def by_key() -> dict:

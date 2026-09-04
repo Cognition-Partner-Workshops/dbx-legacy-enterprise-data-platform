@@ -33,7 +33,7 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from wwigen import config, context, manifest, schema, tables, writers  # noqa: E402
-from wwigen.loaders import bulkinsert, sqlloader  # noqa: E402
+from wwigen.loaders import bcp, landingzone, sqlloader  # noqa: E402
 
 SELF_CHECK_TABLES = (
     "oracle.WWI_MDM.CUST_MASTER",
@@ -63,7 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--resume", action="store_true",
                         help="skip tables already completed by an identical run signature")
     parser.add_argument("--no-loaders", action="store_true",
-                        help="skip the SQL*Loader / bcp / BULK INSERT artefacts")
+                        help="skip the SQL*Loader, bcp and landing-zone artefacts")
     parser.add_argument("--chunk-rows", type=int, default=50000,
                         help="rows buffered before each flush")
     parser.add_argument("--progress-every", type=int, default=250000,
@@ -153,11 +153,12 @@ def generate(cfg, specs, stream, resume: bool = False, emit_loaders: bool = True
         entry = write_table(cfg, ctx_for(cfg), spec, stream, progress_every, quiet)
         manifest.write_marker(cfg.output_dir, spec.key, entry)
 
-    loader_files = {"oracle": [], "sqlserver": []}
+    loader_files = {"oracle": [], "sqlserver": [], "landing": []}
     if emit_loaders:
         all_specs = tables.all_specs()
         loader_files["oracle"] = sqlloader.emit(cfg.output_dir, all_specs)
-        loader_files["sqlserver"] = bulkinsert.emit(cfg.output_dir, all_specs)
+        loader_files["sqlserver"] = bcp.emit(cfg.output_dir, all_specs)
+        loader_files["landing"] = landingzone.emit(cfg, all_specs)
 
     entries = manifest.collect(cfg.output_dir)
     path = manifest.write_manifest(cfg.output_dir, signature, entries, loader_files)
