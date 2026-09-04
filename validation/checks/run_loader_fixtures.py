@@ -79,6 +79,11 @@ FIXTURES = (
      "loader-landing-feed",
      sub_once(r"carrier_scan\]", "carrier_manifest]")),
 
+    ("driver argument interpolating a property",
+     "generators/wwigen/loaders/sqlloader.py",
+     "loader-driver",
+     sub_once(r"& sqlldr @arguments", "& sqlldr $connect control=$load.Control")),
+
     ("loader data path resolving to nowhere",
      "generators/wwigen/loaders/bcp.py",
      "loader-path",
