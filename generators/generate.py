@@ -32,7 +32,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from wwigen import config, context, manifest, schema, tables, writers  # noqa: E402
+from wwigen import config, context, manifest, schema, tables, valuecontract, writers  # noqa: E402
 from wwigen.loaders import bcp, landingzone, sqlloader  # noqa: E402
 
 SELF_CHECK_TABLES = (
@@ -91,6 +91,9 @@ def write_table(cfg, ctx, spec, stream, progress_every: int, quiet: bool) -> dic
     reporter = writers.ProgressReporter(stream, spec.qualified_name,
                                         every=progress_every, quiet=quiet)
     column_count = len(spec.columns)
+    # A parent's extract also runs when a child resolves its key space, so
+    # count only what this pass reconciles.
+    already = valuecontract.reconciled(ctx).get(spec.key, 0)
     with writers.DelimitedWriter(path, spec, chunk_rows=cfg.chunk_rows) as writer:
         for row in spec.produce(cfg, ctx):
             if isinstance(row, bytes):
@@ -105,6 +108,10 @@ def write_table(cfg, ctx, spec, stream, progress_every: int, quiet: bool) -> dic
             reporter.tick(writer.rows_written)
         result = writer.close()
     reporter.done(result["rows"])
+    seeded = valuecontract.reconciled(ctx).get(spec.key, 0) - already
+    if seeded and not quiet:
+        stream.write("%54s%d row(s) already seeded by the deployment\n"
+                     % ("", seeded))
     return {
         "table": spec.key,
         "qualified_name": spec.qualified_name,
@@ -118,6 +125,7 @@ def write_table(cfg, ctx, spec, stream, progress_every: int, quiet: bool) -> dic
         "encoding": spec.encoding,
         "header": spec.header,
         "rows": result["rows"],
+        "seed_reconciled": seeded,
         "bytes": result["bytes"],
         "sha256": result["sha256"],
         "scale": cfg.scale,

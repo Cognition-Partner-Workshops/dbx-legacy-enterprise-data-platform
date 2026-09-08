@@ -42,7 +42,7 @@ if not os.path.isdir(GENERATORS):
     GENERATORS = os.path.join(REPO_ROOT, "generators")
 sys.path.insert(0, GENERATORS)
 
-from wwigen import canon, config, context, schema, tables, valuecontract  # noqa: E402
+from wwigen import canon, config, context, oracheck, schema, tables, valuecontract  # noqa: E402
 from wwigen.conform import ContractError  # noqa: E402
 
 # One finding code per class of rejection the live load produced, so a
@@ -73,6 +73,21 @@ ORA_CODES = (
 # domain breaks every row, and the first few say everything the fix needs.
 REPORTED_ROWS = 3
 
+# A row a table-level CHECK constrains can be made loadable two ways: by
+# constructing it so the constraint holds, or by steering it onto the branch
+# where the constraint says nothing. The second passes every rule below while
+# emitting an estate nobody would recognise - a general ledger whose journals
+# are never posted - so the extracts whose live rejections were of that class
+# state what they are expected to construct.
+#
+#   extract -> (label, row is in scope, row is constructed correctly)
+CONSTRUCTED = {
+    "WWI_FIN.GL_JOURNAL_HDR": (
+        "posted journals whose debits equal their credits",
+        lambda row: row.get("POSTING_STATUS_CD") == "POST",
+        lambda row: row.get("TOTAL_DEBIT_AMT") == row.get("TOTAL_CREDIT_AMT")),
+}
+
 
 def oracle_specs():
     return [spec for spec in tables.all_specs() if spec.system == schema.ORACLE]
@@ -91,6 +106,7 @@ class Counters:
         self.keys = 0
         self.foreign_keys = 0
         self.partitioned = 0
+        self.constructed = 0
         self.failed = set()
 
 
@@ -140,8 +156,8 @@ def check_extract(report, spec, cfg, ctx, counters):
                 report.error(CODES.get(violation.kind, "generated-oracle-value"),
                              origin, "%s: %s" % (spec.key, violation))
         for unique in contract.unique_keys:
-            candidate = tuple(values.get(name) for name in unique)
-            if any(part is None for part in candidate):
+            candidate = indexed_tuple(table, unique, values)
+            if candidate is None:
                 continue
             counters.keys += 1
             where = "%s (%s)" % (spec.key, ", ".join(unique))
@@ -157,12 +173,54 @@ def check_extract(report, spec, cfg, ctx, counters):
                              % (where, ", ".join(str(part) for part in candidate)))
             seen[unique].add(candidate)
 
+    check_construction(report, spec, origin, names, rows, counters)
     counters.rows += len(rows)
     counters.extracts += 1
     counters.foreign_keys += sum(1 for name in table.foreign_keys
                                  if name in contract.writable)
     if table.partition is not None:
         counters.partitioned += 1
+
+
+def indexed_tuple(table, unique, values):
+    """The tuple Oracle will index for ``unique``, or None if it holds a null.
+
+    Derived from the canonical table here rather than from the contract under
+    test: a column the extract does not write takes its DEFAULT, and both
+    TAX_RATE and PARTY_XREF were rejected on exactly the part of their unique
+    key that the extract had left to one.
+    """
+    parts = []
+    for name in unique:
+        if name in values:
+            parts.append(values[name])
+            continue
+        column = table.column(name)
+        default = column.default_value if column is not None else None
+        parts.append(None if isinstance(default, oracheck.Unknowable) else default)
+    return None if any(part is None for part in parts) else tuple(parts)
+
+
+def check_construction(report, spec, origin, names, rows, counters):
+    """Prove the extract constructs the rows its table-level CHECKs expect."""
+    expectation = CONSTRUCTED.get("%s.%s" % (spec.schema, spec.name))
+    if expectation is None:
+        return
+    label, in_scope, constructed = expectation
+    scoped = [row for row in (dict(zip(names, row)) for row in rows)
+              if in_scope(row)]
+    counters.constructed += len(scoped)
+    if not scoped:
+        counters.failed.add(spec.key)
+        report.error("generated-oracle-construction", origin,
+                     "%s emits no %s" % (spec.key, label))
+        return
+    wrong = [row for row in scoped if not constructed(row)]
+    if wrong:
+        counters.failed.add(spec.key)
+        report.error("generated-oracle-construction", origin,
+                     "%s emits %d of %d rows that are not %s"
+                     % (spec.key, len(wrong), len(scoped), label))
 
 
 def refusal_codes(message):
@@ -188,6 +246,7 @@ def run(args):
     report.count("oracle_keys_validated", counters.keys)
     report.count("oracle_foreign_keys_resolved", counters.foreign_keys)
     report.count("oracle_partitioned_tables", counters.partitioned)
+    report.count("oracle_constructed_rows_validated", counters.constructed)
     return report.emit(as_json=args.json, strict=args.strict, show_warnings=not args.quiet)
 
 

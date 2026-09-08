@@ -41,6 +41,7 @@ COLUMN_RE = re.compile(
 
 NOT_NULL_RE = re.compile(r"\bNOT\s+NULL\b", re.I)
 DEFAULT_RE = re.compile(r"\bDEFAULT\b", re.I)
+DEFAULT_VALUE_RE = re.compile(r"\bDEFAULT\s+(.*?)(?:\s+NOT\s+NULL|\s*$)", re.I | re.S)
 
 # `FROM|JOIN schema.table alias` - the estate always qualifies and always
 # aliases, so an unaliased or unqualified source is left unresolved on purpose.
@@ -67,6 +68,7 @@ class Table:
         self.types = {}            # column -> (type, precision text or None)
         self.not_null = set()      # columns declared NOT NULL without a DEFAULT
         self.has_default = set()
+        self.defaults = {}         # column -> DEFAULT expression text
 
     @property
     def key(self):
@@ -163,6 +165,9 @@ def parse_tables(text, path):
             tail = column.group(4) or ""
             if DEFAULT_RE.search(tail):
                 table.has_default.add(name)
+                expression = DEFAULT_VALUE_RE.search(tail)
+                if expression:
+                    table.defaults[name] = expression.group(1).strip()
             if NOT_NULL_RE.search(tail):
                 table.not_null.add(name)
         tables.append(table)
