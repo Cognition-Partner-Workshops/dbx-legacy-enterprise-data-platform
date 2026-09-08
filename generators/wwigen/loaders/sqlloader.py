@@ -149,14 +149,19 @@ foreach ($load in $Loads) {
     }
     Write-Host ("loading {0}" -f $load.Table)
     $connect = '{0}/{1}@{2}' -f $load.Schema, (Get-Item "env:$secretName").Value, $Service
+    # PowerShell only expands the bare variable in an argument like
+    # control=$load.Control, so the keyword arguments are composed first.
+    $arguments = @($connect, ('control=' + $load.Control), ('log=' + $load.Log))
     Push-Location (Split-Path -Parent $control)
     try {
-        & sqlldr $connect control=$load.Control log=$load.Log
+        & sqlldr @arguments
     } finally {
         Pop-Location
-        Remove-Variable connect
+        Remove-Variable connect, arguments
     }
-    if ($LASTEXITCODE -gt 1) {
+    # sqlldr returns 1 for a failed load and 2 when rows were rejected or
+    # discarded; neither is a load this driver can report as done.
+    if ($LASTEXITCODE -ne 0) {
         $failed += ('{0} (sqlldr exit {1})' -f $load.Table, $LASTEXITCODE)
     }
 }
