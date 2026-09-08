@@ -8,12 +8,16 @@ bcp artefacts loadable.
 
 The DDL parsing itself is shared with the offline checks under
 ``validation/checks``; this module adds the parts the generator needs and the
-checks do not: primary keys, foreign keys, and the value sets that CHECK
-constraints restrict a code column to.
+checks do not: primary and unique keys, foreign keys, partition bounds, the
+rows the deployment's own reference layer already seeds, and the CHECK
+constraints - not merely the value sets of the simple ones, but every
+constraint the estate declares, parsed by :mod:`wwigen.oracheck` so a row can
+be held against it before SQL*Loader ever sees the file.
 """
 
 from __future__ import annotations
 
+import datetime
 import os
 import re
 import sys
@@ -28,15 +32,25 @@ if _CHECKS_DIR not in sys.path:
 import oraclelib  # noqa: E402
 import tsqllib  # noqa: E402
 
+from . import oracheck  # noqa: E402
+
 PK_RE = re.compile(
     r"ADD\s+CONSTRAINT\s+\w+\s+PRIMARY\s+KEY\s*\(([^)]*)\)", re.I)
 INLINE_PK_RE = re.compile(r"CONSTRAINT\s+\w+\s+PRIMARY\s+KEY\s*\(([^)]*)\)", re.I)
 FK_RE = re.compile(
     r"ADD\s+CONSTRAINT\s+\w+\s+FOREIGN\s+KEY\s*\(([^)]*)\)\s*"
     r"REFERENCES\s+([A-Z0-9_]+)\.([A-Z0-9_]+)\s*\(([^)]*)\)", re.I)
-CHECK_IN_RE = re.compile(
-    r"CHECK\s*\(\s*([A-Z][A-Z0-9_]*)\s+IN\s*\(([^)]*)\)\s*\)", re.I)
 TABLE_HEADER_RE = re.compile(r"CREATE\s+TABLE\s+([A-Z0-9_]+)\.([A-Z0-9_]+)", re.I)
+ALTER_HEADER_RE = re.compile(r"ALTER\s+TABLE\s+([A-Z0-9_]+)\.([A-Z0-9_]+)", re.I)
+UNIQUE_RE = re.compile(r"CONSTRAINT\s+\w+\s+UNIQUE\s*\(([^)]*)\)", re.I)
+CHECK_START_RE = re.compile(
+    r"(?:CONSTRAINT\s+(\w+)\s+)?CHECK\s*\(", re.I)
+PARTITION_BY_RE = re.compile(r"PARTITION\s+BY\s+RANGE\s*\(\s*([A-Z0-9_]+)\s*\)", re.I)
+INTERVAL_RE = re.compile(r"\bINTERVAL\s*\(", re.I)
+PARTITION_BOUND_RE = re.compile(
+    r"PARTITION\s+([A-Z0-9_]+)\s+VALUES\s+LESS\s+THAN\s*\((.*?)\)\s*(?:,|\)|TABLESPACE)",
+    re.I | re.S)
+TO_DATE_RE = re.compile(r"TO_DATE\s*\(\s*'([^']+)'", re.I)
 
 
 class OracleColumn:
@@ -86,6 +100,66 @@ class OracleColumn:
         return (not self.nullable) and (not self.has_default)
 
 
+class OracleCheck:
+    """One CHECK constraint, with its text parsed into an expression tree."""
+
+    def __init__(self, name, text):
+        self.name = name or ""
+        self.text = " ".join(text.split())
+        self.node = oracheck.parse(self.text)
+
+    @property
+    def readable(self):
+        """Whether the constraint parsed into something evaluable."""
+        return not isinstance(self.node, oracheck.Unknown)
+
+    def evaluate(self, row):
+        return self.node.evaluate(row)
+
+    def columns(self):
+        return tuple(sorted(set(self.node.columns())))
+
+    def __repr__(self):
+        return "OracleCheck(%s)" % (self.name or self.text)
+
+
+class OraclePartition:
+    """The range partitioning of one table, as the DDL declares it."""
+
+    def __init__(self, column, interval, bounds):
+        self.column = column
+        self.interval = interval         # Oracle cuts further partitions itself
+        self.bounds = tuple(bounds)      # [(partition name, high value or None)]
+
+    @property
+    def open_ended(self):
+        """Whether a value beyond the last declared bound still has a home."""
+        return self.interval or any(bound is None for _name, bound in self.bounds)
+
+    @property
+    def highest(self):
+        values = [bound for _name, bound in self.bounds if bound is not None]
+        return max(values) if values else None
+
+    def accepts(self, value):
+        """Whether a partition exists for ``value`` (ORA-14400 otherwise)."""
+        if value is None:
+            return False
+        if self.open_ended:
+            return True
+        highest = self.highest
+        return highest is not None and _as_date(value) is not None \
+            and _as_date(value) < highest
+
+
+def _as_date(value):
+    if isinstance(value, datetime.datetime):
+        return value.date()
+    if isinstance(value, datetime.date):
+        return value
+    return None
+
+
 class OracleTable:
     def __init__(self, key, path):
         self.key = key
@@ -95,6 +169,9 @@ class OracleTable:
         self.primary_key = ()
         self.foreign_keys = {}           # column -> (parent key, parent column)
         self.allowed_values = {}         # column -> (value, ...)
+        self.checks = []                 # [OracleCheck]
+        self.unique_keys = []            # [(column, ...)] including the PK
+        self.partition = None            # OraclePartition or None
 
     @property
     def schema(self):
@@ -114,16 +191,71 @@ class OracleTable:
     def required_columns(self):
         return tuple(column.name for column in self.columns if column.required)
 
+    def violations(self, row):
+        """The constraints ``row`` breaks: those the engine evaluates FALSE."""
+        return tuple(check for check in self.checks if check.evaluate(row) is False)
+
+
+def _balanced(text, start):
+    """The text inside a parenthesis opened at ``start`` - 1."""
+    depth, index = 1, start
+    while index < len(text):
+        character = text[index]
+        if character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+            if not depth:
+                return text[start:index], index + 1
+        index += 1
+    return text[start:], len(text)
+
+
+def _checks_in(statement):
+    """Every CHECK constraint declared in one statement, name and body."""
+    found, position = [], 0
+    while True:
+        match = CHECK_START_RE.search(statement, position)
+        if match is None:
+            return found
+        body, position = _balanced(statement, match.end())
+        found.append((match.group(1), body))
+
+
+def _partition_of(statement):
+    """The range partitioning declared by a CREATE TABLE statement."""
+    header = PARTITION_BY_RE.search(statement)
+    if header is None:
+        return None
+    bounds = []
+    for name, expression in PARTITION_BOUND_RE.findall(statement):
+        literal = TO_DATE_RE.search(expression)
+        if literal:
+            try:
+                bounds.append((name.upper(), datetime.datetime.strptime(
+                    literal.group(1)[:10], "%Y-%m-%d").date()))
+                continue
+            except ValueError:
+                pass
+        bounds.append((name.upper(), None))      # MAXVALUE, or unparsed
+    return OraclePartition(header.group(1).upper(),
+                           bool(INTERVAL_RE.search(statement)), bounds)
+
 
 def _oracle_constraints(table, text):
     """PK, FK and CHECK-IN value sets for one table, from its own DDL file."""
     statements = re.split(r"\n\s*/\s*\n", oraclelib.strip_comments(text))
     for statement in statements:
-        header = TABLE_HEADER_RE.search(statement)
-        if header and "%s.%s" % (header.group(1).upper(),
-                                 header.group(2).upper()) != table.key:
-            continue
-        if not header and table.name.upper() not in statement.upper():
+        # A constraint belongs to the table its own statement names. Matching
+        # on the name appearing anywhere would give a parent table the foreign
+        # keys its children declare onto it.
+        named = [match for match in (TABLE_HEADER_RE.search(statement),
+                                     ALTER_HEADER_RE.search(statement)) if match]
+        if named:
+            if any("%s.%s" % (match.group(1).upper(), match.group(2).upper()) != table.key
+                   for match in named):
+                continue
+        elif table.name.upper() not in statement.upper():
             continue
         for match in list(PK_RE.finditer(statement)) + list(INLINE_PK_RE.finditer(statement)):
             columns = tuple(c.strip().upper() for c in match.group(1).split(","))
@@ -137,13 +269,33 @@ def _oracle_constraints(table, text):
             for child_column, parent_column in zip(child, parent):
                 table.foreign_keys[child_column] = (
                     "%s.%s" % (parent_schema.upper(), parent_name.upper()), parent_column)
-        for column, values in CHECK_IN_RE.findall(statement):
-            literals = tuple(
-                literal for literal in
-                (oraclelib.string_literal(part) for part in values.split(","))
-                if literal is not None)
-            if literals and table.has(column):
-                table.allowed_values.setdefault(column.upper(), literals)
+        for match in UNIQUE_RE.finditer(statement):
+            columns = tuple(c.strip().upper() for c in match.group(1).split(","))
+            if all(table.has(column) for column in columns) \
+                    and columns not in table.unique_keys:
+                table.unique_keys.append(columns)
+        for name, body in _checks_in(statement):
+            check = OracleCheck(name, body)
+            if any(table.has(column) for column in check.node.columns()) \
+                    or not check.readable:
+                table.checks.append(check)
+        if TABLE_HEADER_RE.search(statement):
+            partition = _partition_of(statement)
+            if partition and table.has(partition.column):
+                table.partition = partition
+
+    if table.primary_key and table.primary_key not in table.unique_keys:
+        table.unique_keys.insert(0, table.primary_key)
+    for check in table.checks:
+        for column in check.node.columns():
+            if not table.has(column):
+                continue
+            domain = oracheck.domain_of(check.node, column)
+            if domain:
+                existing = table.allowed_values.get(column)
+                table.allowed_values[column] = tuple(
+                    value for value in domain
+                    if existing is None or value in existing) or domain
 
 
 def _oracle_files():
@@ -179,6 +331,80 @@ def oracle_tables():
             tables[table.key] = table
     _ORACLE_CACHE.update(root=REPO_ROOT, tables=tables)
     return tables
+
+
+def seed_value(text):
+    """One seed literal as the value the row would hold, or None."""
+    literal = oraclelib.string_literal(text)
+    if literal is not None:
+        return literal
+    stripped = text.strip()
+    if oraclelib.is_null_literal(stripped):
+        return None
+    try:
+        return int(stripped)
+    except ValueError:
+        pass
+    try:
+        return float(stripped)
+    except ValueError:
+        return None
+
+
+class OracleSeed:
+    """The rows the deployment's reference layer already created.
+
+    The generator does not own an empty database: ``oracle/reference`` and
+    ``oracle/seed`` run before any extract is loaded, so a generated key that
+    happens to equal a seeded one is ORA-00001 at load time. Holding the seed
+    keys here is what lets generation avoid them deterministically, and what
+    lets a child row legitimately reference a parent the generator never
+    produced.
+    """
+
+    def __init__(self):
+        self.rows = {}                   # table -> [{column: value}]
+
+    def add(self, key, values):
+        self.rows.setdefault(key, []).append(values)
+
+    def values_of(self, key, column):
+        """Every seeded value of one column, as a set."""
+        return frozenset(
+            row[column] for row in self.rows.get(key, ())
+            if row.get(column) is not None)
+
+    def keys_of(self, key, columns):
+        """Every seeded value of one key, as a set of tuples."""
+        found = set()
+        for row in self.rows.get(key, ()):
+            if all(row.get(column) is not None for column in columns):
+                found.add(tuple(row[column] for column in columns))
+        return found
+
+    def count(self, key):
+        return len(self.rows.get(key, ()))
+
+
+_SEED_CACHE = {}
+
+
+def oracle_seed():
+    """The :class:`OracleSeed` for oracle/reference and oracle/seed."""
+    if _SEED_CACHE.get("root") == REPO_ROOT:
+        return _SEED_CACHE["seed"]
+    previous = oraclelib.REPO_ROOT
+    oraclelib.REPO_ROOT = REPO_ROOT
+    try:
+        rows = oraclelib.load_oracle_seed_rows()
+    finally:
+        oraclelib.REPO_ROOT = previous
+    seed = OracleSeed()
+    for row in rows:
+        seed.add(row.key, {column: seed_value(text)
+                           for column, text in row.values.items()})
+    _SEED_CACHE.update(root=REPO_ROOT, seed=seed)
+    return seed
 
 
 class SqlColumn:
@@ -322,3 +548,4 @@ def reset_cache():
     """Drop the parsed contracts; the fixtures repoint REPO_ROOT at a copy."""
     _ORACLE_CACHE.clear()
     _SQL_CACHE.clear()
+    _SEED_CACHE.clear()

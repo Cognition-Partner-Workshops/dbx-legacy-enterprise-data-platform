@@ -34,6 +34,33 @@ from .. import canon, contracts, schema
 FORMAT_VERSION = "14.0"
 CHAR_COLLATION = "SQL_Latin1_General_CP1_CI_AS"
 
+# Bytes a SQLCHAR field needs to carry the text form of each landing type.
+# ``bcp`` rejects a field size that the target type cannot take, so these come
+# from the canonical column rather than from the generator's own view of it.
+TEXT_WIDTHS = {
+    "bit": 1,
+    "tinyint": 3,
+    "smallint": 6,
+    "int": 11,
+    "bigint": 20,
+    "real": 24,
+    "float": 30,
+    "date": 10,
+    "time": 16,
+    "smalldatetime": 19,
+    "datetime": 23,
+    "datetime2": 27,
+    "datetimeoffset": 34,
+    "uniqueidentifier": 36,
+}
+
+# Characters a wide character may take in the generated UTF-8 data file.
+BYTES_PER_CHARACTER = 4
+
+# A (max) column has no field size: bcp reads it to the terminator, and any
+# other size is the "Invalid field size for datatype" it rejected before.
+UNBOUNDED = 0
+
 # The data directory relative to the loader directory. Written once here and
 # joined once in the driver: the load path that failed before was assembled
 # twice, so it carried the traversal twice.
@@ -44,32 +71,45 @@ def _escape_terminator(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def _host_width(column: schema.Column) -> int:
-    """Bytes bcp should allow for the field's character representation."""
-    if column.type == schema.STRING:
-        return max(column.length, 12) * 4
-    if column.type == schema.TIMESTAMP:
-        return 27
-    if column.type == schema.DATE:
-        return 12
-    return max(column.length, 40)
+def _host_width(column: canon.SqlColumn) -> int:
+    """Bytes bcp should allow for the canonical column's text form."""
+    if column.is_character:
+        if column.width is None:
+            return UNBOUNDED
+        return column.width * BYTES_PER_CHARACTER
+    known = TEXT_WIDTHS.get(column.type_name)
+    if known is not None:
+        return known
+    if column.type_name in ("decimal", "numeric", "money", "smallmoney"):
+        return _decimal_width(column)
+    return 128
+
+
+def _decimal_width(column: canon.SqlColumn) -> int:
+    """Digits, sign and point of a decimal as the data file writes it."""
+    inside = column.type_text.partition("(")[2].partition(")")[0]
+    digits = inside.split(",")[0].strip()
+    precision = int(digits) if digits.isdigit() else 38
+    return precision + 3
 
 
 def format_file_text(spec: schema.TableSpec, table: canon.SqlTable) -> str:
     """Non-XML bcp format file mapping the extract onto its landing table."""
     ordinals = {column.name.upper(): index
                 for index, column in enumerate(table.columns, start=1)}
+    canonical = {column.name.upper(): column for column in table.columns}
     lines = [FORMAT_VERSION, str(len(spec.columns))]
     for index, column in enumerate(spec.columns, start=1):
         ordinal = ordinals.get(column.name.upper())
         if ordinal is None:
             raise ValueError("%s: %s has no column %s"
                              % (spec.key, table.key, column.name))
+        target = canonical[column.name.upper()]
         last = index == len(spec.columns)
         terminator = "\\n" if last else _escape_terminator(spec.delimiter)
-        collation = CHAR_COLLATION if column.type in (schema.STRING, schema.FLAG) else '""'
+        collation = CHAR_COLLATION if target.is_character else '""'
         lines.append('%-4d SQLCHAR 0 %-6d "%s" %-4d %-34s %s'
-                     % (index, _host_width(column), terminator, ordinal,
+                     % (index, _host_width(target), terminator, ordinal,
                         column.name, collation))
     return "\n".join(lines) + "\n"
 

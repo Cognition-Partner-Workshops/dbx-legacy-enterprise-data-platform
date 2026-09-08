@@ -21,6 +21,7 @@ import sys
 import check_control_framework_integration
 import check_control_object_columns
 import check_deployment_order
+import check_generated_values
 import check_loader_contracts
 import check_oracle_grants
 import check_oracle_partitions
@@ -46,6 +47,7 @@ CHECKS = (
     ("SQL Server column and routine contracts", check_sqlserver_columns),
     ("SQL Server deployment order", check_deployment_order),
     ("generated loader contracts", check_loader_contracts),
+    ("generated Oracle values", check_generated_values),
 )
 
 
