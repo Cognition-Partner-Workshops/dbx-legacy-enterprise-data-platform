@@ -17,10 +17,13 @@ executes a load rather than discovering that the data was never valid:
 * **CHECK domains** - a violated constraint is satisfied by steering the row
   onto one of the constraint's own branches, which is what makes a regional
   or status-dependent predicate repairable rather than merely detectable;
-* **keys** - a key the reference layer already seeds belongs to the seeded
-  row, so the generated duplicate is dropped; a key that collides with an
-  earlier generated row is re-keyed inside a reserved band, and the children
-  that derived it follow the same remapping;
+* **keys** - every unique constraint is a key space, single-column or
+  composite: a tuple that repeats one an earlier row emitted or one the
+  deployment seeds is moved off it deterministically, and the children that
+  derived the moved key follow the same remapping. A generated tuple that
+  repeats an earlier generated one and cannot be moved is a contract error;
+  the one case that is not an error is a reference catalogue's natural key
+  the deployment already seeds, where the generated row is the seeded row;
 * **foreign keys** - a child value is resolved against the keys its parent
   extract actually emits plus the keys the deployment seeds, never against an
   independently invented space;
@@ -52,6 +55,10 @@ class ContractError(RuntimeError):
     """A generated extract cannot satisfy its target table."""
 
 
+class SeededRow(Exception):
+    """The row is the business row the deployment already seeded."""
+
+
 class Violation:
     """One way a generated row fails the table's own contract."""
 
@@ -67,10 +74,6 @@ class Violation:
 
     def __repr__(self):
         return "Violation(%r)" % str(self)
-
-
-class Dropped(Exception):
-    """The row duplicates one the deployment already seeded."""
 
 
 def numeric_limit(column):
@@ -128,25 +131,29 @@ class ValueContract:
         self.cfg = cfg
         self.ctx = ctx
         self.seed = canon.oracle_seed()
+        # A column the extract does not write takes the table's DEFAULT on
+        # load. A constant default is as much part of the row the engine will
+        # hold as anything written; only a default the load evaluates -
+        # SYSDATE, USER - leaves the column without a verdict.
+        self.unwritten = {column.name: column.default_value
+                          for column in table.columns
+                          if column.name not in self.writable and column.has_default}
+        self.constant = {name: value for name, value in self.unwritten.items()
+                         if not isinstance(value, oracheck.Unknowable)}
         self.unique_keys = tuple(
             key for key in table.unique_keys
-            if key and all(name in self.writable for name in key))
+            if key and all(name in self.writable or name in self.constant
+                           for name in key))
         self.emitted = {key: set() for key in self.unique_keys}
         self.seeded = {key: self.seed.keys_of(table.key, key)
                        for key in self.unique_keys}
-        self.dropped = 0
         self.rekeyed = 0
-        # A column the extract does not write takes the table's DEFAULT on
-        # load, so its value is unknown here rather than null, and a
-        # constraint over it cannot be given a verdict.
-        self.unwritten = {column.name: oracheck.UNKNOWN_VALUE
-                          for column in table.columns
-                          if column.name not in self.writable and column.has_default}
+        self.seed_reconciled = 0
 
     # -- the pipeline ----------------------------------------------------
 
     def apply(self, values, index):
-        """One generated row, repaired into the contract, or dropped."""
+        """One generated row, repaired into the contract or refused."""
         values = self._fit(values)
         values = self._repair_checks(values, index)
         values = self._resolve_foreign_keys(values, index)
@@ -459,74 +466,128 @@ class ValueContract:
 
     # -- keys --------------------------------------------------------------
 
+    def key_tuple(self, key, values):
+        """The tuple the engine will index for ``key``, or None if it is null.
+
+        A column the extract leaves to a constant DEFAULT is part of the
+        indexed tuple exactly as a written one is - ``UK_TAX_RATE_EFF`` is
+        four columns whether or not the extract writes ``RATE_CATEGORY_CD``.
+        Oracle does not enforce a unique key whose tuple carries a null.
+        """
+        tuple_values = tuple(values.get(name) if name in self.writable
+                             else self.constant.get(name) for name in key)
+        return None if any(part is None for part in tuple_values) else tuple_values
+
     def _settle_keys(self, values, index):
         for key in self.unique_keys:
-            candidate = tuple(values.get(name) for name in key)
-            if any(part is None for part in candidate):
+            candidate = self.key_tuple(key, values)
+            if candidate is None:
                 continue
-            if candidate in self.seeded[key]:
-                self.dropped += 1
-                raise Dropped("%s already seeds %s=%s"
-                              % (self.table.key, ", ".join(key),
-                                 ", ".join(str(part) for part in candidate)))
-            if candidate not in self.emitted[key]:
+            seeded = candidate in self.seeded[key]
+            if not seeded and candidate not in self.emitted[key]:
                 self.emitted[key].add(candidate)
                 continue
-            replacement = self._rekey(key, candidate, values, index)
-            if replacement is None:
-                self.dropped += 1
-                raise Dropped("%s repeats %s=%s and the key cannot be moved"
-                              % (self.table.key, ", ".join(key),
-                                 ", ".join(str(part) for part in candidate)))
-            self.emitted[key].add(replacement)
-            self.rekeyed += 1
+            # A tuple the deployment seeds may only be moved by its surrogate
+            # key: moving a business part of it would invent a currency the
+            # estate does not have, where moving a surrogate leaves the same
+            # row under a free identity.
+            positions = self._movable_positions(key, surrogate_only=seeded)
+            replacement = self._rekey(key, candidate, positions, values)
+            if replacement is not None:
+                self.emitted[key].add(replacement)
+                self.rekeyed += 1
+                continue
+            if seeded:
+                # Not a defect and not a silent loss: a reference catalogue's
+                # natural key is the business identity of the row, so a
+                # generated 'SG' *is* the deployment's seeded 'SG'. Moving it
+                # would invent a country; emitting it would be ORA-00001. The
+                # seeded row stands for it, and the run counts it.
+                self.seed_reconciled += 1
+                if self.ctx is not None:
+                    store = reconciled(self.ctx)
+                    store[self.spec_key] = store.get(self.spec_key, 0) + 1
+                raise SeededRow("%s already seeds %s=%s"
+                                % (self.table.key, ", ".join(key),
+                                   ", ".join(str(part) for part in candidate)))
+            raise ContractError(
+                "%s cannot produce a unique %s: %s=%s repeats an earlier "
+                "generated row and no part of the key may be moved"
+                % (self.spec_key, ", ".join(key), ", ".join(key),
+                   ", ".join(str(part) for part in candidate)))
         return values
 
-    def _rekey(self, key, candidate, values, index):
-        """Move a repeated key into the reserved band and record the move."""
-        position = self._numeric_position(key)
-        if position is None:
-            return None
-        name = key[position]
-        column = self.table.column(name)
-        limit = numeric_limit(column)
-        for attempt in range(REKEY_ATTEMPTS):
-            offset = rng.stable_hash(self.cfg.seed, self.spec_key, name,
-                                     candidate[position], attempt) % 90000000
-            replacement_value = REKEY_BAND + offset
-            if limit is not None and replacement_value > limit:
-                replacement_value = replacement_value % (limit + 1)
-            replacement = tuple(
-                replacement_value if slot == position else part
-                for slot, part in enumerate(candidate))
-            if replacement in self.emitted[key] or replacement in self.seeded[key]:
-                continue
-            values[name] = replacement_value
-            if self.ctx is not None and name in self.table.primary_key:
-                remaps(self.ctx).setdefault(
-                    "%s.%s" % (self.table.key, name), {})[candidate[position]] = \
-                    replacement_value
-            return replacement
+    def _rekey(self, key, candidate, positions, values):
+        """Move a repeated tuple off the occupied one, and record the move."""
+        for position in positions:
+            name = key[position]
+            column = self.table.column(name)
+            for attempt in range(REKEY_ATTEMPTS):
+                moved = self._moved_value(column, candidate[position], attempt)
+                if moved is None:
+                    break
+                replacement = tuple(moved if slot == position else part
+                                    for slot, part in enumerate(candidate))
+                if replacement in self.emitted[key] or replacement in self.seeded[key]:
+                    continue
+                values[name] = moved
+                if self.ctx is not None and name in self.table.primary_key:
+                    remaps(self.ctx).setdefault(
+                        "%s.%s" % (self.table.key, name), {})[candidate[position]] = moved
+                return replacement
         return None
 
-    def _numeric_position(self, key):
-        """The part of a unique key that may be moved to break a collision.
+    def _moved_value(self, column, value, attempt):
+        """A deterministic alternative value for one part of a repeated tuple."""
+        offset = rng.stable_hash(self.cfg.seed, self.spec_key, column.name,
+                                 value, attempt)
+        if column.is_numeric and not column.scale:
+            limit = numeric_limit(column)
+            moved = REKEY_BAND + offset % 90000000
+            return moved if limit is None or moved <= limit else moved % (limit + 1)
+        if column.is_date and isinstance(value, (datetime.date, datetime.datetime)):
+            moved = value + datetime.timedelta(days=1 + attempt)
+            partition = self.table.partition
+            if partition is not None and partition.column == column.name \
+                    and not partition.accepts(moved):
+                return None
+            return moved
+        if column.is_character and isinstance(value, str):
+            suffix = "-%03d" % (offset % 1000)
+            width = column.width or (len(value) + len(suffix))
+            return (value[:max(width - len(suffix), 0)] + suffix)[:width]
+        return None
+
+    def _movable_positions(self, key, surrogate_only=False):
+        """The parts of a unique key that may be moved to break a collision.
 
         A foreign key may not: moving it points the row at a different parent,
-        which makes it a different row rather than the same row re-keyed.
+        which makes it a different row rather than the same row re-keyed. Nor
+        may a column the extract does not write - its value is the table's
+        DEFAULT and the file cannot say otherwise. The table's own surrogate
+        key is moved first, then any other free number, then an effective
+        date, and only then a text part of the tuple. ``surrogate_only``
+        keeps the move to the table's own surrogate key, which is what a
+        collision with a deployed row allows.
         """
-        movable = None
+        ranked = []
         for position, name in enumerate(key):
             column = self.table.column(name)
-            if column is None or not column.is_numeric or column.scale:
+            if column is None or name not in self.writable \
+                    or name in self.table.foreign_keys:
                 continue
-            if name in self.table.foreign_keys:
+            if column.is_numeric and not column.scale:
+                rank = 0 if name in self.table.primary_key else 1
+            elif column.is_date:
+                rank = 2
+            elif column.is_character:
+                rank = 3
+            else:
                 continue
-            if name in self.table.primary_key:
-                return position
-            if movable is None:
-                movable = position
-        return movable
+            if surrogate_only and rank:
+                continue
+            ranked.append((rank, position))
+        return [position for _rank, position in sorted(ranked)]
 
     # -- the verdict -------------------------------------------------------
 
@@ -609,6 +670,16 @@ def remaps(ctx):
 def emitted(ctx):
     """{TABLE.COLUMN: {key, ...}} for every Oracle key written this run."""
     return _store(ctx, "emitted_keys")
+
+
+def reconciled(ctx):
+    """{TABLE: rows the deployment already seeds} for the run.
+
+    A row here is not lost: the deployed catalogue holds its business
+    identity. The count is kept so the run can say so out loud rather than
+    leave a table short of its extract with no explanation.
+    """
+    return _store(ctx, "seed_reconciled")
 
 
 def record(ctx, table_key, column, value):

@@ -138,6 +138,38 @@ FIXTURES = (
               "self.seeded = {key: frozenset() for key in self.unique_keys}"),
      VALUES),
 
+    ("posted journals no longer constructed in balance",
+     "generators/wwigen/contracts/oracle_map.py",
+     "generated-oracle-construction",
+     sub_once(r'"TOTAL_CREDIT_AMT": copy_of\("CONTROL_TOTAL_AMT", 0\)',
+              '"TOTAL_CREDIT_AMT": copy_of("NO_SUCH_TOTAL", 0)'),
+     VALUES),
+
+    # The row the live load rejected 618 times: POSTING_STATUS_CD = 'POST'
+    # with totals that do not agree. It takes an extract that stops building
+    # the totals together and a contract that stops steering the row onto a
+    # branch of CK_GL_JHDR_BALANCED - what must not happen is either one
+    # passing the row off as loadable.
+    ("cross-column CHECK left unsatisfied on the completed row",
+     ("generators/wwigen/contracts/oracle_map.py",
+      "generators/wwigen/valuecontract.py"),
+     "generated-oracle-check",
+     (sub_once(r'"TOTAL_CREDIT_AMT": copy_of\("CONTROL_TOTAL_AMT", 0\)',
+               '"TOTAL_CREDIT_AMT": copy_of("NO_SUCH_TOTAL", 0)'),
+      replace_body("    def _repair_checks(self, values, index):",
+                   "        return values\n")),
+     VALUES),
+
+    # TAX_RATE and PARTY_XREF were rejected with ORA-00001 on a tuple whose
+    # last column the extract never writes: the index holds the DEFAULT, so
+    # a key space that only counts written columns sees no duplicate.
+    ("composite key space ignoring a column left to its DEFAULT",
+     "generators/wwigen/valuecontract.py",
+     "generated-oracle-key",
+     sub_once(r"else self\.constant\.get\(name\) for name in key\)",
+              "else None for name in key)"),
+     VALUES),
+
     # Every deployed partitioned table ends in MAXVALUE or an interval, so a
     # row outside the declared ranges takes both a table that closes and a
     # generator that stops fitting the key to it.

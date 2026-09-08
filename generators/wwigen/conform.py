@@ -339,7 +339,7 @@ def conform_oracle_spec(spec: TableSpec, rule: Rule = None) -> TableSpec:
                                            "%s.%s" % (spec_key, column.name))
             try:
                 out = contract.apply(out, index)
-            except valuecontract.Dropped:
+            except valuecontract.SeededRow:
                 continue
             for name in published:
                 valuecontract.record(ctx, key, name, out.get(name))

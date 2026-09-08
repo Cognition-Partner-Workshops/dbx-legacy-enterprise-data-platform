@@ -56,12 +56,28 @@ TO_DATE_RE = re.compile(r"TO_DATE\s*\(\s*'([^']+)'", re.I)
 class OracleColumn:
     """One canonical Oracle column and everything a writer needs about it."""
 
-    def __init__(self, name, type_name, precision_text, nullable, has_default):
+    def __init__(self, name, type_name, precision_text, nullable, has_default,
+                 default_text=""):
         self.name = name
         self.type_name = type_name.upper()
         self.precision_text = precision_text or ""
         self.nullable = nullable
         self.has_default = has_default
+        self.default_text = default_text or ""
+
+    @property
+    def default_value(self):
+        """The value a row that omits this column will hold, if it is knowable.
+
+        ``DEFAULT 0`` and ``DEFAULT 'STD'`` are as much part of the row the
+        engine will hold as anything the extract writes, so a constraint over
+        such a column has a verdict before the load. ``SYSDATE`` and ``USER``
+        do not: they are :data:`oracheck.UNKNOWN_VALUE`.
+        """
+        if not self.has_default:
+            return oracheck.UNKNOWN_VALUE
+        value = seed_value(self.default_text)
+        return oracheck.UNKNOWN_VALUE if value is None else value
 
     @property
     def is_character(self):
@@ -324,7 +340,8 @@ def oracle_tables():
                 type_name, precision = parsed.types[name]
                 column = OracleColumn(name, type_name, precision,
                                       name not in parsed.not_null,
-                                      name in parsed.has_default)
+                                      name in parsed.has_default,
+                                      parsed.defaults.get(name, ""))
                 table.columns.append(column)
                 table.by_name[name] = column
             _oracle_constraints(table, text)
@@ -341,6 +358,9 @@ def seed_value(text):
     stripped = text.strip()
     if oraclelib.is_null_literal(stripped):
         return None
+    date = _date_literal(stripped)
+    if date is not None:
+        return date
     try:
         return int(stripped)
     except ValueError:
@@ -349,6 +369,26 @@ def seed_value(text):
         return float(stripped)
     except ValueError:
         return None
+
+
+DATE_LITERAL_RE = re.compile(r"^DATE\s*'(\d{4}-\d{2}-\d{2})'", re.I)
+
+
+def _date_literal(text):
+    """``DATE '2018-01-02'`` or ``TO_DATE('2018-01-02', ...)`` as a date.
+
+    An effective date is part of the key the estate seeds - leaving it
+    unparsed hid a seeded row from the uniqueness contract and turned it into
+    ORA-00001 at load time.
+    """
+    for pattern in (DATE_LITERAL_RE, TO_DATE_RE):
+        match = pattern.search(text)
+        if match:
+            try:
+                return datetime.datetime.strptime(match.group(1)[:10], "%Y-%m-%d").date()
+            except ValueError:
+                return None
+    return None
 
 
 class OracleSeed:

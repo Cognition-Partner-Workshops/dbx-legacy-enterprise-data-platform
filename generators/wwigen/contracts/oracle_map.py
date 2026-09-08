@@ -376,8 +376,14 @@ RULES = {
                 "APPROVED_BY": "APPROVED_BY_CD"},
         parents={"REVERSAL_OF_JOURNAL_ID": "REVERSES_JOURNAL_NO"},
         drop=("PERIOD_CD", "REVERSES_JOURNAL_NO"),
+        # A journal's control total is the total of each side: CK_GL_JHDR_BALANCED
+        # rejects a posted header whose debits and credits differ, so the credit
+        # total is written from the same control total rather than left to
+        # DEFAULT 0 for the constraint to reject.
+        include=("TOTAL_CREDIT_AMT",),
         fill={"LEDGER_CD": by_region({"NA": "USD_PRI", "EU": "EUR_PRI",
-                                      "APAC": "APAC_PRI"}, "USD_PRI")},
+                                      "APAC": "APAC_PRI"}, "USD_PRI"),
+              "TOTAL_CREDIT_AMT": copy_of("CONTROL_TOTAL_AMT", 0)},
     ),
     "WWI_FIN.GL_JOURNAL_LINE": Rule(
         parents={"JOURNAL_ID": "JOURNAL_NO"},
