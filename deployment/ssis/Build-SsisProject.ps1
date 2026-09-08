@@ -145,12 +145,16 @@ foreach ($dtproj in $projects) {
         Copy-Item -Path $output.FullName -Destination $ispacPath -Force
     }
     elseif ($ssisBuild -and -not $ForceZipFallback) {
-        # SSISBuild writes into <output>\<configuration>\, so it is given a
-        # directory and the produced file is located afterwards.
+        # SSISBuild takes -argument:value; a space-separated pair is read as an
+        # unknown option and the tool exits non-zero after printing its usage.
+        # It writes into <output>\<configuration>\, so it is given a directory
+        # and the produced file is located afterwards.
         $stagingOut = Join-Path $artifacts "$projectName.build"
         Invoke-WwiCommand -Description "SSISBuild $projectName" `
                           -FilePath $ssisBuild.Source `
-                          -ArgumentList @('-project', $dtproj.FullName, '-configuration', $Configuration, '-output', $stagingOut) | Out-Null
+                          -ArgumentList @("-project:$($dtproj.FullName)",
+                                          "-configuration:$Configuration",
+                                          "-output:$stagingOut") | Out-Null
         $output = Get-ChildItem -Path $stagingOut -Filter '*.ispac' -Recurse -File |
                   Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
         if (-not $output) { Stop-WwiWithError "SSISBuild reported success but no .ispac was produced for $projectName." }

@@ -2,9 +2,17 @@
 
 The master packages own the estate's cadences. They create the batch, drive the
 child packages through phase sequence containers in dependency order, record a
-batch step per phase, and close the batch out. Children are executed through
-Execute Package Tasks using the package names declared in
-config/estate-catalog.yaml.
+batch step per phase, and close the batch out.
+
+The children live in the other sixteen projects. An Execute Package Task with
+UseProjectReference resolves a child by name inside the executing project only,
+so a master cannot reach them that way once each project is deployed as its own
+.ispac. Every cross-project child is therefore recorded in the generated
+orchestration plan (ssis/orchestration-plan.json, see
+tools/ssisgen/orchestration.py) together with the phase it belongs to and the
+precedence between phases, and deployment/ssis/Invoke-EstateOrchestration.ps1
+executes it from the project that owns it. A child that shares the master's
+project is still emitted as an Execute Package Task.
 
 Every master follows the same skeleton, which is deliberately the same skeleton
 the operations team has maintained since the 2006 SSIS conversion:
@@ -53,11 +61,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO_ROOT, "tools", "ssisgen"))
 
+import orchestration  # noqa: E402
 import project  # noqa: E402
 from patterns import CONN_DW, CONN_FILES, CONN_OLTP, CONN_STAGING  # noqa: E402
 from ssisgen import Container, ExecuteSql, Expression, ExecutePackage, Package  # noqa: E402
 
 PROJECT_NAME = "WWI_Orchestration"
+
+PLAN = orchestration.Plan()
 
 # Phase step groups recognised by etl.BatchStep.StepGroup.
 GROUP_EXTRACT = "Extract"
@@ -73,6 +84,51 @@ GROUP_MAINTENANCE = "Maintenance"
 
 def _slug(text):
     return "".join(ch for ch in text.title() if ch.isalnum())
+
+
+class MasterPackage(Package):
+    """A master package that also records its externally executed half.
+
+    Every task added and every precedence constraint drawn on the master is
+    mirrored into a RootPlan, so the plan the runner walks and the package the
+    build produces are emitted from one description and cannot drift.
+    """
+
+    def __init__(self, name, description=""):
+        Package.__init__(self, name, description=description)
+        self.plan = PLAN.add(orchestration.RootPlan(name, PROJECT_NAME, description))
+
+    def add_parameter(self, name, value, dtype="string", required=False, sensitive=False, description=""):
+        Package.add_parameter(self, name, value, dtype, required, sensitive, description)
+        if not sensitive:
+            self.plan.parameters[name] = value
+        return self
+
+    def add_variable(self, name, value, dtype="string", namespace="User", expression=None):
+        Package.add_variable(self, name, value, dtype, namespace, expression)
+        self.plan.variables[name] = value
+        return self
+
+    def add(self, task):
+        Package.add(self, task)
+        attributes = dict(getattr(task, "plan_attributes", {}))
+        self.plan.node(task.name, getattr(task, "plan_kind", "control"), **attributes)
+        return task
+
+    def link(self, from_task, to_task, value="Success", expression=None, logical_and=True):
+        # A precedence constraint can only be drawn between two executables the
+        # package actually holds; an edge that touches an externally executed
+        # child exists in the plan alone.
+        if not isinstance(from_task, PlanOnlyNode) and not isinstance(to_task, PlanOnlyNode):
+            Package.link(self, from_task, to_task, value, expression, logical_and)
+        self.plan.edge(from_task.name, to_task.name, value, expression)
+
+
+class PlanOnlyNode:
+    """A node the runner executes and the master package does not contain."""
+
+    def __init__(self, name):
+        self.name = name
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +178,7 @@ def master_error_handler(pkg):
 
 
 def master_package(name, description, connections=(), extra_parameters=(), extra_variables=()):
-    pkg = Package(name, description=description)
+    pkg = MasterPackage(name, description=description)
     pkg.add_parameter("BatchId", 0, dtype="int",
                       description="Batch id to adopt on a restart. Zero means start a new batch.")
     pkg.add_parameter("BusinessDate", "1900-01-01", dtype="string",
@@ -155,7 +211,7 @@ def master_package(name, description, connections=(), extra_parameters=(), extra
 
 
 def start_batch(batch_type, notes):
-    return ExecuteSql(
+    task = ExecuteSql(
         "Start Batch",
         CONN_STAGING,
         "EXEC etl.usp_StartBatch @BatchName = ?, @BatchType = N'%s', @BusinessDate = ?, "
@@ -171,6 +227,9 @@ def start_batch(batch_type, notes):
         result_bindings=[("0", "User::BatchId")],
         is_stored_procedure=True,
     )
+    task.plan_kind = "batch_start"
+    task.plan_attributes = {"batch_type": batch_type}
+    return task
 
 
 def end_batch(name="End Batch", force_status=None):
@@ -178,12 +237,15 @@ def end_batch(name="End Batch", force_status=None):
         sql = ("EXEC etl.usp_EndBatch @BatchId = ?, @ForceStatus = N'%s';" % force_status)
     else:
         sql = "EXEC etl.usp_EndBatch @BatchId = ?;"
-    return ExecuteSql(name, CONN_STAGING, sql,
+    task = ExecuteSql(name, CONN_STAGING, sql,
                       parameter_bindings=[("User::BatchId", 0, "LONG")], is_stored_procedure=True)
+    task.plan_kind = "batch_end"
+    task.plan_attributes = {"force_status": force_status}
+    return task
 
 
 def reconcile_row_counts(name="Reconcile Row Counts", raise_on_failure=1):
-    return ExecuteSql(
+    task = ExecuteSql(
         name,
         CONN_STAGING,
         "EXEC etl.usp_AssertRowCountReconciliation @BatchId = ?, @RaiseOnFailure = %d, "
@@ -193,14 +255,44 @@ def reconcile_row_counts(name="Reconcile Row Counts", raise_on_failure=1):
         result_bindings=[("0", "User::FailedObjectCount")],
         is_stored_procedure=True,
     )
+    task.plan_kind = "reconcile"
+    task.plan_attributes = {"raise_on_failure": raise_on_failure}
+    return task
 
 
-def child(package_name, parameter_assignments=None, task_name=None):
-    assignments = parameter_assignments or [
+def child_assignments(parameter_assignments=None):
+    return parameter_assignments or [
         ("BatchId", "User::BatchId"),
         ("ReloadFullHistory", "$Package::ReloadFullHistory"),
     ]
-    return ExecutePackage(task_name or ("Run %s" % package_name), package_name, assignments)
+
+
+def child(package_name, parameter_assignments=None, task_name=None):
+    """Execute Package Task for a child that shares the master's project."""
+    task = ExecutePackage(task_name or ("Run %s" % package_name), package_name,
+                          child_assignments(parameter_assignments),
+                          parent_project=PROJECT_NAME,
+                          child_project=orchestration.project_of(package_name))
+    task.plan_kind = "package"
+    task.plan_attributes = {
+        "package": package_name,
+        "project": PROJECT_NAME,
+        "in_package": True,
+        "parameters": dict(child_assignments(parameter_assignments)),
+    }
+    return task
+
+
+def run_child(pkg, package_name, parameter_assignments=None, task_name=None):
+    """One child invoked directly by the master, wherever it is deployed."""
+    if orchestration.project_of(package_name) == PROJECT_NAME:
+        return pkg.add(child(package_name, parameter_assignments, task_name))
+    name = task_name or ("Run %s" % package_name)
+    pkg.plan.node(name, "package",
+                  package=package_name,
+                  project=orchestration.project_of(package_name),
+                  parameters=dict(child_assignments(parameter_assignments)))
+    return PlanOnlyNode(name)
 
 
 def phase(pkg, title, sequence, group, children, streams=1, serialise=False,
@@ -233,19 +325,44 @@ def phase(pkg, title, sequence, group, children, streams=1, serialise=False,
         is_stored_procedure=True,
     )
 
-    tasks = [container.add(child(name, parameter_assignments)) for name in children]
-    if serialise or streams <= 1:
-        lanes = [tasks]
+    # A child in another project cannot be reached by a project reference, so it
+    # is carried by the plan instead; one in this project stays an in-package
+    # Execute Package Task.
+    tasks = []
+    external = []
+    for name in children:
+        if orchestration.project_of(name) == PROJECT_NAME:
+            tasks.append(container.add(child(name, parameter_assignments)))
+        else:
+            external.append(name)
+
+    if tasks:
+        if serialise or streams <= 1:
+            lanes = [tasks]
+        else:
+            lanes = [tasks[index::streams] for index in range(streams)]
+            lanes = [lane for lane in lanes if lane]
+        for lane in lanes:
+            container.link(start, lane[0])
+            for previous, following in zip(lane, lane[1:]):
+                container.link(previous, following)
+            container.link(lane[-1], finish)
     else:
-        lanes = [tasks[index::streams] for index in range(streams)]
-        lanes = [lane for lane in lanes if lane]
-    for lane in lanes:
-        container.link(start, lane[0])
-        for previous, following in zip(lane, lane[1:]):
-            container.link(previous, following)
-        container.link(lane[-1], finish)
+        container.link(start, finish)
     container.add(finish)
-    return pkg.add(container)
+
+    container.plan_kind = "phase"
+    container.plan_attributes = {
+        "sequence": sequence,
+        "group": group,
+        "streams": 1 if serialise else streams,
+        "step_variable": variable,
+        "in_package_children": [task.package_name for task in tasks],
+    }
+    node = pkg.add(container)
+    for name in external:
+        pkg.plan.child(container.name, name, dict(child_assignments(parameter_assignments)))
+    return node
 
 
 def skip_expression(step_name):
@@ -528,13 +645,13 @@ def build_master_hourly_incremental():
     notify = phase(pkg, "Intraday Failure Notice", 90, GROUP_MAINTENANCE,
                    ["ERR_Notify_Operations"], serialise=True)
 
-    ingest = pkg.add(child("ING_FILE_FxOverride"))
-    carrier = pkg.add(child("ING_FILE_CarrierScan"))
-    partner_na = pkg.add(child("ING_FILE_PartnerSales_NA"))
-    partner_eu = pkg.add(child("ING_FILE_PartnerSales_EU"))
-    partner_apac = pkg.add(child("ING_FILE_PartnerSales_APAC"))
-    catalog = pkg.add(child("ING_FILE_SupplierCatalog"))
-    quarantine = pkg.add(child("ING_FILE_QuarantineMalformed"))
+    ingest = run_child(pkg, "ING_FILE_FxOverride")
+    carrier = run_child(pkg, "ING_FILE_CarrierScan")
+    partner_na = run_child(pkg, "ING_FILE_PartnerSales_NA")
+    partner_eu = run_child(pkg, "ING_FILE_PartnerSales_EU")
+    partner_apac = run_child(pkg, "ING_FILE_PartnerSales_APAC")
+    catalog = run_child(pkg, "ING_FILE_SupplierCatalog")
+    quarantine = run_child(pkg, "ING_FILE_QuarantineMalformed")
 
     close = pkg.add(end_batch())
     stand_down = pkg.add(ExecuteSql(
@@ -1103,6 +1220,7 @@ def main():
         written.append(pkg.write(os.path.join(HERE, pkg.name + ".dtsx")))
         names.append(pkg.name)
     written.extend(project.write_project(HERE, PROJECT_NAME, names, CONNECTIONS))
+    written.append(PLAN.write(os.path.join(os.path.dirname(HERE), orchestration.PLAN_FILENAME)))
     for path in written:
         print(os.path.relpath(path, REPO_ROOT))
 

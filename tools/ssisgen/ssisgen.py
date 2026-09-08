@@ -1084,8 +1084,23 @@ class ExecutePackage(Task):
     executable_type = "Microsoft.ExecutePackageTask"
     description = "Execute Package Task"
 
-    def __init__(self, name, package_name, parameter_assignments=None):
+    def __init__(self, name, package_name, parameter_assignments=None,
+                 parent_project=None, child_project=None):
+        """Execute a child package held in the *same* project.
+
+        A project reference resolves the child by name inside the executing
+        project, so it cannot reach a package deployed in another .ispac.
+        Callers pass both projects and a cross-project pair is refused here
+        rather than emitted as a reference that fails at run time; those
+        dependencies belong in the orchestration plan the external runner
+        executes (tools/ssisgen/orchestration.py).
+        """
         Task.__init__(self, name)
+        if parent_project is not None and child_project is not None and parent_project != child_project:
+            raise ValueError(
+                "Execute Package Task %r would reference %r across projects (%s -> %s); "
+                "a UseProjectReference edge must stay inside one project"
+                % (name, package_name, parent_project, child_project))
         self.package_name = package_name
         self.parameter_assignments = parameter_assignments or []  # (child_param, parent_variable)
 
