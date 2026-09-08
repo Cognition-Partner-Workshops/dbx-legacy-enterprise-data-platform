@@ -14,7 +14,11 @@ Three rules decide whether a canonical column appears in an extract:
 * everything else is left out, so the column's DEFAULT applies on load.
 
 A required column that ends up with no value is a generation failure, not a
-row to be written and rejected later by the engine.
+row to be written and rejected later by the engine. The same holds for the
+row's values: once the columns are settled, :mod:`wwigen.valuecontract` holds
+every Oracle row against the CHECK domains, numeric precision, key spaces and
+partition bounds the deployed table declares, so a rejected row is a
+generation failure too rather than a SQL*Loader discovery.
 """
 
 from __future__ import annotations
@@ -22,8 +26,9 @@ from __future__ import annotations
 import dataclasses
 import datetime
 
-from . import canon, regions, rng, schema
+from . import canon, regions, rng, schema, valuecontract
 from .schema import Column, TableSpec
+from .valuecontract import ContractError
 
 TECHNICAL_ORACLE = ("SOURCE_SYS", "CREATED_BY", "CREATED_DT",
                     "UPDATED_BY", "UPDATED_DT")
@@ -58,10 +63,6 @@ NAME_ALIASES = {
     "VALID_TO_DT": ("EFFECTIVE_TO_DT", "EXPIRY_DT", "END_DT"),
     "CITY_NM": ("CITY_TXT", "CITY_NAME"),
 }
-
-
-class ContractError(RuntimeError):
-    """A generated extract cannot satisfy its target table."""
 
 
 def oracle_column(column: canon.OracleColumn) -> Column:
@@ -299,14 +300,17 @@ def conform_oracle_spec(spec: TableSpec, rule: Rule = None) -> TableSpec:
                 or column.name in TECHNICAL_ORACLE and table.has(column.name) \
                 or column.name in rule.include:
             written.append(column)
+    written = _with_constrained(table, written)
 
     columns = tuple(oracle_column(column) for column in written)
     original = spec.produce
     spec_key = spec.key
     occurrences = {}
+    published = published_columns(table, written)
 
     def produce(cfg, ctx):
         occurrences.clear()
+        contract = valuecontract.ValueContract(table, spec_key, written, cfg, ctx)
         for index, row in enumerate(original(cfg, ctx)):
             values = dict(zip(generated, row))
             code = values.get(rule.key) if rule.key else None
@@ -314,7 +318,7 @@ def conform_oracle_spec(spec: TableSpec, rule: Rule = None) -> TableSpec:
             if code is not None:
                 occurrence = occurrences.get(code, 0)
                 occurrences[code] = occurrence + 1
-            out = []
+            out = {}
             for column in written:
                 source = sources.get(column.name)
                 if source is not None:
@@ -331,11 +335,58 @@ def conform_oracle_spec(spec: TableSpec, rule: Rule = None) -> TableSpec:
                     raise ContractError(
                         "%s.%s is required by %s and the extract has no value"
                         % (spec_key, column.name, key))
-                out.append(_coerce(value, column, "%s.%s" % (spec_key, column.name)))
-            yield tuple(out)
+                out[column.name] = _coerce(value, column,
+                                           "%s.%s" % (spec_key, column.name))
+            try:
+                out = contract.apply(out, index)
+            except valuecontract.Dropped:
+                continue
+            for name in published:
+                valuecontract.record(ctx, key, name, out.get(name))
+            yield tuple(out[column.name] for column in written)
 
     return _replace(spec, columns=columns, produce=produce,
                     target_object=rule.target or spec.target_object)
+
+
+def _with_constrained(table, written):
+    """``written`` plus the columns a CHECK ties to what is already written.
+
+    A constraint like ``PARTY_TYPE_CD = 'CUST' AND CUST_ID IS NOT NULL`` is
+    decided by a column the extract writes, so leaving the other column to its
+    absent default is a rejection the extract has to own: it is written too,
+    and the value contract steers it.
+    """
+    names = {column.name for column in written}
+    wanted = set()
+    for check in table.checks:
+        columns = {name for name in check.columns() if table.has(name)}
+        if columns & names:
+            wanted |= {name for name in columns
+                       if not table.column(name).has_default}
+    extra = wanted - names
+    if not extra:
+        return written
+    return [column for column in table.columns
+            if column.name in names or column.name in extra]
+
+
+def published_columns(table, written):
+    """The columns of ``table`` whose generated values a child may point at.
+
+    A key space is only useful to the run if it is recorded, and only the
+    columns something actually references are worth recording: the table's own
+    unique keys and any column another table declares a foreign key onto.
+    """
+    writable = {column.name for column in written}
+    names = set()
+    for unique in table.unique_keys:
+        names.update(unique)
+    for other in canon.oracle_tables().values():
+        for parent_key, parent_column in other.foreign_keys.values():
+            if parent_key == table.key:
+                names.add(parent_column)
+    return tuple(sorted(name for name in names if name in writable))
 
 
 def conform_sql_spec(spec: TableSpec, target: str, rule: Rule = None) -> TableSpec:

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Prove the loader-contract check fails on the defects the SMALL load hit.
+"""Prove the loader checks fail on the defects the SMALL loads hit.
 
 Each fixture reinjects one class of the live loader failure - an extract whose
 value no longer fits its Oracle column, a target column the extract cannot
 supply, two extracts claiming one landing table, a feed no longer declared in
-the landing zone, and a data path that resolves to nowhere - into a scratch
-copy of the estate, and asserts check_loader_contracts reports it.
+the landing zone, a data path that resolves to nowhere, a bcp field size the
+target type cannot take, and generated values that stop being held to the
+deployed CHECK, precision, key and partition contracts - into a scratch copy
+of the estate, and asserts the owning check reports it.
 
 The generator is copied with the estate, so a fixture can break the generator
 as well as the schema. Nothing in the repository is modified.
@@ -27,7 +29,8 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
-CHECK = os.path.join(HERE, "check_loader_contracts.py")
+CONTRACTS = os.path.join(HERE, "check_loader_contracts.py")
+VALUES = os.path.join(HERE, "check_generated_values.py")
 
 COPIED_TREES = ("oracle", "sqlserver", "config", "generators")
 IGNORED = shutil.ignore_patterns("output", "__pycache__", "*.pyc")
@@ -50,7 +53,21 @@ def drop_block(*needles):
     return mutate
 
 
-# (label, file the defect goes into, expected finding, mutation)
+def replace_body(signature, body):
+    """Replace the body of one method with ``body``, keeping its signature."""
+    def mutate(text):
+        start = text.find(signature)
+        if start < 0:
+            return None
+        opening = text.find("\n", start) + 1
+        end = text.find("\n    def ", opening)
+        if end < 0:
+            return None
+        return text[:opening] + body + text[end:]
+    return mutate
+
+
+# (label, file the defect goes into, expected findings, mutation[, check])
 FIXTURES = (
     ("extract value no longer fits its Oracle column",
      "oracle/tables/WWI_REF.UOM_REF.sql",
@@ -89,25 +106,81 @@ FIXTURES = (
      "loader-path",
      sub_once(r'DATA_ROOT_RELATIVE = "\.\.\\\\\.\.\\\\data"',
               'DATA_ROOT_RELATIVE = "..\\\\..\\\\..\\\\data"')),
+
+    ("bcp field size given to a (max) column",
+     "generators/wwigen/loaders/bcp.py",
+     "loader-format-size",
+     sub_once(r"^UNBOUNDED = 0$", "UNBOUNDED = 16000", re.M)),
+
+    ("bcp field too narrow for the target type",
+     "generators/wwigen/loaders/bcp.py",
+     "loader-format-size",
+     sub_once(r'"bigint": 20,', '"bigint": 4,')),
+
+    ("generated rows no longer held to the table's constraints",
+     "generators/wwigen/valuecontract.py",
+     ("generated-oracle-check", "generated-oracle-foreign-key"),
+     replace_body("    def apply(self, values, index):",
+                  "        return self._fit(values)\n"),
+     VALUES),
+
+    ("generated numbers no longer fitted to NUMBER(p,s)",
+     "generators/wwigen/valuecontract.py",
+     "generated-oracle-precision",
+     replace_body("    def _fit(self, values):", "        return values\n"),
+     VALUES),
+
+    ("generated keys no longer kept clear of the seeded rows",
+     "generators/wwigen/valuecontract.py",
+     "generated-oracle-seed-key",
+     sub_once(r"self\.seeded = \{key: self\.seed\.keys_of\(table\.key, key\)\s*\n"
+              r"\s*for key in self\.unique_keys\}",
+              "self.seeded = {key: frozenset() for key in self.unique_keys}"),
+     VALUES),
+
+    # Every deployed partitioned table ends in MAXVALUE or an interval, so a
+    # row outside the declared ranges takes both a table that closes and a
+    # generator that stops fitting the key to it.
+    ("generated partition key outside the declared ranges",
+     ("oracle/tables/WWI_FIN.AP_INVOICE_HDR.sql",
+      "generators/wwigen/valuecontract.py"),
+     "generated-oracle-partition",
+     (sub_once(r"PARTITION AP_HDR_2019.*?\n\)",
+               "PARTITION AP_HDR_2019 VALUES LESS THAN "
+               "(TO_DATE('2020-01-01', 'YYYY-MM-DD')) TABLESPACE WWI_HIST_DATA\n)",
+               re.S),
+      replace_body("    def _fit_partition(self, values):", "        return values\n")),
+     VALUES),
 )
 
 
-def prepare(scratch, relative, mutated):
+def prepare(scratch, written):
     for tree in COPIED_TREES:
         shutil.copytree(os.path.join(REPO_ROOT, tree), os.path.join(scratch, tree),
                         ignore=IGNORED)
-    target = os.path.join(scratch, relative.replace("/", os.sep))
-    with open(target, "w", encoding="utf-8", newline="") as handle:
-        handle.write(mutated)
+    for relative, text in written:
+        target = os.path.join(scratch, relative.replace("/", os.sep))
+        with open(target, "w", encoding="utf-8", newline="") as handle:
+            handle.write(text)
 
 
-def run_check(root):
+def inject(relative, mutation):
+    """One file's mutated text, or ``None`` if the defect does not apply."""
+    with open(os.path.join(REPO_ROOT, relative.replace("/", os.sep)),
+              encoding="utf-8", errors="replace") as handle:
+        original = handle.read()
+    mutated = mutation(original)
+    return None if not mutated or mutated == original else mutated
+
+
+def run_check(root, check):
     result = subprocess.run(
-        [sys.executable, CHECK, "--json"],
+        [sys.executable, check, "--json"],
         cwd=REPO_ROOT, env=dict(os.environ, WWI_ESTATE_ROOT=root),
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
     if result.returncode not in (0, 1):
-        raise RuntimeError("check_loader_contracts failed: %s" % result.stderr.strip())
+        raise RuntimeError("%s failed: %s"
+                           % (os.path.basename(check), result.stderr.strip()))
     return json.loads(result.stdout)
 
 
@@ -122,31 +195,39 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     passed, failed = 0, []
-    for label, relative, expected, mutation in FIXTURES:
-        with open(os.path.join(REPO_ROOT, relative.replace("/", os.sep)),
-                  encoding="utf-8", errors="replace") as handle:
-            original = handle.read()
-        mutated = mutation(original)
-        if not mutated or mutated == original:
-            failed.append("%s: the defect could not be injected into %s" % (label, relative))
+    for fixture in FIXTURES:
+        label, where, expected, mutation = fixture[:4]
+        check = fixture[4] if len(fixture) > 4 else CONTRACTS
+        wanted = (expected,) if isinstance(expected, str) else expected
+        files = (where,) if isinstance(where, str) else where
+        mutations = (mutation,) if callable(mutation) else mutation
+        written = [(relative, inject(relative, one))
+                   for relative, one in zip(files, mutations)]
+        stuck = [relative for relative, text in written if text is None]
+        if stuck:
+            failed.append("%s: the defect could not be injected into %s"
+                          % (label, ", ".join(stuck)))
             print("FAIL  %-52s not injectable" % label)
             continue
 
         scratch = tempfile.mkdtemp(prefix="wwi-loader-fixture-")
         try:
-            prepare(scratch, relative, mutated)
-            broken = run_check(scratch)
-            if expected in findings(broken, "error"):
+            prepare(scratch, written)
+            broken = run_check(scratch, check)
+            fired = findings(broken, "error")
+            missing = [code for code in wanted if code not in fired]
+            if not missing:
                 passed += 1
-                print("PASS  %-52s %s" % (label, expected))
+                print("PASS  %-52s %s" % (label, ", ".join(wanted)))
                 if args.verbose:
                     for item in broken["findings"]:
-                        if item["check"] == expected:
+                        if item["check"] in wanted:
                             print("        %s" % item["message"])
             else:
                 failed.append("%s: %s did not fire (fired: %s)"
-                              % (label, expected, ", ".join(sorted(findings(broken))) or "nothing"))
-                print("FAIL  %-52s %s did not fire" % (label, expected))
+                              % (label, ", ".join(missing),
+                                 ", ".join(sorted(findings(broken))) or "nothing"))
+                print("FAIL  %-52s %s did not fire" % (label, ", ".join(missing)))
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
 

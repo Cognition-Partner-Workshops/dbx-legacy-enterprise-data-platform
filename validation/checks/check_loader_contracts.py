@@ -55,8 +55,32 @@ from wwigen.loaders import bcp, landingzone, sqlloader  # noqa: E402
 INFILE_RE = re.compile(r"^INFILE '([^']+)'", re.M)
 DATA_ENTRY_RE = re.compile(r"Data = '([^']+)'")
 DATA_ROOT_RE = re.compile(r"\$DataRoot = Join-Path \$LoaderRoot '([^']+)'")
-FORMAT_HEADER_RE = re.compile(r"^\d+\s+SQLCHAR\s+\d+\s+\d+\s+\"[^\"]*\"\s+(\d+)\s+(\S+)", re.M)
+FORMAT_HEADER_RE = re.compile(
+    r"^\d+\s+SQLCHAR\s+\d+\s+(\d+)\s+\"[^\"]*\"\s+(\d+)\s+(\S+)\s+(\S+)", re.M)
 PROPERTY_ARGUMENT_RE = re.compile(r"(?<![\"'])\b[A-Za-z][\w-]*=\$\w+\.\w+")
+
+# Bytes the text form of a landing type needs at least. A field narrower than
+# this truncates the value on the way in; a (max) column takes no field size
+# at all, and bcp rejects the format file with "Invalid field size for
+# datatype" when one is given - which is how four of the twelve loads failed.
+MINIMUM_FIELD = {
+    "bit": 1,
+    "tinyint": 3,
+    "smallint": 6,
+    "int": 11,
+    "bigint": 20,
+    "real": 14,
+    "float": 24,
+    "date": 10,
+    "time": 8,
+    "smalldatetime": 19,
+    "datetime": 23,
+    "datetime2": 23,
+    "datetimeoffset": 30,
+    "uniqueidentifier": 36,
+}
+
+DEFAULT_MINIMUM_FIELD = 20
 
 # Types that can hold the extract's serialised form of the other.
 COMPATIBLE = {
@@ -336,16 +360,51 @@ def check_formats(report, scratch, specs):
         table = tables.get(spec.target_object)
         ordinals = {column.name.upper(): index
                     for index, column in enumerate(table.columns, start=1)}
-        for (ordinal, name), column in zip(fields, spec.columns):
+        canonical = {column.name.upper(): column for column in table.columns}
+        for (size, ordinal, name, collation), column in zip(fields, spec.columns):
             if name.upper() != column.name.upper():
                 report.error("loader-format", "generators/wwigen/loaders/bcp.py",
                              "%s writes %s where its format file expects %s"
                              % (spec.key, column.name, name))
-            elif int(ordinal) != ordinals.get(name.upper(), -1):
+                continue
+            if int(ordinal) != ordinals.get(name.upper(), -1):
                 report.error("loader-format", "generators/wwigen/loaders/bcp.py",
                              "%s maps %s to column %s of %s, which is column %s"
                              % (spec.key, name, ordinal, spec.target_object,
                                 ordinals.get(name.upper())))
+                continue
+            check_field(report, spec, name, int(size), collation,
+                        canonical[name.upper()])
+
+
+def check_field(report, spec, name, size, collation, canonical):
+    """One format field against the type and width of the column it loads."""
+    owner = "generators/wwigen/loaders/bcp.py"
+    if canonical.is_character:
+        if canonical.width is None:
+            if size != 0:
+                report.error("loader-format-size", owner,
+                             "%s gives %s a field size of %d, but %s is (max) and "
+                             "takes none (Invalid field size for datatype)"
+                             % (spec.key, name, size, canonical.type_text))
+        elif size < canonical.width:
+            report.error("loader-format-size", owner,
+                         "%s reads %s in %d bytes, too narrow for %s"
+                         % (spec.key, name, size, canonical.type_text))
+        if collation == '""':
+            report.error("loader-format-collation", owner,
+                         "%s gives %s no collation, though %s is character data"
+                         % (spec.key, name, canonical.type_text))
+        return
+    if collation != '""':
+        report.error("loader-format-collation", owner,
+                     "%s collates %s, which is %s and not character data"
+                     % (spec.key, name, canonical.type_text))
+    minimum = MINIMUM_FIELD.get(canonical.type_name, DEFAULT_MINIMUM_FIELD)
+    if size < minimum:
+        report.error("loader-format-size", owner,
+                     "%s reads %s in %d bytes, too narrow for %s"
+                     % (spec.key, name, size, canonical.type_text))
 
 
 def check_rows(report, specs, cfg, sample=25):
