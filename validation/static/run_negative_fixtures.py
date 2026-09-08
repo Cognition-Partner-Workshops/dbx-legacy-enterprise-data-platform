@@ -70,6 +70,17 @@ def mutate_conmgr_literal_token(text):
                   r"\1@[$Project::SqlServerHost]\2", text, count=1)
 
 
+def mutate_conmgr_drop_password(text):
+    if "@[$Project::SqlServerPassword]" not in text:
+        return None
+    return text.replace('+ ";Password=" + @[$Project::SqlServerPassword] ', "", 1)
+
+
+def mutate_conmgr_unspaced_tls(text):
+    return text.replace("Trust Server Certificate=True;",
+                        "TrustServerCertificate=True;", 1)
+
+
 def mutate_xml_malformed(text):
     return text.replace("</DTS:Executable>", "</DTS:Executabl>", 1)
 
@@ -105,6 +116,10 @@ FIXTURES = (
      mutate_conmgr_drop_expression),
     ("connection string left as a token", "ssis/04_staging", ".conmgr", "conmgr-binding",
      mutate_conmgr_literal_token),
+    ("SQL connection without a password", "ssis/04_staging", ".conmgr", "conmgr-credentials",
+     mutate_conmgr_drop_password),
+    ("TLS keyword OLE DB 19 ignores", "ssis/04_staging", ".conmgr", "conmgr-credentials",
+     mutate_conmgr_unspaced_tls),
     ("EXEC argument is an expression", "sqlserver/procedures/facts", ".sql",
      "sql-exec-arguments", mutate_sql_exec_expression),  # appended, so any file carries it
     ("MERGE with two WHEN MATCHED updates", "sqlserver/procedures/dimensions", ".sql",

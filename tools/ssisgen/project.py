@@ -8,9 +8,14 @@ deployment info. Anything else is rejected by the SSIS build tooling.
 Connection managers never contain credentials. The connection string is a
 property expression built from project parameters, so the deployed package
 picks the environment up at runtime; the literal ``ConnectionString`` attribute
-is only the design-time default. Passwords are supplied at deployment time
-through the ``CM.<name>.Password`` project connection parameters (see
-config/README.md and .env.example).
+is only the design-time default. The credential itself travels in the sensitive
+``OraclePassword`` / ``SqlServerPassword`` project parameters, which the
+expression consumes, so a runtime that binds those parameters - the SSIS
+catalog environment or ``dtexec /Parameter`` against the .ispac - reaches the
+provider. A property expression is re-evaluated at connect time, so setting
+``ConnectionString`` or ``Password`` on the connection manager directly is
+discarded; the parameters are the only binding surface (see config/README.md
+and .env.example).
 """
 
 from __future__ import annotations
@@ -26,6 +31,12 @@ from xml.sax.saxutils import escape, quoteattr
 # packages are validated against.
 SQLSERVER_PROVIDER = "MSOLEDBSQL19.1"
 ORACLE_PROVIDER = "OraOLEDB.Oracle.1"
+
+# OLE DB Driver 19 spells the keyword with spaces. The unspaced SqlClient form
+# `TrustServerCertificate` parses without error and is then ignored, so an
+# untrusted certificate chain still fails the connect; the estate's SQL Server
+# certificate is self-signed, which is how the difference surfaces.
+SQLSERVER_TRUST_KEYWORD = "Trust Server Certificate=True;"
 
 # name -> (kind, description, design-time connection string, ConnectionString expression)
 #
@@ -44,8 +55,10 @@ def _sql_connection(catalog_param):
         '+ ";Initial Catalog=" + @[$Project::%s] '
         '+ ";Provider=" + @[$Project::SqlServerProvider] '
         '+ ";Auto Translate=False;" '
-        '+ (LEN(@[$Project::SqlServerUser]) > 0 ? "User ID=" + @[$Project::SqlServerUser] + ";" : "Integrated Security=SSPI;") '
-        '+ (@[$Project::SqlServerTrustServerCertificate] ? "TrustServerCertificate=True;" : "")' % catalog_param[0]
+        '+ (LEN(@[$Project::SqlServerUser]) > 0 ? "User ID=" + @[$Project::SqlServerUser] '
+        '+ ";Password=" + @[$Project::SqlServerPassword] + ";" : "Integrated Security=SSPI;") '
+        '+ (@[$Project::SqlServerTrustServerCertificate] ? "%s" : "")'
+        % (catalog_param[0], SQLSERVER_TRUST_KEYWORD)
     )
     return literal, expression
 
@@ -61,6 +74,7 @@ _ORACLE_EXPRESSION = (
     '"Data Source=" + @[$Project::OracleHost] + ":" + (DT_WSTR, 12) @[$Project::OraclePort] '
     '+ "/" + @[$Project::OracleService] '
     '+ ";User ID=" + @[$Project::OracleUser] '
+    '+ ";Password=" + @[$Project::OraclePassword] '
     '+ ";Provider=" + @[$Project::OracleProvider] + ";"'
 )
 

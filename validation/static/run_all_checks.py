@@ -299,6 +299,78 @@ def check_conmgr_binding(result, prefixes):
     result.count("conmgr_files_checked", checked)
 
 
+# OLE DB Driver 19 spells the keyword with spaces; TrustServerCertificate is a
+# .NET SqlClient keyword the provider silently ignores, so a connection to an
+# instance with an untrusted certificate fails with the chain error instead.
+TLS_KEYWORD = "Trust Server Certificate=True;"
+TLS_KEYWORD_WRONG = re.compile(r"TrustServerCertificate\s*=")
+
+
+def check_conmgr_credentials(result, prefixes):
+    """Connection expressions must consume the sensitive project parameters.
+
+    The password reaches the provider only through the ConnectionString
+    property expression: the expression is re-evaluated when the connection is
+    opened, so a password set on the connection manager itself - by dtexec /Set
+    or otherwise - is overwritten before it is used.
+    """
+    ns = {"DTS": "www.microsoft.com/SqlServer/Dts"}
+    oracle = sql = 0
+    for rel, full in walk_files(prefixes, (".conmgr",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        expression = ""
+        for node in root.iter("{%s}PropertyExpression" % ns["DTS"]):
+            if node.get("{%s}Name" % ns["DTS"]) == "ConnectionString":
+                expression = node.text or ""
+        if not expression:
+            continue
+        if "OracleProvider" in expression:
+            oracle += 1
+            if "@[$Project::OraclePassword]" not in expression:
+                result.fail("conmgr-credentials", rel,
+                            "Oracle connection expression does not consume $Project::OraclePassword")
+            if "@[$Project::OracleUser]" not in expression:
+                result.fail("conmgr-credentials", rel,
+                            "Oracle connection expression does not consume $Project::OracleUser")
+        if "SqlServerProvider" in expression:
+            sql += 1
+            if "@[$Project::SqlServerPassword]" not in expression:
+                result.fail("conmgr-credentials", rel,
+                            "SQL Server connection expression does not consume $Project::SqlServerPassword")
+            if "Integrated Security=SSPI;" not in expression:
+                result.fail("conmgr-credentials", rel,
+                            "SQL Server connection expression has no Windows authentication branch")
+            if TLS_KEYWORD not in expression:
+                result.fail("conmgr-credentials", rel,
+                            "SQL Server connection expression does not emit %r" % TLS_KEYWORD)
+            if TLS_KEYWORD_WRONG.search(expression):
+                result.fail("conmgr-credentials", rel,
+                            "SQL Server connection expression emits the unspaced TrustServerCertificate "
+                            "keyword, which OLE DB Driver 19 ignores")
+    result.count("oracle_connections_checked", oracle)
+    result.count("sqlserver_connections_checked", sql)
+
+
+def check_project_reference_scope(result, prefixes):
+    """Project references stay inside a project; the rest is the runner's."""
+    if REPO_ROOT != SOURCE_ROOT:
+        return  # a scratch copy of one area is not an estate to walk
+    sys.path.insert(0, os.path.join(SOURCE_ROOT, "validation", "checks"))
+    import check_orchestration_edges
+
+    report = check_orchestration_edges.analyse()
+    for failure in report["failures"]:
+        result.fail("orchestration-edges", "ssis/orchestration-plan.json", failure)
+    result.count("orchestration_edges", report["edges_total"])
+    result.count("orchestration_edges_intra", report["edges_intra_project"])
+    result.count("orchestration_edges_cross", report["edges_cross_project"])
+    result.count("orchestration_roots", len(report["roots"]))
+    result.count("orchestration_reachable", report["packages_reachable_from_roots"])
+
+
 EXEC_ARG_RE = re.compile(
     r"@\w+\s*=\s*(?P<value>[^,;\r\n]+?)\s*(?=,\s*@\w+\s*=|[,;]?\s*(?:\r?\n|$))")
 EXEC_STATEMENT_RE = re.compile(r"(?is)\bEXEC(?:UTE)?\s+[\[\]\w.]+\s+(?P<args>.*?);")
@@ -587,6 +659,8 @@ CHECKS = [
     ("dtsx-pipeline", check_dtsx_pipeline),
     ("dtproj-structure", check_dtproj_structure),
     ("conmgr-binding", check_conmgr_binding),
+    ("conmgr-credentials", check_conmgr_credentials),
+    ("orchestration-edges", check_project_reference_scope),
     ("sql-exec-arguments", check_sql_exec_arguments),
     ("sql-merge", check_sql_merge_clauses),
     ("package-naming", check_package_naming),
@@ -617,6 +691,8 @@ def main():
     check_dtsx_pipeline(result, prefixes)
     check_dtproj_structure(result, prefixes)
     check_conmgr_binding(result, prefixes)
+    check_conmgr_credentials(result, prefixes)
+    check_project_reference_scope(result, prefixes)
     check_sql_exec_arguments(result, prefixes)
     check_sql_merge_clauses(result, prefixes)
     check_catalog_coverage(result, catalog, prefixes)
