@@ -2077,9 +2077,23 @@ def check_sql_column_contract(result, prefixes):
             if "(" in column_list or "*" in column_list or " SELECT " in column_list.upper():
                 continue  # expressions and sub-selects are not a column contract
             statements += 1
+            # A renamed column is still a column of the table: the name the
+            # server has to resolve is the one in front of the AS, which is how
+            # the live STG_Load_PartnerSale lookup failed to load its metadata.
+            references = []
             for item in column_list.split(","):
-                column = item.strip().strip("[]")
+                item = item.strip()
+                alias = re.match(r"^\[?(\w+)\]?\s+AS\s+\[?\w+\]?$", item, re.I)
+                references.append(alias.group(1) if alias else item.strip("[]"))
+            where = re.split(r"\bWHERE\b", sql, 1, re.I)
+            if len(where) == 2:
+                body = re.split(r"\b(?:GROUP|ORDER|HAVING)\b", where[1], 1, re.I)[0]
+                references.extend(re.findall(r"\b(\w+)\s*(?:=|<>|>=|<=|>|<|\bLIKE\b|\bIN\b)",
+                                             body, re.I))
+            for column in references:
                 if not re.match(r"^\w+$", column):
+                    continue
+                if column.upper() in ("NULL", "AND", "OR", "NOT", "N"):
                     continue
                 if column.lower() not in known:
                     detail = ("%s selects %r from %s, which has no such column"

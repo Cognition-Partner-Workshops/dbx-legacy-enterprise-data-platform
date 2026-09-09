@@ -327,6 +327,26 @@ def mutate_dtsx_unknown_source_column(text):
                         "%sAmountText%s" % (match.group(1), match.group(3)), 1)
 
 
+def mutate_dtsx_renamed_unknown_column(text):
+    """Rename a column the table does not have, as STG_Load_PartnerSale did.
+
+    The lookup that selected SourceCode AS CustomerRef out of ref.CodeCrosswalk
+    loaded no metadata against the live server (0x80040E14, VS_ISBROKEN); an
+    alias hides the missing column from a check that reads the select list
+    verbatim.
+    """
+    if "ConformedCodeValue AS " not in text:
+        return None
+    return text.replace("ConformedCodeValue AS ", "TargetCode AS ", 1)
+
+
+def mutate_dtsx_unknown_filter_column(text):
+    """Filter on a column the table does not have, as STG_Load_PartnerSale did."""
+    if "WHERE CodeDomainCode = " not in text:
+        return None
+    return text.replace("WHERE CodeDomainCode = ", "WHERE CodeSetName = ", 1)
+
+
 def mutate_dtsx_drop_fastparse(text):
     """Drop FastParse from a flat file column, as execution 123 failed on."""
     if 'name="FastParse"' not in text:
@@ -594,6 +614,10 @@ FIXTURES = (
      "expression-task-statements", mutate_dtsx_multi_statement_expression),
     ("source selects a column the table lacks", "ssis/05_data_quality", ".dtsx",
      "sql-column-contract", mutate_dtsx_unknown_source_column),
+    ("renamed source column the table lacks", "ssis/04_staging", ".dtsx",
+     "sql-column-contract", mutate_dtsx_renamed_unknown_column),
+    ("filter on a column the table lacks", "ssis/04_staging", ".dtsx",
+     "sql-column-contract", mutate_dtsx_unknown_filter_column),
     ("flat file column without FastParse", "ssis/03_file_ingestion", ".dtsx",
      "component-contracts", mutate_dtsx_drop_fastparse),
     ("Derived Column without its error output", "ssis/05_data_quality", ".dtsx",

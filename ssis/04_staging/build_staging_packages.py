@@ -406,7 +406,7 @@ def stg_load_supplier():
     flow.lookup(
         "Lookup Payment Terms (Partial Cache)", CONN_STAGING,
         "SELECT PaymentTermsCode, NetDays, DiscountPercent, DiscountDays\n"
-        "FROM stg.PaymentTerms WHERE IsCurrent = 1;",
+        "FROM stg.PaymentTerms WHERE IsActive = 1;",
         ["PaymentTermsCode"],
         [int_col("NetDays"), dec_col("DiscountPercent", 9, 4), int_col("DiscountDays")],
         no_match="RD")
@@ -480,7 +480,7 @@ def stg_load_product():
     flow.lookup(
         "Lookup UoM Conversion (Full Cache)", CONN_STAGING,
         "SELECT FromUomCode, ToUomCode, ConversionFactor\n"
-        "FROM ref.UomConversion WHERE ToUomCode = N'EA' AND IsActive = 1;",
+        "FROM ref.UomConversion WHERE ToUomCode = N'EA';",
         ["BaseUomCode"],
         [dec_col("ConversionFactor", 18, 6)], no_match="IG")
     flow.lookup(
@@ -778,8 +778,8 @@ def stg_load_tax_and_terms():
     ])
     terms.lookup(
         "Lookup Terms Crosswalk (Full Cache)", CONN_STAGING,
-        "SELECT SourceCode AS PaymentTermsCode, TargetCode AS ConformedTermsCode\n"
-        "FROM ref.CodeCrosswalk WHERE CodeSetName = N'PAYMENT_TERMS';",
+        "SELECT SourceCodeValue AS PaymentTermsCode, ConformedCodeValue AS ConformedTermsCode\n"
+        "FROM ref.CodeCrosswalk WHERE CodeDomainCode = N'PAYMENT_TERMS';",
         ["PaymentTermsCode"], [str_col("ConformedTermsCode", 10)], no_match="RD")
     terms.oledb_destination("STG PaymentTerms", CONN_STAGING, "[stg].[PaymentTerms]", batch_size=5000)
     terms.reject_destination("ERR Terms Unmapped", CONN_STAGING, "[err].[RejectedLookupFailure]",
@@ -830,7 +830,7 @@ def stg_load_cost_center():
     flow.lookup(
         "Lookup Parent Cost Center (No Cache)", CONN_STAGING,
         "SELECT CostCenterCode AS ParentCostCenterCode, CostCenterName AS ParentCostCenterName,\n"
-        "       FunctionCode AS ParentFunctionCode\n"
+        "       FunctionalAreaCode AS ParentFunctionCode\n"
         "FROM stg.CostCenter;",
         ["ParentCostCenterCode"],
         [str_col("ParentCostCenterName", 80), str_col("ParentFunctionCode", 8)], no_match="IG")
@@ -900,13 +900,13 @@ def stg_load_vendor_contract():
     ])
     flow.lookup(
         "Lookup Supplier (Full Cache)", CONN_STAGING,
-        "SELECT SupplierCode, SupplierName, DefaultCurrencyCode AS SupplierCurrencyCode\n"
+        "SELECT SupplierCode, SupplierName, TransactionCurrencyCode AS SupplierCurrencyCode\n"
         "FROM stg.Supplier;",
         ["SupplierCode"], [str_col("SupplierName", 100), str_col("SupplierCurrencyCode", 3)],
         no_match="RD")
     flow.lookup(
         "Lookup Contract FX Rate (Partial Cache)", CONN_STAGING,
-        "SELECT FromCurrencyCode AS CommitCurrencyCode, ExchangeRate AS ContractFxRate\n"
+        "SELECT FromCurrencyCode AS CommitCurrencyCode, ConversionRate AS ContractFxRate\n"
         "FROM stg.FxRate\n"
         "WHERE ToCurrencyCode = N'USD' AND RateTypeCode = N'CONTRACT';",
         ["CommitCurrencyCode"], [dec_col("ContractFxRate", 18, 8)], no_match="RD")
@@ -1043,7 +1043,7 @@ def stg_load_purchase_order():
     line.lookup(
         "Lookup Product Crosswalk (Partial Cache)", CONN_STAGING,
         "SELECT SourceItemCode, ProductKey, StockItemId\n"
-        "FROM work.ProductCrosswalk WHERE SourceSystemCode = N'ORA_ERP';",
+        "FROM work.ProductCrosswalk WHERE ResolvedFlag = 1;",
         ["SourceItemCode"], [int_col("ProductKey"), int_col("StockItemId")], no_match="RD")
     line.derived_column("Convert PO Line Quantities", [
         ("OrderQuantityBase", '(DT_NUMERIC,18,4)(ORDER_QTY * ConversionFactor)', dec_col("OrderQuantityBase", 18, 4)),
@@ -1256,8 +1256,9 @@ def stg_load_payment():
     ])
     flow.lookup(
         "Lookup Payment Method Crosswalk (Full Cache)", CONN_STAGING,
-        "SELECT SourceCode AS SourcePaymentMethodCode, TargetCode AS PaymentMethodCode, Description\n"
-        "FROM ref.CodeCrosswalk WHERE CodeSetName = N'PAYMENT_METHOD' AND SourceSystemCode = N'ORA_ERP';",
+        "SELECT SourceCodeValue AS SourcePaymentMethodCode, ConformedCodeValue AS PaymentMethodCode,\n"
+        "       SourceCodeDescription AS Description\n"
+        "FROM ref.CodeCrosswalk WHERE CodeDomainCode = N'PAYMENT_METHOD' AND SourceSystemCode = N'ORA_ERP';",
         ["SourcePaymentMethodCode"],
         [str_col("PaymentMethodCode", 12), str_col("PaymentMethodDescription", 80)], no_match="RD")
     flow.derived_column("Derive Payment Hash", [
@@ -1842,8 +1843,9 @@ def stg_load_return_and_credit():
     ])
     ret.lookup(
         "Lookup Return Reason (Full Cache)", CONN_STAGING,
-        "SELECT SourceCode AS SourceReturnReasonCode, TargetCode AS ReturnReasonCode, Description\n"
-        "FROM ref.CodeCrosswalk WHERE CodeSetName = N'RETURN_REASON';",
+        "SELECT SourceCodeValue AS SourceReturnReasonCode, ConformedCodeValue AS ReturnReasonCode,\n"
+        "       SourceCodeDescription AS Description\n"
+        "FROM ref.CodeCrosswalk WHERE CodeDomainCode = N'RETURN_REASON';",
         ["SourceReturnReasonCode"],
         [str_col("ReturnReasonCode", 12), str_col("ReturnReasonDescription", 80)], no_match="RD")
     ret.conditional_split("Screen Return", [
@@ -2104,8 +2106,8 @@ def stg_load_partner_sale():
         ["PartnerCountryCode"], [str_col("RegionCode", 4)], no_match="RD")
     flow.lookup(
         "Lookup Partner Customer Crosswalk (Partial Cache)", CONN_STAGING,
-        "SELECT SourceCode AS CustomerRef, TargetCode AS CustomerCode\n"
-        "FROM ref.CodeCrosswalk WHERE CodeSetName = N'PARTNER_CUSTOMER';",
+        "SELECT SourceCodeValue AS CustomerRef, ConformedCodeValue AS CustomerCode\n"
+        "FROM ref.CodeCrosswalk WHERE CodeDomainCode = N'CUSTOMER';",
         ["CustomerRef"], [str_col("CustomerCode", 20)], no_match="RD")
     flow.conditional_split("Screen Partner Sale", [
         ("Valid Partner Row", 'Quantity > 0 && GrossAmountValue > 0 && LEN(PartnerOrderRef) > 0'),
