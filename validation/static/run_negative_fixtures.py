@@ -307,6 +307,26 @@ def mutate_sql_duplicate_when_matched(text):
     return text.replace(match.group(0), match.group(0) * 2, 1)
 
 
+def mutate_dtsx_multi_statement_expression(text):
+    """String a second assignment onto an Expression Task, as execution 102 hit."""
+    match = re.search(r'<ExpressionTask Expression="([^"]+)"', text)
+    if not match:
+        return None
+    return text.replace(
+        match.group(0),
+        '<ExpressionTask Expression="%s; @[User::CurrentFileName] = &quot;x&quot;"'
+        % match.group(1), 1)
+
+
+def mutate_dtsx_unknown_source_column(text):
+    """Select a column raw.FilePartnerSales does not have, as execution 105 did."""
+    match = re.search(r'(SELECT\s+)(\w+)(,[^<(]*?FROM raw\.FilePartnerSales)', text)
+    if not match:
+        return None
+    return text.replace(match.group(0),
+                        "%sAmountText%s" % (match.group(1), match.group(3)), 1)
+
+
 # (label, artifact glob root, extension, expected check, mutation)
 FIXTURES = (
     ("duplicate pipeline refId", "ssis/07_dimensions", ".dtsx", "dtsx-pipeline",
@@ -373,6 +393,10 @@ FIXTURES = (
      "execution-parameters", mutate_ps1_hardcoded_adoption),
     ("SSM payload written with a BOM", "deployment/lib", ".ps1",
      "ssm-payload", mutate_ps1_bom_ssm_payload),
+    ("Expression Task with two assignments", "ssis/03_file_ingestion", ".dtsx",
+     "expression-task-statements", mutate_dtsx_multi_statement_expression),
+    ("source selects a column the table lacks", "ssis/05_data_quality", ".dtsx",
+     "sql-column-contract", mutate_dtsx_unknown_source_column),
 )
 
 

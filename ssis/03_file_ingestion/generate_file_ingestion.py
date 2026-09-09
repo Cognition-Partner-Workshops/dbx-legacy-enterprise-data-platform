@@ -48,6 +48,7 @@ from ssisgen import (  # noqa: E402
     FileSystemTask,
     bigint_col,
     date_col,
+    expression_sequence,
     int_col,
     money_col,
     str_col,
@@ -216,15 +217,24 @@ def audit_derivations(source_system, region):
 
 
 def path_expressions(archive_subfolder, reject_subfolder):
-    """Expression task that derives the archive, reject and poison paths."""
-    return Expression(
+    """Sequence deriving the file name and the archive, reject and poison paths.
+
+    Each path is one Expression Task: the evaluator reads a single expression,
+    and the tasks run in order because the later paths read the file name the
+    first one writes.
+    """
+    return expression_sequence(
         "Derive File Paths",
-        "@[User::CurrentFileName] = RIGHT(@[User::CurrentFilePath], "
-        "FINDSTRING(REVERSE(@[User::CurrentFilePath]), \"\\\\\", 1) - 1); "
-        '@[User::ArchiveFilePath] = @[$Project::ArchiveFileRoot] + "\\\\%s\\\\" + @[User::CurrentFileName]; '
-        '@[User::RejectFilePath] = @[$Project::QuarantineFileRoot] + "\\\\%s\\\\" + @[User::CurrentFileName] + ".rej"; '
-        '@[User::PoisonFilePath] = @[$Project::QuarantineFileRoot] + "\\\\poison\\\\" + @[User::CurrentFileName]'
-        % (archive_subfolder, reject_subfolder),
+        [
+            "@[User::CurrentFileName] = RIGHT(@[User::CurrentFilePath], "
+            "FINDSTRING(REVERSE(@[User::CurrentFilePath]), \"\\\\\", 1) - 1)",
+            '@[User::ArchiveFilePath] = @[$Project::ArchiveFileRoot] + "\\\\%s\\\\" + @[User::CurrentFileName]'
+            % archive_subfolder,
+            '@[User::RejectFilePath] = @[$Project::QuarantineFileRoot] + "\\\\%s\\\\" + @[User::CurrentFileName] + ".rej"'
+            % reject_subfolder,
+            '@[User::PoisonFilePath] = @[$Project::QuarantineFileRoot] + "\\\\poison\\\\" + @[User::CurrentFileName]',
+        ],
+        description="Derive the archive, reject and poison paths for the current file.",
     )
 
 
@@ -1140,8 +1150,12 @@ def ing_file_fx_override():
     df.lookup(
         "Lookup Published Rate",
         CONN_STAGING,
-        "SELECT RatePairCode, RateDate, Rate AS PublishedRate FROM raw.OracleFxRate WITH (NOLOCK) "
-        "WHERE RateTypeCode = N'SPOT';",
+        # raw.OracleFxRate keeps the extract's column names and lands every value
+        # as text; the pair code the override carries is assembled here.
+        "SELECT FROM_CURRENCY_CD + '/' + TO_CURRENCY_CD AS RatePairCode,\n"
+        "       TRY_CONVERT(DATE, RATE_DT) AS RateDate,\n"
+        "       TRY_CONVERT(DECIMAL(18,8), CONVERSION_RATE) AS PublishedRate\n"
+        "FROM raw.OracleFxRate WITH (NOLOCK) WHERE RATE_TYPE_CD = N'SPOT';",
         ["RatePairCode", "RateDate"],
         [num_col("PublishedRate", 18, 8)],
         no_match="RD",

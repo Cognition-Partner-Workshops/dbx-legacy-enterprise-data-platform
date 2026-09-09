@@ -129,6 +129,29 @@ def sql_parameter_count(sql):
     return count
 
 
+def expression_statement_count(expression):
+    """Number of statements the expression evaluator would read in *expression*.
+
+    The Expression Task evaluates one expression, so a semicolon that is not
+    inside a string literal is a second statement the parser refuses with 'The
+    token ";" ... was not recognized'.
+    """
+    count = 1
+    in_literal = False
+    escaped = False
+    for char in expression:
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\" and in_literal:
+            escaped = True
+        elif char == '"':
+            in_literal = not in_literal
+        elif char == ";" and not in_literal:
+            count += 1
+    return count
+
+
 def guid(seed: str) -> str:
     """Deterministic {GUID} derived from a seed string."""
     h = hashlib.md5(seed.encode("utf-8")).hexdigest().upper()
@@ -1183,11 +1206,35 @@ class Expression(Task):
 
     def __init__(self, name, expression):
         Task.__init__(self, name)
+        # One task holds one <ExpressionTask Expression="..." />, so several
+        # assignments strung together with semicolons reach the evaluator as a
+        # single expression and fail task validation before the task runs.
+        # Use expression_sequence() for more than one assignment.
+        if expression_statement_count(expression) > 1:
+            raise ContractError(
+                "expression task %r carries %d statements; the Expression Task "
+                "evaluates one expression and refuses the ';' token"
+                % (name, expression_statement_count(expression)))
         self.expression = expression
 
     def object_data(self, ref, indent):
         pad = " " * indent
         return ["%s<ExpressionTask %s />" % (pad, attr("Expression", self.expression))]
+
+
+def expression_sequence(name, assignments, description=None):
+    """Sequence container running one Expression Task per assignment, in order.
+
+    ``assignments`` are expressions evaluated left to right, so a later one may
+    read a variable an earlier one wrote.
+    """
+    container = Container(name, kind="sequence",
+                          description=description or "Sequence Container")
+    steps = []
+    for index, assignment in enumerate(assignments, start=1):
+        steps.append(container.add(Expression("%s %d" % (name, index), assignment)))
+    container.chain(*steps)
+    return container
 
 
 class ExecutePackage(Task):

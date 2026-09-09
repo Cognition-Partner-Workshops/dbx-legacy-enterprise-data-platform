@@ -602,24 +602,29 @@ def stg_load_geography():
 @package
 def stg_load_currency():
     """raw.OracleCurrency + raw.OracleFxRate -> stg.Currency, stg.FxRate."""
+    # raw.OracleCurrency keeps the extract's own column names and lands every
+    # value as text; it carries no region, which stg.Currency does not ask for.
     ccy_cols = [
-        str_col("CCY_CODE", 3), str_col("CCY_NAME", 60), int_col("MINOR_UNITS"),
-        str_col("REGION_CD", 4), str_col("ACTIVE_FLG", 1),
+        str_col("CURRENCY_CD", 10), str_col("CURRENCY_NAME", 100),
+        str_col("MINOR_UNIT_DIGITS", 10), str_col("ACTIVE_FLG", 5),
     ]
     ccy = DataFlow("DFT Conform Currency", "Currency master with minor-unit defaults")
     ccy.oledb_source(
         "RAW Oracle Currency", CONN_STAGING,
-        "SELECT CCY_CODE, CCY_NAME, MINOR_UNITS, REGION_CD, ACTIVE_FLG\n"
+        "SELECT CURRENCY_CD, CURRENCY_NAME, MINOR_UNIT_DIGITS, ACTIVE_FLG\n"
         "FROM raw.OracleCurrency WHERE BatchId = ?;",
         ccy_cols,
         parameters=("$Package::BatchId",),
     )
     ccy.row_count("Count Currency Rows Read", "User::RowsRead")
     ccy.derived_column("Cleanse Currency", [
-        ("CurrencyCode", 'UPPER(TRIM(CCY_CODE))', str_col("CurrencyCode", 3)),
-        ("CurrencyName", 'TRIM(CCY_NAME)', str_col("CurrencyName", 60)),
-        ("MinorUnits", 'ISNULL(MINOR_UNITS) ? 2 : MINOR_UNITS', int_col("MinorUnits")),
-        ("IsActiveFlag", 'UPPER(TRIM(ISNULL(ACTIVE_FLG) ? "Y" : ACTIVE_FLG))', str_col("IsActiveFlag", 1)),
+        ("CurrencyCode", 'UPPER(TRIM(CURRENCY_CD))', str_col("CurrencyCode", 3)),
+        ("CurrencyName", 'TRIM(CURRENCY_NAME)', str_col("CurrencyName", 60)),
+        ("MinorUnits",
+         'ISNULL(MINOR_UNIT_DIGITS) || TRIM(MINOR_UNIT_DIGITS) == "" ? 2 '
+         ': (DT_I4)TRIM(MINOR_UNIT_DIGITS)', int_col("MinorUnits")),
+        ("IsActiveFlag", 'UPPER(SUBSTRING(TRIM(ISNULL(ACTIVE_FLG) ? "Y" : ACTIVE_FLG), 1, 1))',
+         str_col("IsActiveFlag", 1)),
     ])
     ccy.conditional_split("Validate Currency Code", [
         ("Valid Currency", 'LEN(CurrencyCode) == 3'),
@@ -628,18 +633,27 @@ def stg_load_currency():
     ccy.branch_destination("ERR Currency Invalid", CONN_STAGING, "[err].[RejectedConstraintViolation]",
                            "Validate Currency Code", "Invalid Currency")
 
+    # Both feeds land as text and neither carries an end date: a rate is current
+    # until the next one for the pair supersedes it, which is why the sort below
+    # de-duplicates on pair and effective date.
     fx_cols = [
-        str_col("FROM_CCY", 3), str_col("TO_CCY", 3), date_col("EFF_FROM_DT"), date_col("EFF_TO_DT"),
-        dec_col("RATE", 18, 8), str_col("RATE_TYPE_CD", 8), str_col("SRC_SYSTEM_CD", 10),
+        str_col("FROM_CCY", 10), str_col("TO_CCY", 10), date_col("EFF_FROM_DT"),
+        dec_col("RATE", 18, 8), str_col("RATE_TYPE_CD", 20), str_col("SRC_SYSTEM_CD", 20),
     ]
     fx = DataFlow("DFT Conform FX Rate", "Effective-dated FX rates with USD triangulation")
     fx.oledb_source(
         "RAW Oracle FX Rate", CONN_STAGING,
-        "SELECT FROM_CCY, TO_CCY, EFF_FROM_DT, EFF_TO_DT, RATE, RATE_TYPE_CD, SRC_SYSTEM_CD\n"
+        "SELECT FROM_CURRENCY_CD AS FROM_CCY, TO_CURRENCY_CD AS TO_CCY,\n"
+        "       TRY_CONVERT(DATE, RATE_DT) AS EFF_FROM_DT,\n"
+        "       TRY_CONVERT(DECIMAL(18,8), CONVERSION_RATE) AS RATE,\n"
+        "       RATE_TYPE_CD, RATE_SOURCE_CD AS SRC_SYSTEM_CD\n"
         "FROM raw.OracleFxRate\n"
-        "WHERE BatchId = ? AND RATE > 0\n"
+        "WHERE BatchId = ? AND TRY_CONVERT(DECIMAL(18,8), CONVERSION_RATE) > 0\n"
         "UNION ALL\n"
-        "SELECT FROM_CCY, TO_CCY, EFF_FROM_DT, EFF_TO_DT, RATE, N'OVERRIDE', N'FILE_FX'\n"
+        "SELECT FromCurrencyCode, ToCurrencyCode,\n"
+        "       TRY_CONVERT(DATE, RateDate),\n"
+        "       TRY_CONVERT(DECIMAL(18,8), ConversionRate),\n"
+        "       N'OVERRIDE', N'FILE_FX'\n"
         "FROM raw.FileFxOverride WHERE BatchId = ?;",
         fx_cols,
         parameters=("$Package::BatchId", "$Package::BatchId"),
@@ -651,9 +665,7 @@ def stg_load_currency():
         ("RateTypeCode", 'UPPER(TRIM(ISNULL(RATE_TYPE_CD) ? "SPOT" : RATE_TYPE_CD))',
          str_col("RateTypeCode", 8)),
         ("EffectiveFromDate", '(DT_DBDATE)EFF_FROM_DT', Column("EffectiveFromDate", "date")),
-        ("EffectiveToDate",
-         'ISNULL(EFF_TO_DT) ? (DT_DBDATE)"9999-12-31" : (DT_DBDATE)EFF_TO_DT',
-         Column("EffectiveToDate", "date")),
+        ("EffectiveToDate", '(DT_DBDATE)"9999-12-31"', Column("EffectiveToDate", "date")),
         ("ExchangeRate", '(DT_NUMERIC,18,8)RATE', dec_col("ExchangeRate", 18, 8)),
         ("InverseRate", 'RATE == 0 ? (DT_NUMERIC,18,8)0 : (DT_NUMERIC,18,8)(1 / RATE)',
          dec_col("InverseRate", 18, 8)),
@@ -662,8 +674,10 @@ def stg_load_currency():
             eliminate_duplicates=True)
     fx.lookup(
         "Lookup USD Cross Rate (Partial Cache)", CONN_STAGING,
-        "SELECT CurrencyCode AS ToCurrencyCode, UsdCrossRate\n"
-        "FROM stg.FxRate WHERE RateTypeCode = N'SPOT' AND EffectiveToDate = '9999-12-31';",
+        # The cross rate is the currency's own SPOT rate into USD, which is a row
+        # of stg.FxRate rather than a column of one.
+        "SELECT FromCurrencyCode AS ToCurrencyCode, ConversionRate AS UsdCrossRate\n"
+        "FROM stg.FxRate WHERE RateTypeCode = N'SPOT' AND ToCurrencyCode = N'USD';",
         ["ToCurrencyCode"], [dec_col("UsdCrossRate", 18, 8)], no_match="IG")
     fx.derived_column("Triangulate Through USD", [
         ("UsdEquivalentRate",
@@ -2037,17 +2051,21 @@ def stg_load_web_session():
 @package
 def stg_load_partner_sale():
     """raw.FilePartnerSales -> stg.PartnerSale (flat file feed, all columns arrive as text)."""
+    # The landing table names the agreed feed fields; every one of them lands as
+    # text, which is why the parsing below happens here and not in the loader.
     cols = [
-        str_col("PartnerCode", 10), str_col("PartnerOrderRef", 30), str_col("SaleDateText", 20),
-        str_col("CustomerRef", 40), str_col("ItemRef", 30), str_col("QuantityText", 20),
-        str_col("AmountText", 20), str_col("CurrencyText", 10), str_col("CountryText", 20),
-        str_col("SourceFileName", 200),
+        str_col("PartnerCode", 30), str_col("TransactionReference", 60),
+        str_col("TransactionDate", 40), str_col("CustomerReference", 60),
+        str_col("PartnerProductCode", 60), str_col("QuantitySold", 50),
+        str_col("GrossAmount", 50), str_col("CurrencyCode", 10), str_col("CountryCode", 10),
+        str_col("SourceFileName", 260),
     ]
     flow = DataFlow("DFT Conform Partner Sales", "Parse and type the partner sales flat file feed")
     flow.oledb_source(
         "RAW File Partner Sales", CONN_STAGING,
-        "SELECT PartnerCode, PartnerOrderRef, SaleDateText, CustomerRef, ItemRef, QuantityText,\n"
-        "       AmountText, CurrencyText, CountryText, SourceFileName\n"
+        "SELECT PartnerCode, TransactionReference, TransactionDate, CustomerReference,\n"
+        "       PartnerProductCode, QuantitySold, GrossAmount, CurrencyCode, CountryCode,\n"
+        "       SourceFileName\n"
         "FROM raw.FilePartnerSales\n"
         "WHERE BatchId = ?;",
         cols, timeout=3600,
@@ -2055,39 +2073,42 @@ def stg_load_partner_sale():
     )
     flow.row_count("Count Partner Rows Read", "User::RowsRead")
     flow.derived_column("Normalize Partner Text", [
-        ("PartnerCode", 'UPPER(TRIM(PartnerCode))', str_col("PartnerCode", 10)),
-        ("PartnerOrderRef", 'UPPER(TRIM(PartnerOrderRef))', str_col("PartnerOrderRef", 30)),
-        ("CustomerRef", 'UPPER(TRIM(CustomerRef))', str_col("CustomerRef", 40)),
-        ("ItemRef", 'UPPER(REPLACE(TRIM(ItemRef), " ", ""))', str_col("ItemRef", 30)),
+        ("PartnerCode", 'UPPER(TRIM(PartnerCode))', str_col("PartnerCode", 30)),
+        ("PartnerOrderRef", 'UPPER(TRIM(TransactionReference))', str_col("PartnerOrderRef", 60)),
+        ("CustomerRef", 'UPPER(TRIM(CustomerReference))', str_col("CustomerRef", 60)),
+        ("ItemRef", 'UPPER(REPLACE(TRIM(PartnerProductCode), " ", ""))', str_col("ItemRef", 60)),
         # Partners send DD/MM/YYYY, the legacy loader only ever handled YYYY-MM-DD.
         ("SaleDateIso",
-         'FINDSTRING(SaleDateText, "/", 1) > 0 ? '
-         'RIGHT(TRIM(SaleDateText), 4) + "-" + SUBSTRING(TRIM(SaleDateText), 4, 2) + "-" + '
-         'LEFT(TRIM(SaleDateText), 2) : LEFT(TRIM(SaleDateText), 10)',
+         'FINDSTRING(TransactionDate, "/", 1) > 0 ? '
+         'RIGHT(TRIM(TransactionDate), 4) + "-" + SUBSTRING(TRIM(TransactionDate), 4, 2) + "-" + '
+         'LEFT(TRIM(TransactionDate), 2) : LEFT(TRIM(TransactionDate), 10)',
          str_col("SaleDateIso", 10)),
-        ("QuantityText", 'REPLACE(TRIM(QuantityText), ",", "")', str_col("QuantityText", 20)),
-        ("AmountText", 'REPLACE(REPLACE(TRIM(AmountText), ",", ""), "$", "")', str_col("AmountText", 20)),
-        ("PartnerCurrencyCode", 'UPPER(LEFT(TRIM(ISNULL(CurrencyText) ? "USD" : CurrencyText), 3))',
+        ("QuantityClean", 'REPLACE(TRIM(QuantitySold), ",", "")', str_col("QuantityClean", 50)),
+        ("AmountClean", 'REPLACE(REPLACE(TRIM(GrossAmount), ",", ""), "$", "")',
+         str_col("AmountClean", 50)),
+        ("PartnerCurrencyCode", 'UPPER(LEFT(TRIM(ISNULL(CurrencyCode) ? "USD" : CurrencyCode), 3))',
          str_col("PartnerCurrencyCode", 3)),
-        ("CountryName", 'UPPER(TRIM(CountryText))', str_col("CountryName", 20)),
+        ("PartnerCountryCode", 'UPPER(LEFT(TRIM(CountryCode), 3))', str_col("PartnerCountryCode", 3)),
     ])
     flow.data_conversion("Type Partner Measures", [
         ("SaleDateIso", "SaleDate", date_col("SaleDate")),
-        ("QuantityText", "Quantity", int_col("Quantity")),
-        ("AmountText", "GrossAmount", money_col("GrossAmount")),
+        ("QuantityClean", "Quantity", int_col("Quantity")),
+        ("AmountClean", "GrossAmountValue", money_col("GrossAmountValue")),
     ])
+    # The feed carries an ISO country code, not the country name older partner
+    # documentation described.
     flow.lookup(
-        "Lookup Country By Name (Full Cache)", CONN_STAGING,
-        "SELECT UPPER(CountryName) AS CountryName, CountryCode, RegionCode FROM ref.Country;",
-        ["CountryName"], [str_col("CountryCode", 3), str_col("RegionCode", 4)], no_match="RD")
+        "Lookup Country By Code (Full Cache)", CONN_STAGING,
+        "SELECT CountryCode AS PartnerCountryCode, RegionCode FROM ref.Country;",
+        ["PartnerCountryCode"], [str_col("RegionCode", 4)], no_match="RD")
     flow.lookup(
         "Lookup Partner Customer Crosswalk (Partial Cache)", CONN_STAGING,
         "SELECT SourceCode AS CustomerRef, TargetCode AS CustomerCode\n"
         "FROM ref.CodeCrosswalk WHERE CodeSetName = N'PARTNER_CUSTOMER';",
         ["CustomerRef"], [str_col("CustomerCode", 20)], no_match="RD")
     flow.conditional_split("Screen Partner Sale", [
-        ("Valid Partner Row", 'Quantity > 0 && GrossAmount > 0 && LEN(PartnerOrderRef) > 0'),
-        ("Unparsable Amount", 'GrossAmount <= 0'),
+        ("Valid Partner Row", 'Quantity > 0 && GrossAmountValue > 0 && LEN(PartnerOrderRef) > 0'),
+        ("Unparsable Amount", 'GrossAmountValue <= 0'),
     ], default_output="Missing Order Reference")
     flow.row_count("Count Partner Rows Loaded", "User::RowsInserted")
     flow.oledb_destination("STG PartnerSale", CONN_STAGING, "[stg].[PartnerSale]", batch_size=50000)
@@ -2096,7 +2117,7 @@ def stg_load_partner_sale():
     flow.branch_destination("ERR Partner Missing Reference", CONN_STAGING, "[err].[RejectedFileRow]",
                             "Screen Partner Sale", "Missing Order Reference")
     flow.reject_destination("ERR Partner Unknown Country", CONN_STAGING, "[err].[RejectedFileRow]",
-                            "Lookup Country By Name (Full Cache)", "Lookup No Match Output")
+                            "Lookup Country By Code (Full Cache)", "Lookup No Match Output")
     flow.reject_destination("ERR Partner Unknown Customer", CONN_STAGING, "[err].[RejectedFileRow]",
                             "Lookup Partner Customer Crosswalk (Partial Cache)", "Lookup No Match Output")
     flow.reject_destination("ERR Partner Conversion Errors", CONN_STAGING, "[err].[RejectedFileRow]",

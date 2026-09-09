@@ -1538,6 +1538,188 @@ def check_attribution(result):
                         "README no longer references the WideWorldImporters sample")
 
 
+def _expression_statements(text):
+    """Statements the SSIS expression evaluator reads in *text*.
+
+    Deliberately independent of tools/ssisgen: this is the artifact the run time
+    parses, so it is checked without asking the generator what it meant.
+    """
+    count = 1
+    in_literal = False
+    escaped = False
+    for char in text:
+        if escaped:
+            escaped = False
+        elif char == "\\" and in_literal:
+            escaped = True
+        elif char == '"':
+            in_literal = not in_literal
+        elif char == ";" and not in_literal:
+            count += 1
+    return count
+
+
+def check_expression_task_statements(result, prefixes):
+    """An Expression Task holds exactly one expression.
+
+    The task hands its whole Expression attribute to the evaluator, which reads
+    one expression and refuses the separator, so several assignments strung
+    together with semicolons fail task validation before anything runs:
+
+        Attempt to parse the expression ... failed. The token ";" at line
+        number "1", character number "93" was not recognized.
+
+    which is how executions 102-104 failed. Several assignments belong in
+    several tasks, sequenced so the order still holds.
+    """
+    tasks = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for node in root.iter():
+            if not node.tag.endswith("ExpressionTask"):
+                continue
+            tasks += 1
+            expression = ""
+            for name, value in node.attrib.items():
+                if name.endswith("Expression"):
+                    expression = value
+            statements = _expression_statements(expression)
+            if statements > 1:
+                result.fail("expression-task-statements", rel,
+                            "expression task carries %d statements; the evaluator reads one "
+                            "expression and refuses the ';' token: %r"
+                            % (statements, expression[:120]))
+    result.count("expression_tasks_checked", tasks)
+
+
+def _table_columns():
+    """Column names per schema-qualified table, from the deployed DDL.
+
+    Read from the checked-in tree rather than the walked one: the DDL is the
+    contract a package is judged against, and the negative fixtures point the
+    checks at a scratch copy holding only the artifact under test.
+    """
+    create_re = re.compile(r"CREATE\s+TABLE\s+\[?(\w+)\]?\.\[?(\w+)\]?\s*\(", re.I)
+    skip = ("CONSTRAINT", "INDEX", "PRIMARY", "UNIQUE", "FOREIGN", "CHECK", "PERIOD", "WITH")
+    tables = {}
+    sql_files = []
+    for directory, _dirs, names in os.walk(os.path.join(SOURCE_ROOT, "sqlserver")):
+        sql_files.extend(os.path.join(directory, name) for name in names
+                         if name.endswith(".sql"))
+    for full in sorted(sql_files):
+        with open(full, errors="replace") as handle:
+            text = handle.read()
+        for match in create_re.finditer(text):
+            table = "%s.%s" % (match.group(1).lower(), match.group(2).lower())
+            columns = set()
+            depth = 1
+            for line in text[match.end():].splitlines():
+                depth += line.count("(") - line.count(")")
+                token = line.strip().lstrip("[").split(" ")[0].rstrip("],")
+                if token.upper() not in skip and re.match(r"^\w+$", token):
+                    columns.add(token.lower())
+                if depth <= 0:
+                    break
+            tables.setdefault(table, set()).update(columns)
+    return tables
+
+
+def _sql_contract_baseline():
+    """Package/column pairs already known to name a column their table lacks."""
+    path = os.path.join(SOURCE_ROOT, "validation", "static",
+                        "sql-column-contract-baseline.txt")
+    if not os.path.exists(path):
+        return set()
+    entries = set()
+    with open(path, errors="replace") as handle:
+        for line in handle:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                entries.add(line)
+    return entries
+
+
+def check_sql_column_contract(result, prefixes):
+    """A package's SELECT list must name columns the target table has.
+
+    A generated statement is never compiled until the component validates it
+    against the server, where a name the table does not carry fails the whole
+    data flow:
+
+        "The batch could not be analyzed because of compile errors.";
+        "Invalid column name 'AmountText'." ... validation status "VS_ISBROKEN"
+
+    which is how execution 105 failed. Only single-table statements over tables
+    this repository owns the DDL for are checked, and only the bare column names
+    in their select list, so the check reports a broken contract rather than the
+    limits of a SQL parser.
+
+    The estate carries the same defect in packages outside the failing run; those
+    pairs are listed in sql-column-contract-baseline.txt and reported as warnings
+    so this check guards what has been repaired without hiding the rest. A pair
+    that leaves the baseline may not come back.
+    """
+    baseline = _sql_contract_baseline()
+    dts_sq = "www.microsoft.com/sqlserver/dts/tasks/sqltask"
+    select_re = re.compile(r"^\s*SELECT\s+(?P<list>.+?)\s+FROM\s+\[?(?P<schema>\w+)\]?\.\[?(?P<table>\w+)\]?"
+                           r"(?P<rest>\s|;|$)", re.I | re.S)
+    tables = _table_columns()
+    statements = 0
+    seen = set()
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        sql_texts = []
+        for component in root.iter("component"):
+            for node in component.iter("property"):
+                if node.get("name") == "SqlCommand" and (node.text or "").strip():
+                    sql_texts.append((component.get("name"), node.text))
+        for task in root.iter("{%s}SqlTaskData" % dts_sq):
+            sql = task.get("{%s}SqlStatementSource" % dts_sq)
+            if sql:
+                sql_texts.append(("Execute SQL Task", sql))
+        for name, sql in sql_texts:
+            match = select_re.match(sql)
+            if not match:
+                continue
+            table = "%s.%s" % (match.group("schema").lower(), match.group("table").lower())
+            known = tables.get(table)
+            if not known:
+                continue
+            tail = sql[match.end("table"):].upper()
+            if " JOIN " in tail or "," in sql[match.end("table"):].split("WHERE")[0]:
+                continue  # more than one table in play
+            column_list = match.group("list")
+            if "(" in column_list or "*" in column_list or " SELECT " in column_list.upper():
+                continue  # expressions and sub-selects are not a column contract
+            statements += 1
+            for item in column_list.split(","):
+                column = item.strip().strip("[]")
+                if not re.match(r"^\w+$", column):
+                    continue
+                if column.lower() not in known:
+                    detail = ("%s selects %r from %s, which has no such column"
+                              % (name, column, table))
+                    key = "%s|%s" % (rel, detail)
+                    if key in baseline:
+                        seen.add(key)
+                        result.warn("sql-column-contract", rel,
+                                    "known contract drift: %s" % detail)
+                    else:
+                        result.fail("sql-column-contract", rel, detail)
+    for key in sorted(baseline - seen):
+        rel, _, detail = key.partition("|")
+        result.warn("sql-column-contract", rel,
+                    "baseline entry no longer reported, remove it: %s" % detail)
+    result.count("single_table_selects_checked", statements)
+    result.count("sql_contract_drift_baselined", len(seen))
+
+
 CHECKS = [
     ("xml", check_dtsx_xml),
     ("dtsx-structure", check_dtsx_structure),
@@ -1545,6 +1727,8 @@ CHECKS = [
     ("dtsx-pipeline", check_dtsx_pipeline),
     ("dtsx-connection-refs", check_dtsx_connection_refs),
     ("execute-sql-parameters", check_execute_sql_parameters),
+    ("expression-task-statements", check_expression_task_statements),
+    ("sql-column-contract", check_sql_column_contract),
     ("dtproj-structure", check_dtproj_structure),
     ("conmgr-binding", check_conmgr_binding),
     ("conmgr-credentials", check_conmgr_credentials),
@@ -1588,6 +1772,8 @@ def main():
     check_dtsx_pipeline(result, prefixes)
     check_dtsx_connection_refs(result, prefixes)
     check_execute_sql_parameters(result, prefixes)
+    check_expression_task_statements(result, prefixes)
+    check_sql_column_contract(result, prefixes)
     check_dtproj_structure(result, prefixes)
     check_conmgr_binding(result, prefixes)
     check_conmgr_credentials(result, prefixes)
