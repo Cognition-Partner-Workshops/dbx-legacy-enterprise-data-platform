@@ -414,10 +414,10 @@ def check_written_input_dispositions(result, prefixes):
 def check_lookup_reference_mapping(result, prefixes):
     """A lookup must map every key and every copied column to its reference query.
 
-    The join lives on the input column as joinToReferenceColumn and the copy on
-    the match output column as copyFromReferenceColumn. A lookup missing either
-    has no relation to the reference set it names and fails validation with
-    0xC0010009, which is how the live STG_Load_Currency validation failed.
+    The join lives on the input column as joinToReferenceColumn and the copy in
+    the match output column's CopyFromReferenceColumn property. A lookup missing
+    either has no relation to the reference set it names and fails validation
+    with 0xC0010009, which is how the live STG_Load_Currency validation failed.
     """
     lookups = 0
     for rel, full in walk_files(prefixes, (".dtsx",)):
@@ -439,14 +439,15 @@ def check_lookup_reference_mapping(result, prefixes):
                 if output.get("name") != "Lookup Match Output":
                     continue
                 for column in output.iter("outputColumn"):
-                    if not column.get("copyFromReferenceColumn"):
+                    copied = [prop.text for prop in column.iter("property")
+                              if prop.get("name") == "CopyFromReferenceColumn"]
+                    if not any(copied):
                         result.fail("lookup-reference-mapping", rel,
                                     "lookup %r copies output column %r from no reference column"
                                     % (name, column.get("name")))
-                    # The copy can fail or truncate, so the column says what
-                    # that does to the row; without it the column is corrupt.
+                    # The copy can truncate, so the column says what that does
+                    # to the row; without it the column is corrupt.
                     missing = [attr for attr in ("errorOrTruncationOperation",
-                                                 "errorRowDisposition",
                                                  "truncationRowDisposition")
                                if not column.get(attr)]
                     if missing:

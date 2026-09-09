@@ -434,13 +434,29 @@ def mutate_dtsx_undisposed_lookup_output(text):
     disposition' - which is how the live STG_Load_Currency validation failed
     once its property set was complete.
     """
-    match = re.search(r'<outputColumn [^>]*?copyFromReferenceColumn="[^"]*"[^>]*?'
-                      r'truncationRowDisposition="[^"]*"[^>]*?/>', text)
+    match = re.search(r'<outputColumn [^>]*?errorOrTruncationOperation="Copy Column"'
+                      r'[^>]*?truncationRowDisposition="[^"]*"[^>]*?>', text)
     if not match:
         return None
-    stripped = re.sub(r'(errorOrTruncationOperation|errorRowDisposition|'
+    stripped = re.sub(r'(errorOrTruncationOperation|'
                       r'truncationRowDisposition)="[^"]*" ?', "", match.group(0))
     return text.replace(match.group(0), stripped, 1)
+
+
+def mutate_dtsx_attributed_lookup_copy(text):
+    """Name the copied reference column in an attribute instead of a property.
+
+    The lookup reads the copy off the output column's CopyFromReferenceColumn
+    property and never off an attribute, so a column written this way copies
+    nothing and the component fails validation with 0xC0010009 - which is how
+    the live STG_Load_Currency and STG_Load_PartnerSale validations failed.
+    """
+    match = re.search(r'\s*<properties>\s*<property [^>]*name="CopyFromReferenceColumn"[^>]*>'
+                      r'([^<]*)</property>\s*</properties>', text)
+    if not match:
+        return None
+    return text.replace(match.group(0),
+                        ' copyFromReferenceColumn="%s"' % match.group(1), 1)
 
 
 def mutate_dtsx_undeclared_lookup_property(text):
@@ -602,6 +618,8 @@ FIXTURES = (
      "component-property-set", mutate_dtsx_undeclared_lookup_property),
     ("copied lookup column without dispositions", "ssis/04_staging", ".dtsx",
      "lookup-reference-mapping", mutate_dtsx_undisposed_lookup_output),
+    ("lookup copy named in an attribute", "ssis/04_staging", ".dtsx",
+     "lookup-reference-mapping", mutate_dtsx_attributed_lookup_copy),
 )
 
 

@@ -1309,15 +1309,23 @@ class DataFlow:
             out.append("%s      <outputColumns>" % pad)
             for col in comp["output_columns"]:
                 col_ref = "%s.Outputs[Lookup Match Output].Columns[%s]" % (ref, col.name)
-                # The column is copied out of the reference row, and the copy
-                # can only truncate: the lookup gives such a column a truncation
-                # disposition and no error disposition, and reports a column
-                # holding any other pair as corrupt.
-                out.append('%s        <outputColumn refId=%s %s copyFromReferenceColumn=%s '
-                           'errorOrTruncationOperation="Copy Column" errorRowDisposition="NotUsed" '
-                           'lineageId=%s name=%s truncationRowDisposition="FailComponent" />'
-                           % (pad, quoteattr(col_ref), col.metadata_attrs(), quoteattr(col.name),
+                # The lookup names the reference column it copies in a property
+                # of the output column, not in an attribute of it, and treats a
+                # copied column that carries no such property as corrupt. The
+                # copy can only truncate, so the column carries a truncation
+                # disposition and no error disposition.
+                out.append('%s        <outputColumn refId=%s %s '
+                           'errorOrTruncationOperation="Copy Column" '
+                           'lineageId=%s name=%s truncationRowDisposition="FailComponent">'
+                           % (pad, quoteattr(col_ref), col.metadata_attrs(),
                               quoteattr(col_ref), quoteattr(col.name)))
+                out.append("%s          <properties>" % pad)
+                out.append(self._prop(pad + "            ", "System.String",
+                                      "CopyFromReferenceColumn", col.name,
+                                      "Specifies the column in the reference table "
+                                      "from which a column is copied."))
+                out.append("%s          </properties>" % pad)
+                out.append("%s        </outputColumn>" % pad)
             out.append("%s      </outputColumns>" % pad)
             out.append("%s      <externalMetadataColumns />" % pad)
             out.append("%s    </output>" % pad)
