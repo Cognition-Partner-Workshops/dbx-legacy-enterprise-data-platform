@@ -443,6 +443,16 @@ def check_lookup_reference_mapping(result, prefixes):
                         result.fail("lookup-reference-mapping", rel,
                                     "lookup %r copies output column %r from no reference column"
                                     % (name, column.get("name")))
+                    # The copy can fail or truncate, so the column says what
+                    # that does to the row; without it the column is corrupt.
+                    missing = [attr for attr in ("errorOrTruncationOperation",
+                                                 "errorRowDisposition",
+                                                 "truncationRowDisposition")
+                               if not column.get(attr)]
+                    if missing:
+                        result.fail("lookup-reference-mapping", rel,
+                                    "lookup %r copies output column %r with no %s"
+                                    % (name, column.get("name"), ", ".join(missing)))
     result.count("lookups_checked", lookups)
 
 

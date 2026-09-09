@@ -1309,7 +1309,12 @@ class DataFlow:
             out.append("%s      <outputColumns>" % pad)
             for col in comp["output_columns"]:
                 col_ref = "%s.Outputs[Lookup Match Output].Columns[%s]" % (ref, col.name)
-                out.append('%s        <outputColumn refId=%s %s copyFromReferenceColumn=%s lineageId=%s name=%s />'
+                # The column is copied out of the reference row, so it carries
+                # what a failed or truncated copy does to the row; a column that
+                # names an operation without naming a disposition is corrupt.
+                out.append('%s        <outputColumn refId=%s %s copyFromReferenceColumn=%s '
+                           'errorOrTruncationOperation="Copy Column" errorRowDisposition="FailComponent" '
+                           'lineageId=%s name=%s truncationRowDisposition="FailComponent" />'
                            % (pad, quoteattr(col_ref), col.metadata_attrs(), quoteattr(col.name),
                               quoteattr(col_ref), quoteattr(col.name)))
             out.append("%s      </outputColumns>" % pad)

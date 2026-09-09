@@ -426,6 +426,23 @@ def mutate_dtsx_undisposed_written_column(text):
     return text.replace(match.group(0), stripped, 1)
 
 
+def mutate_dtsx_undisposed_lookup_output(text):
+    """Drop the dispositions from a column a lookup copies out of its reference.
+
+    The column then names a copy whose failure has no consequence and the
+    lookup validates as VS_ISCORRUPT - 'has an invalid error or truncation row
+    disposition' - which is how the live STG_Load_Currency validation failed
+    once its property set was complete.
+    """
+    match = re.search(r'<outputColumn [^>]*?copyFromReferenceColumn="[^"]*"[^>]*?'
+                      r'truncationRowDisposition="[^"]*"[^>]*?/>', text)
+    if not match:
+        return None
+    stripped = re.sub(r'(errorOrTruncationOperation|errorRowDisposition|'
+                      r'truncationRowDisposition)="[^"]*" ?', "", match.group(0))
+    return text.replace(match.group(0), stripped, 1)
+
+
 def mutate_dtsx_undeclared_lookup_property(text):
     """Drop a property the lookup gives itself from a lookup component.
 
@@ -583,6 +600,8 @@ FIXTURES = (
      "lookup-reference-mapping", mutate_dtsx_unjoined_lookup_column),
     ("lookup missing a property of its own set", "ssis/04_staging", ".dtsx",
      "component-property-set", mutate_dtsx_undeclared_lookup_property),
+    ("copied lookup column without dispositions", "ssis/04_staging", ".dtsx",
+     "lookup-reference-mapping", mutate_dtsx_undisposed_lookup_output),
 )
 
 
