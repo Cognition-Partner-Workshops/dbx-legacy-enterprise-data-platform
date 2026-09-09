@@ -71,6 +71,35 @@ LINEAGE_COLUMNS = (
 EDGE_COLUMNS = (
     "from_object", "from_layer", "to_object", "to_layer", "package", "via",
 )
+ORACLE_SCHEMAS = {
+    "WWI_MDM", "WWI_PROC", "WWI_FIN", "WWI_REF", "WWI_AUDIT",
+}
+KNOWN_SCHEMA_FALLBACKS = {
+    "ETL", "ERR", "WORK", "RAW", "STG", "REF", "INTEGRATION",
+    "DIMENSION", "FACT", "AGGREGATE", "REPORT", "CUSTOMER360", "DBO",
+    "APPLICATION", "SALES", "PURCHASING", "WAREHOUSE", "WEBSITE",
+    "POWERBI", "REPORTS", "SEQUENCES", "DATALOADSIMULATION",
+}
+
+
+def _known_schemas():
+    schemas = set(KNOWN_SCHEMA_FALLBACKS) | ORACLE_SCHEMAS
+    try:
+        catalog = lib.load_catalog()
+        schemas.update(key.split(".", 1)[0]
+                       for key in lib.catalog_objects(catalog))
+    except (OSError, KeyError, TypeError):
+        pass
+    try:
+        schemas.update(key.split(".", 1)[0]
+                       for key in tsqllib.load_tables())
+    except (OSError, KeyError, TypeError):
+        pass
+    return {schema.upper() for schema in schemas}
+
+
+KNOWN_SCHEMAS = _known_schemas()
+SKIPPED_NON_SCHEMA_REFS = Counter()
 
 
 def local_name(tag):
@@ -91,7 +120,10 @@ def normal_object(raw):
     parts = value.split(".")
     if any(part.startswith("@") or part.startswith("#") for part in parts):
         return ""
-    if parts[-2] in {"SYS", "INFORMATION_SCHEMA"}:
+    if parts[0] not in KNOWN_SCHEMAS:
+        SKIPPED_NON_SCHEMA_REFS[value] += 1
+        return ""
+    if parts[0] in {"SYS", "INFORMATION_SCHEMA"}:
         return ""
     return value
 
@@ -125,7 +157,7 @@ def sql_objects(text):
     # qualified column references in JOIN/WHERE expressions as tables.
     from_re = re.compile(
         r"\bFROM\s+(.+?)(?=\bWHERE\b|\bGROUP\s+BY\b|\bORDER\s+BY\b|"
-        r"\bHAVING\b|\bUNION\b|\bEXCEPT\b|\bINTERSECT\b|;|$)",
+        r"\bHAVING\b|\bUNION\b|\bEXCEPT\b|\bINTERSECT\b|\bJOIN\b|\bON\b|;|$)",
         re.I | re.S)
     for match in from_re.finditer(clean):
         for part in match.group(1).split(","):
@@ -478,30 +510,51 @@ def object_record(key, catalog_objects):
     lookup = catalog_objects.get(value)
     if lookup is None and len(value.split(".")) >= 2:
         lookup = catalog_objects.get(".".join(value.split(".")[-2:]))
+    schema = value.split(".")[0] if value else ""
+    if schema.startswith("WWI_"):
+        layer, inferred_system = "oracle", "Oracle"
+    elif schema in {"APPLICATION", "SALES", "PURCHASING", "WAREHOUSE",
+                    "WEBSITE"}:
+        layer, inferred_system = "oltp", "SQL Server OLTP"
+    elif schema == "RAW":
+        layer, inferred_system = "staging-raw", "SQL Server Staging"
+    elif schema == "STG":
+        layer, inferred_system = "staging-stg", "SQL Server Staging"
+    elif schema == "WORK":
+        layer, inferred_system = "staging-work", "SQL Server Staging"
+    elif schema == "ERR":
+        layer, inferred_system = "staging-err", "SQL Server Staging"
+    elif schema == "REF":
+        layer, inferred_system = "reference", "SQL Server DW"
+    elif schema == "ETL":
+        layer, inferred_system = "etl-control", "ETL control"
+    elif schema == "DIMENSION":
+        layer, inferred_system = "dw-dimension", "SQL Server DW"
+    elif schema == "FACT":
+        layer, inferred_system = "dw-fact", "SQL Server DW"
+    elif schema == "AGGREGATE":
+        layer, inferred_system = "dw-aggregate", "SQL Server DW"
+    elif schema in {"REPORT", "POWERBI", "REPORTS"}:
+        layer, inferred_system = "dw-report", "SQL Server DW"
+    elif schema == "INTEGRATION":
+        layer, inferred_system = "dw-integration", "SQL Server DW"
+    elif schema == "CUSTOMER360":
+        layer, inferred_system = "customer360", "SQL Server DW"
+    else:
+        layer, inferred_system = "unknown", "Unknown"
     if lookup:
         return {
             "object": value,
-            "layer": lookup["layer"],
+            "layer": layer,
             "system": lookup["system"],
             "declared": True,
         }
-    parts = value.split(".")
-    schema = parts[-2] if len(parts) >= 2 else ""
-    if schema.startswith("WWI_"):
-        layer, system = "oracle", "Oracle"
-    elif schema in {"STG", "RAW", "ERR", "WORK", "QUARANTINE"}:
-        layer, system = "sqlserver-staging", "SQL Server Staging"
-    elif schema in {"DIMENSION", "FACT", "AGGREGATE", "INTEGRATION", "REPORT"}:
-        layer, system = "sqlserver-dw", "SQL Server DW"
-    elif schema == "ETL":
-        layer, system = "etl-control", "ETL control"
-    elif schema == "REF":
-        layer, system = "reference", "SQL Server DW"
-    elif schema in {"APPLICATION", "SALES", "PURCHASING", "WAREHOUSE", "WEBSITE"}:
-        layer, system = "sqlserver-oltp", "SQL Server OLTP"
-    else:
-        layer, system = "unknown", "Unknown"
-    return {"object": value, "layer": layer, "system": system, "declared": False}
+    return {
+        "object": value,
+        "layer": layer,
+        "system": inferred_system,
+        "declared": False,
+    }
 
 
 def is_plumbing(value):
@@ -510,8 +563,27 @@ def is_plumbing(value):
             key.startswith("WORK."))
 
 
+def declaration_sets(names, catalog_keys):
+    normalized = [lib.normalise_object(name) for name in names]
+    wildcard_prefixes = {
+        value[:-1] for value in normalized if value.endswith(".*")
+    }
+    explicit = lib.expand_references(
+        [value for value in normalized if "*" not in value], catalog_keys)
+    return explicit, wildcard_prefixes
+
+
+def declaration_covers(value, explicit, wildcard_prefixes):
+    return value in explicit or any(
+        value.startswith(prefix) for prefix in wildcard_prefixes)
+
+
 def as_records(values, catalog_objects):
     return [object_record(value, catalog_objects) for value in sorted(values)]
+
+
+def graph_included(record):
+    return record["layer"] not in {"etl-control", "staging-err"}
 
 
 def parse_params():
@@ -549,22 +621,30 @@ def table_edges(package_data, procedure_data, catalog_objects):
         writes = {item["object"] for item in data["writes"]}
         for source in reads:
             for target in writes:
+                source_record = object_record(source, catalog_objects)
+                target_record = object_record(target, catalog_objects)
+                if not graph_included(source_record) or not graph_included(target_record):
+                    continue
                 rows[(source, target, package, "direct")] = {
                     "from_object": source,
-                    "from_layer": object_record(source, catalog_objects)["layer"],
+                    "from_layer": source_record["layer"],
                     "to_object": target,
-                    "to_layer": object_record(target, catalog_objects)["layer"],
+                    "to_layer": target_record["layer"],
                     "package": package,
                     "via": "direct",
                 }
         for proc, proc_data in procedure_data.get(package, {}).items():
             for source in proc_data["reads"]:
                 for target in proc_data["writes"]:
+                    source_record = object_record(source, catalog_objects)
+                    target_record = object_record(target, catalog_objects)
+                    if not graph_included(source_record) or not graph_included(target_record):
+                        continue
                     rows[(source, target, package, "proc:%s" % proc)] = {
                         "from_object": source,
-                        "from_layer": object_record(source, catalog_objects)["layer"],
+                        "from_layer": source_record["layer"],
                         "to_object": target,
-                        "to_layer": object_record(target, catalog_objects)["layer"],
+                        "to_layer": target_record["layer"],
                         "package": package,
                         "via": "proc:%s" % proc,
                     }
@@ -578,13 +658,24 @@ def markdown_graph(package_data, edges, counts, catalog_objects):
     folders = defaultdict(lambda: {"reads": set(), "writes": set()})
     writers = defaultdict(set)
     readers = defaultdict(set)
+    plumbing_volume = Counter()
     for package, data in package_data.items():
         folder = data["folder"]
         for item in data["reads"] + data["reads_via_procs"]:
+            if item["layer"] == "etl-control":
+                plumbing_volume["etl-control reads"] += 1
+            if not graph_included(item):
+                continue
             reads_by_package[item["object"]].add(package)
             readers[item["object"]].add(package)
             folders[folder]["reads"].add(item["object"])
         for item in data["writes"] + data["writes_via_procs"]:
+            if item["layer"] == "etl-control":
+                plumbing_volume["etl-control writes"] += 1
+            if item["layer"] == "staging-err":
+                plumbing_volume["staging-err writes"] += 1
+            if not graph_included(item):
+                continue
             writes_by_package[item["object"]].add(package)
             writers[item["object"]].add(package)
             folders[folder]["writes"].add(item["object"])
@@ -616,7 +707,8 @@ def markdown_graph(package_data, edges, counts, catalog_objects):
         "",
         "Generated by `validation/checks/extract_sql_lineage.py`. This is "
         "static-only analysis of checked-in XML and SQL; no package or query "
-        "was executed.",
+        "was executed. Control-framework and reject tables are excluded; "
+        "see `shared-plumbing.md`.",
         "",
         "## Headline numbers",
         "",
@@ -631,6 +723,11 @@ def markdown_graph(package_data, edges, counts, catalog_objects):
         ("table_edges", "Table edges"), ("procs_unresolved", "Unresolved procedures"),
     ):
         lines.append("| %s | %s |" % (label, counts[key]))
+    lines.extend(["", "## Plumbing volume excluded", "",
+                   "| Object class | References |", "| --- | ---: |"])
+    for key in ("etl-control reads", "etl-control writes",
+                "staging-err writes"):
+        lines.append("| %s | %d |" % (key, plumbing_volume[key]))
     lines.extend(["", "## Layer-flow matrix", "",
                    "| From \\ To | " + " | ".join(sorted({x for pair in layer_flow for x in pair})) + " |",
                    "| --- | " + " | ".join("---:" for _ in sorted({x for pair in layer_flow for x in pair})) + " |"])
@@ -835,6 +932,7 @@ def write_outputs(paths, payload, lineage_rows, edge_rows, graph, plumbing):
 
 def run(args):
     report = lib.Report("extract_sql_lineage")
+    SKIPPED_NON_SCHEMA_REFS.clear()
     catalog = lib.load_catalog()
     catalog_objects = lib.catalog_objects(catalog)
     catalog_keys = set(catalog_objects)
@@ -895,9 +993,9 @@ def run(args):
 
         all_reads = direct_reads | resolved_reads
         all_writes = direct_writes | resolved_writes
-        declared_sources = lib.expand_references(
+        declared_sources, source_wildcards = declaration_sets(
             package.source_objects, catalog_keys)
-        declared_targets = lib.expand_references(
+        declared_targets, target_wildcards = declaration_sets(
             package.target_objects, catalog_keys)
         parsed_source = all_reads
         parsed_target = all_writes
@@ -905,11 +1003,13 @@ def run(args):
             "declared_sources_not_parsed": sorted(declared_sources - parsed_source),
             "parsed_reads_not_declared": sorted(
                 value for value in parsed_source - declared_sources
-                if not is_plumbing(value)),
+                if not is_plumbing(value) and not declaration_covers(
+                    value, declared_sources, source_wildcards)),
             "declared_targets_not_parsed": sorted(declared_targets - parsed_target),
             "parsed_writes_not_declared": sorted(
                 value for value in parsed_target - declared_targets
-                if not is_plumbing(value)),
+                if not is_plumbing(value) and not declaration_covers(
+                    value, declared_targets, target_wildcards)),
         }
         if declared_targets and not (declared_targets & parsed_target):
             report.warn(
@@ -1013,11 +1113,13 @@ def run(args):
         item["object"]
         for data in package_data.values()
         for item in data["reads"] + data["reads_via_procs"]
+        if graph_included(item)
     }
     all_write_objects = {
         item["object"]
         for data in package_data.values()
         for item in data["writes"] + data["writes_via_procs"]
+        if graph_included(item)
     }
     all_called = {proc for data in package_data.values() for proc in data["execs"]}
     all_resolved = {via[5:] for data in package_data.values()
@@ -1046,6 +1148,7 @@ def run(args):
         "parsed_reads_not_declared": totals["parsed_reads_not_declared"],
         "declared_targets_not_parsed": totals["declared_targets_not_parsed"],
         "parsed_writes_not_declared": totals["parsed_writes_not_declared"],
+        "skipped_non_schema_refs": sum(SKIPPED_NON_SCHEMA_REFS.values()),
     })
     payload = {"static_only": True, "packages": package_data}
     paths = {
@@ -1069,9 +1172,12 @@ def run(args):
     for key, value in counts.items():
         report.count(key, value)
     report.detail("unresolved_procs", sorted(all_unresolved))
+    report.detail("skipped_non_schema_refs",
+                  sorted(SKIPPED_NON_SCHEMA_REFS))
     report.detail("top_hub_objects", sorted(
         Counter(item["object"] for data in package_data.values()
-                for item in data["reads"] + data["reads_via_procs"]).items(),
+                for item in data["reads"] + data["reads_via_procs"]
+                if graph_included(item)).items(),
         key=lambda pair: (-pair[1], pair[0]))[:10])
     report.detail("layer_flow", {
         "%s -> %s" % (source, target): number
