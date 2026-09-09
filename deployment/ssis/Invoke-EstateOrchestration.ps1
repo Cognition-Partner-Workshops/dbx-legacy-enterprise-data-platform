@@ -54,6 +54,7 @@ param(
 
 . (Join-Path (Join-Path (Join-Path $PSScriptRoot '..') 'lib') 'Common.ps1')
 . (Join-Path (Join-Path (Join-Path $PSScriptRoot '..') 'lib') 'SsisCatalog.ps1')
+. (Join-Path (Join-Path (Join-Path $PSScriptRoot '..') 'lib') 'PlanExpression.ps1')
 $script:WwiLogPrefix = 'wwi-orchestrate'
 
 $repoRoot = Get-WwiRepositoryRoot
@@ -479,20 +480,85 @@ while ($remaining.Count -gt 0) {
 
 $status = @{}   # node -> Succeeded / Failed / Skipped
 
+# The master's parameters and variables at their declared defaults. A control
+# node overwrites an entry as it is reached, and the conditional edges are
+# evaluated against this table.
+$variables = ConvertTo-WwiPlanVariableTable -RootPlan $rootPlan
+$variables['$Package::BusinessDate']    = $BusinessDate
+$variables['$Package::EnvironmentCode'] = $environmentCode
+
 function Test-NodeShouldRun {
+    <#
+        A precedence constraint is its value AND its expression. Honouring the
+        value alone takes both sides of a conditional fork - which is how
+        ERR_Notify_Operations ran behind @[User::MissingFileCount] > 0 on a
+        cycle where every feed had arrived.
+    #>
     param([Parameter(Mandatory)][string] $Name)
-    $edges = @($incoming[$Name])
-    if ($edges.Count -eq 0) { return $true }
-    foreach ($edge in $edges) {
-        $upstream = $status[$edge.from]
-        if (-not $upstream) { continue }
-        switch ($edge.value) {
-            'Success'    { if ($upstream -eq 'Succeeded')  { return $true } }
-            'Failure'    { if ($upstream -eq 'Failed')     { return $true } }
-            'Completion' { if ($upstream -ne 'Skipped')    { return $true } }
+    return (Test-WwiPlanNodeShouldRun -Name $Name -Edges @($incoming[$Name]) -Status $status `
+                                      -Variables $variables -Log { param($m) Write-WwiLog $m })
+}
+
+function Invoke-ControlNode {
+    <#
+        Reproduces an in-package control task well enough for the conditional
+        edges that read what it computes.
+
+          expression  an Expression Task assignment, applied to the table
+          query       an Execute SQL Task whose single-row result is bound to a
+                      variable, re-run against the control database
+          statement   an Execute SQL Task that binds nothing; it ordered the
+                      master's graph and has no effect the runner reproduces
+    #>
+    param([Parameter(Mandatory)] $Node)
+
+    $control = if ($Node.PSObject.Properties.Name -contains 'control') { $Node.control } else { 'statement' }
+    switch ($control) {
+        'expression' {
+            $value = Set-WwiPlanAssignment -Assignment $Node.assignment -Variables $variables
+            Write-WwiLog ("control {0}: {1} -> {2}" -f $Node.name, $Node.assignment, $value)
+        }
+        'query' {
+            if ($Node.connection -ne 'WWI_Staging_DB') {
+                Stop-WwiWithError ("control task $($Node.name) reads $($Node.connection); the runner only " +
+                                   'reproduces control queries against the control database.')
+            }
+            # The task binds its ? placeholders positionally; the same values in
+            # the same order become named parameters here.
+            $arguments = @{}
+            $query = $Node.sql
+            $index = 0
+            foreach ($name in @($Node.parameters)) {
+                if (-not $variables.ContainsKey($name)) {
+                    Stop-WwiWithError "control task $($Node.name) binds $name, which this root's plan does not declare."
+                }
+                $arguments["p$index"] = $variables[$name]
+                $query = ([regex] '\?').Replace($query, "@p$index", 1)
+                $index += 1
+            }
+            if ($query.Contains('?')) {
+                Stop-WwiWithError "control task $($Node.name) has more ? placeholders than bound parameters."
+            }
+            if ($DryRun) {
+                Write-WwiLog ("WHATIF control {0}; {1} keeps its default {2}" -f
+                              $Node.name, $Node.result_variable, $variables[$Node.result_variable])
+                return
+            }
+            $rows = Invoke-WwiSqlQuery -Database $env:SQLSERVER_STAGING_DB -Query "SET NOCOUNT ON;`n$query" -Parameters $arguments
+            if (@($rows).Count -eq 0) {
+                Stop-WwiWithError "control task $($Node.name) returned no row to bind to $($Node.result_variable)."
+            }
+            $value = $rows[0].PSObject.Properties | Select-Object -First 1 | ForEach-Object { $_.Value }
+            $variables[$Node.result_variable] = ConvertTo-WwiPlanValue $value
+            Write-WwiLog ("control {0}: {1} = {2}" -f $Node.name, $Node.result_variable, $variables[$Node.result_variable])
+        }
+        'statement' {
+            Write-WwiLog ("control {0}: ordering only, no runner-side effect" -f $Node.name)
+        }
+        default {
+            Stop-WwiWithError "control task $($Node.name) is of unknown kind '$control'."
         }
     }
-    return $false
 }
 
 Write-WwiLog ("orchestrating {0} ({1} node(s), {2} edge(s)) from /SSISDB/{3} with environment {4}" -f `
@@ -526,6 +592,7 @@ foreach ($name in $order) {
         'batch_start' {
             $batchId = Start-EtlBatch -BatchType $node.batch_type
             Write-WwiLog "batch $batchId opened ($($node.batch_type))"
+            $variables['User::BatchId'] = $batchId
             $status[$name] = 'Succeeded'
         }
         'batch_end' {
@@ -566,10 +633,12 @@ foreach ($name in $order) {
             $status[$name] = $(if ($succeeded) { 'Succeeded' } else { 'Failed' })
             if (-not $succeeded) { $forceStatus = 'Failed' }
         }
-        default {
-            # An in-package control task (expression, ad-hoc SQL) orders the
-            # graph but has no effect the runner reproduces.
+        'control' {
+            Invoke-ControlNode -Node $node
             $status[$name] = 'Succeeded'
+        }
+        default {
+            Stop-WwiWithError "the plan node '$name' is of kind '$($node.kind)', which the runner does not model."
         }
     }
 }

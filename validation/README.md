@@ -10,13 +10,14 @@ live estate and have never been pointed at one.
 | `validation/static/run_negative_fixtures.py` | proves the static checks fail on deliberately malformed copies of real artifacts | no |
 | `validation/checks/run_check_fixtures.py` | the same idea for the deep checks: one injected defect per fixture, drawn from the defect classes a live deployment has actually hit | no |
 | `validation/static/Test-ExecutionParameterBinding.ps1` | exercises the runner's catalog parameter conversion against a stand-in declaration map | no |
+| `validation/static/Test-PlanConditionalEdge.ps1` | walks the real orchestration plan offline and proves the runner takes a conditional edge only when its value *and* its expression hold | no |
 | `validation/runtime/` | SQL an operator would run *after* a deployment, to see whether the estate actually behaves | yes - and it has not been run |
 
 Everything under `validation/static` and `validation/checks` is offline. No
 check opens a connection, loads an Oracle client, invokes `dtexec`, reads a
 credential, or touches a file share. `python3` and `pyyaml` are the only
-requirements for the Python suites; the one PowerShell test needs PowerShell
-and dot-sources `deployment/lib` without connecting to anything.
+requirements for the Python suites; the PowerShell tests need PowerShell
+and dot-source `deployment/lib` without connecting to anything.
 
 ## Running them
 
@@ -29,6 +30,7 @@ python3 validation/checks/extract_package_dependency_graph.py --mermaid
 python3 validation/static/run_negative_fixtures.py                # negative fixtures
 python3 validation/checks/run_check_fixtures.py                   # deep-check fixtures
 pwsh -File validation/static/Test-ExecutionParameterBinding.ps1   # runner parameter binding
+pwsh -File validation/static/Test-PlanConditionalEdge.ps1         # conditional precedence edges
 ```
 
 `run_negative_fixtures.py` copies a real project, package, connection manager

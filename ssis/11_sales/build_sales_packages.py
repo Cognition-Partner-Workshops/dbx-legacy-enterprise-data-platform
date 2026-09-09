@@ -162,6 +162,7 @@ def build_sls_na_load_commission():
         parameter_bindings=[
             ("$Package::BatchId", 0, "LONG"),
             ("$Package::CommissionMonth", 1, "NVARCHAR"),
+            ("User::RowsUpdated", 2, "LONG", "Output"),
         ],
     ))
     counts = pkg.add(log_row_count("Fact.Sale"))
@@ -309,6 +310,7 @@ def build_sls_eu_load_commission():
         parameter_bindings=[
             ("$Package::BatchId", 0, "LONG"),
             ("$Package::CommissionMonth", 1, "NVARCHAR"),
+            ("User::RowsUpdated", 2, "LONG", "Output"),
         ],
     ))
     counts = pkg.add(log_row_count("Fact.Sale"))
@@ -447,6 +449,7 @@ def build_sls_apac_load_commission():
         parameter_bindings=[
             ("$Package::BatchId", 0, "LONG"),
             ("$Package::FiscalPeriod445", 1, "NVARCHAR"),
+            ("User::RowsUpdated", 2, "LONG", "Output"),
         ],
     ))
     counts = pkg.add(log_row_count("Fact.Sale"))

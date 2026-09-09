@@ -237,6 +237,151 @@ def check_dtsx_pipeline(result, prefixes):
                             "log provider creation name %r is not a runtime type" % creation)
 
 
+def _project_connection_managers(package_full_path):
+    """DTSID -> name for the .conmgr files of the project owning a package."""
+    ns = {"DTS": "www.microsoft.com/SqlServer/Dts"}
+    folder = os.path.dirname(package_full_path)
+    managers = {}
+    for name in sorted(os.listdir(folder)):
+        if not name.endswith(".conmgr"):
+            continue
+        try:
+            root = ET.parse(os.path.join(folder, name)).getroot()
+        except ET.ParseError:
+            continue
+        dtsid = root.get("{%s}DTSID" % ns["DTS"])
+        if dtsid:
+            managers[dtsid.upper()] = root.get("{%s}ObjectName" % ns["DTS"]) or name[: -len(".conmgr")]
+    return managers
+
+
+def check_dtsx_connection_refs(result, prefixes):
+    """Every component connection must name a connection manager that exists.
+
+    A pipeline component addresses a package-scoped connection manager by its
+    refId path (``Package.ConnectionManagers[X]``) and a project-scoped one by
+    ``{DTSID}:external``. Emitting a package manager's DTSID instead of its
+    refId leaves the reference unresolvable and the package fails to load with
+    0xC001001C inside CPackage::LoadFromXML.
+    """
+    ns = {"DTS": "www.microsoft.com/SqlServer/Dts"}
+    packages = 0
+    references = 0
+    affected = set()
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        packages += 1
+        package_ids = {}   # refId -> DTSID for package-owned connection managers
+        for holder in root.iter("{%s}ConnectionManagers" % ns["DTS"]):
+            for cm in holder.findall("{%s}ConnectionManager" % ns["DTS"]):
+                ref_id = cm.get("{%s}refId" % ns["DTS"])
+                dtsid = cm.get("{%s}DTSID" % ns["DTS"])
+                if ref_id:
+                    package_ids[ref_id] = (dtsid or "").upper()
+        project_ids = _project_connection_managers(full)
+        known_dtsids = set(project_ids) | {v for v in package_ids.values() if v}
+
+        def fail(message):
+            affected.add(rel)
+            result.fail("dtsx-connection-refs", rel, message)
+
+        for pipeline in root.iter("pipeline"):
+            for connection in pipeline.iter("connection"):
+                references += 1
+                manager_id = connection.get("connectionManagerID") or ""
+                ref_id = connection.get("connectionManagerRefId") or ""
+                where = connection.get("refId") or connection.get("name")
+                if manager_id.endswith(":external"):
+                    dtsid = manager_id[: -len(":external")].upper()
+                    if dtsid not in project_ids:
+                        fail("%s references project connection manager %s, which no .conmgr "
+                             "in the project declares" % (where, manager_id))
+                    elif ref_id != "Project.ConnectionManagers[%s]" % project_ids[dtsid]:
+                        fail("%s references %s but names it %r" % (where, manager_id, ref_id))
+                elif manager_id in package_ids:
+                    if ref_id != manager_id:
+                        fail("%s addresses package connection manager %s but names it %r"
+                             % (where, manager_id, ref_id))
+                elif manager_id.upper() in known_dtsids:
+                    fail("%s addresses connection manager %s by DTSID; a package-scoped "
+                         "manager must be addressed by its refId path" % (where, manager_id))
+                else:
+                    fail("%s references connection manager ID %r, which no object in the "
+                         "package or its project owns" % (where, manager_id))
+        for task in root.iter("{www.microsoft.com/sqlserver/dts/tasks/sqltask}SqlTaskData"):
+            manager_id = task.get("{www.microsoft.com/sqlserver/dts/tasks/sqltask}Connection") or ""
+            references += 1
+            if manager_id.upper() not in known_dtsids:
+                fail("Execute SQL Task references connection manager ID %r, which no object "
+                     "in the package or its project owns" % manager_id)
+    result.count("connection_references_checked", references)
+    result.count("packages_with_connection_refs_checked", packages)
+    result.count("packages_with_unknown_connection_refs", len(affected))
+
+
+def _sql_placeholders(sql):
+    """Count OLE DB parameter markers, ignoring the ones inside literals."""
+    count = 0
+    quote = None
+    index = 0
+    while index < len(sql):
+        char = sql[index]
+        if quote:
+            if char == quote:
+                if index + 1 < len(sql) and sql[index + 1] == quote:
+                    index += 1
+                else:
+                    quote = None
+        elif char in "'\"":
+            quote = char
+        elif char == "?":
+            count += 1
+        index += 1
+    return count
+
+
+def check_execute_sql_parameters(result, prefixes):
+    """Every ? in an Execute SQL Task must have a ParameterBinding.
+
+    The OLE DB provider binds parameters positionally, so a statement with more
+    markers than bindings either fails outright or, worse, silently shifts every
+    later value into the wrong slot. Result-set bindings are a separate channel
+    and never stand in for an OUTPUT parameter marker.
+    """
+    sq = "www.microsoft.com/sqlserver/dts/tasks/sqltask"
+    tasks = 0
+    affected = set()
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for task in root.iter("{%s}SqlTaskData" % sq):
+            tasks += 1
+            sql = task.get("{%s}SqlStatementSource" % sq) or ""
+            if (task.get("{%s}SqlStmtSourceType" % sq) or "DirectInput") != "DirectInput":
+                continue
+            markers = _sql_placeholders(sql)
+            bindings = task.findall("{%s}ParameterBinding" % sq)
+            names = [b.get("{%s}ParameterName" % sq) for b in bindings]
+            if markers != len(bindings):
+                affected.add(rel)
+                result.fail("execute-sql-parameters", rel,
+                            "%r has %d parameter marker(s) but %d ParameterBinding entr(y|ies)"
+                            % (sql.strip()[:80], markers, len(bindings)))
+                continue
+            if sorted(names) != sorted(str(i) for i in range(markers)):
+                affected.add(rel)
+                result.fail("execute-sql-parameters", rel,
+                            "%r binds parameter names %s, expected the positions 0..%d"
+                            % (sql.strip()[:80], names, markers - 1))
+    result.count("execute_sql_tasks_checked", tasks)
+    result.count("packages_with_parameter_mismatch", len(affected))
+
+
 def check_dtproj_structure(result, prefixes):
     """Project manifests must be the SSDT project-deployment shape SSIS builds."""
     ssis_ns = "www.microsoft.com/SqlServer/SSIS"
@@ -1063,6 +1208,8 @@ CHECKS = [
     ("dtsx-structure", check_dtsx_structure),
     ("dtsx-references", check_dtsx_references),
     ("dtsx-pipeline", check_dtsx_pipeline),
+    ("dtsx-connection-refs", check_dtsx_connection_refs),
+    ("execute-sql-parameters", check_execute_sql_parameters),
     ("dtproj-structure", check_dtproj_structure),
     ("conmgr-binding", check_conmgr_binding),
     ("conmgr-credentials", check_conmgr_credentials),
@@ -1101,6 +1248,8 @@ def main():
     check_dtsx_structure(result, prefixes)
     check_dtsx_references(result, prefixes)
     check_dtsx_pipeline(result, prefixes)
+    check_dtsx_connection_refs(result, prefixes)
+    check_execute_sql_parameters(result, prefixes)
     check_dtproj_structure(result, prefixes)
     check_conmgr_binding(result, prefixes)
     check_conmgr_credentials(result, prefixes)

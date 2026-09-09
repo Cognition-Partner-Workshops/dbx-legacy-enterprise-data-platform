@@ -87,12 +87,11 @@ def evaluate_rules(rule_group, object_name):
         "EXEC etl.usp_EvaluateDataQualityRules @BatchId = ?, @PackageExecutionId = ?, "
         "@RuleGroupCode = N'%s', @ObjectName = N'%s', @FailedRuleCount = ? OUTPUT;"
         % (rule_group, object_name),
-        result_type="ResultSetType_SingleRow",
         parameter_bindings=[
             ("$Package::BatchId", 0, "LONG"),
             ("User::PackageExecutionId", 1, "LONG"),
+            ("User::FailedRuleCount", 2, "LONG", "Output"),
         ],
-        result_bindings=[("0", "User::FailedRuleCount")],
         is_stored_procedure=True,
     )
 
@@ -103,33 +102,43 @@ def assert_reconciliation(name="Assert Row Count Reconciliation", raise_on_failu
         CONN_STAGING,
         "EXEC etl.usp_AssertRowCountReconciliation @BatchId = ?, @RaiseOnFailure = %d, "
         "@FailedObjectCount = ? OUTPUT;" % raise_on_failure,
-        result_type="ResultSetType_SingleRow",
-        parameter_bindings=[("$Package::BatchId", 0, "LONG")],
-        result_bindings=[("0", "User::FailedObjectCount")],
+        parameter_bindings=[
+            ("$Package::BatchId", 0, "LONG"),
+            ("User::FailedObjectCount", 1, "LONG", "Output"),
+        ],
         is_stored_procedure=True,
     )
 
 
-def record_measure(name, object_name, measure_code, sql_expression, threshold_variable):
+def record_measure(name, object_name, measure_code, sql_expression, threshold_variable,
+                   expression_bindings=()):
     """Persist one profiling measure into etl.DataQualityResult.
 
     The measure itself is a scalar SELECT evaluated on the staging server; the
     result is pushed back into an SSIS variable so the gate task can compare it
     against the configured threshold.
+
+    ``expression_bindings`` carries the variables for any ``?`` the caller put
+    inside ``sql_expression``. Those placeholders precede the INSERT's own two,
+    and OLE DB binds positionally, so they have to be bound first or every
+    later parameter lands one slot out.
     """
+    bindings = [(variable, index, dtype)
+                for index, (variable, dtype) in enumerate(expression_bindings)]
+    offset = len(bindings)
+    bindings.append(("$Package::BatchId", offset, "LONG"))
+    bindings.append(("User::PackageExecutionId", offset + 1, "LONG"))
     return ExecuteSql(
         name,
         CONN_STAGING,
+        "DECLARE @Measure DECIMAL(18,4);\n"
         "SELECT @Measure = %s;\n"
         "INSERT INTO etl.DataQualityResult\n"
         "    (BatchId, PackageExecutionId, ObjectName, RuleCode, MeasuredValue, EvaluatedAtUtc)\n"
         "VALUES (?, ?, N'%s', N'%s', @Measure, SYSUTCDATETIME());\n"
         "SELECT @Measure AS MeasuredValue;" % (sql_expression, object_name, measure_code),
         result_type="ResultSetType_SingleRow",
-        parameter_bindings=[
-            ("$Package::BatchId", 0, "LONG"),
-            ("User::PackageExecutionId", 1, "LONG"),
-        ],
+        parameter_bindings=bindings,
         result_bindings=[("0", threshold_variable)],
     )
 
@@ -833,6 +842,7 @@ def dq_rule_engine():
     count_failures = ExecuteSql(
         "Count Failing Rules",
         CONN_STAGING,
+        "DECLARE @FailedRuleCount INT;\n"
         "SELECT @FailedRuleCount = COUNT(*)\n"
         "FROM etl.DataQualityResult AS r\n"
         "     INNER JOIN etl.DataQualityRule AS d ON d.RuleCode = r.RuleCode\n"
@@ -974,10 +984,12 @@ def dq_threshold_gate():
         "CAST(100.0 * SUM(ISNULL(a.RejectRowCount, 0)) / NULLIF(SUM(ISNULL(a.SourceRowCount, 0)), 0) "
         "AS DECIMAL(9,4)) FROM etl.RowCountAudit AS a INNER JOIN etl.PackageExecution AS e "
         "ON e.PackageExecutionId = a.PackageExecutionId WHERE e.BatchId = ?",
-        "User::MeasuredValue")
+        "User::MeasuredValue",
+        expression_bindings=[("$Package::BatchId", "LONG")])
     scorecard = ExecuteSql(
         "Publish Quality Scorecard",
         CONN_STAGING,
+        "DECLARE @Score DECIMAL(9,4);\n"
         "SELECT @Score = CAST(100.0 - ISNULL(AVG(CASE WHEN r.MeasuredValue > d.ThresholdValue "
         "THEN 100.0 ELSE 0.0 END), 0.0) AS DECIMAL(9,4))\n"
         "FROM etl.DataQualityResult AS r\n"

@@ -115,6 +115,25 @@ def guid(seed: str) -> str:
     return "{%s-%s-%s-%s-%s}" % (h[0:8], h[8:12], h[12:16], h[16:20], h[20:32])
 
 
+def connection_manager_ref_id(name, scope="Project"):
+    """refId of a connection manager as the runtime addresses it."""
+    return "%s.ConnectionManagers[%s]" % (scope, name)
+
+
+def connection_manager_id(name, scope="Project"):
+    """ID a pipeline component's <connection> element must carry.
+
+    A package-scoped manager is addressed by its refId path: the DTSID is not in
+    the package's ID map that CPackage::LoadFromXML resolves pipeline connection
+    references against, so emitting the GUID there fails the load with
+    0xC001001C. A project-scoped manager lives outside the package and is
+    addressed by its DTSID with the ``:external`` suffix.
+    """
+    if scope == "Package":
+        return connection_manager_ref_id(name, scope)
+    return guid("cm:" + name) + ":external"
+
+
 def attr(name, value):
     return "%s=%s" % (name, quoteattr(str(value)))
 
@@ -548,12 +567,11 @@ class DataFlow:
             out.append("%s  </properties>" % pad)
             out.append("%s  <connections>" % pad)
             scope = comp.get("connection_scope", "Project")
-            manager_id = guid("cm:" + comp["connection"])
             out.append(
-                '%s    <connection refId=%s connectionManagerID="%s" connectionManagerRefId=%s description="The connection used to access the source." name="%s" />'
+                '%s    <connection refId=%s connectionManagerID=%s connectionManagerRefId=%s description="The connection used to access the source." name="%s" />'
                 % (pad, quoteattr(ref + ".Connections[%s]" % ("FlatFileConnection" if is_flat else "OleDbConnection")),
-                   manager_id if scope == "Package" else manager_id + ":external",
-                   quoteattr("%s.ConnectionManagers[%s]" % (scope, comp["connection"])),
+                   quoteattr(connection_manager_id(comp["connection"], scope)),
+                   quoteattr(connection_manager_ref_id(comp["connection"], scope)),
                    "FlatFileConnection" if is_flat else "OleDbConnection")
             )
             out.append("%s  </connections>" % pad)
@@ -668,10 +686,10 @@ class DataFlow:
             out.append("%s  </properties>" % pad)
             out.append("%s  <connections>" % pad)
             out.append(
-                '%s    <connection refId=%s connectionManagerID="%s" connectionManagerRefId=%s name="OleDbConnection" />'
+                '%s    <connection refId=%s connectionManagerID=%s connectionManagerRefId=%s name="OleDbConnection" />'
                 % (pad, quoteattr(ref + ".Connections[OleDbConnection]"),
-                   guid("cm:" + comp["connection"]) + ":external",
-                   quoteattr("Project.ConnectionManagers[%s]" % comp["connection"]))
+                   quoteattr(connection_manager_id(comp["connection"])),
+                   quoteattr(connection_manager_ref_id(comp["connection"])))
             )
             out.append("%s  </connections>" % pad)
             out.append("%s  <inputs>" % pad)
@@ -955,10 +973,10 @@ class DataFlow:
             out.append("%s  </properties>" % pad)
             out.append("%s  <connections>" % pad)
             out.append(
-                '%s    <connection refId=%s connectionManagerID="%s" connectionManagerRefId=%s description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />'
+                '%s    <connection refId=%s connectionManagerID=%s connectionManagerRefId=%s description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />'
                 % (pad, quoteattr(ref + ".Connections[OleDbConnection]"),
-                   guid("cm:" + comp["connection"]) + ":external",
-                   quoteattr("Project.ConnectionManagers[%s]" % comp["connection"]))
+                   quoteattr(connection_manager_id(comp["connection"])),
+                   quoteattr(connection_manager_ref_id(comp["connection"])))
             )
             out.append("%s  </connections>" % pad)
             out.append("%s  <inputs>" % pad)

@@ -131,6 +131,30 @@ def mutate_dtsx_unbound_flatfile(text):
         '@[$Project::InboundFileRoot]</DTS:PropertyExpression>', 1)
 
 
+def mutate_dtsx_cm_id_by_dtsid(text):
+    """Address a package connection manager by DTSID - the 0xC001001C defect."""
+    match = re.search(r'<connection refId="[^"]+" connectionManagerID="'
+                      r'(Package\.ConnectionManagers\[([^\]]+)\])"', text)
+    if not match:
+        return None
+    dtsid = re.search(r'DTS:refId="Package.ConnectionManagers\[%s\]"\s+'
+                      r'DTS:CreationName="[^"]*"\s+DTS:DTSID="([^"]+)"'
+                      % re.escape(match.group(2)), text)
+    if not dtsid:
+        return None
+    return text.replace('connectionManagerID="%s"' % match.group(1),
+                        'connectionManagerID="%s"' % dtsid.group(1), 1)
+
+
+def mutate_dtsx_cm_id_unknown(text):
+    """Point a component at a connection manager nothing declares."""
+    match = re.search(r'connectionManagerID="([^"]+)"', text)
+    if not match:
+        return None
+    return text.replace('connectionManagerID="%s"' % match.group(1),
+                        'connectionManagerID="{DEADBEEF-0000-0000-0000-000000000000}"', 1)
+
+
 def mutate_xml_malformed(text):
     return text.replace("</DTS:Executable>", "</DTS:Executabl>", 1)
 
@@ -196,6 +220,24 @@ def mutate_ps1_bom_ssm_payload(text):
         "%sSet-Content -LiteralPath $temporary -Value $payload -Encoding utf8\n" % match.group(1), 1)
 
 
+def mutate_dtsx_drop_parameter_binding(text):
+    """Leave a ? unbound - the positional Execute SQL parameter defect."""
+    match = re.search(r'(?s)<SQLTask:SqlTaskData[^>]*SQLTask:SqlStatementSource="[^"]*\?[^"]*".*?'
+                      r'(<SQLTask:ParameterBinding [^>]*/>)', text)
+    if not match:
+        return None
+    return text.replace(match.group(1), "", 1)
+
+
+def mutate_dtsx_shift_parameter_index(text):
+    """Bind the same statement's parameters to non-positional names."""
+    match = re.search(r'<SQLTask:ParameterBinding SQLTask:ParameterName="0"', text)
+    if not match:
+        return None
+    return text.replace(match.group(0),
+                        '<SQLTask:ParameterBinding SQLTask:ParameterName="7"', 1)
+
+
 def mutate_sql_duplicate_when_matched(text):
     match = re.search(r"(?s)\n\s*WHEN MATCHED THEN UPDATE SET.*?(?=\n\s*(?:WHEN\b|OUTPUT\b|;))",
                       text)
@@ -232,6 +274,14 @@ FIXTURES = (
      "file-locality", mutate_dtsx_drop_directory_expression),
     ("flat file manager not bound to the loop variable", "ssis/03_file_ingestion", ".dtsx",
      "file-locality", mutate_dtsx_unbound_flatfile),
+    ("package connection addressed by DTSID", "ssis/03_file_ingestion", ".dtsx",
+     "dtsx-connection-refs", mutate_dtsx_cm_id_by_dtsid),
+    ("component connection nothing declares", "ssis/07_dimensions", ".dtsx",
+     "dtsx-connection-refs", mutate_dtsx_cm_id_unknown),
+    ("Execute SQL marker with no binding", "ssis/00_orchestration", ".dtsx",
+     "execute-sql-parameters", mutate_dtsx_drop_parameter_binding),
+    ("Execute SQL binding out of position", "ssis/00_orchestration", ".dtsx",
+     "execute-sql-parameters", mutate_dtsx_shift_parameter_index),
     ("TLS keyword OLE DB 19 ignores", "ssis/04_staging", ".conmgr", "conmgr-credentials",
      mutate_conmgr_unspaced_tls),
     ("EXEC argument is an expression", "sqlserver/procedures/facts", ".sql",

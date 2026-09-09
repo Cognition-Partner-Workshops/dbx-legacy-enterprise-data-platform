@@ -111,8 +111,11 @@ class MasterPackage(Package):
 
     def add(self, task):
         Package.add(self, task)
+        kind = getattr(task, "plan_kind", "control")
         attributes = dict(getattr(task, "plan_attributes", {}))
-        self.plan.node(task.name, getattr(task, "plan_kind", "control"), **attributes)
+        if kind == "control":
+            attributes.update(control_attributes(task))
+        self.plan.node(task.name, kind, **attributes)
         return task
 
     def link(self, from_task, to_task, value="Success", expression=None, logical_and=True):
@@ -122,6 +125,36 @@ class MasterPackage(Package):
         if not isinstance(from_task, PlanOnlyNode) and not isinstance(to_task, PlanOnlyNode):
             Package.link(self, from_task, to_task, value, expression, logical_and)
         self.plan.edge(from_task.name, to_task.name, value, expression)
+
+
+def control_attributes(task):
+    """What the runner needs to reproduce an in-package control task.
+
+    A conditional precedence edge is gated on a variable an in-package control
+    task computes, so a runner that walks the plan instead of the package can
+    only evaluate the edge if the plan says how that variable is produced. The
+    task's own definition is the single source of that description:
+
+      ``expression``  an Expression Task assignment, evaluated by the runner
+      ``query``       an Execute SQL Task whose single-row result is bound to a
+                      variable, re-run by the runner against the same connection
+      ``statement``   an Execute SQL Task that binds no variable; it orders the
+                      graph and the runner does not reproduce its side effect
+    """
+    if isinstance(task, Expression):
+        return {"control": "expression", "assignment": task.expression}
+    if isinstance(task, ExecuteSql):
+        attributes = {
+            "control": "query" if task.result_bindings else "statement",
+            "connection": task.connection,
+            "sql": task.sql,
+            "parameters": [binding[0] for binding in sorted(task.parameter_bindings,
+                                                            key=lambda b: b[1])],
+        }
+        if task.result_bindings:
+            attributes["result_variable"] = task.result_bindings[0][1]
+        return attributes
+    return {}
 
 
 class PlanOnlyNode:
@@ -214,17 +247,21 @@ def start_batch(batch_type, notes):
     task = ExecuteSql(
         "Start Batch",
         CONN_STAGING,
+        # @AllowAdoptRunning stays a literal 0: adopting a batch that is still
+        # running is a recovery decision an operator makes through the external
+        # runner's -AdoptRunning switch, never one a scheduled master takes on
+        # its own. etl.usp_StartBatch returns the new BatchId through its OUTPUT
+        # parameter and returns no row, so the variable is bound to the
+        # parameter rather than to a result set that never arrives.
         "EXEC etl.usp_StartBatch @BatchName = ?, @BatchType = N'%s', @BusinessDate = ?, "
-        "@EnvironmentCode = ?, @AllowAdoptRunning = ?, @Notes = N'%s', @BatchId = ? OUTPUT;"
+        "@EnvironmentCode = ?, @AllowAdoptRunning = 0, @Notes = N'%s', @BatchId = ? OUTPUT;"
         % (batch_type, notes),
-        result_type="ResultSetType_SingleRow",
         parameter_bindings=[
             ("System::PackageName", 0, "NVARCHAR"),
             ("$Package::BusinessDate", 1, "NVARCHAR"),
             ("$Package::EnvironmentCode", 2, "NVARCHAR"),
-            ("$Package::BatchId", 3, "LONG"),
+            ("User::BatchId", 3, "LONG", "Output"),
         ],
-        result_bindings=[("0", "User::BatchId")],
         is_stored_procedure=True,
     )
     task.plan_kind = "batch_start"
@@ -250,9 +287,10 @@ def reconcile_row_counts(name="Reconcile Row Counts", raise_on_failure=1):
         CONN_STAGING,
         "EXEC etl.usp_AssertRowCountReconciliation @BatchId = ?, @RaiseOnFailure = %d, "
         "@FailedObjectCount = ? OUTPUT;" % raise_on_failure,
-        result_type="ResultSetType_SingleRow",
-        parameter_bindings=[("User::BatchId", 0, "LONG")],
-        result_bindings=[("0", "User::FailedObjectCount")],
+        parameter_bindings=[
+            ("User::BatchId", 0, "LONG"),
+            ("User::FailedObjectCount", 1, "LONG", "Output"),
+        ],
         is_stored_procedure=True,
     )
     task.plan_kind = "reconcile"
@@ -312,9 +350,10 @@ def phase(pkg, title, sequence, group, children, streams=1, serialise=False,
         CONN_STAGING,
         "EXEC etl.usp_StartBatchStep @BatchId = ?, @StepName = N'%s', @StepSequence = %d, "
         "@StepGroup = N'%s', @BatchStepId = ? OUTPUT;" % (title, sequence, group),
-        result_type="ResultSetType_SingleRow",
-        parameter_bindings=[("User::BatchId", 0, "LONG")],
-        result_bindings=[("0", "User::%s" % variable)],
+        parameter_bindings=[
+            ("User::BatchId", 0, "LONG"),
+            ("User::%s" % variable, 1, "LONG", "Output"),
+        ],
         is_stored_procedure=True,
     ))
     finish = ExecuteSql(
