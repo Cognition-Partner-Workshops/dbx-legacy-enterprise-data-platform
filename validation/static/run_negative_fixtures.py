@@ -380,6 +380,21 @@ def mutate_dtsx_single_row_without_aggregate(text):
         % (match.group(1), match.group(2), match.group(3), match.group(4)), 1)
 
 
+def mutate_dtsx_buffer_shaped_destination(text):
+    """Publish a buffer column as external metadata, as executions 144-147 did.
+
+    The destination then advertises a column its table does not have, which is
+    what SSIS answers VS_NEEDSNEWMETADATA to when it revalidates at run time.
+    """
+    match = re.search(r'(<externalMetadataColumn refId="[^"]*\.Inputs\[[^"]*ExternalColumns\[)(\w+)'
+                      r'(\][^>]*name=")(\w+)(" />)', text)
+    if not match:
+        return None
+    return text.replace(
+        match.group(0),
+        "%sRecordType%sRecordType%s" % (match.group(1), match.group(3), match.group(5)), 1)
+
+
 # (label, artifact glob root, extension, expected check, mutation)
 FIXTURES = (
     ("duplicate pipeline refId", "ssis/07_dimensions", ".dtsx", "dtsx-pipeline",
@@ -460,6 +475,8 @@ FIXTURES = (
      "foreach-file-enumerator", mutate_dtsx_directory_expression_on_container),
     ("single row result set over a table", "ssis/03_file_ingestion", ".dtsx",
      "single-row-result-set", mutate_dtsx_single_row_without_aggregate),
+    ("destination metadata shaped by its buffer", "ssis/03_file_ingestion", ".dtsx",
+     "destination-metadata", mutate_dtsx_buffer_shaped_destination),
 )
 
 
