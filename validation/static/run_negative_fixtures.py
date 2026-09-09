@@ -426,6 +426,21 @@ def mutate_dtsx_undisposed_written_column(text):
     return text.replace(match.group(0), stripped, 1)
 
 
+def mutate_dtsx_undeclared_lookup_property(text):
+    """Drop a property the lookup gives itself from a lookup component.
+
+    The runtime restores the component from what the package holds and fills
+    nothing in, so the component fails with DTS_E_ELEMENTNOTFOUND (0xC0010009)
+    as soon as it reads the property, whatever its value would have been. That
+    is how the live STG_Load_Currency and STG_Load_PartnerSale validations
+    failed on a catalog that matched the built packages byte for byte.
+    """
+    match = re.search(r'<property [^>]*name="MaxMemoryUsage64"[^>]*>[^<]*</property>\s*', text)
+    if not match:
+        return None
+    return text.replace(match.group(0), "", 1)
+
+
 def mutate_dtsx_unjoined_lookup_column(text):
     """Drop a lookup's join to its reference column.
 
@@ -566,6 +581,8 @@ FIXTURES = (
      "input-column-disposition", mutate_dtsx_undisposed_written_column),
     ("lookup key joined to no reference column", "ssis/04_staging", ".dtsx",
      "lookup-reference-mapping", mutate_dtsx_unjoined_lookup_column),
+    ("lookup missing a property of its own set", "ssis/04_staging", ".dtsx",
+     "component-property-set", mutate_dtsx_undeclared_lookup_property),
 )
 
 

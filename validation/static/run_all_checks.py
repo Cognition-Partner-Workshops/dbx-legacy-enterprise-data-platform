@@ -446,6 +446,63 @@ def check_lookup_reference_mapping(result, prefixes):
     result.count("lookups_checked", lookups)
 
 
+# The property set a component gives itself when the SSIS runtime creates one,
+# read off the components on the execution host. A component asks the runtime
+# for each of these by name while it validates and the runtime supplies no
+# default for a property that was never persisted, so anything missing here
+# fails the component with DTS_E_ELEMENTNOTFOUND (0xC0010009) before the
+# component looks at its query, its columns or its connection. The runtime
+# itself is the authority - Test-PackageRuntimeContracts.ps1 asks every
+# component class on a host that has SSIS - and this table repeats the classes
+# whose set is easy to under-declare so the estate is still held to it offline.
+RUNTIME_COMPONENT_PROPERTIES = {
+    "Microsoft.Lookup": (
+        "SqlCommand", "SqlCommandParam", "ConnectionType", "CacheType",
+        "NoMatchBehavior", "NoMatchCachePercentage", "MaxMemoryUsage",
+        "MaxMemoryUsage64", "ReferenceMetadataXml", "ParameterMap",
+        "DefaultCodePage", "TreatDuplicateKeysAsError",
+    ),
+    "Microsoft.Sort": ("EliminateDuplicates", "MaximumThreads"),
+    "Microsoft.Aggregate": (
+        "KeyScale", "Keys", "CountDistinctScale", "CountDistinctKeys",
+        "AutoExtendFactor",
+    ),
+}
+
+
+def check_component_property_sets(result, prefixes):
+    """A component must persist every property the component gives itself.
+
+    The runtime restores a pipeline component from what the package holds and
+    adds nothing: the first property the component reads and does not find
+    fails it with 0xC0010009, whatever the value would have been. That is how a
+    lookup that built, deployed and matched the catalog byte for byte still
+    could not start in the live estate.
+    """
+    components = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for component in root.iter("component"):
+            expected = RUNTIME_COMPONENT_PROPERTIES.get(component.get("componentClassID"))
+            if not expected:
+                continue
+            components += 1
+            written = set()
+            for properties in component.findall("properties"):
+                for prop in properties.findall("property"):
+                    written.add(prop.get("name"))
+            missing = [name for name in expected if name not in written]
+            if missing:
+                result.fail("component-property-set", rel,
+                            "component %r persists no %s"
+                            % (component.get("name") or component.get("refId") or "?",
+                               ", ".join(missing)))
+    result.count("component_property_sets_checked", components)
+
+
 def check_foreach_file_enumerators(result, prefixes):
     """A file loop must enumerate the folder and the files it was configured with.
 
@@ -2162,6 +2219,7 @@ CHECKS = [
     ("input-column-cache", check_input_column_cache),
     ("input-column-disposition", check_written_input_dispositions),
     ("lookup-reference-mapping", check_lookup_reference_mapping),
+    ("component-property-set", check_component_property_sets),
     ("foreach-file-enumerator", check_foreach_file_enumerators),
     ("single-row-result-set", check_single_row_result_sets),
     ("execute-sql-parameters", check_execute_sql_parameters),
@@ -2214,6 +2272,7 @@ def main():
     check_input_column_cache(result, prefixes)
     check_written_input_dispositions(result, prefixes)
     check_lookup_reference_mapping(result, prefixes)
+    check_component_property_sets(result, prefixes)
     check_foreach_file_enumerators(result, prefixes)
     check_single_row_result_sets(result, prefixes)
     check_execute_sql_parameters(result, prefixes)

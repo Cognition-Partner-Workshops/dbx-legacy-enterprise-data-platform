@@ -1218,8 +1218,17 @@ class DataFlow:
                 % (pad, quoteattr(ref), quoteattr(comp["name"]))
             )
             out.append("%s  <properties>" % pad)
+            # Like the OLE DB source, the lookup reads its whole property set by
+            # name while it validates, so every property the component gives
+            # itself has to be persisted even where the default is wanted: the
+            # first one missing fails the component with DTS_E_ELEMENTNOTFOUND
+            # (0xC0010009) before the reference query is looked at.
             out.append(self._prop(pad + "    ", "System.String", "SqlCommand", comp["sql"],
                                   "The SQL command used to populate the lookup cache."))
+            out.append(self._prop(pad + "    ", "System.String", "SqlCommandParam", "",
+                                  "The parameterized SQL command used to populate the lookup cache."))
+            out.append(self._prop(pad + "    ", "System.Int32", "ConnectionType", 0,
+                                  "Specifies whether the reference rows come from a database or a cache."))
             # The component knows two behaviours: 0 treats a miss as an error
             # row - what the match output's disposition then decides the fate of
             # - and 1 sends it to the no match output, which leaves nothing for
@@ -1228,9 +1237,21 @@ class DataFlow:
             out.append(self._prop(pad + "    ", "System.Int32", "NoMatchBehavior",
                                   1 if redirects else 0,
                                   "Determines the behaviour when a lookup finds no match."))
+            out.append(self._prop(pad + "    ", "System.Int32", "NoMatchCachePercentage", 0,
+                                  "The share of the cache held for rows with no matching entry."))
             out.append(self._prop(pad + "    ", "System.Int32", "CacheType", 0, "Full cache."))
+            out.append(self._prop(pad + "    ", "System.Int32", "MaxMemoryUsage", 25,
+                                  "The maximum cache size, in megabytes, of the 32-bit runtime."))
+            out.append(self._prop(pad + "    ", "System.Int64", "MaxMemoryUsage64", 25,
+                                  "The maximum cache size, in megabytes, of the 64-bit runtime."))
+            out.append(self._prop(pad + "    ", "System.String", "ReferenceMetadataXml", "",
+                                  "The cached description of the reference query's columns."))
+            out.append(self._prop(pad + "    ", "System.String", "ParameterMap", "",
+                                  "The input columns bound to the parameters of the reference query."))
             out.append(self._prop(pad + "    ", "System.Int32", "DefaultCodePage", 1252,
                                   "Specifies the code page to use when code page information is unavailable."))
+            out.append(self._prop(pad + "    ", "System.Boolean", "TreatDuplicateKeysAsError", "false",
+                                  "Whether duplicate keys in the reference rows fail the component."))
             out.append("%s  </properties>" % pad)
             out.append("%s  <connections>" % pad)
             out.append(
@@ -1254,11 +1275,29 @@ class DataFlow:
                 # joinToReferenceColumn names the reference column the key is
                 # matched against; without it the component has no join at all
                 # and answers 0xC0010009 at validation.
-                out.append('%s        <inputColumn refId=%s %s joinToReferenceColumn=%s lineageId=%s name=%s />'
+                out.append('%s        <inputColumn refId=%s %s externalMetadataColumnId=%s joinToReferenceColumn=%s lineageId=%s name=%s />'
                            % (pad, quoteattr("%s.Inputs[Lookup Input].Columns[%s]" % (ref, jc)),
-                              join_columns[jc].cached_attrs(), quoteattr(jc),
+                              join_columns[jc].cached_attrs(),
+                              quoteattr("%s.Inputs[Lookup Input].ExternalColumns[%s]" % (ref, jc)),
+                              quoteattr(jc),
                               quoteattr(lineage[jc]), quoteattr(jc)))
             out.append("%s      </inputColumns>" % pad)
+            # The reference set the join and the copies name has to be described
+            # on the input, or the component resolves them against an empty
+            # collection and returns 0xC0010009.
+            out.append('%s      <externalMetadataColumns isUsed="True">' % pad)
+            for jc in comp["join_columns"]:
+                if jc not in lineage:
+                    continue
+                out.append('%s        <externalMetadataColumn refId=%s %s name=%s />'
+                           % (pad, quoteattr("%s.Inputs[Lookup Input].ExternalColumns[%s]" % (ref, jc)),
+                              join_columns[jc].metadata_attrs(), quoteattr(jc)))
+            for col in comp["output_columns"]:
+                out.append('%s        <externalMetadataColumn refId=%s %s name=%s />'
+                           % (pad, quoteattr("%s.Inputs[Lookup Input].ExternalColumns[%s]"
+                                             % (ref, col.name)),
+                              col.metadata_attrs(), quoteattr(col.name)))
+            out.append("%s      </externalMetadataColumns>" % pad)
             out.append("%s    </input>" % pad)
             out.append("%s  </inputs>" % pad)
             out.append("%s  <outputs>" % pad)
@@ -1373,9 +1412,21 @@ class DataFlow:
 
         elif kind == "aggregate":
             out.append(
-                '%s<component refId=%s componentClassID="Microsoft.Aggregate" description="Aggregate" name=%s version="2">'
+                '%s<component refId=%s componentClassID="Microsoft.Aggregate" description="Aggregate" name=%s version="3">'
                 % (pad, quoteattr(ref), quoteattr(comp["name"]))
             )
+            out.append("%s  <properties>" % pad)
+            out.append(self._prop(pad + "    ", "System.UInt32", "KeyScale", 0,
+                                  "The approximate number of groups the component sizes its cache for."))
+            out.append(self._prop(pad + "    ", "System.UInt32", "Keys", 0,
+                                  "The exact number of groups the component sizes its cache for."))
+            out.append(self._prop(pad + "    ", "System.UInt32", "CountDistinctScale", 0,
+                                  "The approximate number of distinct values a count distinct is sized for."))
+            out.append(self._prop(pad + "    ", "System.UInt32", "CountDistinctKeys", 0,
+                                  "The exact number of distinct values a count distinct is sized for."))
+            out.append(self._prop(pad + "    ", "System.Int32", "AutoExtendFactor", 25,
+                                  "The share by which the cache may grow."))
+            out.append("%s  </properties>" % pad)
             out.append("%s  <inputs>" % pad)
             out.append('%s    <input refId=%s name="Aggregate Input 1">' % (pad, quoteattr("%s.Inputs[Aggregate Input 1]" % ref)))
             out.append("%s      <inputColumns>" % pad)
@@ -1414,6 +1465,12 @@ class DataFlow:
             out.append("%s  </inputs>" % pad)
             out.append("%s  <outputs>" % pad)
             out.append('%s    <output refId=%s name="Aggregate Output 1">' % (pad, quoteattr("%s.Outputs[Aggregate Output 1]" % ref)))
+            out.append("%s      <properties>" % pad)
+            out.append(self._prop(pad + "        ", "System.UInt32", "KeyScale", 0,
+                                  "The approximate number of groups this output is sized for."))
+            out.append(self._prop(pad + "        ", "System.UInt32", "Keys", 0,
+                                  "The exact number of groups this output is sized for."))
+            out.append("%s      </properties>" % pad)
             out.append("%s      <outputColumns>" % pad)
             # Each output column names the input column it summarises and the
             # summary it is: the component reads both off the output column and
@@ -1459,6 +1516,8 @@ class DataFlow:
             out.append("%s  <properties>" % pad)
             out.append(self._prop(pad + "    ", "System.Boolean", "EliminateDuplicates",
                                   "true" if comp["dedupe"] else "false", "Remove duplicate rows."))
+            out.append(self._prop(pad + "    ", "System.Int32", "MaximumThreads", -1,
+                                  "The number of threads the sort may use, or -1 for as many as it likes."))
             out.append("%s  </properties>" % pad)
             out.append("%s  <inputs>" % pad)
             out.append('%s    <input refId=%s name="Sort Input">' % (pad, quoteattr("%s.Inputs[Sort Input]" % ref)))
@@ -1563,7 +1622,11 @@ class DataFlow:
                 if dest in lineage:
                     continue
                 col_ref = "%s.Outputs[Data Conversion Output].Columns[%s]" % (ref, dest)
-                src_ref = "%s.Inputs[Data Conversion Input].Columns[%s]" % (ref, src)
+                # The property holds a lineage ID, and an input column's lineage
+                # is the upstream output column it reads - its own refId is a
+                # different ID the component cannot resolve: 'Cannot find input
+                # column with lineage ID ...'.
+                src_ref = lineage[src]
                 out.append('%s        <outputColumn refId=%s %s errorOrTruncationOperation="Conversion" errorRowDisposition="FailComponent" lineageId=%s name=%s truncationRowDisposition="FailComponent">'
                            % (pad, quoteattr(col_ref), col.metadata_attrs(), quoteattr(col_ref), quoteattr(dest)))
                 out.append("%s          <properties>" % pad)

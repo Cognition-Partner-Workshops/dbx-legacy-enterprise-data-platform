@@ -168,6 +168,95 @@ foreach ($file in Get-ChildItem -Path $SsisRoot -Filter '*.conmgr' -Recurse -Fil
     }
 }
 
+# 4. Every pipeline component persists the whole property set the component
+#    gives itself. A component reads its properties by name while it
+#    validates, and the runtime never fills a missing one in: the first
+#    property that was not persisted fails the component with
+#    DTS_E_ELEMENTNOTFOUND (0xC0010009) on the execution host, which is how a
+#    lookup that built, deployed and matched the catalog byte for byte still
+#    could not start. The expected set is not a list kept here - it is asked
+#    of the component itself, by creating one and letting it provide its own
+#    properties.
+$pipelineWrap = [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.DTSPipelineWrap')
+if (-not $pipelineWrap) {
+    Write-WwiLog 'SKIP Microsoft.SqlServer.DTSPipelineWrap is not installed on this host'
+}
+else {
+    # Through C#, because provide-component-properties is a COM call that the
+    # PowerShell late binder cannot make on a native pipeline component.
+    if (-not ('WwiPipelineProbe' -as [type])) {
+        $managedPath = [Microsoft.SqlServer.Dts.Runtime.Application].Assembly.Location
+        $wrapPath = $pipelineWrap.Location
+        Add-Type -Language CSharp -ReferencedAssemblies @($managedPath, $wrapPath) -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using Microsoft.SqlServer.Dts.Runtime;
+using Microsoft.SqlServer.Dts.Pipeline.Wrapper;
+
+public static class WwiPipelineProbe
+{
+    // The property names a freshly created component of this class gives
+    // itself, or null where the class cannot be created on this host.
+    public static string[] PropertyNames(string componentClassID)
+    {
+        Package package = new Package();
+        try
+        {
+            TaskHost host = (TaskHost) package.Executables.Add("STOCK:PipelineTask");
+            MainPipe pipe = (MainPipe) host.InnerObject;
+            IDTSComponentMetaData100 component = pipe.ComponentMetaDataCollection.New();
+            component.ComponentClassID = componentClassID;
+            CManagedComponentWrapper wrapper = component.Instantiate();
+            wrapper.ProvideComponentProperties();
+            List<string> names = new List<string>();
+            foreach (IDTSCustomProperty100 property in component.CustomPropertyCollection)
+            {
+                names.Add(property.Name);
+            }
+            return names.ToArray();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+        finally
+        {
+            package.Dispose();
+        }
+    }
+}
+'@
+    }
+
+    $expectedProperties = @{}
+    $componentsChecked = 0
+    foreach ($file in Get-ChildItem -Path $SsisRoot -Filter '*.dtsx' -Recurse -File) {
+        $relative = $file.FullName.Substring($repoRoot.Length + 1).Replace('\', '/')
+        [xml] $document = Get-Content -LiteralPath $file.FullName
+        foreach ($component in $document.SelectNodes('//component')) {
+            $classID = $component.GetAttribute('componentClassID')
+            if (-not $classID) { continue }
+            if (-not $expectedProperties.ContainsKey($classID)) {
+                $expectedProperties[$classID] = [WwiPipelineProbe]::PropertyNames($classID)
+            }
+            $expected = $expectedProperties[$classID]
+            if (-not $expected) { continue }
+            $componentsChecked++
+            $written = @($component.SelectNodes('properties/property') |
+                ForEach-Object { $_.GetAttribute('name') })
+            $missing = @($expected | Where-Object { $written -notcontains $_ })
+            if ($missing.Count -gt 0) {
+                $failures += ("$relative component '$($component.GetAttribute('name'))' " +
+                              "persists no $($missing -join ', '); the component asks for every " +
+                              'property it owns by name while it validates')
+            }
+        }
+    }
+    if (-not $Quiet) {
+        Write-WwiLog "checked the property set of $componentsChecked pipeline component(s)"
+    }
+}
+
 foreach ($failure in $failures) { Write-WwiLog "FAIL  $failure" }
 Write-WwiLog "$($failures.Count) failure(s)"
 if ($failures) { exit 1 }
