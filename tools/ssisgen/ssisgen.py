@@ -335,6 +335,60 @@ def ntext_col(name):
     return Column(name, "nText")
 
 
+def plain_table(table):
+    """'[stg].[Currency]' as the estate writes it in a log: 'stg.Currency'."""
+    return table.replace("[", "").replace("]", "").strip()
+
+
+# Words that name the shape of a pipeline output rather than the reason rows
+# were routed down it.
+OUTPUT_NOISE = ("ole", "db", "output", "input", "flat", "file", "1")
+
+
+def reason_code(output_name):
+    """The reject reason an output's name states, as a code.
+
+    'Invalid Currency' rejects for INVALID_CURRENCY, and the source error
+    output for SOURCE_ERROR: the routing decision is the reason, so the
+    generator does not invent a second vocabulary for it.
+    """
+    words = [word for word in re.findall(r"[A-Za-z0-9]+", output_name)
+             if word.lower() not in OUTPUT_NOISE]
+    return "_".join(word.upper() for word in words) or "REJECTED"
+
+
+def lookup_subject(component_name):
+    """'Lookup Sales Territory (Full Cache)' looks up 'Sales Territory'."""
+    subject = re.sub(r"\([^)]*\)", " ", component_name)
+    subject = re.sub(r"(?i)^\s*lookup\s+", "", subject.strip())
+    return " ".join(subject.split()) or component_name
+
+
+def literal_expression(column, value):
+    """*value* as an expression of *column*'s type, or None when it has none."""
+    text = value.replace('"', "'")
+    if column.dtype == "wstr":
+        return '(DT_WSTR,%d)"%s"' % (column.length or len(text), text[:column.length or len(text)])
+    if column.dtype == "str":
+        return '(DT_STR,%d,%d)"%s"' % (column.length or len(text), column.codepage or 1252,
+                                       text[:column.length or len(text)])
+    return None
+
+
+def envelope_expression(target, object_name, from_component, from_output):
+    """What the generator can honestly derive for error column *target*."""
+    name = target.name.lower()
+    if name == "batchid":
+        return "(DT_I8) @[$Package::BatchId]"
+    if name in ("targetobjectname", "sourceobjectname", "objectname"):
+        return literal_expression(target, plain_table(object_name))
+    if name == "rejectreasoncode":
+        return literal_expression(target, reason_code(from_output))
+    if name == "lookupname":
+        return literal_expression(target, lookup_subject(from_component))
+    return None
+
+
 VARIABLE_REFERENCE = re.compile(r"[@$]\[[^\]]*\]")
 
 
@@ -381,6 +435,8 @@ class DataFlow:
         self._paths = []
         self._last_output = None
         self._columns = []
+        self._primary_table = None
+        self._envelope_columns = set()
 
     # -- sources ------------------------------------------------------------
 
@@ -624,10 +680,15 @@ class DataFlow:
             broken = ("no CREATE TABLE under sqlserver/ deploys %s" % comp["table"])
         unmapped = None
         if not broken:
+            if not any(col is not None for _target, col in pairs):
+                # SSIS answers VS_ISBROKEN to an input with no columns: "The
+                # number of input columns for ... cannot be zero."
+                unmapped = ("the data flow maps no column into %s, so the destination "
+                            "input is empty" % comp["table"])
             missing = [target.name for target, col in pairs
                        if col is None and not target.nullable
                        and not target.identity and not target.has_default]
-            if missing:
+            if missing and not unmapped:
                 unmapped = ("the data flow supplies no value for NOT NULL column(s) %s"
                             % ", ".join(missing))
         broken = broken or unmapped
@@ -656,6 +717,8 @@ class DataFlow:
         table; ``mapping`` ({target column: buffer column}) carries the pairs
         whose names differ.
         """
+        if self._primary_table is None:
+            self._primary_table = table
         self._components.append(
             dict(
                 kind="oledb_dest",
@@ -673,24 +736,69 @@ class DataFlow:
         self._paths.append((self._last_output, (name, "OLE DB Destination Input")))
         return self
 
+    def _reject_envelope(self, name, table, from_component, from_output):
+        """The bookkeeping columns an error table asks of the branch itself.
+
+        An error table records why a row was routed away, which is a property
+        of the branch rather than of the row: the pipeline carries no BatchId,
+        no object name and no reason code, so a branch destination that only
+        maps the row's own columns leaves the table's mandatory columns unfed -
+        and where none of the row's columns share a name with the table, the
+        destination has no input column at all and fails validation with
+        VS_ISBROKEN. The generator derives those columns onto the branch from
+        what it already knows: the batch parameter, the table the flow loads,
+        the output the rows were routed down and the lookup that missed.
+        """
+        if not dbschema.has_table(table):
+            return []
+        carried = set(col.name.lower() for col in self._columns) - self._envelope_columns
+        derivations = []
+        for target in dbschema.table_columns(table):
+            if target.supplied_by_the_server or target.name.lower() in carried:
+                continue
+            expression = envelope_expression(
+                target, self._primary_table or self.name, from_component, from_output)
+            if expression is None:
+                continue
+            derivations.append((target.name, expression,
+                                Column(target.name, target.dtype, length=target.length,
+                                       precision=target.precision, scale=target.scale,
+                                       codepage=target.codepage)))
+        return derivations
+
+    def _reject_source(self, name, table, from_component, from_output):
+        """The output a reject destination reads, enveloped where it must be."""
+        derivations = self._reject_envelope(name, table, from_component, from_output)
+        if not derivations:
+            return (from_component, from_output)
+        envelope = safe_name("Envelope %s" % name)
+        self._components.append(dict(kind="derived", name=envelope, derivations=derivations))
+        self._paths.append(((from_component, from_output), (envelope, "Derived Column Input")))
+        for col_name, _expr, col in derivations:
+            self._columns.append(col)
+            self._envelope_columns.add(col_name.lower())
+        return (envelope, "Derived Column Output")
+
     def reject_destination(self, name, connection, table, from_component,
                            from_output="OLE DB Source Error Output", mapping=None):
+        source = self._reject_source(name, table, from_component, from_output)
         self._components.append(
             dict(kind="oledb_dest", name=name, connection=connection, table=table, fast_load=False,
                  keep_identity=False, batch_size=0, error_disposition="FailComponent",
                  columns=list(self._columns), mapping=self._destination_mapping(name, table, mapping))
         )
-        self._paths.append(((from_component, from_output), (name, "OLE DB Destination Input")))
+        self._paths.append((source, (name, "OLE DB Destination Input")))
         return self
 
     def branch_destination(self, name, connection, table, from_component, from_output, mapping=None):
         """Attach an extra destination to a named upstream output (e.g. a split case)."""
+        source = self._reject_source(name, table, from_component, from_output)
         self._components.append(
             dict(kind="oledb_dest", name=name, connection=connection, table=table, fast_load=True,
                  keep_identity=False, batch_size=10000, error_disposition="FailComponent",
                  columns=list(self._columns), mapping=self._destination_mapping(name, table, mapping))
         )
-        self._paths.append(((from_component, from_output), (name, "OLE DB Destination Input")))
+        self._paths.append((source, (name, "OLE DB Destination Input")))
         return self
 
     # -- emission -----------------------------------------------------------
@@ -1033,6 +1141,12 @@ class DataFlow:
             replacements = [(col_name, expr) for col_name, expr, _col in comp["derivations"] if col_name in lineage]
             replaced = set(col_name for col_name, _expr in replacements)
             read = self._read_columns([expr for _name, expr, _col in comp["derivations"]], upstream, replaced)
+            # A replaced column is written in place, so its cache describes the
+            # column arriving on the input - the upstream type, not the type the
+            # derivation names. An input column carrying only a cachedName has no
+            # cache the component can compare against the buffer, which fails
+            # validation with VS_NEEDSNEWMETADATA before a row moves.
+            upstream_by_name = dict((col_name, col) for col_name, _rid, col in upstream)
             out.append("%s  <inputs>" % pad)
             if replacements or read:
                 out.append('%s    <input refId=%s name="Derived Column Input">' % (pad, quoteattr("%s.Inputs[Derived Column Input]" % ref)))
@@ -1042,9 +1156,10 @@ class DataFlow:
                                % (pad, quoteattr("%s.Inputs[Derived Column Input].Columns[%s]" % (ref, col_name)),
                                   col.cached_attrs(), quoteattr(lineage[col_name]), quoteattr(col_name)))
                 for col_name, expr in replacements:
-                    out.append('%s        <inputColumn refId=%s cachedName=%s lineageId=%s name=%s usageType="readWrite">'
+                    out.append('%s        <inputColumn refId=%s %s lineageId=%s name=%s usageType="readWrite">'
                                % (pad, quoteattr("%s.Inputs[Derived Column Input].Columns[%s]" % (ref, col_name)),
-                                  quoteattr(col_name), quoteattr(lineage[col_name]), quoteattr(col_name)))
+                                  upstream_by_name[col_name].cached_attrs(),
+                                  quoteattr(lineage[col_name]), quoteattr(col_name)))
                     out.append("%s          <properties>" % pad)
                     out.append(self._prop(pad + "            ", "System.String", "Expression", expr,
                                           "The expression used to compute this column."))
@@ -1375,10 +1490,10 @@ class DataFlow:
             out.append('%s    <input refId=%s hasSideEffects="true" name="Union All Input 1">'
                        % (pad, quoteattr("%s.Inputs[Union All Input 1]" % ref)))
             out.append("%s      <inputColumns>" % pad)
-            for col_name, col_ref, _col in upstream_cols("Union All Input 1"):
-                out.append('%s        <inputColumn refId=%s cachedName=%s lineageId=%s name=%s>'
+            for col_name, col_ref, col in upstream_cols("Union All Input 1"):
+                out.append('%s        <inputColumn refId=%s %s lineageId=%s name=%s>'
                            % (pad, quoteattr("%s.Inputs[Union All Input 1].Columns[%s]" % (ref, col_name)),
-                              quoteattr(col_name), quoteattr(col_ref), quoteattr(col_name)))
+                              col.cached_attrs(), quoteattr(col_ref), quoteattr(col_name)))
                 out.append("%s          <properties>" % pad)
                 out.append(self._prop(pad + "            ", "System.String", "OutputColumnLineageID",
                                       "%s.Outputs[Union All Output 1].Columns[%s]" % (ref, col_name),
@@ -1409,12 +1524,14 @@ class DataFlow:
             out.append('%s    <input refId=%s name="Data Conversion Input">' % (pad, quoteattr("%s.Inputs[Data Conversion Input]" % ref)))
             out.append("%s      <inputColumns>" % pad)
             lineage = lineage_of("Data Conversion Input")
+            arriving = dict((col_name, col) for col_name, _rid, col
+                            in upstream_cols("Data Conversion Input"))
             for src, dest, col in comp["conversions"]:
                 if src not in lineage:
                     continue
-                out.append('%s        <inputColumn refId=%s cachedName=%s lineageId=%s name=%s />'
+                out.append('%s        <inputColumn refId=%s %s lineageId=%s name=%s />'
                            % (pad, quoteattr("%s.Inputs[Data Conversion Input].Columns[%s]" % (ref, src)),
-                              quoteattr(src), quoteattr(lineage[src]), quoteattr(src)))
+                              arriving[src].cached_attrs(), quoteattr(lineage[src]), quoteattr(src)))
             out.append("%s      </inputColumns>" % pad)
             out.append("%s    </input>" % pad)
             out.append("%s  </inputs>" % pad)

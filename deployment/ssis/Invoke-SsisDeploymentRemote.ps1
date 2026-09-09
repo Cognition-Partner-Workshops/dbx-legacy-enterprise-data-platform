@@ -39,12 +39,19 @@
     The preflight step is the same read-only Preflight.ps1 the deploy host runs,
     executed where the catalog spawns ISServerExec, which is the only place its
     answer means anything.
+
+    The validate step is the gate between a deployment and a run:
+    catalog.validate_package for every package named by -ValidateRoot or
+    -ValidateFamily, through the environment reference, which resolves the
+    parameters and opens the connections without executing a data flow. It is
+    started here because SSISDB refuses a validation from a SQL-authenticated
+    login, the same reason the deployment itself runs on the host.
 #>
 
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string] $InstanceId,
-    [ValidateSet('deploy', 'verify', 'environment', 'preflight', 'parity')][string] $Step = 'deploy',
+    [ValidateSet('deploy', 'verify', 'environment', 'preflight', 'parity', 'validate')][string] $Step = 'deploy',
     [string] $Region = $env:AWS_DEFAULT_REGION,
     [string] $RemoteRoot = 'C:\WWI\deploy',
     [string] $Folder = 'WWI_DEV',
@@ -61,6 +68,13 @@ param(
     # over the VPC, not over Oracle's Elastic IP, so this is the Oracle
     # instance's private address (terraform output oracle_private_ip).
     [string] $CatalogOracleHost = '',
+    # What the validate step validates: orchestration roots expanded through the
+    # plan, and package-name wildcards matched against the catalog.
+    [string[]] $ValidateRoot = @('Master_File_Ingestion'),
+    [string[]] $ValidateFamily = @(),
+    # The catalog environment the projects reference. It is named after the
+    # folder, not after -Environment, which names the rendered definition.
+    [string] $EnvironmentName = '',
     [switch] $DryRun
 )
 
@@ -198,6 +212,11 @@ if ($Step -eq 'preflight') {
     $payloadFiles += @(Get-ChildItem -Path $preflight -File |
         Where-Object { $_.Extension -in @('.ps1', '.json') })
 }
+if ($Step -eq 'validate') {
+    # The plan is what -ValidateRoot is expanded through, so it travels with the
+    # scripts.
+    $payloadFiles += @(Get-Item -LiteralPath (Join-Path $repoRoot 'ssis\orchestration-plan.json'))
+}
 if ($Step -eq 'environment') {
     # Only the environment being deployed travels: the others are large and the
     # remote step would never read them.
@@ -307,6 +326,18 @@ elseif ($Step -eq 'preflight') {
         "`$env:WWI_LANDING_ROOT = [Environment]::GetEnvironmentVariable('WWI_LANDING_ROOT', 'Machine')",
         "& '$RemoteRoot\deployment\preflight\Preflight.ps1' -Connectivity -ExecutionHost"
     )
+}
+elseif ($Step -eq 'validate') {
+    $arguments = @("-PlanPath '$RemoteRoot\ssis\orchestration-plan.json'")
+    if ($ValidateRoot.Count -gt 0) {
+        $arguments += "-Root @($((($ValidateRoot | ForEach-Object { "'$_'" }) -join ',')))"
+    }
+    if ($ValidateFamily.Count -gt 0) {
+        $arguments += "-Family @($((($ValidateFamily | ForEach-Object { "'$_'" }) -join ',')))"
+    }
+    $environmentName = if ($EnvironmentName) { $EnvironmentName } else { $Folder }
+    $run += "`$env:SSIS_ENVIRONMENT = '$environmentName'"
+    $run += ("& '$RemoteRoot\deployment\ssis\Test-SsisPackageValidation.ps1' " + ($arguments -join ' '))
 }
 elseif ($Step -eq 'parity') {
     $run += ("& '$RemoteRoot\deployment\ssis\Test-SsisCatalogParity.ps1'" +

@@ -395,6 +395,56 @@ def mutate_dtsx_buffer_shaped_destination(text):
         "%sRecordType%sRecordType%s" % (match.group(1), match.group(3), match.group(5)), 1)
 
 
+def mutate_dtsx_uncached_input_column(text):
+    """Cache only a name on a replaced Derived Column input.
+
+    The component then has nothing to compare against the buffer and answers
+    VS_NEEDSNEWMETADATA at validation - 'does not have a valid cache' - which
+    is how the live STG_Load_PartnerSale validation failed.
+    """
+    match = re.search(r'<inputColumn ([^>]*?)usageType="readWrite"', text)
+    if not match or "cachedDataType" not in match.group(1):
+        return None
+    stripped = re.sub(r'cached(?!Name)\w+="[^"]*" ', "", match.group(1))
+    return text.replace(match.group(0),
+                        '<inputColumn %susageType="readWrite"' % stripped, 1)
+
+
+def _destination_debt_names():
+    """The (data flow, destination) pairs the debt register already excuses."""
+    path = os.path.join(REPO_ROOT, "ssis", "destination-metadata-debt.txt")
+    pairs = set()
+    if not os.path.exists(path):
+        return pairs
+    with open(path, errors="replace") as handle:
+        for line in handle:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                fields = line.split("|")
+                if len(fields) >= 2:
+                    pairs.add((fields[0].strip(), fields[1].strip()))
+    return pairs
+
+
+def mutate_dtsx_empty_destination_input(text):
+    """Leave an OLE DB destination input with no columns at all.
+
+    'The number of input columns for ... cannot be zero' is what SSIS reports
+    for it, as VS_ISBROKEN, and is how the live STG_Load_Currency validation
+    failed.
+    """
+    debt = _destination_debt_names()
+    for match in re.finditer(r'(?s)(<input refId="([^"]*)\.Inputs\[OLE DB Destination Input\]"'
+                             r'[^>]*>\s*<inputColumns>)(.*?)(</inputColumns>)', text):
+        if "<inputColumn " not in match.group(3):
+            continue
+        parts = match.group(2).split("\\")
+        if len(parts) >= 3 and (parts[1], parts[2]) in debt:
+            continue  # a destination the register already excuses stays a warning
+        return text.replace(match.group(0), match.group(1) + match.group(4), 1)
+    return None
+
+
 # (label, artifact glob root, extension, expected check, mutation)
 FIXTURES = (
     ("duplicate pipeline refId", "ssis/07_dimensions", ".dtsx", "dtsx-pipeline",
@@ -477,6 +527,10 @@ FIXTURES = (
      "single-row-result-set", mutate_dtsx_single_row_without_aggregate),
     ("destination metadata shaped by its buffer", "ssis/03_file_ingestion", ".dtsx",
      "destination-metadata", mutate_dtsx_buffer_shaped_destination),
+    ("input column that caches only a name", "ssis/04_staging", ".dtsx",
+     "input-column-cache", mutate_dtsx_uncached_input_column),
+    ("destination input with no columns", "ssis/04_staging", ".dtsx",
+     "destination-metadata", mutate_dtsx_empty_destination_input),
 )
 
 

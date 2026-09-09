@@ -346,6 +346,38 @@ def check_component_contracts(result, prefixes):
     result.count("pipeline_components_checked", components)
 
 
+def check_input_column_cache(result, prefixes):
+    """Every input column must cache the type of the column arriving on it.
+
+    A component revalidates its cached input metadata against the buffer its
+    upstream path offers, and an input column that caches only a name has
+    nothing to compare, so the component fails validation as
+    VS_NEEDSNEWMETADATA before a row moves:
+
+        Column Normalize Partner Text.Inputs[Derived Column Input]
+        .Columns[PartnerCode] does not have a valid cache
+
+    which is how the live STG_Load_PartnerSale validation failed. Derived
+    Column replacements, Data Conversion sources and Union All inputs have all
+    been emitted in that state.
+    """
+    columns = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for component in root.iter("component"):
+            name = component.get("name") or component.get("refId") or "?"
+            for column in component.iter("inputColumn"):
+                columns += 1
+                if not column.get("cachedDataType"):
+                    result.fail("input-column-cache", rel,
+                                "input column %r of %r caches no data type"
+                                % (column.get("name"), name))
+    result.count("input_columns_checked", columns)
+
+
 def check_foreach_file_enumerators(result, prefixes):
     """A file loop must enumerate the folder and the files it was configured with.
 
@@ -2016,6 +2048,11 @@ def check_destination_metadata(result, prefixes):
                 if "ExternalColumns[" in external:
                     mapped.add(external.rsplit("ExternalColumns[", 1)[1].rstrip("]"))
             problems = []
+            if not mapped:
+                # SSIS reports an input with no columns as VS_ISBROKEN when the
+                # package validates: "The number of input columns for ...
+                # cannot be zero."
+                problems.append("has no input column, so its input into %s is empty" % table)
             if declared != [col.name for col in columns]:
                 problems.append("declares external columns %s; %s has %s"
                                 % (", ".join(declared) or "none", table,
@@ -2054,6 +2091,7 @@ CHECKS = [
     ("dtsx-pipeline", check_dtsx_pipeline),
     ("dtsx-connection-refs", check_dtsx_connection_refs),
     ("component-contracts", check_component_contracts),
+    ("input-column-cache", check_input_column_cache),
     ("foreach-file-enumerator", check_foreach_file_enumerators),
     ("single-row-result-set", check_single_row_result_sets),
     ("execute-sql-parameters", check_execute_sql_parameters),
@@ -2103,6 +2141,7 @@ def main():
     check_dtsx_pipeline(result, prefixes)
     check_dtsx_connection_refs(result, prefixes)
     check_component_contracts(result, prefixes)
+    check_input_column_cache(result, prefixes)
     check_foreach_file_enumerators(result, prefixes)
     check_single_row_result_sets(result, prefixes)
     check_execute_sql_parameters(result, prefixes)
