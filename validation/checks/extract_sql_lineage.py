@@ -78,7 +78,7 @@ KNOWN_SCHEMA_FALLBACKS = {
     "ETL", "ERR", "WORK", "RAW", "STG", "REF", "INTEGRATION",
     "DIMENSION", "FACT", "AGGREGATE", "REPORT", "CUSTOMER360", "DBO",
     "APPLICATION", "SALES", "PURCHASING", "WAREHOUSE", "WEBSITE",
-    "POWERBI", "REPORTS", "SEQUENCES", "DATALOADSIMULATION",
+    "SHIPPING", "RETURNS", "LOYALTY", "ECOMMERCE", "POWERBI", "REPORTS", "SEQUENCES", "DATALOADSIMULATION",
 }
 
 
@@ -514,7 +514,7 @@ def object_record(key, catalog_objects):
     if schema.startswith("WWI_"):
         layer, inferred_system = "oracle", "Oracle"
     elif schema in {"APPLICATION", "SALES", "PURCHASING", "WAREHOUSE",
-                    "WEBSITE"}:
+                    "WEBSITE", "SHIPPING", "RETURNS", "LOYALTY", "ECOMMERCE"}:
         layer, inferred_system = "oltp", "SQL Server OLTP"
     elif schema == "RAW":
         layer, inferred_system = "staging-raw", "SQL Server Staging"
