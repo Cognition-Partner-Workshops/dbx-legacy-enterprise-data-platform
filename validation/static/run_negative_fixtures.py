@@ -171,6 +171,31 @@ def mutate_ps1_missing_auth_assert(text):
     return text.replace(match.group(0), "", 1)
 
 
+def mutate_ps1_string_execution_parameter(text):
+    """Bind every package parameter as text - the Int32 sql_variant defect."""
+    if '$arguments["pvalue$index"] = $bound[$name]' not in text:
+        return None
+    return text.replace('$arguments["pvalue$index"] = $bound[$name]',
+                        '$arguments["pvalue$index"] = [string] $bound[$name]', 1)
+
+
+def mutate_ps1_hardcoded_adoption(text):
+    """Pin @AllowAdoptRunning to 0, so an interrupted batch can never be rerun."""
+    if "@AllowAdoptRunning = $adopt" not in text:
+        return None
+    return text.replace("@AllowAdoptRunning = $adopt", "@AllowAdoptRunning = 0", 1)
+
+
+def mutate_ps1_bom_ssm_payload(text):
+    """Write the SSM --parameters payload with a BOM the AWS CLI rejects."""
+    match = re.search(r"(?m)^(\s*)\[System\.IO\.File\]::WriteAllText\(\$temporary,[^\n]*\n", text)
+    if not match:
+        return None
+    return text.replace(
+        match.group(0),
+        "%sSet-Content -LiteralPath $temporary -Value $payload -Encoding utf8\n" % match.group(1), 1)
+
+
 def mutate_sql_duplicate_when_matched(text):
     match = re.search(r"(?s)\n\s*WHEN MATCHED THEN UPDATE SET.*?(?=\n\s*(?:WHEN\b|OUTPUT\b|;))",
                       text)
@@ -221,6 +246,12 @@ FIXTURES = (
      "runtime-tooling", mutate_ps1_missing_landing_assert),
     ("batch opened before the catalog auth check", "deployment/ssis", ".ps1",
      "runtime-tooling", mutate_ps1_missing_auth_assert),
+    ("package parameter bound as text", "deployment/ssis", ".ps1",
+     "execution-parameters", mutate_ps1_string_execution_parameter),
+    ("batch adoption hardcoded off", "deployment/ssis", ".ps1",
+     "execution-parameters", mutate_ps1_hardcoded_adoption),
+    ("SSM payload written with a BOM", "deployment/lib", ".ps1",
+     "ssm-payload", mutate_ps1_bom_ssm_payload),
 )
 
 

@@ -291,6 +291,127 @@ function Assert-WwiCatalogWindowsAuthentication {
     return $context
 }
 
+$script:WwiSsisParameterClrType = [ordered] @{
+    'Boolean'  = [bool]
+    'Byte'     = [byte]
+    'SByte'    = [sbyte]
+    'Int16'    = [int16]
+    'Int32'    = [int32]
+    'Int64'    = [int64]
+    'UInt32'   = [uint32]
+    'UInt64'   = [uint64]
+    'Single'   = [single]
+    'Double'   = [double]
+    'Decimal'  = [decimal]
+    'DateTime' = [datetime]
+    'String'   = [string]
+}
+
+function Get-WwiPackageParameterDeclaration {
+    <#
+        The parameters a deployed package declares, from catalog.object_parameters:
+        parameter name -> its declared CLR data type and sensitivity.
+
+        object_type 30 is a package parameter and 20 a project parameter; only
+        the package's own are settable per execution with object_type 30.
+    #>
+    param(
+        [Parameter(Mandatory)][string] $Folder,
+        [Parameter(Mandatory)][string] $Project,
+        [Parameter(Mandatory)][string] $Package,
+        [switch] $Integrated
+    )
+
+    $rows = Invoke-WwiSqlQuery -Database 'SSISDB' -Integrated:$Integrated -Parameters @{
+        folder = $Folder; project = $Project; package = $Package
+    } -Query @'
+SELECT o.parameter_name, o.data_type, o.sensitive, o.required
+FROM catalog.object_parameters AS o
+INNER JOIN catalog.projects AS p ON p.project_id = o.project_id
+INNER JOIN catalog.folders  AS f ON f.folder_id  = p.folder_id
+WHERE f.name = @folder AND p.name = @project
+  AND o.object_type = 30 AND o.object_name = @package;
+'@
+
+    $declared = @{}
+    foreach ($row in $rows) {
+        $declared[[string] $row.parameter_name] = [pscustomobject] @{
+            DataType  = [string] $row.data_type
+            Sensitive = [bool] $row.sensitive
+        }
+    }
+    return $declared
+}
+
+function ConvertTo-WwiSsisParameterValue {
+    <#
+        One execution parameter value in the CLR type the package declared.
+
+        catalog.set_execution_parameter_value takes a sql_variant, and the
+        catalog compares the base type of what it is handed against the
+        parameter's declared type rather than converting it. A value sent as a
+        string against an Int32 parameter is refused with "The data type of the
+        input value is not compatible with the data type of the 'Int32'", and
+        because create_execution has already committed by then the execution is
+        left stranded in status 1 with no operation message to explain it. So
+        the client converts first, and a value that cannot be converted is an
+        error before an execution exists at all.
+    #>
+    param(
+        [Parameter(Mandatory)][string] $Name,
+        [Parameter(Mandatory)][AllowNull()] $Value,
+        [Parameter(Mandatory)][string] $DataType
+    )
+
+    $key = ($DataType -replace '^System\.', '')
+    if (-not $script:WwiSsisParameterClrType.Contains($key)) {
+        Stop-WwiWithError ("package parameter $Name is declared as '$DataType', which the runner has no " +
+            'binding for; add it to $script:WwiSsisParameterClrType in deployment/lib/SsisCatalog.ps1.')
+    }
+    if ($null -eq $Value) { return [DBNull]::Value }
+
+    $target = $script:WwiSsisParameterClrType[$key]
+    if ($Value.GetType() -eq $target) { return $Value }
+    try {
+        return [System.Convert]::ChangeType($Value, $target, [System.Globalization.CultureInfo]::InvariantCulture)
+    }
+    catch {
+        Stop-WwiWithError ("package parameter $Name is declared as $key but was given " +
+            "'$Value' ($($Value.GetType().Name)), which does not convert: $($_.Exception.Message)")
+    }
+}
+
+function ConvertTo-WwiExecutionParameter {
+    <#
+        Every supplied value converted to its declared type, checked against the
+        deployed package rather than against what the caller believes it takes.
+        A name the package does not declare is an error too: the catalog would
+        refuse it after create_execution had already committed. A sensitive
+        parameter is never set from here: those are bound through the SSISDB
+        environment, and a runner argument would put the value in plain sight.
+    #>
+    param(
+        [Parameter(Mandatory)][hashtable] $Declared,
+        [Parameter(Mandatory)] $Parameters,
+        [Parameter(Mandatory)][string] $Package
+    )
+
+    $bound = [ordered] @{}
+    foreach ($name in $Parameters.Keys) {
+        if (-not $Declared.ContainsKey($name)) {
+            Stop-WwiWithError ("$Package does not declare a package parameter named $name; the deployed " +
+                'project declares: ' + (($Declared.Keys | Sort-Object) -join ', '))
+        }
+        if ($Declared[$name].Sensitive) {
+            Stop-WwiWithError ("$Package declares $name as a sensitive parameter; it must come from the " +
+                'SSISDB environment binding, not from a runner argument.')
+        }
+        $bound[$name] = ConvertTo-WwiSsisParameterValue -Name $name -Value $Parameters[$name] `
+                                                        -DataType $Declared[$name].DataType
+    }
+    return $bound
+}
+
 function Get-WwiLandingZoneDirectory {
     <#
         Every directory the landing zone contract promises, resolved against a

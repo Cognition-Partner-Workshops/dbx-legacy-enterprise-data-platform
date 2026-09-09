@@ -27,6 +27,10 @@
           -Root Master_File_Ingestion
       .\deployment\ssis\Invoke-EstateOrchestrationRemote.ps1 -InstanceId i-0... `
           -Root Master_File_Ingestion -DryRun
+
+    -AdoptRunning is forwarded to the runner and is the documented recovery
+    rerun: it adopts the batch this root already has open for the business date
+    instead of refusing to start a second one.
 #>
 
 [CmdletBinding()]
@@ -42,6 +46,7 @@ param(
     [string] $BusinessDate,
     [int] $ExecutionTimeoutSeconds = 10800,
     [string] $SqlServerSecretId = 'legacy-demo/sqlserver/devin_migration',
+    [switch] $AdoptRunning,
     [switch] $DryRun
 )
 
@@ -116,8 +121,9 @@ $run += @(
 
 $invocation = "& '$RemoteRoot\deployment\ssis\Invoke-EstateOrchestration.ps1' -Root '$Root'" +
               " -LoggingLevel $LoggingLevel -LogPath '$RemoteRoot\logs\orchestration'"
-if ($BusinessDate) { $invocation += " -BusinessDate '$BusinessDate'" }
-if ($DryRun)       { $invocation += ' -DryRun' }
+if ($BusinessDate)  { $invocation += " -BusinessDate '$BusinessDate'" }
+if ($AdoptRunning)  { $invocation += ' -AdoptRunning' }
+if ($DryRun)        { $invocation += ' -DryRun' }
 $run += $invocation
 
 $output = Invoke-WwiRemotePowerShell -ExecutionTimeoutSeconds $ExecutionTimeoutSeconds `

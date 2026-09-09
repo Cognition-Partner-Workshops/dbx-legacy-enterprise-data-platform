@@ -864,6 +864,115 @@ def check_runtime_tooling(result, prefixes):
     result.count("runtime drivers checked", drivers)
 
 
+# DTS:DataType on a package parameter is an OLE Automation VARTYPE, and
+# catalog.object_parameters stores the CLR name SSIS derives from it. The
+# runner has to hand catalog.set_execution_parameter_value a sql_variant whose
+# base type is that CLR type: the procedure compares, it does not convert.
+SSIS_VARTYPE_CLR = {
+    "2": "Int16", "3": "Int32", "4": "Single", "5": "Double", "6": "Decimal",
+    "7": "DateTime", "8": "String", "11": "Boolean", "14": "Decimal",
+    "16": "SByte", "17": "Byte", "18": "UInt16", "19": "UInt32",
+    "20": "Int64", "21": "UInt64",
+}
+
+
+def check_execution_parameter_binding(result, prefixes):
+    """Typed catalog parameter binding, batch adoption, and BOM-free SSM payloads.
+
+    Three defects that only a live run has ever shown:
+
+    - a package parameter bound as text. catalog.create_execution commits the
+      execution before any parameter is set, so a base-type mismatch faults
+      with "The data type of the input value is not compatible with the data
+      type of the 'Int32'" and strands the execution in status 1 with nothing
+      in catalog.operation_messages;
+    - a runner that hardcodes @AllowAdoptRunning = 0, which makes the recovery
+      rerun etl.usp_StartBatch documents impossible without editing the runner;
+    - an SSM --parameters payload written with Set-Content -Encoding utf8. On
+      Windows PowerShell that emits a BOM and the AWS CLI refuses the file with
+      "Expected: '=', received: '\\ufeff'".
+    """
+    runners = 0
+    for rel, full in walk_files(prefixes, (".ps1",)):
+        if not rel.startswith("deployment/"):
+            continue
+        with open(full, errors="replace") as handle:
+            text = handle.read()
+
+        if "catalog.set_execution_parameter_value" in text:
+            runners += 1
+            if "ConvertTo-WwiExecutionParameter" not in text:
+                result.fail("execution-parameters", rel,
+                            "sets execution parameter values without converting them to the "
+                            "types catalog.object_parameters declares for the package")
+            cast = re.search(r"pvalue\$?\w*\"?\]\s*=\s*\[(string|int|long)\]", text)
+            if cast:
+                line = text[: cast.start()].count("\n") + 1
+                result.fail("execution-parameters", "%s:%d" % (rel, line),
+                            "casts every execution parameter to [%s]; the value must carry the "
+                            "CLR type the package declares" % cast.group(1))
+
+        adopt = re.search(r"@AllowAdoptRunning\s*=\s*0\b", text)
+        if adopt and "usp_StartBatch" in text:
+            line = text[: adopt.start()].count("\n") + 1
+            result.fail("execution-parameters", "%s:%d" % (rel, line),
+                        "hardcodes @AllowAdoptRunning = 0, so a batch left Running by an "
+                        "interrupted attempt cannot be adopted without editing the runner")
+
+        for match in re.finditer(r"(?m)^.*Set-Content[^\n]*-Encoding\s+utf8[^\n]*$", text):
+            statement = match.group(0)
+            variable = re.search(r"-LiteralPath\s+\$(\w+)", statement)
+            if not variable:
+                continue
+            if ("file://" in text and re.search(r"--parameters[^\n]*\$%s\b" % variable.group(1), text)):
+                line = text[: match.start()].count("\n") + 1
+                result.fail("ssm-payload", "%s:%d" % (rel, line),
+                            "writes the SSM --parameters payload with Set-Content -Encoding "
+                            "utf8, which emits a BOM the AWS CLI rejects; write it with "
+                            "UTF8Encoding($false)")
+
+    result.count("execution parameter binders checked", runners)
+
+    # Every parameter type the estate declares must have a binding in the
+    # runner's map, or the first run that passes one faults inside the catalog.
+    helper = os.path.join(REPO_ROOT, "deployment", "lib", "SsisCatalog.ps1")
+    if not os.path.exists(helper):
+        return
+    with open(helper, errors="replace") as handle:
+        helper_text = handle.read()
+    block = re.search(r"WwiSsisParameterClrType\s*=\s*\[ordered\]\s*@\{(.*?)\n\}",
+                      helper_text, re.S)
+    if not block:
+        result.fail("execution-parameters", "deployment/lib/SsisCatalog.ps1",
+                    "no $script:WwiSsisParameterClrType map; the runner cannot know what CLR "
+                    "type a declared package parameter needs")
+        return
+    known = set(re.findall(r"'(\w+)'\s*=", block.group(1)))
+
+    declared = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        with open(full, errors="replace") as handle:
+            text = handle.read()
+        for parameter in re.finditer(r"<DTS:PackageParameter\b(.*?)>", text, re.S):
+            attributes = parameter.group(1)
+            name = re.search(r'DTS:ObjectName="([^"]+)"', attributes)
+            vartype = re.search(r'DTS:DataType="(\d+)"', attributes)
+            if not name or not vartype:
+                continue
+            declared += 1
+            clr = SSIS_VARTYPE_CLR.get(vartype.group(1))
+            if clr is None:
+                result.fail("execution-parameters", rel,
+                            "package parameter %s is declared with DTS:DataType %s, which the "
+                            "runner has no CLR mapping for" % (name.group(1), vartype.group(1)))
+            elif clr not in known:
+                result.fail("execution-parameters", rel,
+                            "package parameter %s is a %s, which $script:WwiSsisParameterClrType "
+                            "in deployment/lib/SsisCatalog.ps1 cannot bind"
+                            % (name.group(1), clr))
+    result.count("package parameters typed", declared)
+
+
 def check_no_forbidden_content(result, prefixes):
     for rel, full in walk_files(prefixes, (".sql", ".dtsx", ".py", ".md", ".yaml", ".yml",
                                            ".json", ".ps1", ".sh", ".csv", ".conmgr", ".params")):
@@ -967,6 +1076,8 @@ CHECKS = [
     ("sql-naming", check_sql_naming),
     ("duplicates", check_duplicates),
     ("runtime-tooling", check_runtime_tooling),
+    ("execution-parameters", check_execution_parameter_binding),
+    ("ssm-payload", check_execution_parameter_binding),
     ("forbidden-content", check_no_forbidden_content),
     ("credentials", check_no_credentials),
     ("runtime-claims", check_no_runtime_claims),
@@ -1005,6 +1116,7 @@ def main():
     check_duplicates(result, prefixes)
     check_dependency_cycles(result, catalog)
     check_runtime_tooling(result, prefixes)
+    check_execution_parameter_binding(result, prefixes)
     check_no_forbidden_content(result, prefixes)
     check_no_credentials(result, prefixes)
     check_no_runtime_claims(result, prefixes)

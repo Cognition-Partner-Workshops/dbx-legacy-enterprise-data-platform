@@ -36,7 +36,7 @@
 
     Usage:
       .\deployment\ssis\Invoke-EstateOrchestration.ps1 -Root Master_Daily_ETL `
-          [-LogPath logs] [-DryRun]
+          [-LogPath logs] [-AdoptRunning] [-DryRun]
       .\deployment\ssis\Invoke-EstateOrchestration.ps1 -ListRoots
 #>
 
@@ -48,6 +48,7 @@ param(
     [string]   $PlanPath,
     [int]      $LoggingLevel = 1,
     [string]   $BusinessDate = ((Get-Date).ToUniversalTime().AddDays(-1).ToString('yyyy-MM-dd')),
+    [switch]   $AdoptRunning,
     [switch]   $DryRun
 )
 
@@ -123,13 +124,23 @@ function Invoke-EtlScalar {
 }
 
 function Start-EtlBatch {
+    <#
+        Opens the batch, or adopts the one this name and business date already
+        has open when -AdoptRunning is given.
+
+        Adoption is the recovery rerun etl.usp_StartBatch documents, and it is
+        the operator's decision rather than the runner's: adopting silently
+        would fold a second run into a batch whose first run may still be
+        moving rows, so the default stays 0 and the switch has to be asked for.
+    #>
     param([Parameter(Mandatory)][string] $BatchType)
+    $adopt = if ($AdoptRunning) { 1 } else { 0 }
     $query = @"
 SET NOCOUNT ON;
 DECLARE @BatchId BIGINT;
 EXEC etl.usp_StartBatch @BatchName = N'$Root', @BatchType = N'$BatchType',
      @BusinessDate = N'$BusinessDate', @EnvironmentCode = N'$environmentCode',
-     @AllowAdoptRunning = 0, @Notes = N'external orchestration runner',
+     @AllowAdoptRunning = $adopt, @Notes = N'external orchestration runner',
      @BatchId = @BatchId OUTPUT;
 SELECT @BatchId;
 "@
@@ -320,6 +331,17 @@ function Invoke-EstatePackage {
 
     $referenceId = Get-EstateReference -Project $Project
 
+    # Every value is converted to the type the deployed package declares before
+    # an execution exists. catalog.set_execution_parameter_value takes a
+    # sql_variant and refuses a base type that does not match the declaration -
+    # BatchId is Int32 in all 13 subtree packages, so a value sent as a string
+    # failed with "The data type of the input value is not compatible with the
+    # data type of the 'Int32'" after create_execution had already committed,
+    # stranding the execution in status 1 with no operation message.
+    $declared = Get-WwiPackageParameterDeclaration -Folder $folder -Project $Project `
+                                                   -Package ("$Package.dtsx") -Integrated
+    $bound = ConvertTo-WwiExecutionParameter -Declared $declared -Parameters $parameters -Package $Package
+
     # The package parameters are applied one call at a time, all inside the
     # single batch that also starts the execution, so a failure to set one never
     # leaves a half-configured execution running.
@@ -329,10 +351,10 @@ function Invoke-EstatePackage {
         reference = $referenceId; logging = $LoggingLevel
     }
     $index = 0
-    foreach ($name in $parameters.Keys) {
+    foreach ($name in $bound.Keys) {
         $index += 1
         $arguments["pname$index"] = $name
-        $arguments["pvalue$index"] = [string] $parameters[$name]
+        $arguments["pvalue$index"] = $bound[$name]
         $setParameters += @"
 
 EXEC catalog.set_execution_parameter_value @execution_id,
