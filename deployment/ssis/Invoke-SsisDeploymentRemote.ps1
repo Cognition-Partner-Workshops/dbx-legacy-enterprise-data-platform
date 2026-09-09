@@ -49,6 +49,13 @@ param(
     # binds. Each is a JSON document with username and password members.
     [string] $OracleSecretId = 'legacy-demo/oracle/admin',
     [string] $SqlServerSecretId = 'legacy-demo/sqlserver/devin_migration',
+    # Address the catalog binds as SqlServerHost. Empty means "ask the host",
+    # which is the correct answer: see the environment step below.
+    [string] $CatalogSqlServerHost = '',
+    # Address the catalog binds as OracleHost. The execution host reaches Oracle
+    # over the VPC, not over Oracle's Elastic IP, so this is the Oracle
+    # instance's private address (terraform output oracle_private_ip).
+    [string] $CatalogOracleHost = '',
     [switch] $DryRun
 )
 
@@ -222,6 +229,28 @@ if ($Step -eq 'environment') {
         } else {
             Write-WwiLog "$name is not set here; the rendered default will be bound instead" 'WARN'
         }
+    }
+
+    # SQLSERVER_HOST here is the address *this* client reaches the instance on,
+    # which is the public Elastic IP. The execution host has no hairpin route
+    # back to its own Elastic IP, so binding it makes every catalog execution
+    # fail with a login timeout that reads like a credential problem. The
+    # endpoint the catalog binds is therefore resolved on the execution host
+    # itself, from instance metadata, and overrides whatever was forwarded.
+    if ($CatalogOracleHost) {
+        $run += "`$env:ORACLE_HOST = '$($CatalogOracleHost.Replace("'", "''"))'"
+    }
+
+    if ($CatalogSqlServerHost) {
+        $run += "`$env:SQLSERVER_HOST = '$($CatalogSqlServerHost.Replace("'", "''"))'"
+    }
+    else {
+        $run += @(
+            "`$imdsToken = Invoke-RestMethod -Method Put -Uri 'http://169.254.169.254/latest/api/token' -Headers @{ 'X-aws-ec2-metadata-token-ttl-seconds' = '60' } -TimeoutSec 5",
+            "`$env:SQLSERVER_HOST = Invoke-RestMethod -Uri 'http://169.254.169.254/latest/meta-data/local-ipv4' -Headers @{ 'X-aws-ec2-metadata-token' = `$imdsToken } -TimeoutSec 5",
+            "if (-not `$env:SQLSERVER_HOST) { throw 'could not resolve the private address of the execution host' }",
+            "Write-Host ('catalog SqlServerHost -> ' + `$env:SQLSERVER_HOST + ' (execution-host reachable)')"
+        )
     }
 
     $run += @(
