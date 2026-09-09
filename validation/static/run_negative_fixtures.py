@@ -327,6 +327,59 @@ def mutate_dtsx_unknown_source_column(text):
                         "%sAmountText%s" % (match.group(1), match.group(3)), 1)
 
 
+def mutate_dtsx_drop_fastparse(text):
+    """Drop FastParse from a flat file column, as execution 123 failed on."""
+    if 'name="FastParse"' not in text:
+        return None
+    return re.sub(r'\s*<property [^>]*name="FastParse">[^<]*</property>', "", text, count=1)
+
+
+def mutate_dtsx_drop_derived_error_output(text):
+    """Leave a Derived Column with one output, as execution 126 failed on."""
+    match = re.search(r'(?s)<component [^>]*componentClassID="Microsoft.DerivedColumn".*?</component>',
+                      text)
+    if not match:
+        return None
+    component = match.group(0)
+    error_output = re.search(r'(?s)\s*<output [^>]*isErrorOut="true".*?</output>', component)
+    if not error_output:
+        return None
+    return text.replace(component, component.replace(error_output.group(0), "", 1), 1)
+
+
+def mutate_dtsx_default_output_as_case(text):
+    """Write a conditional split's default output as another case."""
+    if 'name="IsDefaultOut">true' not in text:
+        return None
+    return text.replace('name="IsDefaultOut">true', 'name="IsDefaultOut">false', 1)
+
+
+def mutate_dtsx_directory_expression_on_container(text):
+    """Move the Directory expression onto the loop, where it is never applied.
+
+    This is how etl.FileIngestionLog came to record
+    C:\\$WINRE_BACKUP_PARTITION.MARKER as a feed file.
+    """
+    match = re.search(r'(?s)(<DTS:ForEachEnumerator\b.*?>)(\s*<DTS:PropertyExpression '
+                      r'DTS:Name="Directory">.*?</DTS:PropertyExpression>)', text)
+    if not match:
+        return None
+    return text.replace(match.group(0), match.group(1), 1).replace(
+        "<DTS:ForEachEnumerator", match.group(2).strip() + "\n      <DTS:ForEachEnumerator", 1)
+
+
+def mutate_dtsx_single_row_without_aggregate(text):
+    """Read a table directly into a single row result set, as execution 124 did."""
+    match = re.search(r'SQLTask:SqlStatementSource="SELECT ISNULL\(MAX\((\w+)\), 0\) AS (\w+)'
+                      r' *FROM +([\w\.]+)([^"]*)"', text)
+    if not match:
+        return None
+    return text.replace(
+        match.group(0),
+        'SQLTask:SqlStatementSource="SELECT %s AS %s FROM %s%s"'
+        % (match.group(1), match.group(2), match.group(3), match.group(4)), 1)
+
+
 # (label, artifact glob root, extension, expected check, mutation)
 FIXTURES = (
     ("duplicate pipeline refId", "ssis/07_dimensions", ".dtsx", "dtsx-pipeline",
@@ -397,6 +450,16 @@ FIXTURES = (
      "expression-task-statements", mutate_dtsx_multi_statement_expression),
     ("source selects a column the table lacks", "ssis/05_data_quality", ".dtsx",
      "sql-column-contract", mutate_dtsx_unknown_source_column),
+    ("flat file column without FastParse", "ssis/03_file_ingestion", ".dtsx",
+     "component-contracts", mutate_dtsx_drop_fastparse),
+    ("Derived Column without its error output", "ssis/05_data_quality", ".dtsx",
+     "component-contracts", mutate_dtsx_drop_derived_error_output),
+    ("conditional split default output as a case", "ssis/03_file_ingestion", ".dtsx",
+     "component-contracts", mutate_dtsx_default_output_as_case),
+    ("Directory expression on the loop container", "ssis/03_file_ingestion", ".dtsx",
+     "foreach-file-enumerator", mutate_dtsx_directory_expression_on_container),
+    ("single row result set over a table", "ssis/03_file_ingestion", ".dtsx",
+     "single-row-result-set", mutate_dtsx_single_row_without_aggregate),
 )
 
 

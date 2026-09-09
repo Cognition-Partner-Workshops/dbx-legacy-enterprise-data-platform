@@ -239,6 +239,216 @@ def check_dtsx_pipeline(result, prefixes):
                             "log provider creation name %r is not a runtime type" % creation)
 
 
+def _component_properties(node):
+    """name -> text of the <properties> a component or column carries."""
+    properties = {}
+    for holder in node.findall("properties"):
+        for prop in holder.findall("property"):
+            properties[prop.get("name")] = (prop.text or "").strip()
+    return properties
+
+
+FLAT_FILE_COLUMN_PROPERTIES = ("FastParse", "UseBinaryFormat")
+
+# Transforms the runtime rejects unless they carry a normal and an error
+# output, and nothing else.
+TWO_OUTPUT_COMPONENTS = ("Microsoft.DerivedColumn", "Microsoft.DataConvert")
+
+
+def check_component_contracts(result, prefixes):
+    """Pipeline components must carry the custom properties the runtime demands.
+
+    These are the shapes a component validates itself against when the package
+    is loaded, so a package missing one fails validation as VS_ISCORRUPT before
+    a single row moves - and nothing else in this file would notice. A flat file
+    column without FastParse, a derived column without its error output and a
+    conditional split whose default output is written as a case have all put a
+    package in that state.
+    """
+    components = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for component in root.iter("component"):
+            class_id = component.get("componentClassID") or ""
+            name = component.get("name") or component.get("refId") or "?"
+            outputs = component.findall("outputs/output")
+            components += 1
+
+            if class_id == "Microsoft.FlatFileSource":
+                if not component.get("localeId"):
+                    result.fail("component-contracts", rel,
+                                "flat file source %r has no localeId" % name)
+                for output in outputs:
+                    if output.get("isErrorOut") == "true":
+                        continue
+                    for column in output.findall("outputColumns/outputColumn"):
+                        properties = _component_properties(column)
+                        missing = [p for p in FLAT_FILE_COLUMN_PROPERTIES
+                                   if p not in properties]
+                        if missing:
+                            result.fail("component-contracts", rel,
+                                        "flat file source %r column %r is missing the required "
+                                        "custom propert%s %s"
+                                        % (name, column.get("name"),
+                                           "y" if len(missing) == 1 else "ies",
+                                           ", ".join(missing)))
+
+            if class_id in TWO_OUTPUT_COMPONENTS:
+                if len(outputs) != 2:
+                    result.fail("component-contracts", rel,
+                                "%s %r declares %d output(s); the runtime requires exactly 2"
+                                % (class_id.split(".")[-1], name, len(outputs)))
+                error_outputs = [o for o in outputs if o.get("isErrorOut") == "true"]
+                if not error_outputs:
+                    result.fail("component-contracts", rel,
+                                "%s %r has no error output"
+                                % (class_id.split(".")[-1], name))
+                for output in error_outputs:
+                    carried = {c.get("name")
+                               for c in output.findall("outputColumns/outputColumn")}
+                    missing = [c for c in ("ErrorCode", "ErrorColumn") if c not in carried]
+                    if missing:
+                        result.fail("component-contracts", rel,
+                                    "%s %r error output does not carry %s"
+                                    % (class_id.split(".")[-1], name, ", ".join(missing)))
+
+            if class_id == "Microsoft.ConditionalSplit":
+                defaults, orders = [], []
+                for output in outputs:
+                    if output.get("isErrorOut") == "true":
+                        continue
+                    properties = _component_properties(output)
+                    if properties.get("IsDefaultOut", "").lower() == "true":
+                        defaults.append(output.get("name"))
+                        if properties.get("Expression"):
+                            result.fail("component-contracts", rel,
+                                        "conditional split %r default output %r carries a case "
+                                        "expression" % (name, output.get("name")))
+                        continue
+                    if not properties.get("Expression"):
+                        result.fail("component-contracts", rel,
+                                    "conditional split %r output %r has no Expression and is "
+                                    "not the default output" % (name, output.get("name")))
+                    order = properties.get("EvaluationOrder")
+                    if order is not None and order.lstrip("-").isdigit():
+                        orders.append(int(order))
+                if len(defaults) != 1:
+                    result.fail("component-contracts", rel,
+                                "conditional split %r has %d default output(s); it must have "
+                                "exactly 1" % (name, len(defaults)))
+                if orders and sorted(orders) != list(range(len(orders))):
+                    result.fail("component-contracts", rel,
+                                "conditional split %r case evaluation orders are %s; they must "
+                                "be 0..%d" % (name, sorted(orders), len(orders) - 1))
+    result.count("pipeline_components_checked", components)
+
+
+def check_foreach_file_enumerators(result, prefixes):
+    """A file loop must enumerate the folder and the files it was configured with.
+
+    The Directory expression belongs to the enumerator: on the loop container it
+    is never applied, the enumerator keeps its design-time folder, and the loop
+    silently walks whatever that path resolves to. A file specification of
+    ``*.*`` has the same effect within a folder - unrelated files are ingested
+    and logged as feed files.
+    """
+    ns = "www.microsoft.com/SqlServer/Dts"
+    loops = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for executable in root.iter("{%s}Executable" % ns):
+            enumerator = executable.find("{%s}ForEachEnumerator" % ns)
+            if enumerator is None:
+                continue
+            if (enumerator.get("{%s}CreationName" % ns) or "") != "Microsoft.ForEachFileEnumerator":
+                continue
+            loops += 1
+            where = executable.get("{%s}ObjectName" % ns) or executable.get("{%s}refId" % ns)
+            on_container = [e for e in executable.findall("{%s}PropertyExpression" % ns)
+                            if e.get("{%s}Name" % ns) == "Directory"]
+            on_enumerator = [e for e in enumerator.findall("{%s}PropertyExpression" % ns)
+                             if e.get("{%s}Name" % ns) == "Directory"]
+            if on_container:
+                result.fail("foreach-file-enumerator", rel,
+                            "foreach loop %r sets the Directory expression on the container; "
+                            "the enumerator owns that property" % where)
+            if not on_enumerator:
+                result.fail("foreach-file-enumerator", rel,
+                            "foreach loop %r has no Directory expression on its enumerator, so "
+                            "it walks the folder baked in at design time" % where)
+            spec = None
+            for prop in enumerator.iter("FEFEProperty"):
+                if prop.get("FileSpec") is not None:
+                    spec = prop.get("FileSpec")
+            # A feed loop reads one feed out of a shared drop folder; a sweep
+            # over a quarantine or archive folder is meant to take everything.
+            if rel.startswith("ssis/03_file_ingestion/") and (not spec or spec in ("*", "*.*")):
+                result.fail("foreach-file-enumerator", rel,
+                            "foreach loop %r enumerates %r; it must name the feed's files"
+                            % (where, spec or ""))
+    result.count("foreach_file_loops", loops)
+
+
+# A single row result set that reads a table returns nothing when the table has
+# no matching row, and the assignment to the variable fails. An aggregate over
+# the same predicate always returns exactly one row.
+AGGREGATE_SELECT_RE = re.compile(
+    r"\b(MAX|MIN|COUNT|COUNT_BIG|SUM|AVG|ISNULL|NVL|COALESCE)\b", re.I)
+
+
+def _outermost(sql):
+    """*sql* with every parenthesised subexpression removed.
+
+    A derived table's own GROUP BY says nothing about how many rows the
+    statement returns; only the outermost query shape does.
+    """
+    out, depth = [], 0
+    for char in sql:
+        if char == "(":
+            depth += 1
+            out.append(" ")
+        elif char == ")":
+            depth = max(0, depth - 1)
+        elif depth == 0:
+            out.append(char)
+    return "".join(out)
+
+
+def check_single_row_result_sets(result, prefixes):
+    """An Execute SQL Task taking a single row must be unable to return none."""
+    ns = "www.microsoft.com/sqlserver/dts/tasks/sqltask"
+    tasks = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for task in root.iter("{%s}SqlTaskData" % ns):
+            if (task.get("{%s}ResultType" % ns) or "") != "ResultSetType_SingleRow":
+                continue
+            tasks += 1
+            sql = (task.get("{%s}SqlStatementSource" % ns) or "").strip()
+            if not sql.upper().startswith("SELECT"):
+                continue
+            outer = " ".join(_outermost(sql).split())
+            if not re.search(r"\bFROM\b", outer, re.I):
+                # A select over no table - a scalar function, a literal - is
+                # itself the one row.
+                continue
+            if (re.search(r"\bGROUP\s+BY\b", outer, re.I)
+                    or not AGGREGATE_SELECT_RE.search(sql)):
+                result.fail("single-row-result-set", rel,
+                            "single row result set reads %r, which returns no row when nothing "
+                            "matches" % " ".join(sql.split())[:120])
+    result.count("single_row_result_sets", tasks)
+
+
 def _project_connection_managers(package_full_path):
     """DTSID -> name for the .conmgr files of the project owning a package."""
     ns = {"DTS": "www.microsoft.com/SqlServer/Dts"}
@@ -731,11 +941,12 @@ def check_file_locality(result, prefixes):
             if executable.find(".//{%s}ForEachEnumerator" % dts) is None:
                 continue
             enumerator = executable.find(".//{%s}ForEachEnumerator" % dts)
-            if enumerator.find(".//FEFE") is None:
+            if enumerator.find(".//FEFEProperty") is None:
                 continue  # not a file enumerator
             loops += 1
             name = executable.get("{%s}ObjectName" % dts)
-            expressions = [node.text or "" for node in executable
+            # Directory belongs to the enumerator; see check_foreach_file_enumerators.
+            expressions = [node.text or "" for node in enumerator
                            if node.tag == "{%s}PropertyExpression" % dts
                            and node.get("{%s}Name" % dts) == "Directory"]
             if not expressions:
@@ -1726,6 +1937,9 @@ CHECKS = [
     ("dtsx-references", check_dtsx_references),
     ("dtsx-pipeline", check_dtsx_pipeline),
     ("dtsx-connection-refs", check_dtsx_connection_refs),
+    ("component-contracts", check_component_contracts),
+    ("foreach-file-enumerator", check_foreach_file_enumerators),
+    ("single-row-result-set", check_single_row_result_sets),
     ("execute-sql-parameters", check_execute_sql_parameters),
     ("expression-task-statements", check_expression_task_statements),
     ("sql-column-contract", check_sql_column_contract),
@@ -1771,6 +1985,9 @@ def main():
     check_dtsx_references(result, prefixes)
     check_dtsx_pipeline(result, prefixes)
     check_dtsx_connection_refs(result, prefixes)
+    check_component_contracts(result, prefixes)
+    check_foreach_file_enumerators(result, prefixes)
+    check_single_row_result_sets(result, prefixes)
     check_execute_sql_parameters(result, prefixes)
     check_expression_task_statements(result, prefixes)
     check_sql_column_contract(result, prefixes)

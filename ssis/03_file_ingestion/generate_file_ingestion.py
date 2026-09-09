@@ -39,6 +39,7 @@ sys.path.insert(0, os.path.join(REPO_ROOT, "tools", "ssisgen"))
 
 import project  # noqa: E402
 from ssisgen import (  # noqa: E402
+    FLAT_FILE_ERROR_COLUMN,
     Column,
     Container,
     DataFlow,
@@ -51,6 +52,7 @@ from ssisgen import (  # noqa: E402
     expression_sequence,
     int_col,
     money_col,
+    ntext_col,
     str_col,
 )
 from patterns import (  # noqa: E402
@@ -148,6 +150,16 @@ def feed_loop(name, package_name, description):
     )
 
 
+def feed_code_page(package_name):
+    """The code page the feed's bytes arrive in.
+
+    The flat file source describes the line it could not parse in the file's own
+    code page, so the error output only matches the file when the generator is
+    told which one that is.
+    """
+    return FEED_SPECS[package_name]["code_page"]
+
+
 def feed_connection(pkg, package_name, name, columns):
     """Package-scoped flat file connection manager for one feed's current file."""
     spec = FEED_SPECS[package_name]
@@ -214,6 +226,42 @@ def audit_derivations(source_system, region):
         ("ExtractedAtUtc", "GETUTCDATE()", date_col("ExtractedAtUtc")),
         ("PackageExecutionId", "@[User::PackageExecutionId]", bigint_col("PackageExecutionId")),
     ]
+
+
+def conversion_reject_branch(df, source_component, source_system, code_page):
+    """Land the lines the flat file source could not parse in err.RejectedFileRow.
+
+    The source's error output carries the whole unparsed line as a single blob
+    and none of the columns the reject table needs, so the branch converts that
+    line into the table's Unicode payload column and derives the reject's
+    identity from the file the loop is on.
+    """
+    df.data_conversion(
+        "Convert Rejected Line",
+        [(FLAT_FILE_ERROR_COLUMN, "RawRowText", ntext_col("RawRowText"))],
+        source=(source_component, "Flat File Source Error Output"),
+    )
+    df.derived_column(
+        "Describe Conversion Reject",
+        [
+            ("BatchId", "@[$Package::BatchId]", bigint_col("BatchId")),
+            ("PackageExecutionId", "@[User::PackageExecutionId]", bigint_col("PackageExecutionId")),
+            ("SourceSystemCode", '"%s"' % source_system, str_col("SourceSystemCode", 20)),
+            ("SourceFileName", "@[User::CurrentFileName]", str_col("SourceFileName", 260)),
+            ("RejectReasonCode", '"UNPARSEABLE_LINE"', str_col("RejectReasonCode", 50)),
+            ("RejectReason",
+             '"The flat file source could not parse the line at code page %d."' % code_page,
+             str_col("RejectReason", 500)),
+            ("RejectStage", '"Ingest"', str_col("RejectStage", 50)),
+        ],
+    )
+    df.branch_destination(
+        "err RejectedFileRow Conversion",
+        CONN_STAGING,
+        "err.RejectedFileRow",
+        from_component="Describe Conversion Reject",
+        from_output="Derived Column Output",
+    )
 
 
 def path_expressions(archive_subfolder, reject_subfolder):
@@ -356,7 +404,8 @@ def ing_file_partner_sales_na():
 
     df = DataFlow("Ingest NA Partner Sales")
     feed_conn = feed_connection(pkg, "ING_FILE_PartnerSales_NA", "FF_PartnerSales_NA", cols)
-    df.flatfile_source("NA Partner Sales File", feed_conn, cols, connection_scope="Package")
+    df.flatfile_source("NA Partner Sales File", feed_conn, cols, connection_scope="Package",
+                       code_page=feed_code_page("ING_FILE_PartnerSales_NA"))
     df.conditional_split(
         "Split Record Types",
         [
@@ -420,13 +469,7 @@ def ing_file_partner_sales_na():
         from_component="Split Record Types",
         from_output="Unknown Record Type",
     )
-    df.reject_destination(
-        "err RejectedFileRow Conversion",
-        CONN_STAGING,
-        "err.RejectedFileRow",
-        from_component="NA Partner Sales File",
-        from_output="Flat File Source Error Output",
-    )
+    conversion_reject_branch(df, "NA Partner Sales File", SRC_PARTNER, feed_code_page("ING_FILE_PartnerSales_NA"))
 
     loop = feed_loop("Foreach NA Partner File", "ING_FILE_PartnerSales_NA", "Loop the NA partner drop folder.")
     paths = loop.add(path_expressions("partner/na", "partner/na"))
@@ -511,7 +554,8 @@ def ing_file_partner_sales_eu():
 
     df = DataFlow("Ingest EU Partner Sales")
     feed_conn = feed_connection(pkg, "ING_FILE_PartnerSales_EU", "FF_PartnerSales_EU", cols)
-    df.flatfile_source("EU Partner Sales File", feed_conn, cols, connection_scope="Package")
+    df.flatfile_source("EU Partner Sales File", feed_conn, cols, connection_scope="Package",
+                       code_page=feed_code_page("ING_FILE_PartnerSales_EU"))
     df.conditional_split(
         "Split Record Types",
         [
@@ -595,13 +639,7 @@ def ing_file_partner_sales_eu():
         from_component="Validate EU Detail",
         from_output="Malformed",
     )
-    df.reject_destination(
-        "err RejectedFileRow Conversion",
-        CONN_STAGING,
-        "err.RejectedFileRow",
-        from_component="EU Partner Sales File",
-        from_output="Flat File Source Error Output",
-    )
+    conversion_reject_branch(df, "EU Partner Sales File", SRC_PARTNER, feed_code_page("ING_FILE_PartnerSales_EU"))
 
     loop = feed_loop("Foreach EU Partner File", "ING_FILE_PartnerSales_EU", "Loop the EU partner drop folder.")
     paths = loop.add(path_expressions("partner/eu", "partner/eu"))
@@ -672,7 +710,8 @@ def ing_file_partner_sales_apac():
 
     df = DataFlow("Ingest APAC Partner Sales")
     feed_conn = feed_connection(pkg, "ING_FILE_PartnerSales_APAC", "FF_PartnerSales_APAC", cols)
-    df.flatfile_source("APAC Partner Sales File", feed_conn, cols, connection_scope="Package")
+    df.flatfile_source("APAC Partner Sales File", feed_conn, cols, connection_scope="Package",
+                       code_page=feed_code_page("ING_FILE_PartnerSales_APAC"))
     df.conditional_split(
         "Split Record Types",
         [
@@ -733,13 +772,7 @@ def ing_file_partner_sales_apac():
         from_component="Validate APAC Detail",
         from_output="Malformed",
     )
-    df.reject_destination(
-        "err RejectedFileRow Conversion",
-        CONN_STAGING,
-        "err.RejectedFileRow",
-        from_component="APAC Partner Sales File",
-        from_output="Flat File Source Error Output",
-    )
+    conversion_reject_branch(df, "APAC Partner Sales File", SRC_PARTNER, feed_code_page("ING_FILE_PartnerSales_APAC"))
 
     loop = feed_loop("Foreach APAC Partner File", "ING_FILE_PartnerSales_APAC", "Loop the APAC partner drop folder.")
     paths = loop.add(path_expressions("partner/apac", "partner/apac"))
@@ -810,7 +843,8 @@ def ing_file_carrier_scan():
 
     df = DataFlow("Ingest Carrier Scans")
     feed_conn = feed_connection(pkg, "ING_FILE_CarrierScan", "FF_CarrierScan", cols)
-    df.flatfile_source("Carrier Scan File", feed_conn, cols, connection_scope="Package")
+    df.flatfile_source("Carrier Scan File", feed_conn, cols, connection_scope="Package",
+                       code_page=feed_code_page("ING_FILE_CarrierScan"))
     df.derived_column(
         "Parse Scan Event",
         [
@@ -863,13 +897,7 @@ def ing_file_carrier_scan():
         from_component="Validate Scan Rows",
         from_output="Malformed",
     )
-    df.reject_destination(
-        "err RejectedFileRow Conversion",
-        CONN_STAGING,
-        "err.RejectedFileRow",
-        from_component="Carrier Scan File",
-        from_output="Flat File Source Error Output",
-    )
+    conversion_reject_branch(df, "Carrier Scan File", SRC_CARRIER, feed_code_page("ING_FILE_CarrierScan"))
 
     loop = feed_loop("Foreach Carrier Scan File", "ING_FILE_CarrierScan", "Loop the carrier scan drop folder.")
     paths = loop.add(path_expressions("carrier", "carrier"))
@@ -878,7 +906,10 @@ def ing_file_carrier_scan():
         ExecuteSql(
             "Read Sidecar Control Count",
             CONN_STAGING,
-            "SELECT ISNULL(ExpectedRowCount, 0) AS SidecarRowCount FROM etl.FileControlTotal "
+            # MAX over no rows still returns a row, which is what the single-row
+            # result set contract needs from a feed that arrived without its
+            # sidecar control file.
+            "SELECT ISNULL(MAX(ExpectedRowCount), 0) AS SidecarRowCount FROM etl.FileControlTotal "
             "WHERE FileName = ?;",
             result_type="ResultSetType_SingleRow",
             parameter_bindings=[("User::CurrentFileName", 0, "NVARCHAR")],
@@ -966,7 +997,8 @@ def ing_file_supplier_catalog():
 
     df = DataFlow("Ingest Supplier Catalog")
     feed_conn = feed_connection(pkg, "ING_FILE_SupplierCatalog", "FF_SupplierCatalog", cols)
-    df.flatfile_source("Supplier Catalog File", feed_conn, cols, connection_scope="Package")
+    df.flatfile_source("Supplier Catalog File", feed_conn, cols, connection_scope="Package",
+                       code_page=feed_code_page("ING_FILE_SupplierCatalog"))
     df.conditional_split(
         "Split Record Types",
         [
@@ -1030,13 +1062,7 @@ def ing_file_supplier_catalog():
         from_component="Validate Catalog Detail",
         from_output="Malformed",
     )
-    df.reject_destination(
-        "err RejectedFileRow Conversion",
-        CONN_STAGING,
-        "err.RejectedFileRow",
-        from_component="Supplier Catalog File",
-        from_output="Flat File Source Error Output",
-    )
+    conversion_reject_branch(df, "Supplier Catalog File", SRC_BANK, feed_code_page("ING_FILE_SupplierCatalog"))
 
     loop = feed_loop("Foreach Supplier Catalog File", "ING_FILE_SupplierCatalog", "Loop the supplier catalogue drop folder.")
     paths = loop.add(path_expressions("supplier", "supplier"))
@@ -1123,7 +1149,8 @@ def ing_file_fx_override():
 
     df = DataFlow("Ingest FX Overrides")
     feed_conn = feed_connection(pkg, "ING_FILE_FxOverride", "FF_FxOverride", cols)
-    df.flatfile_source("FX Override File", feed_conn, cols, connection_scope="Package")
+    df.flatfile_source("FX Override File", feed_conn, cols, connection_scope="Package",
+                       code_page=feed_code_page("ING_FILE_FxOverride"))
     df.conditional_split(
         "Split Record Types",
         [("Detail", 'RecordType == "FXO"')],
@@ -1202,13 +1229,7 @@ def ing_file_fx_override():
         from_component="Lookup Published Rate",
         from_output="Lookup No Match Output",
     )
-    df.reject_destination(
-        "err RejectedFileRow Conversion",
-        CONN_STAGING,
-        "err.RejectedFileRow",
-        from_component="FX Override File",
-        from_output="Flat File Source Error Output",
-    )
+    conversion_reject_branch(df, "FX Override File", SRC_FX, feed_code_page("ING_FILE_FxOverride"))
 
     loop = feed_loop("Foreach FX Override File", "ING_FILE_FxOverride", "Loop the treasury FX override drop folder.")
     paths = loop.add(path_expressions("treasury", "treasury"))
@@ -1275,7 +1296,8 @@ def ing_file_quarantine_malformed():
 
     df = DataFlow("Sweep Quarantined Rows")
     feed_conn = feed_connection(pkg, "ING_FILE_QuarantineMalformed", "FF_QuarantineMalformed", cols)
-    df.flatfile_source("Quarantined File", feed_conn, cols, connection_scope="Package")
+    df.flatfile_source("Quarantined File", feed_conn, cols, connection_scope="Package",
+                       code_page=feed_code_page("ING_FILE_QuarantineMalformed"))
     df.derived_column(
         "Classify Quarantined Row",
         [
@@ -1296,7 +1318,7 @@ def ing_file_quarantine_malformed():
             ),
             (
                 "ReplayEligibleFlag",
-                'LEN(TRIM(RawLine)) > 0 && FINDSTRING(RawLine, "\\x00", 1) == 0 ? "Y" : "N"',
+                'LEN(TRIM(RawLine)) > 0 && FINDSTRING(RawLine, "\\xFFFD", 1) == 0 ? "Y" : "N"',
                 str_col("ReplayEligibleFlag", 1),
             ),
         ]

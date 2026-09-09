@@ -354,14 +354,14 @@ def dq_supplier_screen():
          str_col("NormalizedTaxId", 30)),
         ("TermsMissingFlag", 'ISNULL(PaymentTermsCode) || TRIM(PaymentTermsCode) == "" ? "Y" : "N"',
          str_col("TermsMissingFlag", 1)),
+        ("RejectReasonCode",
+         'ISNULL(PaymentTermsCode) || TRIM(PaymentTermsCode) == "" ? "DQ_SUPP_TERMS_NULL" : '
+         '"DQ_SUPP_TAXID_DUP"', str_col("RejectReasonCode", 30)),
         # EU suppliers must present a VAT-shaped identifier; APAC uses a national
         # business number, NA an EIN. Only the EU shape is machine-checkable here.
         ("TaxShapeInvalidFlag",
          'RegionCode == "EU" && (LEN(NormalizedTaxId) < 8 || SUBSTRING(NormalizedTaxId, 1, 2) != '
          'SUBSTRING(UPPER(TRIM(CountryCode)), 1, 2)) ? "Y" : "N"', str_col("TaxShapeInvalidFlag", 1)),
-        ("RejectReasonCode",
-         'ISNULL(PaymentTermsCode) || TRIM(PaymentTermsCode) == "" ? "DQ_SUPP_TERMS_NULL" : '
-         '"DQ_SUPP_TAXID_DUP"', str_col("RejectReasonCode", 30)),
     ])
     flow.sort("Sort By Normalized Tax Identifier", ["NormalizedTaxId", "SupplierCode"])
     flow.aggregate("Count Suppliers Per Tax Identifier", ["NormalizedTaxId"], [
@@ -656,7 +656,7 @@ def dq_file_screen():
         ("UnparsableAmountFlag",
          'ISNULL(GrossAmount) || LEN(REPLACE(REPLACE(REPLACE(TRIM(GrossAmount), ",", ""), "$", ""), ".", "")) == 0 '
          '? "Y" : "N"', str_col("UnparsableAmountFlag", 1)),
-        ("HighBitFlag", 'FINDSTRING(PartnerProductDesc, "\\uFFFD", 1) > 0 ? "Y" : "N"',
+        ("HighBitFlag", 'FINDSTRING(PartnerProductDesc, "\\xFFFD", 1) > 0 ? "Y" : "N"',
          str_col("HighBitFlag", 1)),
         # The reason codes err.RejectedFileRow documents, so a screened row and
         # an ingestion reject describe the same defect with the same code.
