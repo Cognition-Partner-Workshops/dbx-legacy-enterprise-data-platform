@@ -71,12 +71,34 @@ def mutate_conmgr_literal_token(text):
 
 
 def mutate_conmgr_expression_password(text):
-    """Put the credential back into the expression - the 0xC0017010 defect."""
-    if '+ ";" : "Integrated Security=SSPI;"' not in text:
+    """Put the credential back into an expression - the 0xC0017010 defect."""
+    if "<DTS:ObjectData>" not in text:
         return None
-    return text.replace('+ ";" : "Integrated Security=SSPI;"',
-                        '+ ";Password=" + @[$Project::SqlServerPassword] + ";" '
-                        ': "Integrated Security=SSPI;"', 1)
+    return text.replace(
+        "  <DTS:ObjectData>",
+        '  <DTS:PropertyExpression DTS:Name="Password">'
+        '@[$Project::SqlServerPassword]</DTS:PropertyExpression>\n'
+        "  <DTS:ObjectData>", 1)
+
+
+def mutate_conmgr_expressed_connection_string(text):
+    """Retarget the whole connection string - the live login failure.
+
+    An OLE DB connection manager whose ConnectionString is expressed is
+    rebuilt from that expression when the connection opens, which drops the
+    password the catalog applied to CM.<connection>.Password, so every task
+    fails with 'Login failed for user' and then
+    DTS_E_CANNOTACQUIRECONNECTIONFROMCONNECTIONMANAGER.
+    """
+    match = re.search(r'(?s)\n[ \t]*<DTS:PropertyExpression DTS:Name="ServerName">.*?'
+                      r'</DTS:PropertyExpression>', text)
+    if not match or "MSOLEDBSQL19.1" not in text:
+        return None
+    return text.replace(
+        match.group(0),
+        '\n  <DTS:PropertyExpression DTS:Name="ConnectionString">'
+        '"Data Source=" + @[$Project::SqlServerHost] + ";Provider=MSOLEDBSQL19.1;"'
+        "</DTS:PropertyExpression>", 1)
 
 
 def mutate_dtproj_drop_cm_password(text):
@@ -129,6 +151,19 @@ def mutate_dtsx_unbound_flatfile(text):
         '@[User::CurrentFilePath]</DTS:PropertyExpression>',
         '<DTS:PropertyExpression DTS:Name="ConnectionString">'
         '@[$Project::InboundFileRoot]</DTS:PropertyExpression>', 1)
+
+
+def mutate_dtsx_file_system_attributes(text):
+    """Spell FileSystemData the way the task host does not read."""
+    if "TaskOperationType=" not in text:
+        return None
+    for serialised, ignored in (("TaskOperationType", "Operation"),
+                               ("TaskSourcePath", "SourcePath"),
+                               ("TaskIsSourceVariable", "IsSourcePathVariable"),
+                               ("TaskDestinationPath", "DestinationPath"),
+                               ("TaskIsDestinationVariable", "IsDestinationPathVariable")):
+        text = text.replace(serialised + "=", ignored + "=")
+    return text
 
 
 def mutate_dtsx_cm_id_by_dtsid(text):
@@ -266,6 +301,8 @@ FIXTURES = (
      mutate_conmgr_literal_token),
     ("credential named by an expression", "ssis/04_staging", ".conmgr", "conmgr-credentials",
      mutate_conmgr_expression_password),
+    ("whole connection string expressed", "ssis/04_staging", ".conmgr", "conmgr-binding",
+     mutate_conmgr_expressed_connection_string),
     ("CM password parameter removed", "ssis/04_staging", ".dtproj", "catalog-binding",
      mutate_dtproj_drop_cm_password),
     ("sensitive project parameter re-added", "ssis/04_staging", ".params", "catalog-binding",
@@ -274,6 +311,8 @@ FIXTURES = (
      "file-locality", mutate_dtsx_drop_directory_expression),
     ("flat file manager not bound to the loop variable", "ssis/03_file_ingestion", ".dtsx",
      "file-locality", mutate_dtsx_unbound_flatfile),
+    ("File System Task the task host ignores", "ssis/03_file_ingestion", ".dtsx",
+     "file-system-task", mutate_dtsx_file_system_attributes),
     ("package connection addressed by DTSID", "ssis/03_file_ingestion", ".dtsx",
      "dtsx-connection-refs", mutate_dtsx_cm_id_by_dtsid),
     ("component connection nothing declares", "ssis/07_dimensions", ".dtsx",
@@ -325,8 +364,8 @@ def run_checker(root, prefix):
         [sys.executable, CHECKER, "--json", "--path", prefix],
         cwd=REPO_ROOT, env=dict(os.environ, WWI_ESTATE_ROOT=root),
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-    if result.returncode not in (0, 1):
-        raise RuntimeError("checker failed: %s" % result.stderr.strip())
+    if result.returncode not in (0, 1) or not result.stdout.strip():
+        raise RuntimeError("checker failed: %s" % (result.stderr.strip() or result.stdout.strip()))
     return json.loads(result.stdout)
 
 

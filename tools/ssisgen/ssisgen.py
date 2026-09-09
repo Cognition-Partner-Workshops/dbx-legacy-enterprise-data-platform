@@ -1155,12 +1155,33 @@ class ExecutePackage(Task):
 
 
 class FileSystemTask(Task):
+    """A File System Task that moves or copies one variable-addressed path.
+
+    The persisted attribute names are the ones the task host itself writes:
+    ``TaskOperationType``, ``TaskSourcePath``, ``TaskIsSourceVariable``,
+    ``TaskDestinationPath`` and ``TaskIsDestinationVariable``. Any other spelling
+    is well-formed XML that the task host does not recognise, so it loads with
+    its defaults - operation CopyFile over two empty literal paths - and fails
+    validation with '"DestinationPath" is not valid on operation type
+    "CopyFile"'. Nothing but loading the package through the runtime catches
+    that, which is what validation/static/Test-PackageRuntimeContracts.ps1 does.
+    """
+
     creation_name = "Microsoft.FileSystemTask"
     executable_type = "Microsoft.FileSystemTask"
     description = "File System Task"
 
+    # DTSFileSystemOperation, as the task host parses it.
+    OPERATIONS = ("CopyFile", "CopyDirectory", "MoveFile", "MoveDirectory",
+                  "DeleteFile", "DeleteDirectory", "DeleteDirectoryContent",
+                  "RenameFile", "SetAttributes", "CreateDirectory")
+
     def __init__(self, name, operation, source_variable, destination_variable):
         Task.__init__(self, name)
+        if operation not in self.OPERATIONS:
+            raise ValueError(
+                "file system task %r asks for operation %r; the task host only "
+                "parses %s" % (name, operation, ", ".join(self.OPERATIONS)))
         self.operation = operation
         self.source_variable = source_variable
         self.destination_variable = destination_variable
@@ -1168,9 +1189,9 @@ class FileSystemTask(Task):
     def object_data(self, ref, indent):
         pad = " " * indent
         return [
-            '%s<FileSystemData taskOperationType="%s" taskSourceVariable="%s" taskDestinationVariable="%s" '
-            'taskOperationIsSourceVariable="True" taskOperationIsDestinationVariable="True" '
-            'xmlns="www.microsoft.com/sqlserver/dts/tasks/filesystemtask" />'
+            '%s<FileSystemData TaskOperationType="%s" TaskSourcePath="%s" '
+            'TaskIsSourceVariable="True" TaskDestinationPath="%s" '
+            'TaskIsDestinationVariable="True" />'
             % (pad, self.operation, self.source_variable, self.destination_variable)
         ]
 

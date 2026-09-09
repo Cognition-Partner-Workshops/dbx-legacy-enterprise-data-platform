@@ -10,6 +10,7 @@ live estate and have never been pointed at one.
 | `validation/static/run_negative_fixtures.py` | proves the static checks fail on deliberately malformed copies of real artifacts | no |
 | `validation/checks/run_check_fixtures.py` | the same idea for the deep checks: one injected defect per fixture, drawn from the defect classes a live deployment has actually hit | no |
 | `validation/static/Test-ExecutionParameterBinding.ps1` | exercises the runner's catalog parameter conversion against a stand-in declaration map | no |
+| `validation/static/Test-PackageRuntimeContracts.ps1` | loads every package through the SSIS runtime and asserts the task properties the loader parsed, which is the only component that decides what a task's serialised attributes mean | no - it parses, it never connects |
 | `validation/static/Test-PlanConditionalEdge.ps1` | walks the real orchestration plan offline and proves the runner takes a conditional edge only when its value *and* its expression hold | no |
 | `validation/runtime/` | SQL an operator would run *after* a deployment, to see whether the estate actually behaves | yes - and it has not been run |
 
@@ -31,7 +32,14 @@ python3 validation/static/run_negative_fixtures.py                # negative fix
 python3 validation/checks/run_check_fixtures.py                   # deep-check fixtures
 pwsh -File validation/static/Test-ExecutionParameterBinding.ps1   # runner parameter binding
 pwsh -File validation/static/Test-PlanConditionalEdge.ps1         # conditional precedence edges
+powershell -File validation/static/Test-PackageRuntimeContracts.ps1  # runtime load contracts
 ```
+
+`Test-PackageRuntimeContracts.ps1` needs Windows PowerShell and the SSIS
+managed runtime; it skips itself where they are absent. It exists because a
+package is well-formed XML long before it is a package the task host
+understands: an ObjectData attribute the task host does not recognise loads
+silently on the task's defaults and only fails on the execution host.
 
 `run_negative_fixtures.py` copies a real project, package, connection manager
 or procedure into a scratch tree, breaks exactly one thing in the copy, and

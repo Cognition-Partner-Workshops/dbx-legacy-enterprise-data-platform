@@ -30,6 +30,8 @@ import sys
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 
+import yaml
+
 SOURCE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # The tree the file checks walk. Overridable so the negative fixtures in
 # validation/static/run_negative_fixtures.py can point the same checks at a
@@ -420,6 +422,19 @@ def check_dtproj_structure(result, prefixes):
     result.count("dtproj_files_checked", checked)
 
 
+# The properties an OLE DB connection manager is retargeted through. Its whole
+# ConnectionString is deliberately absent: assigning it rebuilds the connection
+# and drops the password the catalog applied to CM.<connection>.Password, which
+# is what made every task fail with 'Login failed for user' followed by
+# DTS_E_CANNOTACQUIRECONNECTIONFROMCONNECTIONMANAGER.
+# Oracle addresses the whole service through ServerName, so it has no catalog
+# of its own to retarget.
+OLEDB_BOUND_PROPERTIES = {
+    "MSOLEDBSQL19.1": ("ServerName", "InitialCatalog", "UserName"),
+    "OraOLEDB.Oracle.1": ("ServerName", "UserName"),
+}
+
+
 def check_conmgr_binding(result, prefixes):
     """Connection managers must bind at run time, not carry a literal token."""
     ns = {"DTS": "www.microsoft.com/SqlServer/Dts"}
@@ -430,9 +445,28 @@ def check_conmgr_binding(result, prefixes):
             root = ET.parse(full).getroot()
         except ET.ParseError:
             continue
-        expressions = [node for node in root.iter("{%s}PropertyExpression" % ns["DTS"])
-                       if node.get("{%s}Name" % ns["DTS"]) == "ConnectionString"]
-        if not expressions:
+        kind = root.get("{%s}CreationName" % ns["DTS"]) or ""
+        expressed = [node.get("{%s}Name" % ns["DTS"])
+                     for node in root.iter("{%s}PropertyExpression" % ns["DTS"])]
+        if kind == "OLEDB":
+            if "ConnectionString" in expressed:
+                result.fail("conmgr-binding", rel,
+                            "OLE DB connection manager expresses ConnectionString; "
+                            "evaluating it rebuilds the connection and discards the "
+                            "password the catalog applied through CM.<connection>.Password")
+            literal = ""
+            for node in root.iter():
+                literal = node.get("{%s}ConnectionString" % ns["DTS"]) or literal
+            required = ()
+            for provider, properties in OLEDB_BOUND_PROPERTIES.items():
+                if provider in literal:
+                    required = properties
+            for prop in required:
+                if prop not in expressed:
+                    result.fail("conmgr-binding", rel,
+                                "no %s property expression; the connection cannot be "
+                                "retargeted at run time" % prop)
+        elif "ConnectionString" not in expressed:
             result.fail("conmgr-binding", rel,
                         "no ConnectionString property expression; the connection cannot be "
                         "retargeted at run time")
@@ -450,22 +484,32 @@ def check_conmgr_binding(result, prefixes):
 TLS_KEYWORD = "Trust Server Certificate=True;"
 TLS_KEYWORD_WRONG = re.compile(r"TrustServerCertificate\s*=")
 
+# The providers the estate is validated against; both are fixed in the
+# design-time connection string because no connection manager property carries
+# them and rewriting the whole connection string would drop the password.
+SQLSERVER_PROVIDER = "MSOLEDBSQL19.1"
+ORACLE_PROVIDER = "OraOLEDB.Oracle.1"
+
 
 SENSITIVE_TOKEN_RE = re.compile(
     r"@\[\$Project::(\w*(?:Password|Secret|Pwd)\w*)\]", re.IGNORECASE)
 
 
+PASSWORD_KEYWORD_RE = re.compile(r"(?i)\b(password|pwd)\s*=")
+
+
 def check_conmgr_credentials(result, prefixes):
-    """No connection expression may name a credential.
+    """No connection expression may name a credential, and no literal may hold one.
 
     A Sensitive project parameter cannot be read by the SSIS expression
     evaluator: the package fails validation with 0xC0017010 before the
     credential would ever be used. The password therefore travels on the
     connection manager's own ``CM.<connection>.Password`` project parameter,
-    which the runtime applies to the connection manager object before the
-    ConnectionString expression is evaluated, and which the catalog environment
-    binds by reference. Everything else about the connection string - host,
-    port, service, catalog, provider, user, TLS - stays in the expression.
+    which the runtime applies to the connection manager object and which the
+    catalog environment binds by reference. Host, catalog and user are
+    retargeted by property expression; the provider and the TLS keyword cannot
+    be, so they are asserted on the design-time literal that ships with the
+    package and is what the connection actually starts from.
     """
     ns = {"DTS": "www.microsoft.com/SqlServer/Dts"}
     oracle = sql = 0
@@ -474,35 +518,42 @@ def check_conmgr_credentials(result, prefixes):
             root = ET.parse(full).getroot()
         except ET.ParseError:
             continue
-        expression = ""
+        expressions = {}
         for node in root.iter("{%s}PropertyExpression" % ns["DTS"]):
-            if node.get("{%s}Name" % ns["DTS"]) == "ConnectionString":
-                expression = node.text or ""
-        if not expression:
+            expressions[node.get("{%s}Name" % ns["DTS"])] = node.text or ""
+        for name, expression in sorted(expressions.items()):
+            for match in SENSITIVE_TOKEN_RE.finditer(expression):
+                result.fail("conmgr-credentials", rel,
+                            "the %s expression references the sensitive project parameter "
+                            "$Project::%s; a sensitive parameter cannot be read by the "
+                            "expression evaluator (0xC0017010) - bind the credential through "
+                            "CM.<connection>.Password" % (name, match.group(1)))
+        if (root.get("{%s}CreationName" % ns["DTS"]) or "") != "OLEDB":
             continue
-        for match in SENSITIVE_TOKEN_RE.finditer(expression):
+        literal = ""
+        for node in root.iter():
+            literal = node.get("{%s}ConnectionString" % ns["DTS"]) or literal
+        if PASSWORD_KEYWORD_RE.search(literal):
             result.fail("conmgr-credentials", rel,
-                        "connection expression references the sensitive project parameter "
-                        "$Project::%s; a sensitive parameter cannot be read by the "
-                        "expression evaluator (0xC0017010) - bind the credential through "
-                        "CM.<connection>.Password" % match.group(1))
-        if "OracleProvider" in expression:
+                        "the design-time connection string holds a password keyword")
+        if ORACLE_PROVIDER in literal:
             oracle += 1
-            if "@[$Project::OracleUser]" not in expression:
+            if "UserName" not in expressions:
                 result.fail("conmgr-credentials", rel,
-                            "Oracle connection expression does not consume $Project::OracleUser")
-        if "SqlServerProvider" in expression:
+                            "Oracle connection manager does not retarget UserName")
+        if SQLSERVER_PROVIDER in literal:
             sql += 1
-            if "Integrated Security=SSPI;" not in expression:
+            if TLS_KEYWORD not in literal:
                 result.fail("conmgr-credentials", rel,
-                            "SQL Server connection expression has no Windows authentication branch")
-            if TLS_KEYWORD not in expression:
+                            "SQL Server connection string does not carry %r" % TLS_KEYWORD)
+            if TLS_KEYWORD_WRONG.search(literal):
                 result.fail("conmgr-credentials", rel,
-                            "SQL Server connection expression does not emit %r" % TLS_KEYWORD)
-            if TLS_KEYWORD_WRONG.search(expression):
-                result.fail("conmgr-credentials", rel,
-                            "SQL Server connection expression emits the unspaced TrustServerCertificate "
+                            "SQL Server connection string carries the unspaced TrustServerCertificate "
                             "keyword, which OLE DB Driver 19 ignores")
+        elif ORACLE_PROVIDER not in literal:
+            result.fail("conmgr-credentials", rel,
+                        "OLE DB connection string names no supported provider; the provider "
+                        "cannot be retargeted at run time, so it has to be in the literal")
     result.count("oracle_connections_checked", oracle)
     result.count("sqlserver_connections_checked", sql)
 
@@ -578,6 +629,82 @@ def check_catalog_binding_surface(result, prefixes):
     result.count("catalog_password_bindings", bindings)
 
 
+def check_environment_binding_parity(result, prefixes):
+    """Every catalog environment variable must have a parameter to bind to.
+
+    config/environments/<env>.env.yaml is what deployment/ssis/render_environment_sql.py
+    turns into `catalog.set_object_parameter_value @value_type = 'R'` calls. A
+    variable whose target parameter no longer exists in the project manifest is
+    bound to nothing: the deployment still succeeds, and the execution then runs
+    with the design-time default - an empty password, in the case that took the
+    Master_File_Ingestion run down. A CM.<connection>.ConnectionString target is
+    refused outright, because applying it rebuilds the connection manager and
+    discards CM.<connection>.Password with it.
+    """
+    ssis_ns = "www.microsoft.com/SqlServer/SSIS"
+    dts_ns = "www.microsoft.com/SqlServer/Dts"
+    # The deployable parameter surface of a project is its manifest - the
+    # CM.<connection>.* parameters - plus Project.params.
+    declared = set()
+    credential_parameters = set()
+    for _rel, full in walk_files(prefixes, (".dtproj", ".params")):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for node in root.iter("{%s}Parameter" % ssis_ns):
+            name = node.get("{%s}Name" % ssis_ns)
+            declared.add(name)
+            if name.startswith("CM.") and name.endswith(".Password"):
+                credential_parameters.add(name)
+    if not declared:
+        return
+
+    oledb = set()
+    for _rel, full in walk_files(prefixes, (".conmgr",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        if (root.get("{%s}CreationName" % dts_ns) or "") == "OLEDB":
+            oledb.add(os.path.basename(full)[: -len(".conmgr")])
+
+    environments = 0
+    directory = os.path.join(REPO_ROOT, "config", "environments")
+    if not os.path.isdir(directory):
+        return
+    for name in sorted(os.listdir(directory)):
+        if not name.endswith(".env.yaml"):
+            continue
+        rel = "config/environments/%s" % name
+        with open(os.path.join(REPO_ROOT, rel)) as handle:
+            document = yaml.safe_load(handle)
+        environments += 1
+        bound = set()
+        for variable in document.get("ssis_environment_variables") or []:
+            for target in variable.get("binds_to") or [variable["parameter"]]:
+                bound.add(target)
+                if (target.endswith(".ConnectionString")
+                        and target[len("CM."):-len(".ConnectionString")] in oledb):
+                    result.fail("environment-binding", rel,
+                                "%s binds %s; applying a whole connection string "
+                                "rebuilds the connection manager and discards the "
+                                "password bound to CM.<connection>.Password"
+                                % (variable["parameter"], target))
+                elif target not in declared:
+                    result.fail("environment-binding", rel,
+                                "%s binds %s, which no project manifest declares; the "
+                                "binding is skipped at deployment and the execution "
+                                "runs on the design-time default"
+                                % (variable["parameter"], target))
+        for parameter in sorted(credential_parameters - bound):
+            result.fail("environment-binding", rel,
+                        "no environment variable binds %s, so that connection "
+                        "manager would authenticate with an empty password"
+                        % parameter)
+    result.count("environments_checked", environments)
+
+
 def check_file_locality(result, prefixes):
     """A file package must resolve its folder and its file at run time.
 
@@ -636,6 +763,55 @@ def check_file_locality(result, prefixes):
                             "design-time file" % name)
     result.count("foreach_file_loops_checked", loops)
     result.count("flatfile_managers_checked", managers)
+
+
+FILE_SYSTEM_OPERATIONS = ("CopyFile", "MoveFile", "DeleteFile", "RenameFile",
+                          "CopyDirectory", "MoveDirectory", "DeleteDirectory",
+                          "DeleteDirectoryContent", "CreateDirectory", "SetAttributes")
+
+
+def check_file_system_tasks(result, prefixes):
+    """A File System Task must serialise the attribute names the task host reads.
+
+    The task host is the only component that interprets FileSystemData, and it
+    reads TaskOperationType / TaskSourcePath / TaskDestinationPath. An element
+    spelled Operation / SourcePath / DestinationPath is still well-formed XML
+    and still builds, but the task loads on its defaults - operation CopyFile
+    with no paths - and the execution host reports
+
+        "DestinationPath" is not valid on operation type "CopyFile"
+
+    at task validation, which is how the archive step of every ING_FILE_*
+    package failed in the Master_File_Ingestion run.
+    """
+    tasks = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for data in root.iter("FileSystemData"):
+            tasks += 1
+            operation = data.get("TaskOperationType")
+            if operation is None:
+                result.fail("file-system-task", rel,
+                            "FileSystemData carries %s; the task host reads "
+                            "TaskOperationType and loads its CopyFile default instead"
+                            % (", ".join(sorted(data.attrib)) or "no attribute"))
+                continue
+            if operation not in FILE_SYSTEM_OPERATIONS:
+                result.fail("file-system-task", rel,
+                            "unknown File System Task operation %r" % operation)
+            for attribute in ("TaskSourcePath", "TaskIsSourceVariable"):
+                if not data.get(attribute):
+                    result.fail("file-system-task", rel,
+                                "operation %s has no %s" % (operation, attribute))
+            if operation.startswith(("Copy", "Move", "Rename")):
+                for attribute in ("TaskDestinationPath", "TaskIsDestinationVariable"):
+                    if not data.get(attribute):
+                        result.fail("file-system-task", rel,
+                                    "operation %s has no %s" % (operation, attribute))
+    result.count("file_system_tasks_checked", tasks)
 
 
 def check_feed_manifest(result, prefixes):
@@ -1214,6 +1390,7 @@ CHECKS = [
     ("conmgr-binding", check_conmgr_binding),
     ("conmgr-credentials", check_conmgr_credentials),
     ("catalog-binding", check_catalog_binding_surface),
+    ("environment-binding", check_environment_binding_parity),
     ("file-locality", check_file_locality),
     ("feed-manifest", check_feed_manifest),
     ("orchestration-edges", check_project_reference_scope),
@@ -1254,7 +1431,9 @@ def main():
     check_conmgr_binding(result, prefixes)
     check_conmgr_credentials(result, prefixes)
     check_catalog_binding_surface(result, prefixes)
+    check_environment_binding_parity(result, prefixes)
     check_file_locality(result, prefixes)
+    check_file_system_tasks(result, prefixes)
     check_feed_manifest(result, prefixes)
     check_project_reference_scope(result, prefixes)
     check_sql_exec_arguments(result, prefixes)

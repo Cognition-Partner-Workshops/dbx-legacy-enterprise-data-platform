@@ -8,13 +8,10 @@
     'OraclePort' = @{ EnvVar = 'ORACLE_PORT'; Default = '1521'; Secret = $false }
     'OracleService' = @{ EnvVar = 'ORACLE_SERVICE'; Default = 'WWIGERPD'; Secret = $false }
     'OracleUser' = @{ EnvVar = 'ORACLE_USER'; Default = 'WWI_ETL_DEV'; Secret = $false }
-    'OracleProvider' = @{ EnvVar = 'ORACLE_PROVIDER'; Default = 'OraOLEDB.Oracle.1'; Secret = $false }
     'OraclePassword' = @{ EnvVar = 'ORACLE_PASSWORD'; Default = $null; Secret = $true }
     'SqlServerHost' = @{ EnvVar = 'SQLSERVER_HOST'; Default = 'sqldev01.internal.example'; Secret = $false }
     'SqlServerPort' = @{ EnvVar = 'SQLSERVER_PORT'; Default = '1433'; Secret = $false }
     'SqlServerUser' = @{ EnvVar = 'SQLSERVER_USER'; Default = 'WWI_ETL'; Secret = $false }
-    'SqlServerProvider' = @{ EnvVar = 'SQLSERVER_PROVIDER'; Default = 'MSOLEDBSQL19.1'; Secret = $false }
-    'SqlServerTrustServerCertificate' = @{ EnvVar = 'SQLSERVER_TRUST_SERVER_CERTIFICATE'; Default = '1'; Secret = $false }
     'SqlServerPassword' = @{ EnvVar = 'SQLSERVER_PASSWORD'; Default = $null; Secret = $true }
     'SqlServerOltpDb' = @{ EnvVar = 'SQLSERVER_OLTP_DB'; Default = 'WideWorldImporters'; Secret = $false }
     'SqlServerStagingDb' = @{ EnvVar = 'SQLSERVER_STAGING_DB'; Default = 'WideWorldImporters_Staging'; Secret = $false }

@@ -1,12 +1,21 @@
 #!/usr/bin/env python3
-"""Evaluate a generated connection-manager ConnectionString expression.
+"""Evaluate the property expressions a generated connection manager carries.
 
-The provider never sees the literal ``DTS:ConnectionString`` attribute: the
-package re-evaluates the ConnectionString property expression from the project
-parameters when the connection is opened. Anything that wants to prove the
-generated contract actually reaches OraOLEDB or MSOLEDBSQL19 - the runtime
-acceptance test in validation/runtime - therefore has to evaluate the same
-expression the runtime does, not a second string maintained beside it.
+An OLE DB connection manager is retargeted property by property - ServerName,
+InitialCatalog, UserName - on top of the design-time ``DTS:ConnectionString``
+literal, and the password arrives separately on ``CM.<connection>.Password``.
+The string the provider finally receives is therefore the literal with those
+properties folded back into it, which is what ``effective_connection_string``
+builds. Anything that wants to prove the generated contract actually reaches
+OraOLEDB or MSOLEDBSQL19 - the runtime acceptance test in validation/runtime -
+has to compose the same string the runtime composes, not a second one
+maintained beside it.
+
+No OLE DB connection manager may carry a ``ConnectionString`` expression:
+assigning that property rebuilds the connection from the string alone and
+discards the password already applied to it, which is the defect behind
+'Login failed for user' / DTS_E_CANNOTACQUIRECONNECTIONFROMCONNECTIONMANAGER.
+``assert_no_connection_string_expression`` is the guard.
 
 Only the constructs the generator emits are supported: string literals,
 concatenation, project parameter references, the ``(DT_WSTR, n)`` cast, LEN(),
@@ -62,6 +71,15 @@ SENSITIVE_PARAMETER_RE = re.compile(
     r"@\[\$Project::(?P<name>\w*(?:Password|Secret|Pwd)\w*|CM\.[\w.]*Password)\]",
     re.IGNORECASE)
 PARAMETER_TOKEN_RE = re.compile(r"@\[\$Project::(?P<name>[\w.]+)\]")
+
+# connection manager property -> the OLE DB keyword it writes into the
+# connection string, as MSOLEDBSQL/OraOLEDB spell it.
+PROPERTY_KEYWORD = {
+    "ServerName": "Data Source",
+    "InitialCatalog": "Initial Catalog",
+    "UserName": "User ID",
+    "Password": "Password",
+}
 
 TOKEN_RE = re.compile(r"""
     (?P<space>\s+)
@@ -232,13 +250,107 @@ def assert_no_sensitive(expression, origin="expression"):
             % (origin, ", ".join(found)))
 
 
-def connection_expression(conmgr_path):
-    """The ConnectionString property expression held in a .conmgr file."""
+def connection_expressions(conmgr_path):
+    """The property expressions held in a .conmgr file, in document order."""
     root = ET.parse(conmgr_path).getroot()
+    found = []
     for node in root.iter("{%s}PropertyExpression" % DTS_NS):
-        if node.get("{%s}Name" % DTS_NS) == "ConnectionString":
-            return node.text or ""
+        found.append((node.get("{%s}Name" % DTS_NS), node.text or ""))
+    if not found:
+        raise ExpressionError("%s has no property expression at all; nothing "
+                             "retargets it at run time" % conmgr_path)
+    return found
+
+
+def connection_kind(conmgr_path):
+    """The CreationName of a .conmgr file: OLEDB, FILE, ..."""
+    root = ET.parse(conmgr_path).getroot()
+    return root.get("{%s}CreationName" % DTS_NS) or ""
+
+
+def connection_literal(conmgr_path):
+    """The design-time DTS:ConnectionString attribute of a .conmgr file."""
+    root = ET.parse(conmgr_path).getroot()
+    for data in root.iter("{%s}ObjectData" % DTS_NS):
+        for inner in data.iter("{%s}ConnectionManager" % DTS_NS):
+            value = inner.get("{%s}ConnectionString" % DTS_NS)
+            if value is not None:
+                return value
+    raise ExpressionError("%s has no design-time connection string" % conmgr_path)
+
+
+def connection_expression(conmgr_path):
+    """The ConnectionString property expression of a FILE connection manager."""
+    for name, text in connection_expressions(conmgr_path):
+        if name == "ConnectionString":
+            return text
     raise ExpressionError("%s has no ConnectionString property expression" % conmgr_path)
+
+
+def assert_no_connection_string_expression(conmgr_path):
+    """Raise if an OLE DB connection manager expresses its whole ConnectionString.
+
+    Setting ConnectionString rebuilds the connection manager from that string,
+    dropping the password the catalog applied through CM.<connection>.Password;
+    the provider then answers 0x80040E4D 'Login failed for user' and the task
+    fails with DTS_E_CANNOTACQUIRECONNECTIONFROMCONNECTIONMANAGER.
+    """
+    if connection_kind(conmgr_path) != "OLEDB":
+        return
+    for name, _text in connection_expressions(conmgr_path):
+        if name == "ConnectionString":
+            raise ExpressionError(
+                "%s expresses ConnectionString; evaluating it rebuilds the "
+                "connection and discards the password applied through "
+                "CM.<connection>.Password. Retarget ServerName, InitialCatalog "
+                "and UserName instead." % conmgr_path)
+
+
+def parse_connection_string(text):
+    """An OLE DB connection string as an ordered list of (keyword, value)."""
+    pairs = []
+    for fragment in text.split(";"):
+        if not fragment.strip():
+            continue
+        keyword, _, value = fragment.partition("=")
+        pairs.append((keyword.strip(), value.strip()))
+    return pairs
+
+
+def effective_connection_string(conmgr_path, parameters, credential=None):
+    """The string the provider receives: literal + evaluated property expressions.
+
+    This is the runtime's own composition order - the catalog and the expression
+    evaluator write connection manager properties, and the connection manager
+    rewrites its connection string from them - so a check that opens this string
+    is testing what the package will actually open.
+    """
+    pairs = parse_connection_string(connection_literal(conmgr_path))
+    for name, expression in connection_expressions(conmgr_path):
+        if name == "ConnectionString":
+            pairs = parse_connection_string(str(evaluate(expression, parameters)))
+            continue
+        keyword = PROPERTY_KEYWORD.get(name)
+        if keyword is None:
+            raise ExpressionError("%s expresses the unmodelled property %s"
+                                  % (conmgr_path, name))
+        pairs = _assign(pairs, keyword, str(evaluate(expression, parameters)))
+    if credential is not None:
+        pairs = _assign(pairs, "Password", credential)
+    return "".join("%s=%s;" % (keyword, value) for keyword, value in pairs)
+
+
+def _assign(pairs, keyword, value):
+    """Set one keyword, dropping it entirely when the value is empty.
+
+    An empty UserName is how the connection manager selects Windows
+    authentication: the keyword is not written at all.
+    """
+    out = [(existing, held) for existing, held in pairs if existing.lower() != keyword.lower()]
+    if value == "":
+        return out
+    out.append((keyword, value))
+    return out
 
 
 def parameters_from_environment(defaults=None, redact=False):
@@ -259,23 +371,27 @@ def main():
     parser.add_argument("conmgr")
     parser.add_argument("--unmasked", action="store_true",
                         help="render real password values (caller must not log the result)")
-    parser.add_argument("--provider", default="", help="value for the provider parameter")
-    parser.add_argument("--trust-server-certificate", default="true")
+    parser.add_argument("--password-env", default="", metavar="NAME",
+                        help="append the password held by this environment "
+                             "variable, the way CM.<connection>.Password does")
     parser.add_argument("--set", action="append", default=[], metavar="NAME=VALUE",
                         help="override one project parameter")
     args = parser.parse_args()
 
-    defaults = {
-        "OracleProvider": args.provider or "OraOLEDB.Oracle.1",
-        "SqlServerProvider": args.provider or "MSOLEDBSQL19.1",
-        "SqlServerTrustServerCertificate": args.trust_server_certificate,
-    }
-    values = parameters_from_environment(defaults, redact=not args.unmasked)
+    values = parameters_from_environment(redact=not args.unmasked)
+    credential = None
+    if args.password_env:
+        credential = os.environ.get(args.password_env, "")
+        if not args.unmasked:
+            credential = REDACTED
     for override in args.set:
         name, _, value = override.partition("=")
+        if name in SENSITIVE_PARAMETERS:
+            credential = value
+            continue
         values[name] = value
     try:
-        print(evaluate(connection_expression(args.conmgr), values))
+        print(effective_connection_string(args.conmgr, values, credential))
     except ExpressionError as error:
         sys.stderr.write("connection expression: %s\n" % error)
         return 1

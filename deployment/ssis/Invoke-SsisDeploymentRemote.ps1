@@ -232,9 +232,12 @@ if ($Step -eq 'environment') {
     # Non-credential configuration is forwarded from this host's environment,
     # so the catalog is bound to the estate's real hosts and accounts instead of
     # the placeholder defaults rendered into <env>_environment.vars.psd1.
-    $forwarded = @('ORACLE_HOST', 'ORACLE_PORT', 'ORACLE_SERVICE', 'ORACLE_PROVIDER',
-                   'SQLSERVER_HOST', 'SQLSERVER_PORT', 'SQLSERVER_PROVIDER',
-                   'SQLSERVER_TRUST_SERVER_CERTIFICATE', 'SQLSERVER_OLTP_DB', 'SQLSERVER_STAGING_DB',
+    # Provider and TLS trust are not forwarded: they are part of the connection
+    # string as a whole, which the catalog cannot rebind without discarding the
+    # password, so they ship in the connection manager literal instead.
+    $forwarded = @('ORACLE_HOST', 'ORACLE_PORT', 'ORACLE_SERVICE',
+                   'SQLSERVER_HOST', 'SQLSERVER_PORT',
+                   'SQLSERVER_OLTP_DB', 'SQLSERVER_STAGING_DB',
                    'SQLSERVER_DW_DB', 'ETL_INBOUND_FILE_ROOT', 'ETL_ARCHIVE_FILE_ROOT',
                    'ETL_QUARANTINE_FILE_ROOT')
     foreach ($name in $forwarded) {
