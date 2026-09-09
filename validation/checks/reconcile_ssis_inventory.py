@@ -39,7 +39,8 @@ SQL_CONNECTION_RE = re.compile(r'SQLTask:Connection="([^"]+)"')
 
 OUTPUT_COLUMNS = (
     "package", "project", "folder", "domain", "load_type", "source_system",
-    "target_system", "parent", "parent_edge_source", "file_present", "path",
+    "target_system", "parent", "parent_edge_source", "actual_parents",
+    "file_present", "path",
     "execute_sql_tasks", "data_flow_tasks", "script_tasks",
     "execute_package_tasks", "file_system_tasks", "foreach_loops",
     "send_mail_tasks", "connection_managers", "connection_manager_types",
@@ -268,7 +269,7 @@ def write_csv(path, rows):
     if parent and not os.path.isdir(parent):
         os.makedirs(parent)
     with open(path, "w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=OUTPUT_COLUMNS)
+        writer = csv.DictWriter(handle, fieldnames=OUTPUT_COLUMNS, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -344,6 +345,10 @@ def run(args):
 
         parent = csv_row.get("parent_package", "") or (
             catalog_row.get("parent") or "" if package else "")
+        actual_parents = sorted(
+            {edge_parent for edge_parent, child in execute_edges if child == name}
+            | {root for root, child in plan_children if child == name})
+        actual_parents_text = ";".join(actual_parents)
         edge_source = ""
         if parent:
             if (parent, name) in execute_edges:
@@ -355,7 +360,9 @@ def run(args):
                 report.warn(
                     "parent-mismatch", name,
                     "catalog declares parent '%s' but neither an Execute Package "
-                    "Task nor ssis/orchestration-plan.json references it" % parent)
+                    "Task nor ssis/orchestration-plan.json references it "
+                    "(actually invoked by: %s)" %
+                    (parent, actual_parents_text or "no root or package invokes it"))
 
         children = facts["child_packages"]
         unresolved = [child for child in children if child not in package_names]
@@ -389,6 +396,7 @@ def run(args):
             "target_system": value("target_system"),
             "parent": parent,
             "parent_edge_source": edge_source,
+            "actual_parents": actual_parents_text,
             "file_present": "yes" if file_present else "no",
             "path": path,
             "execute_sql_tasks": facts["execute_sql_tasks"],
