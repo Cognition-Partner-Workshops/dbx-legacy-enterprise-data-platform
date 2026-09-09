@@ -35,7 +35,9 @@ SAMPLE_DIRS = (
     "wwi-ssasmd", "power-bi-dashboards", "sample-scripts", "workload-drivers",
 )
 
-SKIP_DIRS = (".git", "__pycache__", ".venv", "node_modules", "obj", "bin")
+# artifacts/ holds the built .ispac files, which are not checked in: inventorying
+# them makes the CSV say whether the tree had been built rather than what it holds.
+SKIP_DIRS = (".git", "__pycache__", ".venv", "node_modules", "obj", "bin", "artifacts")
 
 LAYERS = (
     ("oracle/", "oracle"),
