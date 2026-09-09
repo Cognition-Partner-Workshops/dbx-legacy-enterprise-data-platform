@@ -96,7 +96,7 @@ class SourceBatch:
     source_kind: str
     source_ref: str            # file glob, JDBC query, or federated table
     contract: Contract
-    files: list = field(default_factory=list)
+    files: dict = field(default_factory=dict)   # source path -> version (mtime/size for files)
 
 
 def _strip_scheme(col):
@@ -140,11 +140,12 @@ class VolumeDelimitedReader(SourceReader):
             .load(folder + "/*.dat")
             .withColumn("_source_file", _strip_scheme(F.col("_metadata.file_path")))
         )
-        files = [
-            r.path
+        files = {
+            r.path: "%s|%d" % (r.modificationTime.isoformat(), r.length)
             for r in self.spark.read.format("binaryFile").load(folder + "/*.dat")
-            .select(_strip_scheme(F.col("path")).alias("path")).collect()
-        ]
+            .select(_strip_scheme(F.col("path")).alias("path"), "modificationTime", "length")
+            .collect()
+        }
         return SourceBatch(df=df, source_kind=self.kind, source_ref=folder, contract=contract,
                            files=files)
 

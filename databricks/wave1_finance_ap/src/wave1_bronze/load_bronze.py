@@ -1,9 +1,10 @@
 """Load one legacy table into its bronze Delta table.
 
 Bronze keeps the extract's columns and physical types untouched and adds ingest
-metadata. Loads are file-idempotent: every landed file is recorded in
-``<catalog>.<bronze_prefix>_wwi_fin._ingest_log`` and a rerun skips files already
-loaded, so a partial job can simply be run again.
+metadata. Loads are file-idempotent: every landed file (path + version, i.e.
+modification time and size) is recorded in ``<catalog>.<bronze_prefix>_wwi_fin._ingest_log``
+and a rerun skips versions already loaded, so a partial job can simply be run again
+while a re-dropped file with the same name is picked up as a new extract.
 """
 
 from __future__ import annotations
@@ -43,6 +44,7 @@ def ensure_ingest_log(spark: SparkSession, name: str) -> None:
             bronze_table   STRING,
             source_kind    STRING,
             source_file    STRING,
+            source_version STRING,
             rows_loaded    BIGINT,
             run_id         STRING,
             loaded_at      TIMESTAMP
@@ -54,9 +56,9 @@ def ensure_ingest_log(spark: SparkSession, name: str) -> None:
 
 def already_loaded(spark: SparkSession, log: str, legacy_table: str) -> set:
     rows = spark.sql(
-        f"SELECT source_file FROM {log} WHERE legacy_table = '{legacy_table}'"
+        f"SELECT source_file, source_version FROM {log} WHERE legacy_table = '{legacy_table}'"
     ).collect()
-    return {r.source_file for r in rows}
+    return {(r.source_file, r.source_version) for r in rows}
 
 
 def main() -> None:
@@ -80,7 +82,7 @@ def main() -> None:
     batch = reader.read(table)
 
     done = already_loaded(spark, log, table.qualified)
-    pending = [f for f in batch.files if f not in done]
+    pending = [f for f, v in batch.files.items() if (f, v) not in done]
 
     df = (
         batch.df.where(F.col("_source_file").isin(pending))
@@ -110,25 +112,26 @@ def main() -> None:
         .saveAsTable(target)
     )
 
-    per_file = (
-        spark.table(target)
+    per_file = {
+        r["_source_file"]: int(r["count"])
+        for r in spark.table(target)
         .where((F.col("_run_id") == args.run_id) & F.col("_source_file").isin(pending))
         .groupBy("_source_file").count().collect()
-    )
+    }
     log_rows = [
-        (table.qualified, target, batch.source_kind, r["_source_file"], int(r["count"]), args.run_id)
-        for r in per_file
+        (table.qualified, target, batch.source_kind, f, batch.files[f], per_file.get(f, 0), args.run_id)
+        for f in pending
     ]
     (
         spark.createDataFrame(
             log_rows,
             "legacy_table STRING, bronze_table STRING, source_kind STRING, source_file STRING, "
-            "rows_loaded BIGINT, run_id STRING",
+            "source_version STRING, rows_loaded BIGINT, run_id STRING",
         )
         .withColumn("loaded_at", F.current_timestamp())
         .write.format("delta").mode("append").saveAsTable(log)
     )
-    loaded = sum(r["count"] for r in per_file)
+    loaded = sum(per_file.values())
     total = spark.table(target).count()
     print(
         "%s: +%d rows from %d file(s) (contract expected %d); table now %d rows"
