@@ -131,6 +131,30 @@ def mutate_dtsx_unbound_flatfile(text):
         '@[$Project::InboundFileRoot]</DTS:PropertyExpression>', 1)
 
 
+def mutate_dtsx_cm_id_by_dtsid(text):
+    """Address a package connection manager by DTSID - the 0xC001001C defect."""
+    match = re.search(r'<connection refId="[^"]+" connectionManagerID="'
+                      r'(Package\.ConnectionManagers\[([^\]]+)\])"', text)
+    if not match:
+        return None
+    dtsid = re.search(r'DTS:refId="Package.ConnectionManagers\[%s\]"\s+'
+                      r'DTS:CreationName="[^"]*"\s+DTS:DTSID="([^"]+)"'
+                      % re.escape(match.group(2)), text)
+    if not dtsid:
+        return None
+    return text.replace('connectionManagerID="%s"' % match.group(1),
+                        'connectionManagerID="%s"' % dtsid.group(1), 1)
+
+
+def mutate_dtsx_cm_id_unknown(text):
+    """Point a component at a connection manager nothing declares."""
+    match = re.search(r'connectionManagerID="([^"]+)"', text)
+    if not match:
+        return None
+    return text.replace('connectionManagerID="%s"' % match.group(1),
+                        'connectionManagerID="{DEADBEEF-0000-0000-0000-000000000000}"', 1)
+
+
 def mutate_xml_malformed(text):
     return text.replace("</DTS:Executable>", "</DTS:Executabl>", 1)
 
@@ -138,6 +162,80 @@ def mutate_xml_malformed(text):
 def mutate_sql_exec_expression(text):
     return text + ("\nEXEC etl.usp_LogRowCount\n"
                    "    @TargetRowCount = @InsertedCount + @UpdatedCount;\n")
+
+
+def mutate_ps1_catalog_sql_auth(text):
+    """Let a catalog write fall back to SQL authentication - the live defect."""
+    if "-Database 'SSISDB' -Integrated" not in text:
+        return None
+    return text.replace("-Database 'SSISDB' -Integrated", "-Database 'SSISDB'", 1)
+
+
+def mutate_ps1_unclosed_batch(text):
+    """Drop the finally that closes the batch, leaving it Running after a fault."""
+    match = re.search(r"(?ms)^finally \{.*?^\}\n", text)
+    if not match or "Stop-EtlBatch" not in match.group(0):
+        return None
+    return text.replace(match.group(0), "", 1)
+
+
+def mutate_ps1_missing_landing_assert(text):
+    """Execute file ingestion without proving the landing zone is on the host."""
+    match = re.search(r"(?m)^.*Assert-WwiExecutionHostLandingZone .*\n", text)
+    if not match:
+        return None
+    return text.replace(match.group(0), "", 1)
+
+
+def mutate_ps1_missing_auth_assert(text):
+    """Open a batch before knowing the catalog will accept the connection."""
+    match = re.search(r"(?m)^.*Assert-WwiCatalogWindowsAuthentication .*\n", text)
+    if not match:
+        return None
+    return text.replace(match.group(0), "", 1)
+
+
+def mutate_ps1_string_execution_parameter(text):
+    """Bind every package parameter as text - the Int32 sql_variant defect."""
+    if '$arguments["pvalue$index"] = $bound[$name]' not in text:
+        return None
+    return text.replace('$arguments["pvalue$index"] = $bound[$name]',
+                        '$arguments["pvalue$index"] = [string] $bound[$name]', 1)
+
+
+def mutate_ps1_hardcoded_adoption(text):
+    """Pin @AllowAdoptRunning to 0, so an interrupted batch can never be rerun."""
+    if "@AllowAdoptRunning = $adopt" not in text:
+        return None
+    return text.replace("@AllowAdoptRunning = $adopt", "@AllowAdoptRunning = 0", 1)
+
+
+def mutate_ps1_bom_ssm_payload(text):
+    """Write the SSM --parameters payload with a BOM the AWS CLI rejects."""
+    match = re.search(r"(?m)^(\s*)\[System\.IO\.File\]::WriteAllText\(\$temporary,[^\n]*\n", text)
+    if not match:
+        return None
+    return text.replace(
+        match.group(0),
+        "%sSet-Content -LiteralPath $temporary -Value $payload -Encoding utf8\n" % match.group(1), 1)
+
+
+def mutate_dtsx_drop_parameter_binding(text):
+    """Leave a ? unbound - the positional Execute SQL parameter defect."""
+    match = re.search(r'(?s)<SQLTask:SqlTaskData[^>]*SQLTask:SqlStatementSource="[^"]*\?[^"]*".*?'
+                      r'(<SQLTask:ParameterBinding [^>]*/>)', text)
+    if not match:
+        return None
+    return text.replace(match.group(1), "", 1)
+
+
+def mutate_dtsx_shift_parameter_index(text):
+    """Bind the same statement's parameters to non-positional names."""
+    match = re.search(r'<SQLTask:ParameterBinding SQLTask:ParameterName="0"', text)
+    if not match:
+        return None
+    return text.replace(match.group(0),
+                        '<SQLTask:ParameterBinding SQLTask:ParameterName="7"', 1)
 
 
 def mutate_sql_duplicate_when_matched(text):
@@ -176,12 +274,34 @@ FIXTURES = (
      "file-locality", mutate_dtsx_drop_directory_expression),
     ("flat file manager not bound to the loop variable", "ssis/03_file_ingestion", ".dtsx",
      "file-locality", mutate_dtsx_unbound_flatfile),
+    ("package connection addressed by DTSID", "ssis/03_file_ingestion", ".dtsx",
+     "dtsx-connection-refs", mutate_dtsx_cm_id_by_dtsid),
+    ("component connection nothing declares", "ssis/07_dimensions", ".dtsx",
+     "dtsx-connection-refs", mutate_dtsx_cm_id_unknown),
+    ("Execute SQL marker with no binding", "ssis/00_orchestration", ".dtsx",
+     "execute-sql-parameters", mutate_dtsx_drop_parameter_binding),
+    ("Execute SQL binding out of position", "ssis/00_orchestration", ".dtsx",
+     "execute-sql-parameters", mutate_dtsx_shift_parameter_index),
     ("TLS keyword OLE DB 19 ignores", "ssis/04_staging", ".conmgr", "conmgr-credentials",
      mutate_conmgr_unspaced_tls),
     ("EXEC argument is an expression", "sqlserver/procedures/facts", ".sql",
      "sql-exec-arguments", mutate_sql_exec_expression),  # appended, so any file carries it
     ("MERGE with two WHEN MATCHED updates", "sqlserver/procedures/dimensions", ".sql",
      "sql-merge", mutate_sql_duplicate_when_matched),
+    ("catalog write over SQL authentication", "deployment/ssis", ".ps1",
+     "runtime-tooling", mutate_ps1_catalog_sql_auth),
+    ("batch opened with no guaranteed close", "deployment/ssis", ".ps1",
+     "runtime-tooling", mutate_ps1_unclosed_batch),
+    ("file ingestion without a landing zone check", "deployment/ssis", ".ps1",
+     "runtime-tooling", mutate_ps1_missing_landing_assert),
+    ("batch opened before the catalog auth check", "deployment/ssis", ".ps1",
+     "runtime-tooling", mutate_ps1_missing_auth_assert),
+    ("package parameter bound as text", "deployment/ssis", ".ps1",
+     "execution-parameters", mutate_ps1_string_execution_parameter),
+    ("batch adoption hardcoded off", "deployment/ssis", ".ps1",
+     "execution-parameters", mutate_ps1_hardcoded_adoption),
+    ("SSM payload written with a BOM", "deployment/lib", ".ps1",
+     "ssm-payload", mutate_ps1_bom_ssm_payload),
 )
 
 

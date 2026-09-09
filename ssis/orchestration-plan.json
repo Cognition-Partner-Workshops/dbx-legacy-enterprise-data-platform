@@ -56,7 +56,9 @@
         },
         {
           "name": "Initialise Attempt Counter",
-          "kind": "control"
+          "kind": "control",
+          "control": "expression",
+          "assignment": "@[User::ExtractAttempt] = 1"
         },
         {
           "name": "Extract Oracle",
@@ -426,11 +428,20 @@
         },
         {
           "name": "Increment Extract Attempt",
-          "kind": "control"
+          "kind": "control",
+          "control": "expression",
+          "assignment": "@[User::ExtractAttempt] = @[User::ExtractAttempt] + 1"
         },
         {
           "name": "Record Extract Attempt",
-          "kind": "control"
+          "kind": "control",
+          "control": "statement",
+          "connection": "WWI_Staging_DB",
+          "sql": "UPDATE etl.BatchStep SET AttemptNumber = ? WHERE BatchId = ? AND StepGroup = N'Extract' AND Status = N'Failed';",
+          "parameters": [
+            "User::ExtractAttempt",
+            "User::BatchId"
+          ]
         },
         {
           "name": "Extract Retry Driver",
@@ -2176,7 +2187,12 @@
       "nodes": [
         {
           "name": "Check Nightly Batch",
-          "kind": "control"
+          "kind": "control",
+          "control": "query",
+          "connection": "WWI_Staging_DB",
+          "sql": "SELECT COUNT(*) AS RunningBatches FROM etl.Batch WHERE BatchType = N'Daily' AND Status = N'Running';",
+          "parameters": [],
+          "result_variable": "User::NightlyBatchRunning"
         },
         {
           "name": "Start Batch",
@@ -2279,7 +2295,9 @@
         },
         {
           "name": "Increment Extract Attempt",
-          "kind": "control"
+          "kind": "control",
+          "control": "expression",
+          "assignment": "@[User::ExtractAttempt] = @[User::ExtractAttempt] + 1"
         },
         {
           "name": "Incremental Stage",
@@ -2492,7 +2510,11 @@
         },
         {
           "name": "Log Stand Down",
-          "kind": "control"
+          "kind": "control",
+          "control": "statement",
+          "connection": "WWI_Staging_DB",
+          "sql": "EXEC etl.usp_LogError @BatchId = NULL, @ErrorSeverity = N'Information', @ErrorCode = 0, @ErrorDescription = N'Intraday run skipped: a Daily batch is still running.', @SourceName = N'Master_Hourly_Incremental';",
+          "parameters": []
         }
       ],
       "edges": [
@@ -2650,7 +2672,14 @@
         },
         {
           "name": "Read Period Status",
-          "kind": "control"
+          "kind": "control",
+          "control": "query",
+          "connection": "WWI_Staging_DB",
+          "sql": "SELECT TOP (1) ConfigurationValue AS PeriodStatus FROM etl.Configuration WHERE ConfigurationKey = N'Finance.PeriodStatus' AND EnvironmentCode IN (?, N'ALL') ORDER BY EnvironmentCode DESC;",
+          "parameters": [
+            "$Package::EnvironmentCode"
+          ],
+          "result_variable": "User::PeriodStatus"
         },
         {
           "name": "Subledger Loads",
@@ -2819,7 +2848,14 @@
         },
         {
           "name": "Read Subledger Variance",
-          "kind": "control"
+          "kind": "control",
+          "control": "query",
+          "connection": "WWI_Staging_DB",
+          "sql": "SELECT ISNULL(SUM(ABS(ra.SourceRowCount - ra.TargetRowCount)), 0) AS Variance FROM etl.RowCountAudit AS ra INNER JOIN etl.PackageExecution AS pe ON pe.PackageExecutionId = ra.PackageExecutionId WHERE pe.BatchId = ? AND ra.ObjectName IN (N'Fact.Payment', N'Fact.GL Posting');",
+          "parameters": [
+            "User::BatchId"
+          ],
+          "result_variable": "User::SubledgerVariance"
         },
         {
           "name": "Reconcile Row Counts",
@@ -2945,7 +2981,9 @@
         },
         {
           "name": "Force Full Reload",
-          "kind": "control"
+          "kind": "control",
+          "control": "expression",
+          "assignment": "@[User::ExtractAttempt] = 1"
         },
         {
           "name": "Geography And Sites",
@@ -3154,7 +3192,14 @@
         },
         {
           "name": "Count Unmapped Codes",
-          "kind": "control"
+          "kind": "control",
+          "control": "query",
+          "connection": "WWI_Staging_DB",
+          "sql": "SELECT COUNT(*) AS UnmappedCodes FROM etl.RejectedRecord WHERE BatchId = ? AND RejectReasonCode = N'CODE_UNMAPPED' AND IsReprocessed = 0;",
+          "parameters": [
+            "User::BatchId"
+          ],
+          "result_variable": "User::UnmappedCodeCount"
         },
         {
           "name": "End Batch",
@@ -3272,7 +3317,12 @@
         },
         {
           "name": "Count Pending Corrections",
-          "kind": "control"
+          "kind": "control",
+          "control": "query",
+          "connection": "WWI_Staging_DB",
+          "sql": "SELECT COUNT(*) AS PendingCorrections FROM etl.RejectedRecord WHERE IsReprocessed = 0 AND RejectStage IN (N'Fact', N'Dimension');",
+          "parameters": [],
+          "result_variable": "User::CorrectionCount"
         },
         {
           "name": "Fact Corrections",
@@ -3988,7 +4038,9 @@
         },
         {
           "name": "Increment Extract Attempt",
-          "kind": "control"
+          "kind": "control",
+          "control": "expression",
+          "assignment": "@[User::ExtractAttempt] = @[User::ExtractAttempt] + 1"
         },
         {
           "name": "Customer Stage",
@@ -4216,7 +4268,14 @@
         },
         {
           "name": "Count Merge Candidates",
-          "kind": "control"
+          "kind": "control",
+          "control": "query",
+          "connection": "WWI_Staging_DB",
+          "sql": "SELECT COUNT(*) AS Candidates FROM etl.RejectedRecord WHERE BatchId = ? AND ObjectName = N'work.CustomerDedup' AND RejectReasonCode = N'DUP_CANDIDATE';",
+          "parameters": [
+            "User::BatchId"
+          ],
+          "result_variable": "User::DedupeCandidateCount"
         },
         {
           "name": "End Batch",
@@ -4402,7 +4461,9 @@
         },
         {
           "name": "Increment Extract Attempt",
-          "kind": "control"
+          "kind": "control",
+          "control": "expression",
+          "assignment": "@[User::ExtractAttempt] = @[User::ExtractAttempt] + 1"
         },
         {
           "name": "Inventory Stage",
@@ -4568,7 +4629,14 @@
         },
         {
           "name": "Read On Hand Variance",
-          "kind": "control"
+          "kind": "control",
+          "control": "query",
+          "connection": "WWI_Staging_DB",
+          "sql": "SELECT ISNULL(MAX(ABS(ra.SourceRowCount - ra.TargetRowCount)), 0) AS OnHandVariance FROM etl.RowCountAudit AS ra INNER JOIN etl.PackageExecution AS pe ON pe.PackageExecutionId = ra.PackageExecutionId WHERE pe.BatchId = ? AND ra.ObjectName = N'Fact.Stock Holding';",
+          "parameters": [
+            "User::BatchId"
+          ],
+          "result_variable": "User::OnHandVariance"
         },
         {
           "name": "End Batch",
@@ -4690,7 +4758,14 @@
         },
         {
           "name": "Count Expected Files Missing",
-          "kind": "control"
+          "kind": "control",
+          "control": "query",
+          "connection": "WWI_Staging_DB",
+          "sql": "SELECT COUNT(*) AS MissingFiles FROM etl.Configuration AS c WHERE c.ConfigurationKey LIKE N'Ingest.ExpectedFile.%' AND c.EnvironmentCode IN (?, N'ALL') AND NOT EXISTS (SELECT 1 FROM etl.PackageExecution AS pe                 WHERE pe.PackageName = c.ConfigurationValue                   AND pe.StartedAtUtc >= DATEADD(HOUR, -24, SYSUTCDATETIME())                   AND pe.Status = N'Succeeded');",
+          "parameters": [
+            "$Package::EnvironmentCode"
+          ],
+          "result_variable": "User::MissingFileCount"
         },
         {
           "name": "Partner Drops",

@@ -24,11 +24,19 @@
 
     The control framework the master owns (etl.usp_StartBatch, a batch step per
     phase, the reconciliation assert, etl.usp_EndBatch) is reproduced here so a
-    child still runs inside the step its phase opened.
+    child still runs inside the step its phase opened. A batch this runner opens
+    is always closed: a fault anywhere in the walk logs to etl.ErrorLog and ends
+    the batch Failed rather than leaving it Running for the next operator.
+
+    The catalog half of the run authenticates as the Windows principal.
+    catalog.create_execution refuses a SQL login outright, so the runner belongs
+    on the catalog host - Invoke-EstateOrchestrationRemote.ps1 puts it there -
+    while the control framework keeps using SQLSERVER_USER against the staging
+    database. Both are checked before the first batch is opened.
 
     Usage:
       .\deployment\ssis\Invoke-EstateOrchestration.ps1 -Root Master_Daily_ETL `
-          [-LogPath logs] [-DryRun]
+          [-LogPath logs] [-AdoptRunning] [-DryRun]
       .\deployment\ssis\Invoke-EstateOrchestration.ps1 -ListRoots
 #>
 
@@ -40,11 +48,13 @@ param(
     [string]   $PlanPath,
     [int]      $LoggingLevel = 1,
     [string]   $BusinessDate = ((Get-Date).ToUniversalTime().AddDays(-1).ToString('yyyy-MM-dd')),
+    [switch]   $AdoptRunning,
     [switch]   $DryRun
 )
 
 . (Join-Path (Join-Path (Join-Path $PSScriptRoot '..') 'lib') 'Common.ps1')
 . (Join-Path (Join-Path (Join-Path $PSScriptRoot '..') 'lib') 'SsisCatalog.ps1')
+. (Join-Path (Join-Path (Join-Path $PSScriptRoot '..') 'lib') 'PlanExpression.ps1')
 $script:WwiLogPrefix = 'wwi-orchestrate'
 
 $repoRoot = Get-WwiRepositoryRoot
@@ -73,6 +83,20 @@ Assert-WwiEnvironmentVariable @(
     'SSIS_SERVER', 'SSIS_FOLDER', 'SSIS_ENVIRONMENT',
     'SQLSERVER_HOST', 'SQLSERVER_PORT', 'SQLSERVER_USER', 'SQLSERVER_PASSWORD',
     'SQLSERVER_STAGING_DB')
+
+# Roots that execute a file ingestion package read their input from the catalog
+# host's file system, so those runs additionally need the landing zone.
+$fileChildren = @()
+foreach ($node in $rootPlan.nodes) {
+    if ($node.PSObject.Properties.Name -contains 'children') {
+        $fileChildren += @($node.children | Where-Object { $_.project -eq 'WWI_Ingest_Files' })
+    }
+    if (($node.PSObject.Properties.Name -contains 'project') -and $node.project -eq 'WWI_Ingest_Files') {
+        $fileChildren += $node
+    }
+}
+$needsLandingZone = @($fileChildren).Count -gt 0
+if ($needsLandingZone) { Assert-WwiEnvironmentVariable @('WWI_LANDING_ROOT') }
 $environmentCode = Get-WwiEnvironmentCode
 Confirm-WwiProduction
 
@@ -101,13 +125,23 @@ function Invoke-EtlScalar {
 }
 
 function Start-EtlBatch {
+    <#
+        Opens the batch, or adopts the one this name and business date already
+        has open when -AdoptRunning is given.
+
+        Adoption is the recovery rerun etl.usp_StartBatch documents, and it is
+        the operator's decision rather than the runner's: adopting silently
+        would fold a second run into a batch whose first run may still be
+        moving rows, so the default stays 0 and the switch has to be asked for.
+    #>
     param([Parameter(Mandatory)][string] $BatchType)
+    $adopt = if ($AdoptRunning) { 1 } else { 0 }
     $query = @"
 SET NOCOUNT ON;
 DECLARE @BatchId BIGINT;
 EXEC etl.usp_StartBatch @BatchName = N'$Root', @BatchType = N'$BatchType',
      @BusinessDate = N'$BusinessDate', @EnvironmentCode = N'$environmentCode',
-     @AllowAdoptRunning = 0, @Notes = N'external orchestration runner',
+     @AllowAdoptRunning = $adopt, @Notes = N'external orchestration runner',
      @BatchId = @BatchId OUTPUT;
 SELECT @BatchId;
 "@
@@ -150,6 +184,43 @@ SELECT @FailedObjectCount;
     return Invoke-EtlScalar -Query $query
 }
 
+function Test-EtlBatchRunning {
+    param([Parameter(Mandatory)][long] $BatchId)
+    if ($BatchId -le 0) { return $false }
+    return (Invoke-EtlScalar -Query "SELECT COUNT(*) FROM etl.Batch WHERE BatchId = $BatchId AND Status = N'Running';") -gt 0
+}
+
+function Write-EtlError {
+    <#
+        Records a runner-side fault where the estate keeps every other failure.
+        A crash between usp_StartBatch and usp_EndBatch used to leave the batch
+        Running with nothing in etl.ErrorLog to say why, which is indistinguish-
+        able from a run that is still going.
+
+        Logging is best effort by design: if the control database is what broke,
+        the original fault must still be the one the operator sees.
+    #>
+    param(
+        [Parameter(Mandatory)][long] $BatchId,
+        [Parameter(Mandatory)][string] $Message,
+        [string] $Source = 'Invoke-EstateOrchestration.ps1'
+    )
+
+    if ($DryRun) { Write-WwiLog "WHATIF etl.usp_LogError for batch $BatchId"; return }
+    if ($BatchId -le 0) { return }
+    try {
+        Invoke-WwiSqlQuery -Database $env:SQLSERVER_STAGING_DB -Parameters @{
+            batch = $BatchId; source = $Source; description = $Message
+        } -Query @'
+EXEC etl.usp_LogError @BatchId = @batch, @ErrorSeverity = N'Error',
+     @SourceName = @source, @ProcedureName = @source, @ErrorDescription = @description;
+'@ | Out-Null
+    }
+    catch {
+        Write-WwiLog "could not write etl.ErrorLog for batch ${BatchId}: $($_.Exception.Message)" 'WARN'
+    }
+}
+
 # ---------------------------------------------------------------------------
 # package execution
 # ---------------------------------------------------------------------------
@@ -177,7 +248,7 @@ function Get-EstateReference {
 
     if ($script:References.ContainsKey($Project)) { return $script:References[$Project] }
 
-    $rows = Invoke-WwiSqlQuery -Database 'SSISDB' -Parameters @{
+    $rows = Invoke-WwiSqlQuery -Database 'SSISDB' -Integrated -Parameters @{
         folder = $folder; project = $Project; environment = $environment
     } -Query @'
 SELECT r.reference_id, r.reference_type, r.environment_folder_name
@@ -261,6 +332,17 @@ function Invoke-EstatePackage {
 
     $referenceId = Get-EstateReference -Project $Project
 
+    # Every value is converted to the type the deployed package declares before
+    # an execution exists. catalog.set_execution_parameter_value takes a
+    # sql_variant and refuses a base type that does not match the declaration -
+    # BatchId is Int32 in all 13 subtree packages, so a value sent as a string
+    # failed with "The data type of the input value is not compatible with the
+    # data type of the 'Int32'" after create_execution had already committed,
+    # stranding the execution in status 1 with no operation message.
+    $declared = Get-WwiPackageParameterDeclaration -Folder $folder -Project $Project `
+                                                   -Package ("$Package.dtsx") -Integrated
+    $bound = ConvertTo-WwiExecutionParameter -Declared $declared -Parameters $parameters -Package $Package
+
     # The package parameters are applied one call at a time, all inside the
     # single batch that also starts the execution, so a failure to set one never
     # leaves a half-configured execution running.
@@ -270,10 +352,10 @@ function Invoke-EstatePackage {
         reference = $referenceId; logging = $LoggingLevel
     }
     $index = 0
-    foreach ($name in $parameters.Keys) {
+    foreach ($name in $bound.Keys) {
         $index += 1
         $arguments["pname$index"] = $name
-        $arguments["pvalue$index"] = [string] $parameters[$name]
+        $arguments["pvalue$index"] = $bound[$name]
         $setParameters += @"
 
 EXEC catalog.set_execution_parameter_value @execution_id,
@@ -281,7 +363,7 @@ EXEC catalog.set_execution_parameter_value @execution_id,
 "@
     }
 
-    $rows = Invoke-WwiSqlQuery -Database 'SSISDB' -TimeoutSeconds 0 -Parameters $arguments -Query @"
+    $rows = Invoke-WwiSqlQuery -Database 'SSISDB' -Integrated -TimeoutSeconds 0 -Parameters $arguments -Query @"
 SET NOCOUNT ON;
 DECLARE @execution_id BIGINT;
 
@@ -306,7 +388,7 @@ SELECT execution_id = @execution_id;
 
     $executionId = [long] $rows[0].execution_id
 
-    $execution = (Invoke-WwiSqlQuery -Database 'SSISDB' -Parameters @{ execution = $executionId } -Query @'
+    $execution = (Invoke-WwiSqlQuery -Database 'SSISDB' -Integrated -Parameters @{ execution = $executionId } -Query @'
 SELECT e.status, e.start_time, e.end_time
 FROM catalog.executions AS e
 WHERE e.execution_id = @execution;
@@ -318,7 +400,7 @@ WHERE e.execution_id = @execution;
 
     # message_type 120 is an error and 130 a warning; they are the catalog's own
     # account of what happened and are kept next to the run's other logs.
-    $messages = Invoke-WwiSqlQuery -Database 'SSISDB' -Parameters @{ execution = $executionId } -Query @'
+    $messages = Invoke-WwiSqlQuery -Database 'SSISDB' -Integrated -Parameters @{ execution = $executionId } -Query @'
 SELECT m.message_time, m.message_type, m.message
 FROM catalog.operation_messages AS m
 WHERE m.operation_id = @execution AND m.message_type IN (120, 130)
@@ -398,27 +480,106 @@ while ($remaining.Count -gt 0) {
 
 $status = @{}   # node -> Succeeded / Failed / Skipped
 
+# The master's parameters and variables at their declared defaults. A control
+# node overwrites an entry as it is reached, and the conditional edges are
+# evaluated against this table.
+$variables = ConvertTo-WwiPlanVariableTable -RootPlan $rootPlan
+$variables['$Package::BusinessDate']    = $BusinessDate
+$variables['$Package::EnvironmentCode'] = $environmentCode
+
 function Test-NodeShouldRun {
+    <#
+        A precedence constraint is its value AND its expression. Honouring the
+        value alone takes both sides of a conditional fork - which is how
+        ERR_Notify_Operations ran behind @[User::MissingFileCount] > 0 on a
+        cycle where every feed had arrived.
+    #>
     param([Parameter(Mandatory)][string] $Name)
-    $edges = @($incoming[$Name])
-    if ($edges.Count -eq 0) { return $true }
-    foreach ($edge in $edges) {
-        $upstream = $status[$edge.from]
-        if (-not $upstream) { continue }
-        switch ($edge.value) {
-            'Success'    { if ($upstream -eq 'Succeeded')  { return $true } }
-            'Failure'    { if ($upstream -eq 'Failed')     { return $true } }
-            'Completion' { if ($upstream -ne 'Skipped')    { return $true } }
+    return (Test-WwiPlanNodeShouldRun -Name $Name -Edges @($incoming[$Name]) -Status $status `
+                                      -Variables $variables -Log { param($m) Write-WwiLog $m })
+}
+
+function Invoke-ControlNode {
+    <#
+        Reproduces an in-package control task well enough for the conditional
+        edges that read what it computes.
+
+          expression  an Expression Task assignment, applied to the table
+          query       an Execute SQL Task whose single-row result is bound to a
+                      variable, re-run against the control database
+          statement   an Execute SQL Task that binds nothing; it ordered the
+                      master's graph and has no effect the runner reproduces
+    #>
+    param([Parameter(Mandatory)] $Node)
+
+    $control = if ($Node.PSObject.Properties.Name -contains 'control') { $Node.control } else { 'statement' }
+    switch ($control) {
+        'expression' {
+            $value = Set-WwiPlanAssignment -Assignment $Node.assignment -Variables $variables
+            Write-WwiLog ("control {0}: {1} -> {2}" -f $Node.name, $Node.assignment, $value)
+        }
+        'query' {
+            if ($Node.connection -ne 'WWI_Staging_DB') {
+                Stop-WwiWithError ("control task $($Node.name) reads $($Node.connection); the runner only " +
+                                   'reproduces control queries against the control database.')
+            }
+            # The task binds its ? placeholders positionally; the same values in
+            # the same order become named parameters here.
+            $arguments = @{}
+            $query = $Node.sql
+            $index = 0
+            foreach ($name in @($Node.parameters)) {
+                if (-not $variables.ContainsKey($name)) {
+                    Stop-WwiWithError "control task $($Node.name) binds $name, which this root's plan does not declare."
+                }
+                $arguments["p$index"] = $variables[$name]
+                $query = ([regex] '\?').Replace($query, "@p$index", 1)
+                $index += 1
+            }
+            if ($query.Contains('?')) {
+                Stop-WwiWithError "control task $($Node.name) has more ? placeholders than bound parameters."
+            }
+            if ($DryRun) {
+                Write-WwiLog ("WHATIF control {0}; {1} keeps its default {2}" -f
+                              $Node.name, $Node.result_variable, $variables[$Node.result_variable])
+                return
+            }
+            $rows = Invoke-WwiSqlQuery -Database $env:SQLSERVER_STAGING_DB -Query "SET NOCOUNT ON;`n$query" -Parameters $arguments
+            if (@($rows).Count -eq 0) {
+                Stop-WwiWithError "control task $($Node.name) returned no row to bind to $($Node.result_variable)."
+            }
+            $value = $rows[0].PSObject.Properties | Select-Object -First 1 | ForEach-Object { $_.Value }
+            $variables[$Node.result_variable] = ConvertTo-WwiPlanValue $value
+            Write-WwiLog ("control {0}: {1} = {2}" -f $Node.name, $Node.result_variable, $variables[$Node.result_variable])
+        }
+        'statement' {
+            Write-WwiLog ("control {0}: ordering only, no runner-side effect" -f $Node.name)
+        }
+        default {
+            Stop-WwiWithError "control task $($Node.name) is of unknown kind '$control'."
         }
     }
-    return $false
 }
 
 Write-WwiLog ("orchestrating {0} ({1} node(s), {2} edge(s)) from /SSISDB/{3} with environment {4}" -f `
     $Root, $rootPlan.nodes.Count, $rootPlan.edges.Count, $folder, $environment)
+
+# Everything that can be known before a batch exists is checked before one is
+# opened. Both of these used to surface as a failed execution - or, worse, as a
+# successful one over an empty directory - after the control framework had
+# already recorded a run.
+if (-not $DryRun) {
+    Assert-WwiCatalogWindowsAuthentication -Database 'SSISDB' | Out-Null
+    if ($needsLandingZone) {
+        Assert-WwiExecutionHostLandingZone -LandingRoot $env:WWI_LANDING_ROOT -Integrated | Out-Null
+    }
+}
+
 $batchId = 0
 $forceStatus = $null
+$fault = $null
 
+try {
 foreach ($name in $order) {
     $node = $nodesByName[$name]
     if (-not (Test-NodeShouldRun -Name $name)) {
@@ -431,10 +592,11 @@ foreach ($name in $order) {
         'batch_start' {
             $batchId = Start-EtlBatch -BatchType $node.batch_type
             Write-WwiLog "batch $batchId opened ($($node.batch_type))"
+            $variables['User::BatchId'] = $batchId
             $status[$name] = 'Succeeded'
         }
         'batch_end' {
-            $force = if ($node.PSObject.Properties.Name -contains 'force_status') { $node.force_status } else { $null }
+            $force = if ($node.PSObject.Properties.Name -contains 'force_status') { $node.force_status } else { $forceStatus }
             Stop-EtlBatch -BatchId $batchId -ForceStatus $force
             $status[$name] = 'Succeeded'
         }
@@ -471,15 +633,42 @@ foreach ($name in $order) {
             $status[$name] = $(if ($succeeded) { 'Succeeded' } else { 'Failed' })
             if (-not $succeeded) { $forceStatus = 'Failed' }
         }
-        default {
-            # An in-package control task (expression, ad-hoc SQL) orders the
-            # graph but has no effect the runner reproduces.
+        'control' {
+            Invoke-ControlNode -Node $node
             $status[$name] = 'Succeeded'
+        }
+        default {
+            Stop-WwiWithError "the plan node '$name' is of kind '$($node.kind)', which the runner does not model."
+        }
+    }
+}
+}
+catch {
+    $fault = $_
+    $forceStatus = 'Failed'
+    Write-WwiLog "orchestration faulted: $($_.Exception.Message)" 'ERROR'
+    Write-EtlError -BatchId $batchId -Message $_.Exception.Message
+}
+finally {
+    # The batch the runner opened is the runner's to close, on every path out.
+    if ($batchId -gt 0) {
+        try {
+            # The plan's own batch_end has usually closed it already; this is
+            # for the paths that never reached that node.
+            if (Test-EtlBatchRunning -BatchId $batchId) {
+                Stop-EtlBatch -BatchId $batchId -ForceStatus $forceStatus
+            }
+        }
+        catch {
+            Write-WwiLog "could not close batch ${batchId}: $($_.Exception.Message)" 'ERROR'
         }
     }
 }
 
-if ($forceStatus -and $batchId -gt 0) { Stop-EtlBatch -BatchId $batchId -ForceStatus $forceStatus }
+if ($fault) {
+    Write-WwiLog ("{0}: orchestration aborted; batch {1} closed Failed" -f $Root, $batchId) 'ERROR'
+    throw $fault
+}
 
 $failed = @($script:Results | Where-Object { $_.Status -eq 'Failed' })
 if ($script:Results.Count -gt 0) { $script:Results | Format-Table -AutoSize | Out-String | Write-Host }

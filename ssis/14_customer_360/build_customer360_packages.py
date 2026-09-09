@@ -211,7 +211,10 @@ def build_c360_build_customerprofile():
         "Publish Customer 360 Profile",
         "EXEC Integration.usp_PublishCustomer360Profile @BatchId = ?, @RowsUpdated = ? OUTPUT;",
         connection=CONN_DW,
-        parameter_bindings=[("$Package::BatchId", 0, "LONG")],
+        parameter_bindings=[
+            ("$Package::BatchId", 0, "LONG"),
+            ("User::RowsUpdated", 1, "LONG", "Output"),
+        ],
     ))
     clusters = pkg.add(ExecuteSql(
         "Count Duplicate Clusters",

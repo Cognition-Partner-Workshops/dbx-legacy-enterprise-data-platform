@@ -501,7 +501,10 @@ def build_inv_load_stocktransfer():
         "Post Transfer Movements",
         "EXEC Integration.usp_PostTransferMovements @BatchId = ?, @RowsInserted = ? OUTPUT;",
         connection=CONN_DW,
-        parameter_bindings=[("$Package::BatchId", 0, "LONG")],
+        parameter_bindings=[
+            ("$Package::BatchId", 0, "LONG"),
+            ("User::RowsInserted", 1, "LONG", "Output"),
+        ],
     ))
     intransit = pkg.add(ExecuteSql(
         "Escalate Aged In Transit",

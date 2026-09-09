@@ -147,6 +147,7 @@ def build_prc_load_purchasespend():
         parameter_bindings=[
             ("$Package::BatchId", 0, "LONG"),
             ("$Package::SpendCategoryScope", 1, "NVARCHAR"),
+            ("User::RowsInserted", 2, "LONG", "Output"),
         ],
     ))
     maverick = pkg.add(ExecuteSql(

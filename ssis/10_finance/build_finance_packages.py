@@ -142,6 +142,7 @@ def build_fin_load_apaging():
             ("$Package::BatchId", 0, "LONG"),
             ("User::AsOfDate", 1, "NVARCHAR"),
             ("$Package::IncludeDisputedInvoices", 2, "BYTE"),
+            ("User::RowsInserted", 3, "LONG", "Output"),
         ],
     ))
     # Row-by-row bucket summary. It is slow, it has been slow since 2007, and
@@ -833,6 +834,7 @@ def build_fin_load_withholdingtax():
         parameter_bindings=[
             ("$Package::BatchId", 0, "LONG"),
             ("$Package::JurisdictionScope", 1, "NVARCHAR"),
+            ("User::RowsInserted", 2, "LONG", "Output"),
         ],
     ))
     certificates = pkg.add(ExecuteSql(

@@ -95,6 +95,14 @@ Restart is by step. `etl.Batch.RestartFromStep` records where to resume; the
 master reads it. There is no automatic resume: a human sets it and re-runs the
 job.
 
+The external runner asks for the same decision explicitly. Rerunning a root
+whose batch is still `Running` for that business date fails on
+`etl.usp_StartBatch` unless `-AdoptRunning` is given, which
+`Invoke-EstateOrchestration.ps1` and `Invoke-EstateOrchestrationRemote.ps1`
+both accept and which sets `@AllowAdoptRunning = 1`. Adopt only once the first
+attempt is known to be dead: adopting a batch whose packages are still moving
+rows puts two runs in one batch.
+
 Retries are per-failure-mode, from `sqlserver/agent/`:
 
 | Job | Retry | Because |

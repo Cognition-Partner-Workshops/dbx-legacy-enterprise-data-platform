@@ -245,15 +245,25 @@ def register_file(object_name):
     )
 
 
-def reconcile_control_total(object_name, tolerance_clause):
-    """Footer/control-total reconciliation against what actually landed."""
+def reconcile_control_total(object_name, tolerance_clause, tolerance_bindings=()):
+    """Footer/control-total reconciliation against what actually landed.
+
+    ``tolerance_bindings`` names the variable behind every ``?`` the caller put
+    into ``tolerance_clause``, in the order the placeholders appear. They follow
+    the execution-id placeholder in the DECLARE, and OLE DB binds positionally,
+    so a clause placeholder left unbound is a load-time parameter-count error
+    rather than a silently wrong comparison.
+    """
+    bindings = [("User::PackageExecutionId", 0, "LONG")]
+    for offset, (variable, dtype) in enumerate(tolerance_bindings):
+        bindings.append((variable, offset + 1, dtype))
     return ExecuteSql(
         "Reconcile Control Totals",
         CONN_STAGING,
         "DECLARE @Landed int = (SELECT COUNT(*) FROM %s WHERE PackageExecutionId = ?); "
         "SELECT CASE WHEN %s THEN 1 ELSE 0 END AS ControlTotalsMatch;" % (object_name, tolerance_clause),
         result_type="ResultSetType_SingleRow",
-        parameter_bindings=[("User::PackageExecutionId", 0, "LONG")],
+        parameter_bindings=bindings,
         result_bindings=[("0", "User::ControlTotalsMatch")],
     )
 
@@ -427,6 +437,8 @@ def ing_file_partner_sales_na():
         reconcile_control_total(
             "raw.FilePartnerSales",
             "@Landed = ? OR ? = 0",
+            tolerance_bindings=[("User::FooterRowCount", "LONG"),
+                                ("User::FooterRowCount", "LONG")],
         )
     )
     rejects = loop.add(
@@ -590,6 +602,7 @@ def ing_file_partner_sales_eu():
             "raw.FilePartnerSales",
             "ABS(ISNULL((SELECT SUM(GrossAmount) FROM raw.FilePartnerSales WHERE PackageExecutionId = ?), 0)) >= 0 "
             "AND @Landed >= 0",
+            tolerance_bindings=[("User::PackageExecutionId", "LONG")],
         )
     )
     rejects = loop.add(

@@ -31,10 +31,15 @@ param(
 )
 
 . (Join-Path (Join-Path (Join-Path $PSScriptRoot '..') 'lib') 'Common.ps1')
+. (Join-Path (Join-Path (Join-Path $PSScriptRoot '..') 'lib') 'RemoteHost.ps1')
 $script:WwiLogPrefix = 'wwi-landing'
 
 if ([string]::IsNullOrWhiteSpace($Region)) { $Region = 'us-east-2' }
 Assert-WwiTool -Name 'aws' -Hint 'install the AWS CLI; SSM Run Command is the only channel to the execution host'
+
+$script:WwiRemoteInstanceId = $InstanceId
+$script:WwiRemoteRegion     = $Region
+$script:WwiRemoteDryRun     = [bool] $DryRun
 
 $manifestPath = Join-Path (Join-Path (Join-Path $PSScriptRoot '..') 'preflight') 'feed-manifest.json'
 if (-not (Test-Path $manifestPath)) {
@@ -42,47 +47,11 @@ if (-not (Test-Path $manifestPath)) {
 }
 $manifest = Get-Content -Raw $manifestPath | ConvertFrom-Json
 
-# SSM commands are size limited, so file content travels as base64 in chunks
-# that comfortably fit one command document.
-$chunkSize = 6000
-
-function Invoke-RemotePowerShell {
-    param(
-        [Parameter(Mandatory)][string] $Description,
-        [Parameter(Mandatory)][string[]] $Commands,
-        [switch] $Quiet
-    )
-
-    if ($DryRun) {
-        Write-WwiLog "WHATIF $Description"
-        return ''
-    }
-
-    $payload = @{ commands = $Commands } | ConvertTo-Json -Depth 4 -Compress
-    $temporary = [System.IO.Path]::GetTempFileName()
-    try {
-        Set-Content -LiteralPath $temporary -Value $payload -Encoding utf8
-        $sent = aws ssm send-command --region $Region --instance-ids $InstanceId `
-            --document-name 'AWS-RunPowerShellScript' --parameters ("file://{0}" -f $temporary) `
-            --output json | ConvertFrom-Json
-        $commandId = $sent.Command.CommandId
-
-        do {
-            Start-Sleep -Seconds 2
-            $result = aws ssm get-command-invocation --region $Region `
-                --command-id $commandId --instance-id $InstanceId --output json | ConvertFrom-Json
-        } while ($result.Status -in @('Pending', 'InProgress', 'Delayed'))
-
-        if ($result.Status -ne 'Success') {
-            Stop-WwiWithError ("{0} failed on {1}: {2} {3}" -f $Description, $InstanceId, $result.Status, $result.StandardErrorContent)
-        }
-        if (-not $Quiet) { Write-WwiLog "$Description ok" }
-        return [string] $result.StandardOutputContent
-    }
-    finally {
-        Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
-    }
-}
+# The SSM channel itself lives in deployment/lib/RemoteHost.ps1. This script
+# used to carry its own copy, which wrote the --parameters payload with
+# Set-Content -Encoding utf8: on Windows PowerShell that emits a BOM, and the
+# AWS CLI rejects the file with "Error parsing parameter '--parameters':
+# Expected: '=', received: '\ufeff'".
 
 function Get-LocalFeedFiles {
     param([Parameter(Mandatory)] $Feed)
@@ -113,7 +82,7 @@ if (-not $VerifyOnly) {
     $create += "icacls '$LandingRoot' /grant '$($ServiceAccount):(OI)(CI)M' /T /C | Out-Null"
     $create += "[Environment]::SetEnvironmentVariable('$($manifest.root_variable)', '$LandingRoot', 'Machine')"
     $create += "Write-Output 'layout ready'"
-    Invoke-RemotePowerShell -Description "create the landing zone under $LandingRoot" -Commands $create | Out-Null
+    Invoke-WwiRemotePowerShell -Description "create the landing zone under $LandingRoot" -Commands $create | Out-Null
 }
 
 # -- 2. feed content ---------------------------------------------------------
@@ -128,39 +97,10 @@ if (-not $VerifyOnly) {
 
         foreach ($file in $files) {
             $target = Join-Path (Join-Path $LandingRoot ($feed.relative_path -replace '/', '\')) $file.Name
-            $encoded = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($file.FullName))
-            $chunks = [System.Collections.Generic.List[string]]::new()
-            for ($offset = 0; $offset -lt $encoded.Length; $offset += $chunkSize) {
-                $chunks.Add($encoded.Substring($offset, [Math]::Min($chunkSize, $encoded.Length - $offset)))
-            }
-
-            $staging = "$target.b64"
-            $first = $true
-            $index = 0
-            foreach ($chunk in $chunks) {
-                $index++
-                $commands = @("`$ErrorActionPreference = 'Stop'")
-                if ($first) {
-                    $commands += "Set-Content -LiteralPath '$staging' -Value '$chunk' -NoNewline -Encoding ascii"
-                    $first = $false
-                } else {
-                    $commands += "Add-Content -LiteralPath '$staging' -Value '$chunk' -NoNewline -Encoding ascii"
-                }
-                Invoke-RemotePowerShell -Quiet -Description ("send {0} part {1}/{2}" -f $file.Name, $index, $chunks.Count) `
-                    -Commands $commands | Out-Null
-            }
-
-            $finish = @(
-                "`$ErrorActionPreference = 'Stop'",
-                "[System.IO.File]::WriteAllBytes('$target', [Convert]::FromBase64String((Get-Content -Raw -LiteralPath '$staging')))",
-                "Remove-Item -LiteralPath '$staging' -Force",
-                "Write-Output ((Get-Item -LiteralPath '$target').Length)"
-            )
-            $size = (Invoke-RemotePowerShell -Quiet -Description "materialise $($file.Name)" -Commands $finish).Trim()
-            if (-not $DryRun -and [int64] $size -ne $file.Length) {
-                Stop-WwiWithError ("{0} arrived as {1} bytes but is {2} bytes locally" -f $file.Name, $size, $file.Length)
-            }
-            Write-WwiLog ("staged {0} -> {1} ({2} bytes)" -f $file.Name, $target, $file.Length)
+            # Copy-WwiFileToHost proves the bytes that arrived hash to the same
+            # value, which is a stronger check than the byte count this script
+            # used to make on its own.
+            Copy-WwiFileToHost -LocalPath $file.FullName -RemotePath $target
         }
     }
 }
@@ -177,7 +117,7 @@ foreach (`$f in `$files) { `$rows += @(Get-Content -LiteralPath `$f.FullName).Co
 Write-Output ('$($feed.feed)={0} files,{1} lines' -f `$files.Count, `$rows)
 "@
 }
-$report = Invoke-RemotePowerShell -Description 'verify the staged feeds' -Commands $verify
+$report = Invoke-WwiRemotePowerShell -Description 'verify the staged feeds' -Commands $verify
 if (-not $DryRun) {
     foreach ($line in ($report -split "`r?`n" | Where-Object { $_ })) { Write-WwiLog $line }
 }

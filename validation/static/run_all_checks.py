@@ -237,6 +237,151 @@ def check_dtsx_pipeline(result, prefixes):
                             "log provider creation name %r is not a runtime type" % creation)
 
 
+def _project_connection_managers(package_full_path):
+    """DTSID -> name for the .conmgr files of the project owning a package."""
+    ns = {"DTS": "www.microsoft.com/SqlServer/Dts"}
+    folder = os.path.dirname(package_full_path)
+    managers = {}
+    for name in sorted(os.listdir(folder)):
+        if not name.endswith(".conmgr"):
+            continue
+        try:
+            root = ET.parse(os.path.join(folder, name)).getroot()
+        except ET.ParseError:
+            continue
+        dtsid = root.get("{%s}DTSID" % ns["DTS"])
+        if dtsid:
+            managers[dtsid.upper()] = root.get("{%s}ObjectName" % ns["DTS"]) or name[: -len(".conmgr")]
+    return managers
+
+
+def check_dtsx_connection_refs(result, prefixes):
+    """Every component connection must name a connection manager that exists.
+
+    A pipeline component addresses a package-scoped connection manager by its
+    refId path (``Package.ConnectionManagers[X]``) and a project-scoped one by
+    ``{DTSID}:external``. Emitting a package manager's DTSID instead of its
+    refId leaves the reference unresolvable and the package fails to load with
+    0xC001001C inside CPackage::LoadFromXML.
+    """
+    ns = {"DTS": "www.microsoft.com/SqlServer/Dts"}
+    packages = 0
+    references = 0
+    affected = set()
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        packages += 1
+        package_ids = {}   # refId -> DTSID for package-owned connection managers
+        for holder in root.iter("{%s}ConnectionManagers" % ns["DTS"]):
+            for cm in holder.findall("{%s}ConnectionManager" % ns["DTS"]):
+                ref_id = cm.get("{%s}refId" % ns["DTS"])
+                dtsid = cm.get("{%s}DTSID" % ns["DTS"])
+                if ref_id:
+                    package_ids[ref_id] = (dtsid or "").upper()
+        project_ids = _project_connection_managers(full)
+        known_dtsids = set(project_ids) | {v for v in package_ids.values() if v}
+
+        def fail(message):
+            affected.add(rel)
+            result.fail("dtsx-connection-refs", rel, message)
+
+        for pipeline in root.iter("pipeline"):
+            for connection in pipeline.iter("connection"):
+                references += 1
+                manager_id = connection.get("connectionManagerID") or ""
+                ref_id = connection.get("connectionManagerRefId") or ""
+                where = connection.get("refId") or connection.get("name")
+                if manager_id.endswith(":external"):
+                    dtsid = manager_id[: -len(":external")].upper()
+                    if dtsid not in project_ids:
+                        fail("%s references project connection manager %s, which no .conmgr "
+                             "in the project declares" % (where, manager_id))
+                    elif ref_id != "Project.ConnectionManagers[%s]" % project_ids[dtsid]:
+                        fail("%s references %s but names it %r" % (where, manager_id, ref_id))
+                elif manager_id in package_ids:
+                    if ref_id != manager_id:
+                        fail("%s addresses package connection manager %s but names it %r"
+                             % (where, manager_id, ref_id))
+                elif manager_id.upper() in known_dtsids:
+                    fail("%s addresses connection manager %s by DTSID; a package-scoped "
+                         "manager must be addressed by its refId path" % (where, manager_id))
+                else:
+                    fail("%s references connection manager ID %r, which no object in the "
+                         "package or its project owns" % (where, manager_id))
+        for task in root.iter("{www.microsoft.com/sqlserver/dts/tasks/sqltask}SqlTaskData"):
+            manager_id = task.get("{www.microsoft.com/sqlserver/dts/tasks/sqltask}Connection") or ""
+            references += 1
+            if manager_id.upper() not in known_dtsids:
+                fail("Execute SQL Task references connection manager ID %r, which no object "
+                     "in the package or its project owns" % manager_id)
+    result.count("connection_references_checked", references)
+    result.count("packages_with_connection_refs_checked", packages)
+    result.count("packages_with_unknown_connection_refs", len(affected))
+
+
+def _sql_placeholders(sql):
+    """Count OLE DB parameter markers, ignoring the ones inside literals."""
+    count = 0
+    quote = None
+    index = 0
+    while index < len(sql):
+        char = sql[index]
+        if quote:
+            if char == quote:
+                if index + 1 < len(sql) and sql[index + 1] == quote:
+                    index += 1
+                else:
+                    quote = None
+        elif char in "'\"":
+            quote = char
+        elif char == "?":
+            count += 1
+        index += 1
+    return count
+
+
+def check_execute_sql_parameters(result, prefixes):
+    """Every ? in an Execute SQL Task must have a ParameterBinding.
+
+    The OLE DB provider binds parameters positionally, so a statement with more
+    markers than bindings either fails outright or, worse, silently shifts every
+    later value into the wrong slot. Result-set bindings are a separate channel
+    and never stand in for an OUTPUT parameter marker.
+    """
+    sq = "www.microsoft.com/sqlserver/dts/tasks/sqltask"
+    tasks = 0
+    affected = set()
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for task in root.iter("{%s}SqlTaskData" % sq):
+            tasks += 1
+            sql = task.get("{%s}SqlStatementSource" % sq) or ""
+            if (task.get("{%s}SqlStmtSourceType" % sq) or "DirectInput") != "DirectInput":
+                continue
+            markers = _sql_placeholders(sql)
+            bindings = task.findall("{%s}ParameterBinding" % sq)
+            names = [b.get("{%s}ParameterName" % sq) for b in bindings]
+            if markers != len(bindings):
+                affected.add(rel)
+                result.fail("execute-sql-parameters", rel,
+                            "%r has %d parameter marker(s) but %d ParameterBinding entr(y|ies)"
+                            % (sql.strip()[:80], markers, len(bindings)))
+                continue
+            if sorted(names) != sorted(str(i) for i in range(markers)):
+                affected.add(rel)
+                result.fail("execute-sql-parameters", rel,
+                            "%r binds parameter names %s, expected the positions 0..%d"
+                            % (sql.strip()[:80], names, markers - 1))
+    result.count("execute_sql_tasks_checked", tasks)
+    result.count("packages_with_parameter_mismatch", len(affected))
+
+
 def check_dtproj_structure(result, prefixes):
     """Project manifests must be the SSDT project-deployment shape SSIS builds."""
     ssis_ns = "www.microsoft.com/SqlServer/SSIS"
@@ -741,6 +886,238 @@ def check_dependency_cycles(result, catalog):
         visit(node)
 
 
+def _powershell_statement(text, start):
+    """The text of one PowerShell statement beginning at start.
+
+    A statement ends at its line break, except that a backtick continues it, an
+    unclosed hash table or parenthesis continues it, and a here-string runs to
+    its own terminator - which between them are the shape every catalog batch in
+    deployment/ is written in.
+    """
+    def delta(fragment):
+        return (fragment.count("{") + fragment.count("(") + fragment.count("[")
+                - fragment.count("}") - fragment.count(")") - fragment.count("]"))
+
+    collected = []
+    here = None
+    depth = 0
+    for line in text[start:].split("\n"):
+        collected.append(line)
+        if here is not None:
+            if not line.startswith(here + "@"):
+                continue
+            here = None
+            depth += delta(line[2:])
+        else:
+            opened = re.search(r"@([\"'])\s*$", line)
+            if opened:
+                depth += delta(line[: opened.start()])
+                here = opened.group(1)
+                continue
+            depth += delta(line)
+        if depth <= 0 and not line.rstrip().endswith("`"):
+            break
+    return "\n".join(collected)
+
+
+def check_runtime_tooling(result, prefixes):
+    """The handwritten runtime drivers, checked for the contracts they broke.
+
+    Three defect classes, each of which reached a live run before it was seen:
+
+    - a catalog write issued over a SQL-authenticated connection. Every
+      catalog procedure that writes rejects one ("The operation cannot be
+      started by an account that uses SQL Server Authentication"), and
+      create_execution rejects it before an execution id exists, so the run
+      leaves nothing behind in catalog.operation_messages to diagnose;
+    - an etl batch opened without a guaranteed close. A fault between
+      usp_StartBatch and usp_EndBatch left the batch Running for ever, which
+      is indistinguishable from a run still in progress;
+    - a driver that executes file ingestion without first proving the landing
+      zone exists on the catalog host. A Foreach loop over a missing directory
+      succeeds, loads nothing, and reconciles to zero.
+    """
+    catalog_writers = (
+        "catalog.create_execution", "catalog.start_execution",
+        "catalog.set_execution_parameter_value", "catalog.deploy_project",
+        "catalog.create_folder", "catalog.create_environment",
+        "catalog.create_environment_variable", "catalog.create_environment_reference",
+        "catalog.set_object_parameter_value", "catalog.delete_project",
+    )
+    integrated_switches = ("-Integrated", "-ForceIntegrated", "-IntegratedSecurity")
+    drivers = 0
+
+    for rel, full in walk_files(prefixes, (".ps1",)):
+        if not rel.startswith("deployment/"):
+            continue
+        with open(full, errors="replace") as handle:
+            text = handle.read()
+        drivers += 1
+
+        for match in re.finditer(r"\bInvoke-WwiSql(?:Query|NonQuery)\b", text):
+            statement = _powershell_statement(text, match.end())
+            written = [name for name in catalog_writers if name in statement]
+            if not written:
+                continue
+            if not any(switch in statement for switch in integrated_switches):
+                line = text[: match.start()].count("\n") + 1
+                result.fail("runtime-tooling", "%s:%d" % (rel, line),
+                            "%s is called over a connection that may authenticate with a SQL "
+                            "login; the catalog procedures accept a Windows principal only"
+                            % written[0])
+
+        opens_batch = re.search(r"\bStart-EtlBatch\s+-BatchType\b", text)
+        if opens_batch:
+            closes = [block.start() for block in re.finditer(r"(?m)^finally\s*\{", text)]
+            guarded = False
+            for position in closes:
+                depth = 0
+                for index in range(text.index("{", position), len(text)):
+                    if text[index] == "{":
+                        depth += 1
+                    elif text[index] == "}":
+                        depth -= 1
+                        if depth == 0:
+                            body = text[position:index]
+                            guarded = guarded or "Stop-EtlBatch" in body or "usp_EndBatch" in body
+                            break
+            if not guarded:
+                line = text[: opens_batch.start()].count("\n") + 1
+                result.fail("runtime-tooling", "%s:%d" % (rel, line),
+                            "opens an etl batch with no finally block that closes it; a fault "
+                            "would leave etl.Batch Running with no etl.ErrorLog row")
+            if "usp_LogError" not in text:
+                line = text[: opens_batch.start()].count("\n") + 1
+                result.fail("runtime-tooling", "%s:%d" % (rel, line),
+                            "opens an etl batch but never writes etl.usp_LogError, so a runner "
+                            "fault would be recorded nowhere in the control framework")
+
+        if "catalog.create_execution" in text and opens_batch:
+            for helper, why in (
+                ("Assert-WwiCatalogWindowsAuthentication",
+                 "the catalog connection is not proved to be a Windows principal before a "
+                 "batch is opened"),
+                ("Assert-WwiExecutionHostLandingZone",
+                 "the landing zone is not proved to exist on the catalog host before a batch "
+                 "is opened"),
+            ):
+                call = re.search(r"\b%s\b" % helper, text)
+                if not call or call.start() > opens_batch.start():
+                    line = text[: opens_batch.start()].count("\n") + 1
+                    result.fail("runtime-tooling", "%s:%d" % (rel, line), why)
+
+    result.count("runtime drivers checked", drivers)
+
+
+# DTS:DataType on a package parameter is an OLE Automation VARTYPE, and
+# catalog.object_parameters stores the CLR name SSIS derives from it. The
+# runner has to hand catalog.set_execution_parameter_value a sql_variant whose
+# base type is that CLR type: the procedure compares, it does not convert.
+SSIS_VARTYPE_CLR = {
+    "2": "Int16", "3": "Int32", "4": "Single", "5": "Double", "6": "Decimal",
+    "7": "DateTime", "8": "String", "11": "Boolean", "14": "Decimal",
+    "16": "SByte", "17": "Byte", "18": "UInt16", "19": "UInt32",
+    "20": "Int64", "21": "UInt64",
+}
+
+
+def check_execution_parameter_binding(result, prefixes):
+    """Typed catalog parameter binding, batch adoption, and BOM-free SSM payloads.
+
+    Three defects that only a live run has ever shown:
+
+    - a package parameter bound as text. catalog.create_execution commits the
+      execution before any parameter is set, so a base-type mismatch faults
+      with "The data type of the input value is not compatible with the data
+      type of the 'Int32'" and strands the execution in status 1 with nothing
+      in catalog.operation_messages;
+    - a runner that hardcodes @AllowAdoptRunning = 0, which makes the recovery
+      rerun etl.usp_StartBatch documents impossible without editing the runner;
+    - an SSM --parameters payload written with Set-Content -Encoding utf8. On
+      Windows PowerShell that emits a BOM and the AWS CLI refuses the file with
+      "Expected: '=', received: '\\ufeff'".
+    """
+    runners = 0
+    for rel, full in walk_files(prefixes, (".ps1",)):
+        if not rel.startswith("deployment/"):
+            continue
+        with open(full, errors="replace") as handle:
+            text = handle.read()
+
+        if "catalog.set_execution_parameter_value" in text:
+            runners += 1
+            if "ConvertTo-WwiExecutionParameter" not in text:
+                result.fail("execution-parameters", rel,
+                            "sets execution parameter values without converting them to the "
+                            "types catalog.object_parameters declares for the package")
+            cast = re.search(r"pvalue\$?\w*\"?\]\s*=\s*\[(string|int|long)\]", text)
+            if cast:
+                line = text[: cast.start()].count("\n") + 1
+                result.fail("execution-parameters", "%s:%d" % (rel, line),
+                            "casts every execution parameter to [%s]; the value must carry the "
+                            "CLR type the package declares" % cast.group(1))
+
+        adopt = re.search(r"@AllowAdoptRunning\s*=\s*0\b", text)
+        if adopt and "usp_StartBatch" in text:
+            line = text[: adopt.start()].count("\n") + 1
+            result.fail("execution-parameters", "%s:%d" % (rel, line),
+                        "hardcodes @AllowAdoptRunning = 0, so a batch left Running by an "
+                        "interrupted attempt cannot be adopted without editing the runner")
+
+        for match in re.finditer(r"(?m)^.*Set-Content[^\n]*-Encoding\s+utf8[^\n]*$", text):
+            statement = match.group(0)
+            variable = re.search(r"-LiteralPath\s+\$(\w+)", statement)
+            if not variable:
+                continue
+            if ("file://" in text and re.search(r"--parameters[^\n]*\$%s\b" % variable.group(1), text)):
+                line = text[: match.start()].count("\n") + 1
+                result.fail("ssm-payload", "%s:%d" % (rel, line),
+                            "writes the SSM --parameters payload with Set-Content -Encoding "
+                            "utf8, which emits a BOM the AWS CLI rejects; write it with "
+                            "UTF8Encoding($false)")
+
+    result.count("execution parameter binders checked", runners)
+
+    # Every parameter type the estate declares must have a binding in the
+    # runner's map, or the first run that passes one faults inside the catalog.
+    helper = os.path.join(REPO_ROOT, "deployment", "lib", "SsisCatalog.ps1")
+    if not os.path.exists(helper):
+        return
+    with open(helper, errors="replace") as handle:
+        helper_text = handle.read()
+    block = re.search(r"WwiSsisParameterClrType\s*=\s*\[ordered\]\s*@\{(.*?)\n\}",
+                      helper_text, re.S)
+    if not block:
+        result.fail("execution-parameters", "deployment/lib/SsisCatalog.ps1",
+                    "no $script:WwiSsisParameterClrType map; the runner cannot know what CLR "
+                    "type a declared package parameter needs")
+        return
+    known = set(re.findall(r"'(\w+)'\s*=", block.group(1)))
+
+    declared = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        with open(full, errors="replace") as handle:
+            text = handle.read()
+        for parameter in re.finditer(r"<DTS:PackageParameter\b(.*?)>", text, re.S):
+            attributes = parameter.group(1)
+            name = re.search(r'DTS:ObjectName="([^"]+)"', attributes)
+            vartype = re.search(r'DTS:DataType="(\d+)"', attributes)
+            if not name or not vartype:
+                continue
+            declared += 1
+            clr = SSIS_VARTYPE_CLR.get(vartype.group(1))
+            if clr is None:
+                result.fail("execution-parameters", rel,
+                            "package parameter %s is declared with DTS:DataType %s, which the "
+                            "runner has no CLR mapping for" % (name.group(1), vartype.group(1)))
+            elif clr not in known:
+                result.fail("execution-parameters", rel,
+                            "package parameter %s is a %s, which $script:WwiSsisParameterClrType "
+                            "in deployment/lib/SsisCatalog.ps1 cannot bind"
+                            % (name.group(1), clr))
+    result.count("package parameters typed", declared)
+
+
 def check_no_forbidden_content(result, prefixes):
     for rel, full in walk_files(prefixes, (".sql", ".dtsx", ".py", ".md", ".yaml", ".yml",
                                            ".json", ".ps1", ".sh", ".csv", ".conmgr", ".params")):
@@ -831,6 +1208,8 @@ CHECKS = [
     ("dtsx-structure", check_dtsx_structure),
     ("dtsx-references", check_dtsx_references),
     ("dtsx-pipeline", check_dtsx_pipeline),
+    ("dtsx-connection-refs", check_dtsx_connection_refs),
+    ("execute-sql-parameters", check_execute_sql_parameters),
     ("dtproj-structure", check_dtproj_structure),
     ("conmgr-binding", check_conmgr_binding),
     ("conmgr-credentials", check_conmgr_credentials),
@@ -843,6 +1222,9 @@ CHECKS = [
     ("package-naming", check_package_naming),
     ("sql-naming", check_sql_naming),
     ("duplicates", check_duplicates),
+    ("runtime-tooling", check_runtime_tooling),
+    ("execution-parameters", check_execution_parameter_binding),
+    ("ssm-payload", check_execution_parameter_binding),
     ("forbidden-content", check_no_forbidden_content),
     ("credentials", check_no_credentials),
     ("runtime-claims", check_no_runtime_claims),
@@ -866,6 +1248,8 @@ def main():
     check_dtsx_structure(result, prefixes)
     check_dtsx_references(result, prefixes)
     check_dtsx_pipeline(result, prefixes)
+    check_dtsx_connection_refs(result, prefixes)
+    check_execute_sql_parameters(result, prefixes)
     check_dtproj_structure(result, prefixes)
     check_conmgr_binding(result, prefixes)
     check_conmgr_credentials(result, prefixes)
@@ -880,6 +1264,8 @@ def main():
     check_sql_naming(result, prefixes)
     check_duplicates(result, prefixes)
     check_dependency_cycles(result, catalog)
+    check_runtime_tooling(result, prefixes)
+    check_execution_parameter_binding(result, prefixes)
     check_no_forbidden_content(result, prefixes)
     check_no_credentials(result, prefixes)
     check_no_runtime_claims(result, prefixes)
