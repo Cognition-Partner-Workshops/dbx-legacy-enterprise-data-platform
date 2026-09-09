@@ -741,6 +741,129 @@ def check_dependency_cycles(result, catalog):
         visit(node)
 
 
+def _powershell_statement(text, start):
+    """The text of one PowerShell statement beginning at start.
+
+    A statement ends at its line break, except that a backtick continues it, an
+    unclosed hash table or parenthesis continues it, and a here-string runs to
+    its own terminator - which between them are the shape every catalog batch in
+    deployment/ is written in.
+    """
+    def delta(fragment):
+        return (fragment.count("{") + fragment.count("(") + fragment.count("[")
+                - fragment.count("}") - fragment.count(")") - fragment.count("]"))
+
+    collected = []
+    here = None
+    depth = 0
+    for line in text[start:].split("\n"):
+        collected.append(line)
+        if here is not None:
+            if not line.startswith(here + "@"):
+                continue
+            here = None
+            depth += delta(line[2:])
+        else:
+            opened = re.search(r"@([\"'])\s*$", line)
+            if opened:
+                depth += delta(line[: opened.start()])
+                here = opened.group(1)
+                continue
+            depth += delta(line)
+        if depth <= 0 and not line.rstrip().endswith("`"):
+            break
+    return "\n".join(collected)
+
+
+def check_runtime_tooling(result, prefixes):
+    """The handwritten runtime drivers, checked for the contracts they broke.
+
+    Three defect classes, each of which reached a live run before it was seen:
+
+    - a catalog write issued over a SQL-authenticated connection. Every
+      catalog procedure that writes rejects one ("The operation cannot be
+      started by an account that uses SQL Server Authentication"), and
+      create_execution rejects it before an execution id exists, so the run
+      leaves nothing behind in catalog.operation_messages to diagnose;
+    - an etl batch opened without a guaranteed close. A fault between
+      usp_StartBatch and usp_EndBatch left the batch Running for ever, which
+      is indistinguishable from a run still in progress;
+    - a driver that executes file ingestion without first proving the landing
+      zone exists on the catalog host. A Foreach loop over a missing directory
+      succeeds, loads nothing, and reconciles to zero.
+    """
+    catalog_writers = (
+        "catalog.create_execution", "catalog.start_execution",
+        "catalog.set_execution_parameter_value", "catalog.deploy_project",
+        "catalog.create_folder", "catalog.create_environment",
+        "catalog.create_environment_variable", "catalog.create_environment_reference",
+        "catalog.set_object_parameter_value", "catalog.delete_project",
+    )
+    integrated_switches = ("-Integrated", "-ForceIntegrated", "-IntegratedSecurity")
+    drivers = 0
+
+    for rel, full in walk_files(prefixes, (".ps1",)):
+        if not rel.startswith("deployment/"):
+            continue
+        with open(full, errors="replace") as handle:
+            text = handle.read()
+        drivers += 1
+
+        for match in re.finditer(r"\bInvoke-WwiSql(?:Query|NonQuery)\b", text):
+            statement = _powershell_statement(text, match.end())
+            written = [name for name in catalog_writers if name in statement]
+            if not written:
+                continue
+            if not any(switch in statement for switch in integrated_switches):
+                line = text[: match.start()].count("\n") + 1
+                result.fail("runtime-tooling", "%s:%d" % (rel, line),
+                            "%s is called over a connection that may authenticate with a SQL "
+                            "login; the catalog procedures accept a Windows principal only"
+                            % written[0])
+
+        opens_batch = re.search(r"\bStart-EtlBatch\s+-BatchType\b", text)
+        if opens_batch:
+            closes = [block.start() for block in re.finditer(r"(?m)^finally\s*\{", text)]
+            guarded = False
+            for position in closes:
+                depth = 0
+                for index in range(text.index("{", position), len(text)):
+                    if text[index] == "{":
+                        depth += 1
+                    elif text[index] == "}":
+                        depth -= 1
+                        if depth == 0:
+                            body = text[position:index]
+                            guarded = guarded or "Stop-EtlBatch" in body or "usp_EndBatch" in body
+                            break
+            if not guarded:
+                line = text[: opens_batch.start()].count("\n") + 1
+                result.fail("runtime-tooling", "%s:%d" % (rel, line),
+                            "opens an etl batch with no finally block that closes it; a fault "
+                            "would leave etl.Batch Running with no etl.ErrorLog row")
+            if "usp_LogError" not in text:
+                line = text[: opens_batch.start()].count("\n") + 1
+                result.fail("runtime-tooling", "%s:%d" % (rel, line),
+                            "opens an etl batch but never writes etl.usp_LogError, so a runner "
+                            "fault would be recorded nowhere in the control framework")
+
+        if "catalog.create_execution" in text and opens_batch:
+            for helper, why in (
+                ("Assert-WwiCatalogWindowsAuthentication",
+                 "the catalog connection is not proved to be a Windows principal before a "
+                 "batch is opened"),
+                ("Assert-WwiExecutionHostLandingZone",
+                 "the landing zone is not proved to exist on the catalog host before a batch "
+                 "is opened"),
+            ):
+                call = re.search(r"\b%s\b" % helper, text)
+                if not call or call.start() > opens_batch.start():
+                    line = text[: opens_batch.start()].count("\n") + 1
+                    result.fail("runtime-tooling", "%s:%d" % (rel, line), why)
+
+    result.count("runtime drivers checked", drivers)
+
+
 def check_no_forbidden_content(result, prefixes):
     for rel, full in walk_files(prefixes, (".sql", ".dtsx", ".py", ".md", ".yaml", ".yml",
                                            ".json", ".ps1", ".sh", ".csv", ".conmgr", ".params")):
@@ -843,6 +966,7 @@ CHECKS = [
     ("package-naming", check_package_naming),
     ("sql-naming", check_sql_naming),
     ("duplicates", check_duplicates),
+    ("runtime-tooling", check_runtime_tooling),
     ("forbidden-content", check_no_forbidden_content),
     ("credentials", check_no_credentials),
     ("runtime-claims", check_no_runtime_claims),
@@ -880,6 +1004,7 @@ def main():
     check_sql_naming(result, prefixes)
     check_duplicates(result, prefixes)
     check_dependency_cycles(result, catalog)
+    check_runtime_tooling(result, prefixes)
     check_no_forbidden_content(result, prefixes)
     check_no_credentials(result, prefixes)
     check_no_runtime_claims(result, prefixes)

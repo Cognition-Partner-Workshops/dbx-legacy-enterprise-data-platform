@@ -175,7 +175,7 @@ if (-not $catalogState.CatalogUsable) {
 }
 
 Write-WwiLog "ensuring catalogue folder [$folder] exists"
-Invoke-WwiSqlNonQuery -Database 'SSISDB' -Parameters @{ folder = $folder } -Query @'
+Invoke-WwiSqlNonQuery -Database 'SSISDB' -Integrated -Parameters @{ folder = $folder } -Query @'
 IF NOT EXISTS (SELECT 1 FROM catalog.folders WHERE name = @folder)
     EXEC catalog.create_folder @folder_name = @folder;
 '@ | Out-Null
@@ -199,7 +199,7 @@ if ($UseCatalogProcedure) {
         $projectName = [System.IO.Path]::GetFileNameWithoutExtension($ispac)
         $bytes = [System.IO.File]::ReadAllBytes($ispac)
         Write-WwiLog ("deploying {0} ({1:N0} bytes) -> /SSISDB/{2}" -f $projectName, $bytes.Length, $folder)
-        Invoke-WwiSqlNonQuery -Database 'SSISDB' -Parameters @{
+        Invoke-WwiSqlNonQuery -Database 'SSISDB' -Integrated -Parameters @{
             folder_name  = $folder
             project_name = $projectName
             stream       = $bytes

@@ -140,6 +140,37 @@ def mutate_sql_exec_expression(text):
                    "    @TargetRowCount = @InsertedCount + @UpdatedCount;\n")
 
 
+def mutate_ps1_catalog_sql_auth(text):
+    """Let a catalog write fall back to SQL authentication - the live defect."""
+    if "-Database 'SSISDB' -Integrated" not in text:
+        return None
+    return text.replace("-Database 'SSISDB' -Integrated", "-Database 'SSISDB'", 1)
+
+
+def mutate_ps1_unclosed_batch(text):
+    """Drop the finally that closes the batch, leaving it Running after a fault."""
+    match = re.search(r"(?ms)^finally \{.*?^\}\n", text)
+    if not match or "Stop-EtlBatch" not in match.group(0):
+        return None
+    return text.replace(match.group(0), "", 1)
+
+
+def mutate_ps1_missing_landing_assert(text):
+    """Execute file ingestion without proving the landing zone is on the host."""
+    match = re.search(r"(?m)^.*Assert-WwiExecutionHostLandingZone .*\n", text)
+    if not match:
+        return None
+    return text.replace(match.group(0), "", 1)
+
+
+def mutate_ps1_missing_auth_assert(text):
+    """Open a batch before knowing the catalog will accept the connection."""
+    match = re.search(r"(?m)^.*Assert-WwiCatalogWindowsAuthentication .*\n", text)
+    if not match:
+        return None
+    return text.replace(match.group(0), "", 1)
+
+
 def mutate_sql_duplicate_when_matched(text):
     match = re.search(r"(?s)\n\s*WHEN MATCHED THEN UPDATE SET.*?(?=\n\s*(?:WHEN\b|OUTPUT\b|;))",
                       text)
@@ -182,6 +213,14 @@ FIXTURES = (
      "sql-exec-arguments", mutate_sql_exec_expression),  # appended, so any file carries it
     ("MERGE with two WHEN MATCHED updates", "sqlserver/procedures/dimensions", ".sql",
      "sql-merge", mutate_sql_duplicate_when_matched),
+    ("catalog write over SQL authentication", "deployment/ssis", ".ps1",
+     "runtime-tooling", mutate_ps1_catalog_sql_auth),
+    ("batch opened with no guaranteed close", "deployment/ssis", ".ps1",
+     "runtime-tooling", mutate_ps1_unclosed_batch),
+    ("file ingestion without a landing zone check", "deployment/ssis", ".ps1",
+     "runtime-tooling", mutate_ps1_missing_landing_assert),
+    ("batch opened before the catalog auth check", "deployment/ssis", ".ps1",
+     "runtime-tooling", mutate_ps1_missing_auth_assert),
 )
 
 

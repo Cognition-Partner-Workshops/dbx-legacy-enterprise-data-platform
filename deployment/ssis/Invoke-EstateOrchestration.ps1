@@ -24,7 +24,15 @@
 
     The control framework the master owns (etl.usp_StartBatch, a batch step per
     phase, the reconciliation assert, etl.usp_EndBatch) is reproduced here so a
-    child still runs inside the step its phase opened.
+    child still runs inside the step its phase opened. A batch this runner opens
+    is always closed: a fault anywhere in the walk logs to etl.ErrorLog and ends
+    the batch Failed rather than leaving it Running for the next operator.
+
+    The catalog half of the run authenticates as the Windows principal.
+    catalog.create_execution refuses a SQL login outright, so the runner belongs
+    on the catalog host - Invoke-EstateOrchestrationRemote.ps1 puts it there -
+    while the control framework keeps using SQLSERVER_USER against the staging
+    database. Both are checked before the first batch is opened.
 
     Usage:
       .\deployment\ssis\Invoke-EstateOrchestration.ps1 -Root Master_Daily_ETL `
@@ -73,6 +81,20 @@ Assert-WwiEnvironmentVariable @(
     'SSIS_SERVER', 'SSIS_FOLDER', 'SSIS_ENVIRONMENT',
     'SQLSERVER_HOST', 'SQLSERVER_PORT', 'SQLSERVER_USER', 'SQLSERVER_PASSWORD',
     'SQLSERVER_STAGING_DB')
+
+# Roots that execute a file ingestion package read their input from the catalog
+# host's file system, so those runs additionally need the landing zone.
+$fileChildren = @()
+foreach ($node in $rootPlan.nodes) {
+    if ($node.PSObject.Properties.Name -contains 'children') {
+        $fileChildren += @($node.children | Where-Object { $_.project -eq 'WWI_Ingest_Files' })
+    }
+    if (($node.PSObject.Properties.Name -contains 'project') -and $node.project -eq 'WWI_Ingest_Files') {
+        $fileChildren += $node
+    }
+}
+$needsLandingZone = @($fileChildren).Count -gt 0
+if ($needsLandingZone) { Assert-WwiEnvironmentVariable @('WWI_LANDING_ROOT') }
 $environmentCode = Get-WwiEnvironmentCode
 Confirm-WwiProduction
 
@@ -150,6 +172,43 @@ SELECT @FailedObjectCount;
     return Invoke-EtlScalar -Query $query
 }
 
+function Test-EtlBatchRunning {
+    param([Parameter(Mandatory)][long] $BatchId)
+    if ($BatchId -le 0) { return $false }
+    return (Invoke-EtlScalar -Query "SELECT COUNT(*) FROM etl.Batch WHERE BatchId = $BatchId AND Status = N'Running';") -gt 0
+}
+
+function Write-EtlError {
+    <#
+        Records a runner-side fault where the estate keeps every other failure.
+        A crash between usp_StartBatch and usp_EndBatch used to leave the batch
+        Running with nothing in etl.ErrorLog to say why, which is indistinguish-
+        able from a run that is still going.
+
+        Logging is best effort by design: if the control database is what broke,
+        the original fault must still be the one the operator sees.
+    #>
+    param(
+        [Parameter(Mandatory)][long] $BatchId,
+        [Parameter(Mandatory)][string] $Message,
+        [string] $Source = 'Invoke-EstateOrchestration.ps1'
+    )
+
+    if ($DryRun) { Write-WwiLog "WHATIF etl.usp_LogError for batch $BatchId"; return }
+    if ($BatchId -le 0) { return }
+    try {
+        Invoke-WwiSqlQuery -Database $env:SQLSERVER_STAGING_DB -Parameters @{
+            batch = $BatchId; source = $Source; description = $Message
+        } -Query @'
+EXEC etl.usp_LogError @BatchId = @batch, @ErrorSeverity = N'Error',
+     @SourceName = @source, @ProcedureName = @source, @ErrorDescription = @description;
+'@ | Out-Null
+    }
+    catch {
+        Write-WwiLog "could not write etl.ErrorLog for batch ${BatchId}: $($_.Exception.Message)" 'WARN'
+    }
+}
+
 # ---------------------------------------------------------------------------
 # package execution
 # ---------------------------------------------------------------------------
@@ -177,7 +236,7 @@ function Get-EstateReference {
 
     if ($script:References.ContainsKey($Project)) { return $script:References[$Project] }
 
-    $rows = Invoke-WwiSqlQuery -Database 'SSISDB' -Parameters @{
+    $rows = Invoke-WwiSqlQuery -Database 'SSISDB' -Integrated -Parameters @{
         folder = $folder; project = $Project; environment = $environment
     } -Query @'
 SELECT r.reference_id, r.reference_type, r.environment_folder_name
@@ -281,7 +340,7 @@ EXEC catalog.set_execution_parameter_value @execution_id,
 "@
     }
 
-    $rows = Invoke-WwiSqlQuery -Database 'SSISDB' -TimeoutSeconds 0 -Parameters $arguments -Query @"
+    $rows = Invoke-WwiSqlQuery -Database 'SSISDB' -Integrated -TimeoutSeconds 0 -Parameters $arguments -Query @"
 SET NOCOUNT ON;
 DECLARE @execution_id BIGINT;
 
@@ -306,7 +365,7 @@ SELECT execution_id = @execution_id;
 
     $executionId = [long] $rows[0].execution_id
 
-    $execution = (Invoke-WwiSqlQuery -Database 'SSISDB' -Parameters @{ execution = $executionId } -Query @'
+    $execution = (Invoke-WwiSqlQuery -Database 'SSISDB' -Integrated -Parameters @{ execution = $executionId } -Query @'
 SELECT e.status, e.start_time, e.end_time
 FROM catalog.executions AS e
 WHERE e.execution_id = @execution;
@@ -318,7 +377,7 @@ WHERE e.execution_id = @execution;
 
     # message_type 120 is an error and 130 a warning; they are the catalog's own
     # account of what happened and are kept next to the run's other logs.
-    $messages = Invoke-WwiSqlQuery -Database 'SSISDB' -Parameters @{ execution = $executionId } -Query @'
+    $messages = Invoke-WwiSqlQuery -Database 'SSISDB' -Integrated -Parameters @{ execution = $executionId } -Query @'
 SELECT m.message_time, m.message_type, m.message
 FROM catalog.operation_messages AS m
 WHERE m.operation_id = @execution AND m.message_type IN (120, 130)
@@ -416,9 +475,23 @@ function Test-NodeShouldRun {
 
 Write-WwiLog ("orchestrating {0} ({1} node(s), {2} edge(s)) from /SSISDB/{3} with environment {4}" -f `
     $Root, $rootPlan.nodes.Count, $rootPlan.edges.Count, $folder, $environment)
+
+# Everything that can be known before a batch exists is checked before one is
+# opened. Both of these used to surface as a failed execution - or, worse, as a
+# successful one over an empty directory - after the control framework had
+# already recorded a run.
+if (-not $DryRun) {
+    Assert-WwiCatalogWindowsAuthentication -Database 'SSISDB' | Out-Null
+    if ($needsLandingZone) {
+        Assert-WwiExecutionHostLandingZone -LandingRoot $env:WWI_LANDING_ROOT -Integrated | Out-Null
+    }
+}
+
 $batchId = 0
 $forceStatus = $null
+$fault = $null
 
+try {
 foreach ($name in $order) {
     $node = $nodesByName[$name]
     if (-not (Test-NodeShouldRun -Name $name)) {
@@ -434,7 +507,7 @@ foreach ($name in $order) {
             $status[$name] = 'Succeeded'
         }
         'batch_end' {
-            $force = if ($node.PSObject.Properties.Name -contains 'force_status') { $node.force_status } else { $null }
+            $force = if ($node.PSObject.Properties.Name -contains 'force_status') { $node.force_status } else { $forceStatus }
             Stop-EtlBatch -BatchId $batchId -ForceStatus $force
             $status[$name] = 'Succeeded'
         }
@@ -478,8 +551,33 @@ foreach ($name in $order) {
         }
     }
 }
+}
+catch {
+    $fault = $_
+    $forceStatus = 'Failed'
+    Write-WwiLog "orchestration faulted: $($_.Exception.Message)" 'ERROR'
+    Write-EtlError -BatchId $batchId -Message $_.Exception.Message
+}
+finally {
+    # The batch the runner opened is the runner's to close, on every path out.
+    if ($batchId -gt 0) {
+        try {
+            # The plan's own batch_end has usually closed it already; this is
+            # for the paths that never reached that node.
+            if (Test-EtlBatchRunning -BatchId $batchId) {
+                Stop-EtlBatch -BatchId $batchId -ForceStatus $forceStatus
+            }
+        }
+        catch {
+            Write-WwiLog "could not close batch ${batchId}: $($_.Exception.Message)" 'ERROR'
+        }
+    }
+}
 
-if ($forceStatus -and $batchId -gt 0) { Stop-EtlBatch -BatchId $batchId -ForceStatus $forceStatus }
+if ($fault) {
+    Write-WwiLog ("{0}: orchestration aborted; batch {1} closed Failed" -f $Root, $batchId) 'ERROR'
+    throw $fault
+}
 
 $failed = @($script:Results | Where-Object { $_.Status -eq 'Failed' })
 if ($script:Results.Count -gt 0) { $script:Results | Format-Table -AutoSize | Out-String | Write-Host }
