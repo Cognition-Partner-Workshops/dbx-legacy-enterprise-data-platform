@@ -81,6 +81,7 @@ DT = {
     "i8": ("i8", None, None, None),
     "bool": ("bool", None, None, None),
     "date": ("date", None, None, None),
+    "dbDate": ("dbDate", None, None, None),
     "dbTimeStamp": ("dbTimeStamp", None, None, None),
     "guid": ("guid", None, None, None),
 }
@@ -274,6 +275,15 @@ def money_col(name):
 
 def date_col(name):
     return Column(name, "dbTimeStamp")
+
+
+def day_col(name):
+    """A whole-day column, which is what a SQL DATE hands the buffer.
+
+    Declaring one as a timestamp leaves the source's external metadata out of
+    synchronisation with the column the server describes.
+    """
+    return Column(name, "dbDate")
 
 
 # The aggregate names its summaries by number, and a summary applied to a type
@@ -1156,7 +1166,13 @@ class DataFlow:
                                % (pad, quoteattr("%s.Inputs[Derived Column Input].Columns[%s]" % (ref, col_name)),
                                   col.cached_attrs(), quoteattr(lineage[col_name]), quoteattr(col_name)))
                 for col_name, expr in replacements:
-                    out.append('%s        <inputColumn refId=%s %s lineageId=%s name=%s usageType="readWrite">'
+                    # A written column computes, so it needs the dispositions
+                    # that say what a computation error does; without them the
+                    # column validates as VS_ISCORRUPT: "has an invalid error
+                    # or truncation row disposition".
+                    out.append('%s        <inputColumn refId=%s %s errorOrTruncationOperation="Computation"'
+                               ' errorRowDisposition="FailComponent" lineageId=%s name=%s'
+                               ' truncationRowDisposition="FailComponent" usageType="readWrite">'
                                % (pad, quoteattr("%s.Inputs[Derived Column Input].Columns[%s]" % (ref, col_name)),
                                   upstream_by_name[col_name].cached_attrs(),
                                   quoteattr(lineage[col_name]), quoteattr(col_name)))
@@ -1235,9 +1251,12 @@ class DataFlow:
             for jc in comp["join_columns"]:
                 if jc not in lineage:
                     continue
-                out.append('%s        <inputColumn refId=%s %s lineageId=%s name=%s />'
+                # joinToReferenceColumn names the reference column the key is
+                # matched against; without it the component has no join at all
+                # and answers 0xC0010009 at validation.
+                out.append('%s        <inputColumn refId=%s %s joinToReferenceColumn=%s lineageId=%s name=%s />'
                            % (pad, quoteattr("%s.Inputs[Lookup Input].Columns[%s]" % (ref, jc)),
-                              join_columns[jc].cached_attrs(),
+                              join_columns[jc].cached_attrs(), quoteattr(jc),
                               quoteattr(lineage[jc]), quoteattr(jc)))
             out.append("%s      </inputColumns>" % pad)
             out.append("%s    </input>" % pad)
@@ -1251,8 +1270,9 @@ class DataFlow:
             out.append("%s      <outputColumns>" % pad)
             for col in comp["output_columns"]:
                 col_ref = "%s.Outputs[Lookup Match Output].Columns[%s]" % (ref, col.name)
-                out.append('%s        <outputColumn refId=%s %s lineageId=%s name=%s />'
-                           % (pad, quoteattr(col_ref), col.metadata_attrs(), quoteattr(col_ref), quoteattr(col.name)))
+                out.append('%s        <outputColumn refId=%s %s copyFromReferenceColumn=%s lineageId=%s name=%s />'
+                           % (pad, quoteattr(col_ref), col.metadata_attrs(), quoteattr(col.name),
+                              quoteattr(col_ref), quoteattr(col.name)))
             out.append("%s      </outputColumns>" % pad)
             out.append("%s      <externalMetadataColumns />" % pad)
             out.append("%s    </output>" % pad)

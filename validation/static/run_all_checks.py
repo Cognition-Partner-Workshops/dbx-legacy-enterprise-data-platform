@@ -378,6 +378,74 @@ def check_input_column_cache(result, prefixes):
     result.count("input_columns_checked", columns)
 
 
+def check_written_input_dispositions(result, prefixes):
+    """An input column a component writes must say what a failure does to its row.
+
+    A readWrite column is computed in place, so it carries the dispositions the
+    computation obeys. Without them the column validates as VS_ISCORRUPT:
+
+        The Normalize Partner Text.Inputs[Derived Column Input]
+        .Columns[PartnerCode] has an invalid error or truncation row disposition
+
+    which is how the live STG_Load_PartnerSale validation failed.
+    """
+    columns = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for component in root.iter("component"):
+            name = component.get("name") or component.get("refId") or "?"
+            for column in component.iter("inputColumn"):
+                if column.get("usageType") != "readWrite":
+                    continue
+                columns += 1
+                missing = [attr for attr in ("errorRowDisposition",
+                                             "truncationRowDisposition")
+                           if not column.get(attr)]
+                if missing:
+                    result.fail("input-column-disposition", rel,
+                                "written input column %r of %r declares no %s"
+                                % (column.get("name"), name, ", ".join(missing)))
+    result.count("written_input_columns_checked", columns)
+
+
+def check_lookup_reference_mapping(result, prefixes):
+    """A lookup must map every key and every copied column to its reference query.
+
+    The join lives on the input column as joinToReferenceColumn and the copy on
+    the match output column as copyFromReferenceColumn. A lookup missing either
+    has no relation to the reference set it names and fails validation with
+    0xC0010009, which is how the live STG_Load_Currency validation failed.
+    """
+    lookups = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for component in root.iter("component"):
+            if component.get("componentClassID") != "Microsoft.Lookup":
+                continue
+            lookups += 1
+            name = component.get("name") or component.get("refId") or "?"
+            for column in component.iter("inputColumn"):
+                if not column.get("joinToReferenceColumn"):
+                    result.fail("lookup-reference-mapping", rel,
+                                "lookup %r joins input column %r to no reference column"
+                                % (name, column.get("name")))
+            for output in component.iter("output"):
+                if output.get("name") != "Lookup Match Output":
+                    continue
+                for column in output.iter("outputColumn"):
+                    if not column.get("copyFromReferenceColumn"):
+                        result.fail("lookup-reference-mapping", rel,
+                                    "lookup %r copies output column %r from no reference column"
+                                    % (name, column.get("name")))
+    result.count("lookups_checked", lookups)
+
+
 def check_foreach_file_enumerators(result, prefixes):
     """A file loop must enumerate the folder and the files it was configured with.
 
@@ -2092,6 +2160,8 @@ CHECKS = [
     ("dtsx-connection-refs", check_dtsx_connection_refs),
     ("component-contracts", check_component_contracts),
     ("input-column-cache", check_input_column_cache),
+    ("input-column-disposition", check_written_input_dispositions),
+    ("lookup-reference-mapping", check_lookup_reference_mapping),
     ("foreach-file-enumerator", check_foreach_file_enumerators),
     ("single-row-result-set", check_single_row_result_sets),
     ("execute-sql-parameters", check_execute_sql_parameters),
@@ -2142,6 +2212,8 @@ def main():
     check_dtsx_connection_refs(result, prefixes)
     check_component_contracts(result, prefixes)
     check_input_column_cache(result, prefixes)
+    check_written_input_dispositions(result, prefixes)
+    check_lookup_reference_mapping(result, prefixes)
     check_foreach_file_enumerators(result, prefixes)
     check_single_row_result_sets(result, prefixes)
     check_execute_sql_parameters(result, prefixes)

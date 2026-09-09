@@ -32,6 +32,7 @@ from ssisgen import (  # noqa: E402
     Expression,
     bigint_col,
     date_col,
+    day_col,
     int_col,
     money_col,
     str_col,
@@ -637,7 +638,7 @@ def stg_load_currency():
     # until the next one for the pair supersedes it, which is why the sort below
     # de-duplicates on pair and effective date.
     fx_cols = [
-        str_col("FROM_CCY", 10), str_col("TO_CCY", 10), date_col("EFF_FROM_DT"),
+        str_col("FROM_CCY", 10), str_col("TO_CCY", 10), day_col("EFF_FROM_DT"),
         dec_col("RATE", 18, 8), str_col("RATE_TYPE_CD", 20), str_col("SRC_SYSTEM_CD", 20),
     ]
     fx = DataFlow("DFT Conform FX Rate", "Effective-dated FX rates with USD triangulation")

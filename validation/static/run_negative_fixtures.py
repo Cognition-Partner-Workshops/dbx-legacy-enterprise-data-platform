@@ -410,6 +410,37 @@ def mutate_dtsx_uncached_input_column(text):
                         '<inputColumn %susageType="readWrite"' % stripped, 1)
 
 
+def mutate_dtsx_undisposed_written_column(text):
+    """Drop the dispositions from a written Derived Column input.
+
+    The computed column then validates as VS_ISCORRUPT - 'has an invalid error
+    or truncation row disposition' - which is how the live STG_Load_PartnerSale
+    validation failed once its cache was repaired.
+    """
+    match = re.search(r'<inputColumn [^>]*?errorRowDisposition="[^"]*"[^>]*?'
+                      r'usageType="readWrite"[^>]*?>', text)
+    if not match:
+        return None
+    stripped = re.sub(r'(errorOrTruncationOperation|errorRowDisposition|'
+                      r'truncationRowDisposition)="[^"]*" ', "", match.group(0))
+    return text.replace(match.group(0), stripped, 1)
+
+
+def mutate_dtsx_unjoined_lookup_column(text):
+    """Drop a lookup's join to its reference column.
+
+    The component then has no relation to the reference set it queries and
+    fails validation with 0xC0010009, which is how the live STG_Load_Currency
+    validation failed.
+    """
+    match = re.search(r'<inputColumn [^>]*?joinToReferenceColumn="[^"]*"[^>]*?/>', text)
+    if not match:
+        return None
+    return text.replace(
+        match.group(0),
+        re.sub(r'joinToReferenceColumn="[^"]*" ', "", match.group(0)), 1)
+
+
 def _destination_debt_names():
     """The (data flow, destination) pairs the debt register already excuses."""
     path = os.path.join(REPO_ROOT, "ssis", "destination-metadata-debt.txt")
@@ -531,6 +562,10 @@ FIXTURES = (
      "input-column-cache", mutate_dtsx_uncached_input_column),
     ("destination input with no columns", "ssis/04_staging", ".dtsx",
      "destination-metadata", mutate_dtsx_empty_destination_input),
+    ("written input column without dispositions", "ssis/04_staging", ".dtsx",
+     "input-column-disposition", mutate_dtsx_undisposed_written_column),
+    ("lookup key joined to no reference column", "ssis/04_staging", ".dtsx",
+     "lookup-reference-mapping", mutate_dtsx_unjoined_lookup_column),
 )
 
 
