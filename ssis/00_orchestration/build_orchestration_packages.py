@@ -1209,7 +1209,7 @@ BUILDERS = [
 ]
 
 CONNECTIONS = ["WWI_Oracle_ERP", "WWI_Source_DB", "WWI_Staging_DB", "WWI_DW_Destination_DB",
-               "WWI_Inbound_Files", "WWI_Archive_Files", "WWI_Reject_Files"]
+               "WWI_Inbound_Files", "WWI_Archive_Files", "WWI_Quarantine_Files"]
 
 
 def main():

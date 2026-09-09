@@ -51,6 +51,11 @@ HEADER = """\
 
                       Idempotent. Not executed against any catalogue.
 
+                      Every value arrives as a sqlcmd variable, supplied by the
+                      deploy driver from the environment variable named in the
+                      comment above it, falling back to the YAML default. No
+                      host, account or credential value is baked into this file.
+
     sqlcmd variables required: {secret_vars}
 */
 
@@ -93,13 +98,14 @@ BEGIN
          @variable_name = N'{parameter}';
 END
 
+DECLARE @Value {sql_type} = {value_expression};
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'{folder}',
      @environment_name = N'{environment_name}',
      @variable_name    = N'{parameter}',
      @data_type        = N'{type}',
      @sensitive        = {sensitive_flag},
-     @value            = {value_expression},
+     @value            = @Value,
      @description      = N'Bound to project parameter {parameter}. Source: {env_var}.';
 GO
 """
@@ -118,36 +124,107 @@ BEGIN
          @folder_name       = N'{folder}',
          @project_name      = N'{project}',
          @environment_name  = N'{environment_name}',
-         @reference_location = 'L',            /* local: same folder */
+         @reference_type    = 'R',             /* relative: environment in this folder */
          @reference_id      = @ReferenceId OUTPUT;
 END
 GO
 """
 
 BINDING_TEMPLATE = """\
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'{folder}',
-     @project_name   = N'{project}',
-     @parameter_name = N'{parameter}',
-     @parameter_value = N'{parameter}',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* {target} <- environment variable {parameter} */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'{folder}' AND pr.name = N'{project}'
+             AND op.object_type = 20 AND op.parameter_name = N'{target}')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'{folder}',
+         @project_name   = N'{project}',
+         @parameter_name = N'{target}',
+         @parameter_value = N'{parameter}',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 """
 
-FOOTER = """\
-/* Post-condition: every project parameter resolves to an environment variable. */
-SELECT p.parameter_name,
-       p.value_type,
-       p.design_default_value,
-       p.referenced_variable_name
-FROM SSISDB.catalog.object_parameters AS p
-INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
-INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+POSTCONDITION = """\
+/* ---------------------------------------------------------------------------
+   Post-conditions. These are the reason this script is worth running twice:
+   a binding that silently did not take looks exactly like a working one until
+   an execution fails with an empty password.
+   --------------------------------------------------------------------------- */
+
+/* 1. Every reference resolves inside this folder - that is what local means,
+      whatever letter the catalog chose to record for reference_type. */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.environment_references AS r
+           INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f ON f.folder_id  = p.folder_id
+           WHERE f.name = N'{folder}'
+             AND ISNULL(r.environment_folder_name, N'{folder}') <> N'{folder}')
+    THROW 50001, 'An environment reference in this folder points outside it.', 1;
+
+/* 2. Every project in the folder has exactly one reference to the environment. */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.projects AS p
+           INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
+           LEFT JOIN SSISDB.catalog.environment_references AS r
+                  ON r.project_id = p.project_id
+                 AND r.environment_name = N'{environment_name}'
+           WHERE f.name = N'{folder}'
+           GROUP BY p.project_id
+           HAVING COUNT(r.reference_id) <> 1)
+    THROW 50002, 'A project in this folder does not have exactly one reference to the environment.', 1;
+
+/* 3. No sensitive parameter carries a literal value. */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f ON f.folder_id  = p.folder_id
+           WHERE f.name = N'{folder}' AND op.sensitive = 1 AND op.value_type = 'V')
+    THROW 50003, 'A sensitive parameter holds a literal value instead of an environment reference.', 1;
+
+/* 4. Every referenced variable actually exists in the environment. */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f ON f.folder_id  = p.folder_id
+           WHERE f.name = N'{folder}' AND op.value_type = 'R'
+             AND NOT EXISTS (SELECT 1
+                             FROM SSISDB.catalog.environment_variables AS v
+                             INNER JOIN SSISDB.catalog.environments AS e
+                                     ON e.environment_id = v.environment_id
+                             INNER JOIN SSISDB.catalog.folders AS ef
+                                     ON ef.folder_id = e.folder_id
+                             WHERE ef.name = N'{folder}'
+                               AND e.name = N'{environment_name}'
+                               AND v.name = op.referenced_variable_name))
+    THROW 50004, 'A parameter references an environment variable that does not exist.', 1;
+
+/* 5. Every CM.<connection>.Password in the folder is bound by reference. */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f ON f.folder_id  = p.folder_id
+           WHERE f.name = N'{folder}' AND op.object_type = 20
+             AND op.parameter_name LIKE 'CM.%.Password'
+             AND op.value_type <> 'R')
+    THROW 50005, 'A connection manager password parameter is not bound to the environment.', 1;
+
+SELECT p.name          AS project_name,
+       op.parameter_name,
+       op.value_type,
+       op.sensitive,
+       op.referenced_variable_name
+FROM SSISDB.catalog.object_parameters AS op
+INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = op.project_id
+INNER JOIN SSISDB.catalog.folders  AS f ON f.folder_id  = p.folder_id
 WHERE f.name = N'{folder}'
-  AND pr.name = N'{project}'
-  AND p.object_type = 20
-ORDER BY p.parameter_name;
+  AND op.object_type = 20
+ORDER BY p.name, op.parameter_name;
 GO
 """
 
@@ -175,8 +252,39 @@ def sql_literal(value, data_type):
     """Render a YAML value as a SQL literal for create_environment_variable."""
     if data_type == "Int32":
         return "%d" % int(value)
+    if data_type == "Boolean":
+        return "1" if value in (True, "true", "True", 1) else "0"
     text = str(value).replace("'", "''")
     return "N'%s'" % text
+
+
+SQL_TYPES = {
+    "Int32": "INT",
+    "Boolean": "BIT",
+    "String": "NVARCHAR(4000)",
+}
+
+
+def sql_type(variable):
+    """The local declared for the value, so the catalog gets a typed sql_variant."""
+    return SQL_TYPES.get(variable["type"], "NVARCHAR(4000)")
+
+
+def value_expression(variable):
+    """Every value is a substituted token, so nothing about the estate is committed.
+
+    The deploy driver resolves each one from its declared environment variable
+    and falls back to the YAML default, which keeps real host names and account
+    names out of the repository while leaving the file readable. The value is
+    assigned to a typed local rather than passed inline: create_environment_variable
+    is a procedure, and a procedure argument cannot be an expression.
+    """
+    return "N'$(%s)'" % variable["parameter"]
+
+
+def binding_targets(variable):
+    """The project parameters this environment variable is bound to."""
+    return list(variable.get("binds_to") or [variable["parameter"]])
 
 
 def render(code):
@@ -201,20 +309,14 @@ def render(code):
 
     for variable in variables:
         sensitive = bool(variable.get("secret"))
-        if sensitive:
-            # The value arrives as a sqlcmd variable named after the parameter,
-            # supplied by the deploy driver from the environment variable.
-            value_expression = "N'$(%s)'" % variable["parameter"]
-        else:
-            value_expression = sql_literal(variable["value"], variable["type"])
-
         parts.append(VARIABLE_TEMPLATE.format(
             parameter=variable["parameter"],
             type=variable["type"],
             env_var=variable["env_var"],
             sensitive_note=", sensitive" if sensitive else "",
             sensitive_flag=1 if sensitive else 0,
-            value_expression=value_expression,
+            sql_type=sql_type(variable),
+            value_expression=value_expression(variable),
             environment_name=environment_name,
             folder=folder))
 
@@ -223,11 +325,45 @@ def render(code):
                                                environment_name=environment_name))
 
         for variable in variables:
-            parts.append(BINDING_TEMPLATE.format(folder=folder, project=project,
-                                                 parameter=variable["parameter"]))
+            for target in binding_targets(variable):
+                parts.append(BINDING_TEMPLATE.format(folder=folder, project=project,
+                                                     parameter=variable["parameter"],
+                                                     target=target))
 
-        parts.append(FOOTER.format(folder=folder, project=project))
+    parts.append(POSTCONDITION.format(folder=folder, environment_name=environment_name))
     return "\n".join(parts)
+
+
+def render_variable_map(code):
+    """The sqlcmd variable table the deploy driver reads.
+
+    Every environment value is now a sqlcmd variable, so the driver needs to
+    know, without Python and without the YAML parser it does not have, which
+    environment variable supplies each one and what to fall back to. Secrets
+    appear here as a name and a source only - never a value.
+    """
+    document, source_name = load_environment(code)
+    lines = [
+        "# GENERATED FILE - do not edit by hand. Rendered from",
+        "# config/environments/%s by deployment/ssis/render_environment_sql.py." % source_name,
+        "#",
+        "# sqlcmd variable -> (environment variable, default). A Secret entry has no",
+        "# default: the deploy fails if its environment variable is unset.",
+        "@{",
+    ]
+    for variable in document["ssis_environment_variables"]:
+        secret = bool(variable.get("secret"))
+        if secret:
+            default = "$null"
+        elif variable["type"] == "Boolean":
+            default = "'%s'" % ("1" if variable["value"] in (True, "true", 1) else "0")
+        else:
+            default = "'%s'" % str(variable["value"]).replace("'", "''")
+        lines.append("    '%s' = @{ EnvVar = '%s'; Default = %s; Secret = $%s }"
+                     % (variable["parameter"], variable["env_var"], default,
+                        "true" if secret else "false"))
+    lines.append("}")
+    return "\n".join(lines) + "\n"
 
 
 def main():
@@ -257,6 +393,11 @@ def main():
         with open(target, "w") as handle:
             handle.write(text)
         sys.stdout.write("wrote %s\n" % os.path.relpath(target, REPO_ROOT))
+
+        variables = os.path.join(OUTPUT_DIR, "%s_environment.vars.psd1" % code)
+        with open(variables, "w") as handle:
+            handle.write(render_variable_map(code))
+        sys.stdout.write("wrote %s\n" % os.path.relpath(variables, REPO_ROOT))
 
     return 0
 

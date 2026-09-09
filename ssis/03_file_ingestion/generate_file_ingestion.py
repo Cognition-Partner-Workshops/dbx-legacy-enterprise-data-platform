@@ -62,16 +62,117 @@ from patterns import (  # noqa: E402
     new_package,
 )
 
+CONFIG_PATH = os.path.join(REPO_ROOT, "config", "landing-zone.yaml")
+
+# The encodings config/landing-zone.yaml records, as the code page the flat file
+# connection manager persists. A feed whose encoding is not here is a feed
+# nobody has agreed the bytes for, so it fails generation rather than defaulting.
+CODE_PAGES = {
+    "windows-1252": 1252,
+    "utf-8": 65001,
+    "iso-8859-1": 28591,
+    "shift_jis": 932,
+}
+
+
+def _load_feed_specs():
+    """Feed layout keyed by the package that consumes it.
+
+    config/landing-zone.yaml is the single source of truth for where a feed
+    lands and how it is encoded; reading it here is what keeps the Foreach
+    directory, the file specification and the flat file connection manager from
+    drifting away from the directory the files are actually staged into.
+    """
+    import yaml  # local import: only the generator needs it
+
+    with open(CONFIG_PATH) as handle:
+        config = yaml.safe_load(handle)
+
+    specs = {}
+    for directory in config["directories"].values():
+        for entry in directory.get("subdirectories", []) or []:
+            consumer = entry.get("consumed_by")
+            if not consumer:
+                continue
+            encoding = entry["encoding"]
+            if encoding not in CODE_PAGES:
+                raise ValueError(
+                    "config/landing-zone.yaml gives feed %s the encoding %r, which has no "
+                    "code page mapping in CODE_PAGES" % (consumer, encoding))
+            # 'partner_sales_na_{yyyyMMdd}_{seq3}.csv' -> 'partner_sales_na_*.csv'
+            stem, _, extension = entry["pattern"].rpartition(".")
+            prefix = stem.split("{")[0].rstrip("_")
+            specs[consumer] = dict(
+                path=entry["path"],
+                file_spec=("%s_*.%s" % (prefix, extension)) if prefix else "*",
+                code_page=CODE_PAGES[encoding],
+                delimiter=entry["delimiter"],
+                header=bool(entry["header"]),
+            )
+    return specs
+
+
+FEED_SPECS = _load_feed_specs()
+
+
+def feed_loop(name, package_name, description):
+    """Foreach loop over one feed's inbound directory.
+
+    The enumerator's Folder attribute is a design-time literal the runtime never
+    evaluates, so the directory the loop actually reads is a Directory property
+    expression over the configured root. Without it the loop enumerates a
+    non-existent folder, finds nothing, and the package succeeds having loaded
+    nothing.
+    """
+    spec = FEED_SPECS[package_name]
+    relative = spec["path"]
+    root_parameter = "QuarantineFileRoot" if relative.split("/")[0] == "quarantine" else "InboundFileRoot"
+    tail = "/".join(relative.split("/")[1:])
+    suffix = ("\\\\" + tail.replace("/", "\\\\")) if tail else ""
+    literal_root = project.INBOUND_ROOT if root_parameter == "InboundFileRoot" else project.QUARANTINE_ROOT
+    expression = '@[$Project::%s]' % root_parameter
+    if tail:
+        expression += ' + "%s"' % suffix
+
+    return Container(
+        name,
+        kind="foreach",
+        enumerator={
+            "folder": os.path.join(literal_root, *tail.split("/")) if tail else literal_root,
+            "file_spec": spec["file_spec"],
+        },
+        folder_expression=expression,
+        variable_mappings=["User::CurrentFilePath"],
+        description=description,
+    )
+
+
+def feed_connection(pkg, package_name, name, columns):
+    """Package-scoped flat file connection manager for one feed's current file."""
+    spec = FEED_SPECS[package_name]
+    return pkg.add_flat_file_connection(
+        name,
+        columns,
+        delimiter=spec["delimiter"],
+        code_page=spec["code_page"],
+        header_in_first_row=spec["header"],
+        design_time_path=os.path.join(
+            project.QUARANTINE_ROOT if spec["path"].startswith("quarantine") else project.INBOUND_ROOT,
+            *spec["path"].split("/")[1:]),
+        description="Current %s file, bound to User::CurrentFilePath by the Foreach loop." % package_name,
+    )
+
+
 PROJECT_NAME = "WWI_Ingest_Files"
 PROJECT_CONNECTIONS = [
     "WWI_Inbound_Files",
     "WWI_Archive_Files",
-    "WWI_Reject_Files",
+    "WWI_Quarantine_Files",
     "WWI_Staging_DB",
 ]
 
 CONN_ARCHIVE = "WWI_Archive_Files"
-CONN_REJECT = "WWI_Reject_Files"
+CONN_QUARANTINE = "WWI_Quarantine_Files"
 
 SRC_PARTNER = "PARTNER_FL"
 SRC_CARRIER = "CARRIER_FL"
@@ -121,8 +222,8 @@ def path_expressions(archive_subfolder, reject_subfolder):
         "@[User::CurrentFileName] = RIGHT(@[User::CurrentFilePath], "
         "FINDSTRING(REVERSE(@[User::CurrentFilePath]), \"\\\\\", 1) - 1); "
         '@[User::ArchiveFilePath] = @[$Project::ArchiveFileRoot] + "\\\\%s\\\\" + @[User::CurrentFileName]; '
-        '@[User::RejectFilePath] = @[$Project::RejectFileRoot] + "\\\\%s\\\\" + @[User::CurrentFileName] + ".rej"; '
-        '@[User::PoisonFilePath] = @[$Project::RejectFileRoot] + "\\\\poison\\\\" + @[User::CurrentFileName]'
+        '@[User::RejectFilePath] = @[$Project::QuarantineFileRoot] + "\\\\%s\\\\" + @[User::CurrentFileName] + ".rej"; '
+        '@[User::PoisonFilePath] = @[$Project::QuarantineFileRoot] + "\\\\poison\\\\" + @[User::CurrentFileName]'
         % (archive_subfolder, reject_subfolder),
     )
 
@@ -210,7 +311,7 @@ def ing_file_partner_sales_na():
         "into a single tax amount. Malformed detail rows go to err.RejectedFileRow and "
         "the reject file; the file is archived either way.",
         source_system=SRC_PARTNER,
-        connections=(CONN_FILES, CONN_ARCHIVE, CONN_REJECT, CONN_STAGING),
+        connections=(CONN_FILES, CONN_ARCHIVE, CONN_QUARANTINE, CONN_STAGING),
         extra_variables=file_variables([("StateTaxTotal", 0, "int")]),
     )
 
@@ -234,7 +335,8 @@ def ing_file_partner_sales_na():
     ]
 
     df = DataFlow("Ingest NA Partner Sales")
-    df.flatfile_source("NA Partner Sales File", CONN_FILES, cols)
+    feed_conn = feed_connection(pkg, "ING_FILE_PartnerSales_NA", "FF_PartnerSales_NA", cols)
+    df.flatfile_source("NA Partner Sales File", feed_conn, cols, connection_scope="Package")
     df.conditional_split(
         "Split Record Types",
         [
@@ -306,13 +408,7 @@ def ing_file_partner_sales_na():
         from_output="Flat File Source Error Output",
     )
 
-    loop = Container(
-        "Foreach NA Partner File",
-        kind="foreach",
-        enumerator={"folder": "@[$Project::InboundFileRoot]\\partner\\na", "file_spec": "partner_sales_na_*.csv"},
-        variable_mappings=["User::CurrentFilePath"],
-        description="Loop the NA partner drop folder.",
-    )
+    loop = feed_loop("Foreach NA Partner File", "ING_FILE_PartnerSales_NA", "Loop the NA partner drop folder.")
     paths = loop.add(path_expressions("partner/na", "partner/na"))
     register = loop.add(register_file("raw.FilePartnerSales"))
     ingest = loop.add(DataFlowTask(df))
@@ -368,7 +464,7 @@ def ing_file_partner_sales_eu():
         "registration number is mandatory and rows without one are rejected rather than "
         "loaded, and marketing consent is honoured for the customer reference.",
         source_system=SRC_PARTNER,
-        connections=(CONN_FILES, CONN_ARCHIVE, CONN_REJECT, CONN_STAGING),
+        connections=(CONN_FILES, CONN_ARCHIVE, CONN_QUARANTINE, CONN_STAGING),
         extra_variables=file_variables([("VatMissingCount", 0, "int")]),
     )
 
@@ -392,7 +488,8 @@ def ing_file_partner_sales_eu():
     ]
 
     df = DataFlow("Ingest EU Partner Sales")
-    df.flatfile_source("EU Partner Sales File", CONN_FILES, cols)
+    feed_conn = feed_connection(pkg, "ING_FILE_PartnerSales_EU", "FF_PartnerSales_EU", cols)
+    df.flatfile_source("EU Partner Sales File", feed_conn, cols, connection_scope="Package")
     df.conditional_split(
         "Split Record Types",
         [
@@ -484,13 +581,7 @@ def ing_file_partner_sales_eu():
         from_output="Flat File Source Error Output",
     )
 
-    loop = Container(
-        "Foreach EU Partner File",
-        kind="foreach",
-        enumerator={"folder": "@[$Project::InboundFileRoot]\\partner\\eu", "file_spec": "partner_sales_eu_*.csv"},
-        variable_mappings=["User::CurrentFilePath"],
-        description="Loop the EU partner drop folder.",
-    )
+    loop = feed_loop("Foreach EU Partner File", "ING_FILE_PartnerSales_EU", "Loop the EU partner drop folder.")
     paths = loop.add(path_expressions("partner/eu", "partner/eu"))
     register = loop.add(register_file("raw.FilePartnerSales"))
     ingest = loop.add(DataFlowTask(df))
@@ -535,7 +626,7 @@ def ing_file_partner_sales_apac():
         "amount; local outlet names arrive double-byte and are kept as supplied. "
         "Postal districts are numeric-6 and are zero-padded rather than trimmed.",
         source_system=SRC_PARTNER,
-        connections=(CONN_FILES, CONN_ARCHIVE, CONN_REJECT, CONN_STAGING),
+        connections=(CONN_FILES, CONN_ARCHIVE, CONN_QUARANTINE, CONN_STAGING),
         extra_variables=file_variables([("DoubleByteRowCount", 0, "int")]),
     )
 
@@ -557,7 +648,8 @@ def ing_file_partner_sales_apac():
     ]
 
     df = DataFlow("Ingest APAC Partner Sales")
-    df.flatfile_source("APAC Partner Sales File", CONN_FILES, cols)
+    feed_conn = feed_connection(pkg, "ING_FILE_PartnerSales_APAC", "FF_PartnerSales_APAC", cols)
+    df.flatfile_source("APAC Partner Sales File", feed_conn, cols, connection_scope="Package")
     df.conditional_split(
         "Split Record Types",
         [
@@ -626,13 +718,7 @@ def ing_file_partner_sales_apac():
         from_output="Flat File Source Error Output",
     )
 
-    loop = Container(
-        "Foreach APAC Partner File",
-        kind="foreach",
-        enumerator={"folder": "@[$Project::InboundFileRoot]\\partner\\apac", "file_spec": "partner_sales_apac_*.txt"},
-        variable_mappings=["User::CurrentFilePath"],
-        description="Loop the APAC partner drop folder.",
-    )
+    loop = feed_loop("Foreach APAC Partner File", "ING_FILE_PartnerSales_APAC", "Loop the APAC partner drop folder.")
     paths = loop.add(path_expressions("partner/apac", "partner/apac"))
     register = loop.add(register_file("raw.FilePartnerSales"))
     ingest = loop.add(DataFlowTask(df))
@@ -682,7 +768,7 @@ def ing_file_carrier_scan():
         "translation happens downstream against raw.OracleCustomerMaster code sets. "
         "Duplicate scans within a file are counted, not rejected.",
         source_system=SRC_CARRIER,
-        connections=(CONN_FILES, CONN_ARCHIVE, CONN_REJECT, CONN_STAGING),
+        connections=(CONN_FILES, CONN_ARCHIVE, CONN_QUARANTINE, CONN_STAGING),
         extra_variables=file_variables([("SidecarRowCount", 0, "int"), ("DuplicateScanCount", 0, "int")]),
     )
 
@@ -700,7 +786,8 @@ def ing_file_carrier_scan():
     ]
 
     df = DataFlow("Ingest Carrier Scans")
-    df.flatfile_source("Carrier Scan File", CONN_FILES, cols)
+    feed_conn = feed_connection(pkg, "ING_FILE_CarrierScan", "FF_CarrierScan", cols)
+    df.flatfile_source("Carrier Scan File", feed_conn, cols, connection_scope="Package")
     df.derived_column(
         "Parse Scan Event",
         [
@@ -761,13 +848,7 @@ def ing_file_carrier_scan():
         from_output="Flat File Source Error Output",
     )
 
-    loop = Container(
-        "Foreach Carrier Scan File",
-        kind="foreach",
-        enumerator={"folder": "@[$Project::InboundFileRoot]\\carrier", "file_spec": "carrier_scan_*.csv"},
-        variable_mappings=["User::CurrentFilePath"],
-        description="Loop the carrier scan drop folder.",
-    )
+    loop = feed_loop("Foreach Carrier Scan File", "ING_FILE_CarrierScan", "Loop the carrier scan drop folder.")
     paths = loop.add(path_expressions("carrier", "carrier"))
     register = loop.add(register_file("raw.FileCarrierScan"))
     read_sidecar = loop.add(
@@ -836,7 +917,7 @@ def ing_file_supplier_catalog():
         "converted downstream. A checksum mismatch quarantines the file instead of "
         "loading a partial catalogue.",
         source_system=SRC_BANK,
-        connections=(CONN_FILES, CONN_ARCHIVE, CONN_REJECT, CONN_STAGING),
+        connections=(CONN_FILES, CONN_ARCHIVE, CONN_QUARANTINE, CONN_STAGING),
         extra_variables=file_variables([("PriceChecksum", 0, "int"), ("FooterChecksum", 0, "int")]),
     )
 
@@ -861,7 +942,8 @@ def ing_file_supplier_catalog():
     ]
 
     df = DataFlow("Ingest Supplier Catalog")
-    df.flatfile_source("Supplier Catalog File", CONN_FILES, cols)
+    feed_conn = feed_connection(pkg, "ING_FILE_SupplierCatalog", "FF_SupplierCatalog", cols)
+    df.flatfile_source("Supplier Catalog File", feed_conn, cols, connection_scope="Package")
     df.conditional_split(
         "Split Record Types",
         [
@@ -933,13 +1015,7 @@ def ing_file_supplier_catalog():
         from_output="Flat File Source Error Output",
     )
 
-    loop = Container(
-        "Foreach Supplier Catalog File",
-        kind="foreach",
-        enumerator={"folder": "@[$Project::InboundFileRoot]\\supplier", "file_spec": "supplier_catalog_*.psv"},
-        variable_mappings=["User::CurrentFilePath"],
-        description="Loop the supplier catalogue drop folder.",
-    )
+    loop = feed_loop("Foreach Supplier Catalog File", "ING_FILE_SupplierCatalog", "Loop the supplier catalogue drop folder.")
     paths = loop.add(path_expressions("supplier", "supplier"))
     register = loop.add(register_file("raw.FileSupplierCatalog"))
     ingest = loop.add(DataFlowTask(df))
@@ -1003,7 +1079,7 @@ def ing_file_fx_override():
         "band against the published ERP rate; refused rows go to err.RejectedFileRow "
         "with the published rate attached rather than silently overriding it.",
         source_system=SRC_FX,
-        connections=(CONN_FILES, CONN_ARCHIVE, CONN_REJECT, CONN_STAGING),
+        connections=(CONN_FILES, CONN_ARCHIVE, CONN_QUARANTINE, CONN_STAGING),
         extra_variables=file_variables([("OutOfToleranceCount", 0, "int"), ("ToleranceBasisPoints", 500, "int")]),
     )
 
@@ -1023,7 +1099,8 @@ def ing_file_fx_override():
     ]
 
     df = DataFlow("Ingest FX Overrides")
-    df.flatfile_source("FX Override File", CONN_FILES, cols)
+    feed_conn = feed_connection(pkg, "ING_FILE_FxOverride", "FF_FxOverride", cols)
+    df.flatfile_source("FX Override File", feed_conn, cols, connection_scope="Package")
     df.conditional_split(
         "Split Record Types",
         [("Detail", 'RecordType == "FXO"')],
@@ -1106,13 +1183,7 @@ def ing_file_fx_override():
         from_output="Flat File Source Error Output",
     )
 
-    loop = Container(
-        "Foreach FX Override File",
-        kind="foreach",
-        enumerator={"folder": "@[$Project::InboundFileRoot]\\treasury", "file_spec": "fx_override_*.csv"},
-        variable_mappings=["User::CurrentFilePath"],
-        description="Loop the treasury FX override drop folder.",
-    )
+    loop = feed_loop("Foreach FX Override File", "ING_FILE_FxOverride", "Loop the treasury FX override drop folder.")
     paths = loop.add(path_expressions("treasury", "treasury"))
     register = loop.add(register_file("raw.FileFxOverride"))
     ingest = loop.add(DataFlowTask(df))
@@ -1167,7 +1238,7 @@ def ing_file_quarantine_malformed():
         "rejected. Files that cannot be read at all are moved to the poison path and "
         "left for manual handling; nothing is deleted.",
         source_system=SRC_MANUAL,
-        connections=(CONN_FILES, CONN_ARCHIVE, CONN_REJECT, CONN_STAGING),
+        connections=(CONN_FILES, CONN_ARCHIVE, CONN_QUARANTINE, CONN_STAGING),
         extra_variables=file_variables([("UnreadableFileCount", 0, "int"), ("ReplayEligibleCount", 0, "int")]),
     )
 
@@ -1176,7 +1247,8 @@ def ing_file_quarantine_malformed():
     ]
 
     df = DataFlow("Sweep Quarantined Rows")
-    df.flatfile_source("Quarantined File", CONN_FILES, cols)
+    feed_conn = feed_connection(pkg, "ING_FILE_QuarantineMalformed", "FF_QuarantineMalformed", cols)
+    df.flatfile_source("Quarantined File", feed_conn, cols, connection_scope="Package")
     df.derived_column(
         "Classify Quarantined Row",
         [
@@ -1224,13 +1296,7 @@ def ing_file_quarantine_malformed():
         from_output="Unreadable",
     )
 
-    loop = Container(
-        "Foreach Quarantined File",
-        kind="foreach",
-        enumerator={"folder": "@[$Project::RejectFileRoot]\\quarantine", "file_spec": "*"},
-        variable_mappings=["User::CurrentFilePath"],
-        description="Loop everything sitting in the quarantine folder.",
-    )
+    loop = feed_loop("Foreach Quarantined File", "ING_FILE_QuarantineMalformed", "Loop everything sitting in the quarantine folder.")
     paths = loop.add(path_expressions("quarantine", "quarantine"))
     register = loop.add(register_file("err.RejectedFileRow"))
     sweep = loop.add(DataFlowTask(df))
