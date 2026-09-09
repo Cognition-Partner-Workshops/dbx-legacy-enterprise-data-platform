@@ -164,7 +164,10 @@ WHERE   o.OrderID > ?
 ORDER BY o.OrderID;"""
 
     df = DataFlow("Extract Orders")
-    df.oledb_source("OLTP Sales.Orders", CONN_OLTP, sql, cols, timeout=3600)
+    df.oledb_source(
+        "OLTP Sales.Orders", CONN_OLTP, sql, cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Derive Order Flags",
         [
@@ -205,7 +208,10 @@ FROM    CHANGETABLE(CHANGES Sales.Orders, ?) AS ct
 WHERE   ct.SYS_CHANGE_OPERATION = 'D';"""
 
     deletes = DataFlow("Detect Deleted Orders")
-    deletes.oledb_source("OLTP Order Change Tracking", CONN_OLTP, delete_sql, delete_cols, timeout=600)
+    deletes.oledb_source(
+        "OLTP Order Change Tracking", CONN_OLTP, delete_sql, delete_cols, timeout=600,
+        parameters=("User::ChangeTrackingVersion",),
+    )
     deletes.derived_column(
         "Flag Deleted Orders",
         audit_derivations(SRC_OLTP) + [("DeleteFlag", '"Y"', str_col("DeleteFlag", 1))],
@@ -296,7 +302,10 @@ WHERE   ol.OrderLineID > ?
 ORDER BY ol.OrderLineID;"""
 
     df = DataFlow("Extract Order Lines")
-    df.oledb_source("OLTP vw_OrderLineExtract", CONN_OLTP, sql, cols, timeout=7200)
+    df.oledb_source(
+        "OLTP vw_OrderLineExtract", CONN_OLTP, sql, cols, timeout=7200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Derive Line Economics",
         [
@@ -407,7 +416,10 @@ WHERE   i.InvoiceID > ?
 ORDER BY i.InvoiceID;"""
 
     df = DataFlow("Extract Invoices")
-    df.oledb_source("OLTP vw_InvoiceExtract", CONN_OLTP, sql, cols, timeout=3600)
+    df.oledb_source(
+        "OLTP vw_InvoiceExtract", CONN_OLTP, sql, cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Derive Tax Attributes",
         [
@@ -505,7 +517,10 @@ WHERE   il.InvoiceLineID > ?
 ORDER BY il.InvoiceLineID;"""
 
     df = DataFlow("Extract Invoice Lines")
-    df.oledb_source("OLTP Sales.InvoiceLines", CONN_OLTP, sql, cols, timeout=7200)
+    df.oledb_source(
+        "OLTP Sales.InvoiceLines", CONN_OLTP, sql, cols, timeout=7200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Derive Margin",
         [
@@ -840,7 +855,11 @@ def ext_sql_stock_items():
         "tracking.",
         source_system=SRC_OLTP,
         connections=(CONN_OLTP, CONN_STAGING),
-        extra_variables=[("LookbackMinutes", 240, "int"), ("RowsDeleted", 0, "int")],
+        extra_variables=[
+            ("LookbackMinutes", 240, "int"),
+            ("RowsDeleted", 0, "int"),
+            ("ChangeTrackingVersion", 0, "long"),
+        ],
     )
 
     cols = [
@@ -900,7 +919,10 @@ WHERE   si.ValidFrom >= DATEADD(minute, -240, CAST(? AS datetime2(7)))
   AND   si.ValidFrom <  CAST(? AS datetime2(7));"""
 
     df = DataFlow("Extract Stock Items")
-    df.oledb_source("OLTP Warehouse.StockItems", CONN_OLTP, sql, cols, timeout=2400)
+    df.oledb_source(
+        "OLTP Warehouse.StockItems", CONN_OLTP, sql, cols, timeout=2400,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Derive Stock Flags",
         [
@@ -941,7 +963,10 @@ FROM    CHANGETABLE(CHANGES Warehouse.StockItems, ?) AS ct
 WHERE   ct.SYS_CHANGE_OPERATION = 'D';"""
 
     deletes = DataFlow("Detect Deleted Stock Items")
-    deletes.oledb_source("OLTP Stock Item Change Tracking", CONN_OLTP, delete_sql, delete_cols, timeout=600)
+    deletes.oledb_source(
+        "OLTP Stock Item Change Tracking", CONN_OLTP, delete_sql, delete_cols, timeout=600,
+        parameters=("User::ChangeTrackingVersion",),
+    )
     deletes.derived_column(
         "Flag Deleted Stock Items",
         audit_derivations(SRC_OLTP) + [("DeleteFlag", '"Y"', str_col("DeleteFlag", 1))],
@@ -958,12 +983,23 @@ WHERE   ct.SYS_CHANGE_OPERATION = 'D';"""
     init = pkg.add(init_variables("@[User::RowsDeleted] = 0"))
     start = pkg.add(log_package_start(pkg))
     wm = pkg.add(get_watermark(object_name="Warehouse.StockItems"))
+    read_ct = pkg.add(
+        ExecuteSql(
+            "Read Change Tracking Version",
+            CONN_OLTP,
+            "SELECT ISNULL(LastSyncVersion, 0) AS LastSyncVersion "
+            "FROM Integration.ChangeTrackingWatermark WITH (NOLOCK) "
+            "WHERE ObjectName = N'Warehouse.StockItems';",
+            result_type="ResultSetType_SingleRow",
+            result_bindings=[("0", "User::ChangeTrackingVersion")],
+        )
+    )
     extract = pkg.add(DataFlowTask(df))
     delete_pass = pkg.add(DataFlowTask(deletes))
     setwm = pkg.add(set_watermark("Warehouse.StockItems"))
     rows = pkg.add(log_row_count("raw.SqlStockItem"))
     done = pkg.add(log_package_success())
-    pkg.chain(init, start, wm, extract, delete_pass, setwm, rows, done)
+    pkg.chain(init, start, wm, read_ct, extract, delete_pass, setwm, rows, done)
     return pkg
 
 
@@ -1024,7 +1060,10 @@ WHERE   m.StockItemTransactionID > ?
 ORDER BY m.StockItemTransactionID;"""
 
     df = DataFlow("Extract Stock Movements")
-    df.oledb_source("OLTP vw_StockMovementExtract", CONN_OLTP, sql, cols, timeout=7200)
+    df.oledb_source(
+        "OLTP vw_StockMovementExtract", CONN_OLTP, sql, cols, timeout=7200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Derive Movement Attributes",
         [
@@ -1139,7 +1178,10 @@ WHERE   tl.StockTransferLineID > ?
 ORDER BY tl.StockTransferLineID;"""
 
     df = DataFlow("Extract Stock Transfers")
-    df.oledb_source("OLTP Warehouse.StockTransferLines", CONN_OLTP, sql, cols, timeout=1800)
+    df.oledb_source(
+        "OLTP Warehouse.StockTransferLines", CONN_OLTP, sql, cols, timeout=1800,
+        parameters=("User::WatermarkFrom",),
+    )
     df.derived_column(
         "Derive Transit Metrics",
         [
@@ -1259,7 +1301,10 @@ WHERE   s.ShipmentHeaderID > ?
 ORDER BY s.ShipmentHeaderID;"""
 
     df = DataFlow("Extract Shipments")
-    df.oledb_source("OLTP vw_ShipmentExtract", CONN_OLTP, sql, cols, timeout=3600)
+    df.oledb_source(
+        "OLTP vw_ShipmentExtract", CONN_OLTP, sql, cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Derive Delivery Performance",
         [
@@ -1353,7 +1398,10 @@ WHERE   sl.ShipmentLineID > ?
 ORDER BY sl.ShipmentLineID;"""
 
     df = DataFlow("Extract Shipment Lines")
-    df.oledb_source("OLTP Shipping.ShipmentLines", CONN_OLTP, sql, cols, timeout=3600)
+    df.oledb_source(
+        "OLTP Shipping.ShipmentLines", CONN_OLTP, sql, cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Derive Scan State",
         [
@@ -1451,7 +1499,10 @@ WHERE   rl.ReturnLineID > ?
 ORDER BY rl.ReturnLineID;"""
 
     df = DataFlow("Extract Return Lines")
-    df.oledb_source("OLTP vw_ReturnExtract", CONN_OLTP, sql, cols, timeout=1800)
+    df.oledb_source(
+        "OLTP vw_ReturnExtract", CONN_OLTP, sql, cols, timeout=1800,
+        parameters=("User::WatermarkFrom",),
+    )
     df.derived_column(
         "Derive Return Attributes",
         [
@@ -1563,7 +1614,10 @@ WHERE   cl.CreditNoteLineID > ?
 ORDER BY cl.CreditNoteLineID;"""
 
     df = DataFlow("Extract Credit Note Lines")
-    df.oledb_source("OLTP vw_CreditNoteExtract", CONN_OLTP, sql, cols, timeout=1800)
+    df.oledb_source(
+        "OLTP vw_CreditNoteExtract", CONN_OLTP, sql, cols, timeout=1800,
+        parameters=("User::WatermarkFrom",),
+    )
     df.derived_column(
         "Derive Credit Attributes",
         [
@@ -1668,7 +1722,10 @@ WHERE   ws.SessionStartedWhen >= CAST(? AS datetime2(7))
   AND   ws.SessionStartedWhen <  CAST(? AS datetime2(7));"""
 
     df = DataFlow("Extract Web Sessions")
-    df.oledb_source("OLTP Ecommerce.WebSessions", CONN_OLTP, sql, cols, timeout=3600)
+    df.oledb_source(
+        "OLTP Ecommerce.WebSessions", CONN_OLTP, sql, cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Derive Session Metrics",
         [
@@ -1774,7 +1831,10 @@ WHERE   ct.CustomerTransactionID > ?
 ORDER BY ct.CustomerTransactionID;"""
 
     df = DataFlow("Extract Customer Transactions")
-    df.oledb_source("OLTP Sales.CustomerTransactions", CONN_OLTP, sql, cols, timeout=3600)
+    df.oledb_source(
+        "OLTP Sales.CustomerTransactions", CONN_OLTP, sql, cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Derive AR Attributes",
         [
@@ -1876,7 +1936,10 @@ WHERE   st.SupplierTransactionID > ?
 ORDER BY st.SupplierTransactionID;"""
 
     df = DataFlow("Extract Supplier Transactions")
-    df.oledb_source("OLTP Purchasing.SupplierTransactions", CONN_OLTP, sql, cols, timeout=2400)
+    df.oledb_source(
+        "OLTP Purchasing.SupplierTransactions", CONN_OLTP, sql, cols, timeout=2400,
+        parameters=("User::WatermarkFrom",),
+    )
     df.derived_column(
         "Derive AP Overlap Key",
         [
@@ -2317,7 +2380,10 @@ WHERE   l.LoyaltyLedgerID > CAST(? AS bigint)
    OR   l.ExpiredWhen >= DATEADD(day, -1 * CAST(? AS int), SYSDATETIME());"""
 
     df = DataFlow("Extract Loyalty Ledger")
-    df.oledb_source("OLTP Loyalty.LoyaltyPointsLedger", CONN_OLTP, sql, cols, timeout=3600)
+    df.oledb_source(
+        "OLTP Loyalty.LoyaltyPointsLedger", CONN_OLTP, sql, cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::ExpiryLookbackDays"),
+    )
     df.derived_column("Derive Audit Columns", audit_derivations(SRC_OLTP))
     df.row_count("Count Ledger Entries", "User::RowsRead")
     df.oledb_destination(

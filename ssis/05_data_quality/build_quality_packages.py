@@ -265,7 +265,9 @@ def dq_customer_screen():
         "SELECT CustomerCode, CustomerName, CountryCode, RegionCode, CustomerClassCode,\n"
         "       TaxRegistrationNumber, MarketingConsentFlag, RetentionMonths, CreditLimitAmount\n"
         "FROM stg.Customer WHERE BatchId = ?;",
-        cols, timeout=3600)
+        cols, timeout=3600,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Customers Screened", "User::RowsRead")
     flow.derived_column("Evaluate Customer Rules", [
         ("NameMissingFlag", 'ISNULL(CustomerName) || TRIM(CustomerName) == "" ? "Y" : "N"',
@@ -344,7 +346,9 @@ def dq_supplier_screen():
         "SELECT SupplierCode, SupplierName, TaxIdentifier, PaymentTermsCode, CountryCode,\n"
         "       RegionCode, IsActive\n"
         "FROM stg.Supplier WHERE BatchId = ?;",
-        cols, timeout=3600)
+        cols, timeout=3600,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Suppliers Screened", "User::RowsRead")
     flow.derived_column("Normalize Tax Identifier", [
         ("NormalizedTaxId",
@@ -415,7 +419,9 @@ def dq_order_line_screen():
         "FROM stg.OrderLine AS l\n"
         "     INNER JOIN stg.[Order] AS o ON o.OrderId = l.OrderId\n"
         "WHERE l.BatchId = ?;",
-        cols, timeout=7200)
+        cols, timeout=7200,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Order Lines Screened", "User::RowsRead")
     flow.lookup(
         "Lookup Order Customer (No Cache)", CONN_STAGING,
@@ -491,7 +497,9 @@ def dq_invoice_line_screen():
         "FROM stg.SaleLine AS l\n"
         "     INNER JOIN stg.Sale AS s ON s.InvoiceId = l.InvoiceId\n"
         "WHERE l.BatchId = ?;",
-        cols, timeout=7200)
+        cols, timeout=7200,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Invoice Lines Screened", "User::RowsRead")
     flow.lookup(
         "Lookup Currency Domain (Full Cache)", CONN_STAGING,
@@ -567,7 +575,9 @@ def dq_payment_screen():
         "FROM stg.Payment AS p\n"
         "     LEFT OUTER JOIN work.PaymentMatched AS m ON m.PaymentNumber = p.PaymentNumber\n"
         "WHERE p.BatchId = ?;",
-        cols, timeout=3600)
+        cols, timeout=3600,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Payments Screened", "User::RowsRead")
     flow.derived_column("Evaluate Payment Rules", [
         ("OrphanFlag", 'MatchTypeCode == "UNMATCHED" ? "Y" : "N"', str_col("OrphanFlag", 1)),
@@ -630,7 +640,9 @@ def dq_file_screen():
         "       LEN(RawLine) - LEN(REPLACE(RawLine, N'|', N'')) AS DelimiterCount,\n"
         "       SaleDateText, AmountText, PartnerCode\n"
         "FROM raw.FilePartnerSales WHERE BatchId = ?;",
-        cols, timeout=3600)
+        cols, timeout=3600,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count File Rows Screened", "User::RowsRead")
     flow.derived_column("Evaluate File Row Rules", [
         # The agreed interface is nine pipe-delimited fields; partners have been
@@ -697,7 +709,9 @@ def dq_referential_screen():
         "STG Order Line Keys", CONN_STAGING,
         "SELECT OrderLineId, StockItemId, PackageTypeCode, N'stg.OrderLine' AS SourceObjectName\n"
         "FROM stg.OrderLine WHERE BatchId = ?;",
-        order_cols, timeout=7200)
+        order_cols, timeout=7200,
+        parameters=("$Package::BatchId",),
+    )
     order.row_count("Count Order Keys Checked", "User::RowsRead")
     order.lookup(
         "Lookup Stock Item Key (Full Cache)", CONN_STAGING,
@@ -731,7 +745,9 @@ def dq_referential_screen():
         "       N'stg.SaleLine' AS SourceObjectName\n"
         "FROM stg.SaleLine AS l INNER JOIN stg.Sale AS s ON s.InvoiceId = l.InvoiceId\n"
         "WHERE l.BatchId = ?;",
-        sale_cols, timeout=7200)
+        sale_cols, timeout=7200,
+        parameters=("$Package::BatchId",),
+    )
     sale.lookup(
         "Lookup Sale Currency (Full Cache)", CONN_STAGING,
         "SELECT CurrencyCode AS SaleCurrencyCode, CurrencyName FROM ref.Currency;",
@@ -951,7 +967,9 @@ def dq_threshold_gate():
         "     INNER JOIN etl.PackageExecution AS e ON e.PackageExecutionId = a.PackageExecutionId\n"
         "WHERE e.BatchId = ?\n"
         "GROUP BY a.ObjectName;",
-        cols, timeout=1800)
+        cols, timeout=1800,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Objects Reconciled", "User::RowsRead")
     flow.derived_column("Compute Variance Percent", [
         ("RejectPercent",

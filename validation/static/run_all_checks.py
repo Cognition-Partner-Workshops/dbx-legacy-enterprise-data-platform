@@ -814,6 +814,165 @@ def check_file_system_tasks(result, prefixes):
     result.count("file_system_tasks_checked", tasks)
 
 
+def check_variable_driven_file_tasks(result, prefixes):
+    """A File System Task fed by variables must not validate at package start.
+
+    CurrentFilePath and ArchiveFilePath hold their design-time empty string
+    until the Foreach loop assigns the first file, so a task that validates
+    with the package fails before the loop ever runs with
+
+        Variable "CurrentFilePath" is used as a source or destination and is empty.
+
+    which is how executions 81-83 of Master_File_Ingestion failed. The task
+    therefore has to carry DelayValidation, and every variable it addresses has
+    to be one the run time actually fills: a Foreach variable mapping or an
+    expression, never a bare empty literal.
+    """
+    dts = "www.microsoft.com/SqlServer/Dts"
+    assignment = re.compile(r"@\[(\w+::\w+)\]\s*=")
+    tasks = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+
+        # variable -> the executables that give it a value before anything reads it
+        writers = {}
+        for variable in root.iter("{%s}Variable" % dts):
+            if not variable.get("{%s}Expression" % dts):
+                continue
+            writers.setdefault("%s::%s" % (variable.get("{%s}Namespace" % dts),
+                                           variable.get("{%s}ObjectName" % dts)), set()).add(None)
+        for executable in root.iter("{%s}Executable" % dts):
+            ref = executable.get("{%s}refId" % dts)
+            for task in executable.iter("ExpressionTask"):
+                for name in assignment.findall(task.get("Expression") or ""):
+                    writers.setdefault(name, set()).add(ref)
+            for mapping in executable.findall("{%s}ForEachVariableMappings/{%s}ForEachVariableMapping"
+                                              % (dts, dts)):
+                writers.setdefault(mapping.get("{%s}VariableName" % dts), set()).add(ref)
+
+        upstream = {}
+        for constraint in root.iter("{%s}PrecedenceConstraint" % dts):
+            upstream.setdefault(constraint.get("{%s}To" % dts), set()).add(
+                constraint.get("{%s}From" % dts))
+
+        def before(ref):
+            """Every executable that must complete before *ref* starts."""
+            seen, queue = set(), [ref]
+            while queue:
+                for parent in upstream.get(queue.pop(), ()):
+                    if parent not in seen:
+                        seen.add(parent)
+                        queue.append(parent)
+            # a containing loop or sequence has already run its own assignments
+            while "\\" in ref:
+                ref = ref.rsplit("\\", 1)[0]
+                seen.add(ref)
+            return seen
+
+        for executable in root.iter("{%s}Executable" % dts):
+            data = executable.find("{%s}ObjectData/FileSystemData" % dts)
+            if data is None:
+                continue
+            variables = [data.get("TaskSourcePath")] if data.get("TaskIsSourceVariable") == "True" else []
+            if data.get("TaskIsDestinationVariable") == "True":
+                variables.append(data.get("TaskDestinationPath"))
+            if not variables:
+                continue
+            tasks += 1
+            name = executable.get("{%s}ObjectName" % dts)
+            if executable.get("{%s}DelayValidation" % dts) != "True":
+                result.fail("file-task-validation", rel,
+                            "File System Task %r addresses %s but validates at package "
+                            "start, when those variables are still empty"
+                            % (name, ", ".join(variables)))
+            preceding = before(executable.get("{%s}refId" % dts))
+            for variable in variables:
+                sources = writers.get(variable)
+                if not sources:
+                    result.fail("file-task-validation", rel,
+                                "File System Task %r reads %s, which no expression, Foreach "
+                                "mapping or Expression Task ever fills" % (name, variable))
+                elif not sources & (preceding | {None}):
+                    result.fail("file-task-validation", rel,
+                                "File System Task %r reads %s, which is only assigned by %s - "
+                                "nothing that runs before it" % (name, variable,
+                                                                 ", ".join(sorted(s for s in sources if s))))
+    result.count("variable_driven_file_tasks_checked", tasks)
+
+
+OLEDB_SOURCE_PROPERTIES = ("OpenRowset", "OpenRowsetVariable", "SqlCommand", "SqlCommandVariable",
+                           "DefaultCodePage", "AlwaysUseDefaultCodePage", "AccessMode",
+                           "ParameterMapping")
+
+
+def check_oledb_source_properties(result, prefixes):
+    """An OLE DB source must persist the whole custom property set it declares.
+
+    The component asks the run time for every property of its class by name
+    during validation, so one omission fails it outright:
+
+        The "RAW File Partner Sales" is missing the required property
+        "OpenRowsetVariable" ... validation status "VS_ISCORRUPT"
+
+    which is how execution 84 failed. Beyond presence, a command with ?
+    markers needs one ParameterMapping entry per marker, in order, each
+    naming a variable or parameter DTSID the package actually declares -
+    an unmapped marker cannot be bound and a dangling DTSID binds nothing.
+    """
+    dts = "www.microsoft.com/SqlServer/Dts"
+    mapping_entry = re.compile(r'"Parameter(\d+):(\w+)",\{([0-9A-Fa-f-]{36})\};')
+    sources = 0
+    parameterised = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+
+        declared = set()
+        for node in list(root.iter("{%s}Variable" % dts)) + list(root.iter("{%s}PackageParameter" % dts)):
+            dtsid = node.get("{%s}DTSID" % dts) or ""
+            declared.add(dtsid.strip("{}").upper())
+
+        for component in root.iter("component"):
+            if component.get("componentClassID") != "Microsoft.OLEDBSource":
+                continue
+            sources += 1
+            name = component.get("name")
+            properties = {node.get("name"): (node.text or "")
+                          for node in component.iter("property")}
+            for required in OLEDB_SOURCE_PROPERTIES:
+                if required not in properties:
+                    result.fail("oledb-source-properties", rel,
+                                "OLE DB source %r does not persist the required property %r, "
+                                "so the component fails validation as VS_ISCORRUPT"
+                                % (name, required))
+            markers = _sql_placeholders(properties.get("SqlCommand", ""))
+            if not markers:
+                continue
+            parameterised += 1
+            entries = mapping_entry.findall(properties.get("ParameterMapping", ""))
+            if len(entries) != markers:
+                result.fail("oledb-source-properties", rel,
+                            "OLE DB source %r has %d parameter marker(s) but %d "
+                            "ParameterMapping entr(y|ies)" % (name, markers, len(entries)))
+                continue
+            if [int(index) for index, _direction, _dtsid in entries] != list(range(markers)):
+                result.fail("oledb-source-properties", rel,
+                            "OLE DB source %r maps parameters out of placeholder order: %s"
+                            % (name, properties.get("ParameterMapping")))
+            for _index, _direction, dtsid in entries:
+                if dtsid.upper() not in declared:
+                    result.fail("oledb-source-properties", rel,
+                                "OLE DB source %r binds a parameter to DTSID {%s}, which no "
+                                "variable or package parameter owns" % (name, dtsid))
+    result.count("oledb_sources_checked", sources)
+    result.count("parameterised_oledb_sources_checked", parameterised)
+
+
 def check_feed_manifest(result, prefixes):
     """The preflight's feed manifest must still match config/landing-zone.yaml.
 
@@ -1392,6 +1551,8 @@ CHECKS = [
     ("catalog-binding", check_catalog_binding_surface),
     ("environment-binding", check_environment_binding_parity),
     ("file-locality", check_file_locality),
+    ("file-task-validation", check_variable_driven_file_tasks),
+    ("oledb-source-properties", check_oledb_source_properties),
     ("feed-manifest", check_feed_manifest),
     ("orchestration-edges", check_project_reference_scope),
     ("sql-exec-arguments", check_sql_exec_arguments),
@@ -1434,6 +1595,8 @@ def main():
     check_environment_binding_parity(result, prefixes)
     check_file_locality(result, prefixes)
     check_file_system_tasks(result, prefixes)
+    check_variable_driven_file_tasks(result, prefixes)
+    check_oledb_source_properties(result, prefixes)
     check_feed_manifest(result, prefixes)
     check_project_reference_scope(result, prefixes)
     check_sql_exec_arguments(result, prefixes)

@@ -166,6 +166,32 @@ def mutate_dtsx_file_system_attributes(text):
     return text
 
 
+def mutate_dtsx_file_task_validates_early(text):
+    """Validate a path-variable File System Task at package start.
+
+    The variables are still empty then, which is how executions 81-83 of
+    Master_File_Ingestion failed on 'Variable "CurrentFilePath" is used as a
+    source or destination and is empty.'
+    """
+    index = text.find("<FileSystemData")
+    if index < 0:
+        return None
+    start = text.rfind("<DTS:Executable", 0, index)
+    head = re.sub(r'\s*DTS:DelayValidation="True"', "", text[start:index], count=1)
+    return text[:start] + head + text[index:]
+
+
+def mutate_dtsx_drop_oledb_property(text):
+    """Omit OpenRowsetVariable from an OLE DB source - the VS_ISCORRUPT defect."""
+    return re.sub(r'\s*<property [^>]*name="OpenRowsetVariable"[^>]*>(?:</property>)?', "",
+                  text, count=1) or None
+
+
+def mutate_dtsx_drop_oledb_parameter_mapping(text):
+    """Leave a ? in an OLE DB command with nothing bound to it."""
+    return re.sub(r'(name="ParameterMapping">)[^<]+(</property>)', r"\1\2", text, count=1)
+
+
 def mutate_dtsx_cm_id_by_dtsid(text):
     """Address a package connection manager by DTSID - the 0xC001001C defect."""
     match = re.search(r'<connection refId="[^"]+" connectionManagerID="'
@@ -313,6 +339,12 @@ FIXTURES = (
      "file-locality", mutate_dtsx_unbound_flatfile),
     ("File System Task the task host ignores", "ssis/03_file_ingestion", ".dtsx",
      "file-system-task", mutate_dtsx_file_system_attributes),
+    ("File System Task validating before the loop runs", "ssis/03_file_ingestion", ".dtsx",
+     "file-task-validation", mutate_dtsx_file_task_validates_early),
+    ("OLE DB source without OpenRowsetVariable", "ssis/05_data_quality", ".dtsx",
+     "oledb-source-properties", mutate_dtsx_drop_oledb_property),
+    ("OLE DB marker with no ParameterMapping", "ssis/05_data_quality", ".dtsx",
+     "oledb-source-properties", mutate_dtsx_drop_oledb_parameter_mapping),
     ("package connection addressed by DTSID", "ssis/03_file_ingestion", ".dtsx",
      "dtsx-connection-refs", mutate_dtsx_cm_id_by_dtsid),
     ("component connection nothing declares", "ssis/07_dimensions", ".dtsx",

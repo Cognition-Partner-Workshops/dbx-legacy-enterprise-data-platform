@@ -186,7 +186,9 @@ def stg_load_customer():
         "       CREDIT_CCY, CREATED_DT, LAST_UPD_DT\n"
         "FROM raw.OracleCustomerMaster\n"
         "WHERE BatchId = ? AND NULLIF(LTRIM(RTRIM(CUST_CODE)), '') IS NOT NULL;",
-        src_cols, timeout=3600)
+        src_cols, timeout=3600,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Rows Read", "User::RowsRead")
     flow.derived_column("Cleanse Customer Attributes", [
         ("CustomerCode", 'UPPER(TRIM(CUST_CODE))', str_col("CustomerCode", 20)),
@@ -275,7 +277,7 @@ def stg_load_customer_address():
             "       POSTAL_CD, COUNTRY_CD, REGION_CD, EFF_FROM_DT\n"
             "FROM raw.OracleCustomerAddress\n"
             "WHERE BatchId = ? AND UPPER(LTRIM(RTRIM(REGION_CD))) = N'%s';" % region,
-            cols)
+            cols, parameters=("$Package::BatchId",))
         flow.row_count("Count %s Rows Read" % region, "User::RowsRead")
         flow.derived_column("Standardize %s Address" % region, derivations)
         flow.lookup(
@@ -382,7 +384,9 @@ def stg_load_supplier():
         "FROM raw.OracleSupplierMaster\n"
         "WHERE BatchId = ?\n"
         "ORDER BY TAX_ID, LAST_UPD_DT DESC;",
-        cols)
+        cols,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Rows Read", "User::RowsRead")
     flow.derived_column("Cleanse Supplier Attributes", [
         ("SupplierCode", 'UPPER(TRIM(SUPP_CODE))', str_col("SupplierCode", 20)),
@@ -454,7 +458,9 @@ def stg_load_product():
         "SELECT PROD_CODE, PROD_DESC, PROD_FAMILY_CD, BASE_UOM_CD, PACK_QTY, LIST_PRICE_AMT,\n"
         "       LIST_PRICE_CCY, NET_WEIGHT, WEIGHT_UOM_CD, HAZMAT_FLG, DISCONTINUED_FLG, LAST_UPD_DT\n"
         "FROM raw.OracleProductMaster WHERE BatchId = ?;",
-        cols)
+        cols,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Rows Read", "User::RowsRead")
     flow.derived_column("Cleanse Product Attributes", [
         ("ProductCode", 'UPPER(TRIM(PROD_CODE))', str_col("ProductCode", 25)),
@@ -537,7 +543,9 @@ def stg_load_geography():
         "SELECT GEO_CODE, CITY_NAME, STATE_PROV_CD, STATE_PROV_NAME, COUNTRY_CD, REGION_CD,\n"
         "       SALES_TERR_CD, LATITUDE, LONGITUDE, POPULATION\n"
         "FROM raw.OracleGeography WHERE BatchId = ?;",
-        cols)
+        cols,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Rows Read", "User::RowsRead")
     flow.derived_column("Cleanse Geography", [
         ("GeographyCode", 'UPPER(TRIM(GEO_CODE))', str_col("GeographyCode", 16)),
@@ -603,7 +611,9 @@ def stg_load_currency():
         "RAW Oracle Currency", CONN_STAGING,
         "SELECT CCY_CODE, CCY_NAME, MINOR_UNITS, REGION_CD, ACTIVE_FLG\n"
         "FROM raw.OracleCurrency WHERE BatchId = ?;",
-        ccy_cols)
+        ccy_cols,
+        parameters=("$Package::BatchId",),
+    )
     ccy.row_count("Count Currency Rows Read", "User::RowsRead")
     ccy.derived_column("Cleanse Currency", [
         ("CurrencyCode", 'UPPER(TRIM(CCY_CODE))', str_col("CurrencyCode", 3)),
@@ -631,7 +641,9 @@ def stg_load_currency():
         "UNION ALL\n"
         "SELECT FROM_CCY, TO_CCY, EFF_FROM_DT, EFF_TO_DT, RATE, N'OVERRIDE', N'FILE_FX'\n"
         "FROM raw.FileFxOverride WHERE BatchId = ?;",
-        fx_cols)
+        fx_cols,
+        parameters=("$Package::BatchId", "$Package::BatchId"),
+    )
     fx.row_count("Count FX Rows Read", "User::RowsRead")
     fx.derived_column("Normalise FX Rate", [
         ("FromCurrencyCode", 'UPPER(TRIM(FROM_CCY))', str_col("FromCurrencyCode", 3)),
@@ -690,7 +702,9 @@ def stg_load_tax_and_terms():
         "SELECT TAX_CODE, TAX_TYPE_CD, COUNTRY_CD, REGION_CD, JURISDICTION_CD, RATE_PCT,\n"
         "       EFF_FROM_DT, EFF_TO_DT, RECOVERABLE_FLG\n"
         "FROM raw.OracleTaxRate WHERE BatchId = ?;",
-        tax_cols)
+        tax_cols,
+        parameters=("$Package::BatchId",),
+    )
     tax.row_count("Count Tax Rows Read", "User::RowsRead")
     tax.derived_column("Derive Regional Tax Attributes", [
         ("TaxCode", 'UPPER(TRIM(TAX_CODE))', str_col("TaxCode", 12)),
@@ -734,7 +748,9 @@ def stg_load_tax_and_terms():
         "RAW Oracle Payment Terms", CONN_STAGING,
         "SELECT TERMS_CODE, TERMS_DESC, NET_DAYS, DISC_PCT, DISC_DAYS, REGION_CD\n"
         "FROM raw.OraclePaymentTerms WHERE BatchId = ?;",
-        terms_cols)
+        terms_cols,
+        parameters=("$Package::BatchId",),
+    )
     terms.derived_column("Cleanse Payment Terms", [
         ("PaymentTermsCode", 'UPPER(REPLACE(TRIM(TERMS_CODE)," ",""))', str_col("PaymentTermsCode", 10)),
         ("PaymentTermsDescription", 'TRIM(ISNULL(TERMS_DESC) ? "" : TERMS_DESC)',
@@ -781,7 +797,9 @@ def stg_load_cost_center():
         "SELECT CC_CODE, CC_NAME, PARENT_CC_CODE, COMPANY_CD, REGION_CD, FUNCTION_CD,\n"
         "       ACTIVE_FLG, VALID_FROM_DT\n"
         "FROM raw.OracleCostCenter WHERE BatchId = ?;",
-        cols)
+        cols,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Rows Read", "User::RowsRead")
     flow.derived_column("Cleanse Cost Center", [
         ("CostCenterCode", 'UPPER(REPLACE(TRIM(CC_CODE)," ",""))', str_col("CostCenterCode", 12)),
@@ -848,7 +866,9 @@ def stg_load_vendor_contract():
         "SELECT CONTRACT_NBR, SUPP_CODE, CONTRACT_TYPE_CD, START_DT, END_DT, COMMIT_AMT,\n"
         "       COMMIT_CCY, DISC_PCT, REGION_CD, STATUS_CD\n"
         "FROM raw.OracleVendorContract WHERE BatchId = ?;",
-        cols)
+        cols,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Rows Read", "User::RowsRead")
     flow.derived_column("Cleanse Contract", [
         ("ContractNumber", 'UPPER(TRIM(CONTRACT_NBR))', str_col("ContractNumber", 20)),
@@ -929,7 +949,9 @@ def stg_load_purchase_order():
         "       PO_TOTAL_AMT, PO_DT, PROMISED_DT, LAST_UPD_DT\n"
         "FROM raw.OraclePurchaseOrderHdr\n"
         "WHERE LAST_UPD_DT > CONVERT(datetime2(3), ?) AND LAST_UPD_DT <= CONVERT(datetime2(3), ?);",
-        hdr_cols, timeout=7200)
+        hdr_cols, timeout=7200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     hdr.row_count("Count Header Rows Read", "User::RowsRead")
     hdr.derived_column("Standardize PO Header", [
         ("PurchaseOrderNumber", 'UPPER(TRIM(PO_NBR))', str_col("PurchaseOrderNumber", 20)),
@@ -989,7 +1011,9 @@ def stg_load_purchase_order():
         "FROM raw.OraclePurchaseOrderLine AS l\n"
         "     INNER JOIN raw.OraclePurchaseOrderHdr AS h ON h.PO_NBR = l.PO_NBR\n"
         "WHERE h.LAST_UPD_DT > CONVERT(datetime2(3), ?) AND h.LAST_UPD_DT <= CONVERT(datetime2(3), ?);",
-        line_cols, timeout=7200)
+        line_cols, timeout=7200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     line.derived_column("Standardize PO Line", [
         ("PurchaseOrderNumber", 'UPPER(TRIM(PO_NBR))', str_col("PurchaseOrderNumber", 20)),
         ("LineNumber", 'PO_LINE_NBR', int_col("LineNumber")),
@@ -1060,7 +1084,9 @@ def stg_load_ap_invoice():
         "       INVOICE_DT, DUE_DT, TERMS_CD, HOLD_FLAG\n"
         "FROM raw.OracleApInvoiceHdr\n"
         "WHERE INVOICE_DT > CONVERT(datetime2(3), ?) AND INVOICE_DT <= CONVERT(datetime2(3), ?);",
-        hdr_cols, timeout=7200)
+        hdr_cols, timeout=7200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     hdr.row_count("Count Invoice Rows Read", "User::RowsRead")
     hdr.derived_column("Classify Invoice Tax", [
         ("InvoiceNumber", 'UPPER(TRIM(INVOICE_NBR))', str_col("InvoiceNumber", 30)),
@@ -1128,7 +1154,9 @@ def stg_load_ap_invoice():
         "FROM raw.OracleApInvoiceLine AS l\n"
         "     INNER JOIN raw.OracleApInvoiceHdr AS h ON h.INVOICE_NBR = l.INVOICE_NBR\n"
         "WHERE h.INVOICE_DT > CONVERT(datetime2(3), ?) AND h.INVOICE_DT <= CONVERT(datetime2(3), ?);",
-        line_cols, timeout=7200)
+        line_cols, timeout=7200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     line.derived_column("Standardize Invoice Line", [
         ("InvoiceNumber", 'UPPER(TRIM(INVOICE_NBR))', str_col("InvoiceNumber", 30)),
         ("LineNumber", 'INV_LINE_NBR', int_col("LineNumber")),
@@ -1189,7 +1217,9 @@ def stg_load_payment():
         "       PAY_DT, VALUE_DT, PAY_STATUS_CD, REGION_CD\n"
         "FROM raw.OracleApPayment\n"
         "WHERE PAY_DT > CONVERT(datetime2(3), ?) AND PAY_DT <= CONVERT(datetime2(3), ?);",
-        cols, timeout=3600)
+        cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     flow.row_count("Count Payment Rows Read", "User::RowsRead")
     flow.data_conversion("Convert Payment Types", [
         ("PAY_AMT", "PaymentAmount", money_col("PaymentAmount")),
@@ -1261,7 +1291,9 @@ def stg_load_gl_journal():
         "       JRNL_CCY, DEBIT_AMT, CREDIT_AMT, ACCOUNTING_DT, PERIOD_NAME, SOURCE_CD, REGION_CD\n"
         "FROM raw.OracleGlJournalLine\n"
         "WHERE ACCOUNTING_DT > CONVERT(datetime2(3), ?) AND ACCOUNTING_DT <= CONVERT(datetime2(3), ?);",
-        cols, timeout=7200)
+        cols, timeout=7200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     flow.row_count("Count Journal Rows Read", "User::RowsRead")
     flow.derived_column("Derive Fiscal Attributes", [
         ("JournalId", 'UPPER(TRIM(JOURNAL_ID))', str_col("JournalId", 30)),
@@ -1339,7 +1371,9 @@ def stg_load_order():
         "       CustomerPurchaseOrderNumber, IsUndersupplyBackordered, Comments, LastEditedWhen\n"
         "FROM raw.SqlOrder\n"
         "WHERE LastEditedWhen > CONVERT(datetime2(3), ?) AND LastEditedWhen <= CONVERT(datetime2(3), ?);",
-        hdr_cols, timeout=3600)
+        hdr_cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     hdr.row_count("Count Order Rows Read", "User::RowsRead")
     hdr.derived_column("Clean Order Header", [
         ("OrderId", 'OrderID', int_col("OrderId")),
@@ -1380,7 +1414,9 @@ def stg_load_order():
         "FROM raw.SqlOrderLine AS l\n"
         "     INNER JOIN raw.SqlOrder AS o ON o.OrderID = l.OrderID\n"
         "WHERE o.LastEditedWhen > CONVERT(datetime2(3), ?) AND o.LastEditedWhen <= CONVERT(datetime2(3), ?);",
-        line_cols, timeout=3600)
+        line_cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     line.derived_column("Extend Order Line", [
         ("OrderLineId", 'OrderLineID', int_col("OrderLineId")),
         ("OrderId", 'OrderID', int_col("OrderId")),
@@ -1439,7 +1475,9 @@ def stg_load_sale():
         "       CurrencyCode, ConfirmedDeliveryTime, LastEditedWhen\n"
         "FROM raw.SqlInvoice\n"
         "WHERE LastEditedWhen > CONVERT(datetime2(3), ?) AND LastEditedWhen <= CONVERT(datetime2(3), ?);",
-        hdr_cols, timeout=3600)
+        hdr_cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     hdr.row_count("Count Sale Rows Read", "User::RowsRead")
     hdr.derived_column("Tag Sale Region", [
         ("InvoiceId", 'InvoiceID', int_col("InvoiceId")),
@@ -1489,7 +1527,9 @@ def stg_load_sale():
         "FROM raw.SqlInvoiceLine AS l\n"
         "     INNER JOIN raw.SqlInvoice AS i ON i.InvoiceID = l.InvoiceID\n"
         "WHERE i.LastEditedWhen > CONVERT(datetime2(3), ?) AND i.LastEditedWhen <= CONVERT(datetime2(3), ?);",
-        line_cols, timeout=3600)
+        line_cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     line.derived_column("Recompute Sale Line Tax", [
         ("InvoiceLineId", 'InvoiceLineID', int_col("InvoiceLineId")),
         ("InvoiceId", 'InvoiceID', int_col("InvoiceId")),
@@ -1610,7 +1650,9 @@ def stg_load_stock_movement():
         "FROM raw.SqlStockMovement\n"
         "WHERE TransactionOccurredWhen > CONVERT(datetime2(3), ?)\n"
         "  AND TransactionOccurredWhen <= CONVERT(datetime2(3), ?);",
-        cols, timeout=7200)
+        cols, timeout=7200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     flow.row_count("Count Movement Rows Read", "User::RowsRead")
     flow.lookup(
         "Lookup Transaction Type (Full Cache)", CONN_STAGING,
@@ -1673,7 +1715,9 @@ def stg_load_shipment():
         "       DestinationPostalCode, GrossWeightKg, DespatchedWhen, DeliveredWhen\n"
         "FROM raw.SqlShipment\n"
         "WHERE DespatchedWhen > CONVERT(datetime2(3), ?) AND DespatchedWhen <= CONVERT(datetime2(3), ?);",
-        hdr_cols, timeout=3600)
+        hdr_cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     hdr.row_count("Count Shipment Rows Read", "User::RowsRead")
     hdr.derived_column("Standardize Shipment", [
         ("ShipmentId", 'ShipmentID', int_col("ShipmentId")),
@@ -1717,7 +1761,9 @@ def stg_load_shipment():
         "FROM raw.SqlShipmentLine AS l\n"
         "     INNER JOIN raw.SqlShipment AS s ON s.ShipmentID = l.ShipmentID\n"
         "WHERE s.DespatchedWhen > CONVERT(datetime2(3), ?) AND s.DespatchedWhen <= CONVERT(datetime2(3), ?);",
-        line_cols, timeout=3600)
+        line_cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     line.derived_column("Rebase Line Weight", [
         ("ShipmentLineId", 'ShipmentLineID', int_col("ShipmentLineId")),
         ("ShipmentId", 'ShipmentID', int_col("ShipmentId")),
@@ -1761,7 +1807,9 @@ def stg_load_return_and_credit():
         "       RegionCode, ReturnedWhen\n"
         "FROM raw.SqlReturnLine\n"
         "WHERE ReturnedWhen > CONVERT(datetime2(3), ?) AND ReturnedWhen <= CONVERT(datetime2(3), ?);",
-        ret_cols, timeout=3600)
+        ret_cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     ret.row_count("Count Return Rows Read", "User::RowsRead")
     ret.derived_column("Apply Return Window", [
         ("ReturnLineId", 'ReturnLineID', int_col("ReturnLineId")),
@@ -1805,7 +1853,9 @@ def stg_load_return_and_credit():
         "       IssuedWhen, ApprovedBy\n"
         "FROM raw.SqlCreditNote\n"
         "WHERE IssuedWhen > CONVERT(datetime2(3), ?) AND IssuedWhen <= CONVERT(datetime2(3), ?);",
-        credit_cols, timeout=3600)
+        credit_cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     credit.derived_column("Band Credit Notes", [
         ("CreditNoteId", 'CreditNoteID', int_col("CreditNoteId")),
         ("InvoiceId", 'InvoiceID', int_col("InvoiceId")),
@@ -1855,7 +1905,9 @@ def stg_load_loyalty_ledger():
         "       EntryDate, ExpiryDate\n"
         "FROM raw.SqlLoyaltyLedger\n"
         "WHERE EntryDate > CONVERT(datetime2(3), ?) AND EntryDate <= CONVERT(datetime2(3), ?);",
-        cols, timeout=3600)
+        cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     flow.row_count("Count Loyalty Rows Read", "User::RowsRead")
     flow.derived_column("Type Loyalty Entries", [
         ("LoyaltyEntryId", 'LoyaltyEntryID', bigint_col("LoyaltyEntryId")),
@@ -1925,7 +1977,9 @@ def stg_load_web_session():
         "       LandingPageUrl, PageViewCount, DurationSeconds, ConsentFlag, SessionStartWhen\n"
         "FROM raw.SqlWebSession\n"
         "WHERE SessionStartWhen > CONVERT(datetime2(3), ?) AND SessionStartWhen <= CONVERT(datetime2(3), ?);",
-        cols, timeout=7200)
+        cols, timeout=7200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     flow.row_count("Count Session Rows Read", "User::RowsRead")
     flow.lookup(
         "Lookup Country Region (Full Cache)", CONN_STAGING,
@@ -1996,7 +2050,9 @@ def stg_load_partner_sale():
         "       AmountText, CurrencyText, CountryText, SourceFileName\n"
         "FROM raw.FilePartnerSales\n"
         "WHERE BatchId = ?;",
-        cols, timeout=3600)
+        cols, timeout=3600,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Partner Rows Read", "User::RowsRead")
     flow.derived_column("Normalize Partner Text", [
         ("PartnerCode", 'UPPER(TRIM(PartnerCode))', str_col("PartnerCode", 10)),

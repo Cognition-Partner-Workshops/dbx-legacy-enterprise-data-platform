@@ -109,6 +109,26 @@ def safe_name(name):
     return out
 
 
+class ContractError(ValueError):
+    """A spec asks for XML the SSIS runtime would reject at validation."""
+
+
+def sql_parameter_count(sql):
+    """Number of ``?`` placeholders the OLE DB provider binds in *sql*.
+
+    Question marks inside string literals belong to the data, not to the
+    parameter list, so they are skipped.
+    """
+    count = 0
+    in_literal = False
+    for char in sql:
+        if char == "'":
+            in_literal = not in_literal
+        elif char == "?" and not in_literal:
+            count += 1
+    return count
+
+
 def guid(seed: str) -> str:
     """Deterministic {GUID} derived from a seed string."""
     h = hashlib.md5(seed.encode("utf-8")).hexdigest().upper()
@@ -228,12 +248,43 @@ class DataFlow:
 
     # -- sources ------------------------------------------------------------
 
-    def oledb_source(self, name, connection, sql, columns, timeout=0):
+    def oledb_source(self, name, connection, sql, columns, timeout=0, parameters=()):
+        """Read a rowset with an SQL command.
+
+        ``parameters`` names the variables or package parameters bound to the
+        ``?`` placeholders of *sql*, in placeholder order. A parameterised
+        command with no bindings cannot be executed, so the count is enforced
+        when the package emits (see :meth:`bind`).
+        """
         self._columns = list(columns)
         self._components.append(
-            dict(kind="oledb_source", name=name, connection=connection, sql=sql, columns=list(columns), timeout=timeout)
+            dict(kind="oledb_source", name=name, connection=connection, sql=sql, columns=list(columns),
+                 timeout=timeout, parameters=list(parameters), parameter_mapping="")
         )
         self._last_output = (name, "OLE DB Source Output")
+        return self
+
+    def bind(self, package):
+        """Resolve variable-addressed component metadata against *package*.
+
+        An OLE DB source persists its parameter list as ``ParameterMapping``:
+        placeholder name plus the DTSID of the variable feeding it. The DTSID
+        is derived from the owning package, so it can only be resolved once the
+        data flow is attached to one.
+        """
+        for comp in self._components:
+            if comp["kind"] != "oledb_source":
+                continue
+            expected = sql_parameter_count(comp["sql"])
+            bound = comp["parameters"]
+            if len(bound) != expected:
+                raise ContractError(
+                    "OLE DB source %r in %r has %d '?' placeholder(s) but %d bound "
+                    "parameter(s); an unbound placeholder fails component validation "
+                    "at run time" % (comp["name"], self.name, expected, len(bound)))
+            comp["parameter_mapping"] = "".join(
+                '"Parameter%d:Input",%s;' % (index, package.variable_dtsid(variable))
+                for index, variable in enumerate(bound))
         return self
 
     def flatfile_source(self, name, connection, columns, connection_scope="Project"):
@@ -551,14 +602,29 @@ class DataFlow:
             if not is_flat:
                 out.append(self._prop(pad + "    ", "System.Int32", "CommandTimeout", comp["timeout"],
                                       "The number of seconds before a command times out."))
+                # The OLE DB source declares the whole custom property set it
+                # supports, not just the ones the chosen access mode reads. The
+                # component asks the runtime for every property by name during
+                # validation, and a missing one - OpenRowsetVariable is the
+                # first it looks for - fails the component with VS_ISCORRUPT
+                # before the access mode is ever consulted.
                 out.append(self._prop(pad + "    ", "System.String", "OpenRowset", "",
                                       "Specifies the name of the database object used to open a rowset."))
+                out.append(self._prop(pad + "    ", "System.String", "OpenRowsetVariable", "",
+                                      "Specifies the variable that contains the name of the database object used to open a rowset."))
                 out.append(self._prop(pad + "    ", "System.String", "SqlCommand", comp["sql"],
                                       "The SQL command to be executed."))
-                out.append(self._prop(pad + "    ", "System.Int32", "AccessMode", 2,
-                                      "Specifies the mode used to access the database."))
+                out.append(self._prop(pad + "    ", "System.String", "SqlCommandVariable", "",
+                                      "The variable that contains the SQL command to be executed."))
                 out.append(self._prop(pad + "    ", "System.Int32", "DefaultCodePage", 1252,
                                       "Specifies the column code page to use when code page information is unavailable."))
+                out.append(self._prop(pad + "    ", "System.Boolean", "AlwaysUseDefaultCodePage", "false",
+                                      "Forces the use of the DefaultCodePage property value when describing character data."))
+                out.append(self._prop(pad + "    ", "System.Int32", "AccessMode", 2,
+                                      "Specifies the mode used to access the database."))
+                out.append(self._prop(pad + "    ", "System.String", "ParameterMapping",
+                                      comp.get("parameter_mapping", ""),
+                                      "The mapping from parameter to variables."))
             else:
                 out.append(self._prop(pad + "    ", "System.Boolean", "RetainNulls", "false",
                                       "Specifies whether zero-length strings are converted to nulls."))
@@ -1022,11 +1088,19 @@ class Task:
     executable_type = ""
     description = ""
 
+    # A task whose work is addressed through variables the control flow fills
+    # in at run time cannot be validated at package start; see FileSystemTask.
+    delay_validation = False
+
     def __init__(self, name):
         self.name = safe_name(name)
 
     def object_data(self, ref, indent):  # pragma: no cover - overridden
         return []
+
+    def bind(self, package):
+        """Resolve package-scoped references. Overridden where needed."""
+        return self
 
     def to_xml(self, parent_ref, indent):
         ref = "%s\\%s" % (parent_ref, self.name)
@@ -1037,12 +1111,16 @@ class Task:
             '%s  DTS:CreationName="%s"' % (pad, self.creation_name),
             "%s  %s" % (pad, attr("DTS:Description", self.description)),
             '%s  DTS:DTSID="%s"' % (pad, guid(ref)),
+        ]
+        if self.delay_validation:
+            out.append('%s  DTS:DelayValidation="True"' % pad)
+        out.extend([
             '%s  DTS:ExecutableType="%s"' % (pad, self.executable_type),
             '%s  DTS:LocaleID="-1"' % pad,
             "%s  %s" % (pad, attr("DTS:ObjectName", self.name)),
             '%s  DTS:ThreadHint="0">' % pad,
             "%s  <DTS:Variables />" % pad,
-        ]
+        ])
         body = self.object_data(ref, indent + 2)
         if body:
             out.append("%s  <DTS:ObjectData>" % pad)
@@ -1176,6 +1254,13 @@ class FileSystemTask(Task):
                   "DeleteFile", "DeleteDirectory", "DeleteDirectoryContent",
                   "RenameFile", "SetAttributes", "CreateDirectory")
 
+    # Both paths are variables the control flow fills in per iteration, so the
+    # task has to be validated when it runs. Validated at package start the
+    # variables still hold their design-time empty string and the task host
+    # fails with 'Variable "X" is used as a source or destination and is
+    # empty.', which is how every ING_FILE_* archive step failed.
+    delay_validation = True
+
     def __init__(self, name, operation, source_variable, destination_variable):
         Task.__init__(self, name)
         if operation not in self.OPERATIONS:
@@ -1201,9 +1286,14 @@ class DataFlowTask(Task):
     executable_type = "Microsoft.Pipeline"
     description = "Data Flow Task"
 
-    def __init__(self, data_flow):
+    def __init__(self, data_flow, delay_validation=False):
         Task.__init__(self, data_flow.name)
         self.data_flow = data_flow
+        self.delay_validation = delay_validation
+
+    def bind(self, package):
+        self.data_flow.bind(package)
+        return self
 
     def object_data(self, ref, indent):
         return self.data_flow.to_xml(ref, indent)
@@ -1213,7 +1303,7 @@ class Container:
     """Sequence container or Foreach loop holding child executables."""
 
     def __init__(self, name, kind="sequence", enumerator=None, variable_mappings=None, description=None,
-                 folder_expression=None):
+                 folder_expression=None, delay_validation=None):
         self.name = safe_name(name)
         self.kind = kind
         self.enumerator = enumerator or {}
@@ -1223,12 +1313,21 @@ class Container:
         self.folder_expression = folder_expression
         self.variable_mappings = variable_mappings or []
         self.description = description or ("Sequence Container" if kind == "sequence" else "Foreach Loop Container")
+        # A Foreach loop hands its children a file path that only exists once
+        # the loop is iterating, so its children have to be validated then and
+        # not at package start, where the mapped variables are still empty.
+        self.delay_validation = (kind == "foreach") if delay_validation is None else delay_validation
         self.tasks = []
         self.constraints = []
 
     def add(self, task):
         self.tasks.append(task)
         return task
+
+    def bind(self, package):
+        for task in self.tasks:
+            task.bind(package)
+        return self
 
     def link(self, from_task, to_task, value="Success", expression=None, logical_and=True):
         self.constraints.append((from_task, to_task, value, expression, logical_and))
@@ -1247,10 +1346,14 @@ class Container:
             '%s  DTS:CreationName="%s"' % (pad, creation),
             "%s  %s" % (pad, attr("DTS:Description", self.description)),
             '%s  DTS:DTSID="%s"' % (pad, guid(ref)),
+        ]
+        if self.delay_validation:
+            out.append('%s  DTS:DelayValidation="True"' % pad)
+        out.extend([
             '%s  DTS:ExecutableType="%s"' % (pad, creation),
             '%s  DTS:LocaleID="-1"' % pad,
             "%s  %s>" % (pad, attr("DTS:ObjectName", self.name)),
-        ]
+        ])
         if self.folder_expression:
             out.append('%s  <DTS:PropertyExpression DTS:Name="Directory">%s</DTS:PropertyExpression>'
                        % (pad, escape(self.folder_expression)))
@@ -1369,6 +1472,40 @@ class Package:
         self.event_handlers.append((event_name, tasks, constraints or []))
         return self
 
+    def variable_dtsid(self, name):
+        """DTSID of the variable or package parameter *name* addresses.
+
+        Components that persist a variable reference by id - an OLE DB source
+        parameter mapping, for one - need the id the package will emit, and a
+        reference to something the package does not declare would load as a
+        dangling GUID, so the lookup is strict.
+        """
+        if name.startswith("$Package::"):
+            short = name[len("$Package::"):]
+            if any(entry[0] == short for entry in self.parameters):
+                return guid("Package.Variables[$Package::%s]" % short + self.name)
+            raise ContractError("package %r has no parameter %r to bind" % (self.name, short))
+        namespace, separator, short = name.partition("::")
+        if not separator:
+            namespace, short = "User", name
+        if namespace == "System":
+            raise ContractError(
+                "package %r binds system variable %r; the runtime owns its id, so it "
+                "cannot be referenced by DTSID" % (self.name, name))
+        for vname, _value, _dtype, vnamespace, _expression in self.variables:
+            if vname == short and vnamespace == namespace:
+                return guid("Package.Variables[%s::%s]" % (namespace, short) + self.name)
+        raise ContractError("package %r has no variable %r to bind" % (self.name, name))
+
+    def bind(self):
+        """Let every executable resolve its package-scoped references."""
+        for task in self.tasks:
+            task.bind(self)
+        for _event_name, tasks, _constraints in self.event_handlers:
+            for task in tasks:
+                task.bind(self)
+        return self
+
     def add_flat_file_connection(self, name, columns, delimiter=",", code_page=1252,
                                  header_in_first_row=True, design_time_path="",
                                  expression="@[User::CurrentFilePath]", description=""):
@@ -1439,6 +1576,7 @@ class Package:
     # -- emission -----------------------------------------------------------
 
     def to_xml(self):
+        self.bind()
         out = ['<?xml version="1.0"?>']
         out.append('<DTS:Executable xmlns:DTS="%s"' % DTS_NS)
         out.append('  DTS:refId="Package"')
