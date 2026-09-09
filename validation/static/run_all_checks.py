@@ -2142,6 +2142,35 @@ def _destination_debt(dbschema):
     return entries
 
 
+# The orchestration roots whose whole subtree is validated against the live
+# SSISDB catalog before it is run; see deployment/ssis/Test-SsisPackageValidation.ps1.
+LIVE_VALIDATED_ROOTS = ("Master_File_Ingestion",)
+
+
+def _orchestrated_packages():
+    """The packages every orchestration root executes, by root."""
+    path = os.path.join(SOURCE_ROOT, "ssis", "orchestration-plan.json")
+    roots = {}
+    if not os.path.exists(path):
+        return roots
+    with open(path, errors="replace") as handle:
+        plan = json.load(handle)
+
+    def walk(nodes, into):
+        for node in nodes or []:
+            package = node.get("package")
+            if package:
+                into.add(package)
+            for key in ("children", "in_package_children", "nodes"):
+                walk(node.get(key), into)
+
+    for root in plan.get("roots", []):
+        packages = set()
+        walk(root.get("nodes"), packages)
+        roots[root["root"]] = packages
+    return roots
+
+
 def check_destination_metadata(result, prefixes):
     """An OLE DB destination's external metadata must be its target table's.
 
@@ -2160,7 +2189,10 @@ def check_destination_metadata(result, prefixes):
 
     Destinations still carrying the defect are listed in
     ssis/destination-metadata-debt.txt and reported as warnings; an entry that
-    no longer reproduces has to be removed.
+    no longer reproduces has to be removed. The register cannot excuse a
+    buffer-derived shape in a package a live-validated root executes, because
+    catalog validation of that root fails on it - which is how STG PartnerSale
+    reached a live run.
     """
     dbschema = _ddl_catalog()
     if dbschema is None:
@@ -2169,6 +2201,13 @@ def check_destination_metadata(result, prefixes):
                     "could be checked against its table")
         return
     debt = _destination_debt(dbschema)
+    # A destination that publishes its buffer's shape fails catalog validation
+    # before a row moves, so the register cannot carry one in a root the estate
+    # validates against the live catalog: the root's own validation fails on it.
+    plan = _orchestrated_packages()
+    orchestrated = set()
+    for root in LIVE_VALIDATED_ROOTS:
+        orchestrated |= plan.get(root, set())
     seen = set()
     destinations = 0
     for rel, full in walk_files(prefixes, (".dtsx",)):
@@ -2214,9 +2253,18 @@ def check_destination_metadata(result, prefixes):
                 if missing:
                     problems.append("maps no value into NOT NULL column(s) %s of %s"
                                     % (", ".join(missing), table))
+            package = os.path.splitext(os.path.basename(rel))[0]
             for problem in problems:
                 detail = "destination %r in %r %s" % (name, flow, problem)
-                if registered:
+                if registered and problem.startswith("declares external columns") \
+                        and package in orchestrated:
+                    seen.add(key)
+                    result.fail("destination-metadata", rel,
+                                "%s, and a live-validated root executes %s: SSIS "
+                                "answers that shape with VS_NEEDSNEWMETADATA at "
+                                "validation, so the register cannot carry it"
+                                % (detail, package))
+                elif registered:
                     seen.add(key)
                     result.warn("destination-metadata", rel,
                                 "known destination debt: %s" % detail)

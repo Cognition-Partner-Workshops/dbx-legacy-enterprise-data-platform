@@ -2056,18 +2056,23 @@ def stg_load_partner_sale():
     """raw.FilePartnerSales -> stg.PartnerSale (flat file feed, all columns arrive as text)."""
     # The landing table names the agreed feed fields; every one of them lands as
     # text, which is why the parsing below happens here and not in the loader.
+    # The text columns keep a Text suffix: stg.PartnerSale names its typed
+    # columns TransactionDate, QuantitySold and GrossAmount, and a buffer column
+    # of the same name carrying text is what the destination cannot insert.
     cols = [
         str_col("PartnerCode", 30), str_col("TransactionReference", 60),
-        str_col("TransactionDate", 40), str_col("CustomerReference", 60),
-        str_col("PartnerProductCode", 60), str_col("QuantitySold", 50),
-        str_col("GrossAmount", 50), str_col("CurrencyCode", 10), str_col("CountryCode", 10),
+        str_col("TransactionDateText", 40), str_col("CustomerReference", 60),
+        str_col("PartnerProductCode", 60), str_col("QuantitySoldText", 50),
+        str_col("GrossAmountText", 50), str_col("CurrencyCode", 10), str_col("CountryCode", 10),
         str_col("SourceFileName", 260),
     ]
     flow = DataFlow("DFT Conform Partner Sales", "Parse and type the partner sales flat file feed")
     flow.oledb_source(
         "RAW File Partner Sales", CONN_STAGING,
-        "SELECT PartnerCode, TransactionReference, TransactionDate, CustomerReference,\n"
-        "       PartnerProductCode, QuantitySold, GrossAmount, CurrencyCode, CountryCode,\n"
+        "SELECT PartnerCode, TransactionReference,\n"
+        "       TransactionDate AS TransactionDateText, CustomerReference,\n"
+        "       PartnerProductCode, QuantitySold AS QuantitySoldText,\n"
+        "       GrossAmount AS GrossAmountText, CurrencyCode, CountryCode,\n"
         "       SourceFileName\n"
         "FROM raw.FilePartnerSales\n"
         "WHERE BatchId = ?;",
@@ -2082,16 +2087,25 @@ def stg_load_partner_sale():
         ("ItemRef", 'UPPER(REPLACE(TRIM(PartnerProductCode), " ", ""))', str_col("ItemRef", 60)),
         # Partners send DD/MM/YYYY, the legacy loader only ever handled YYYY-MM-DD.
         ("SaleDateIso",
-         'FINDSTRING(TransactionDate, "/", 1) > 0 ? '
-         'RIGHT(TRIM(TransactionDate), 4) + "-" + SUBSTRING(TRIM(TransactionDate), 4, 2) + "-" + '
-         'LEFT(TRIM(TransactionDate), 2) : LEFT(TRIM(TransactionDate), 10)',
+         'FINDSTRING(TransactionDateText, "/", 1) > 0 ? '
+         'RIGHT(TRIM(TransactionDateText), 4) + "-" + '
+         'SUBSTRING(TRIM(TransactionDateText), 4, 2) + "-" + '
+         'LEFT(TRIM(TransactionDateText), 2) : LEFT(TRIM(TransactionDateText), 10)',
          str_col("SaleDateIso", 10)),
-        ("QuantityClean", 'REPLACE(TRIM(QuantitySold), ",", "")', str_col("QuantityClean", 50)),
-        ("AmountClean", 'REPLACE(REPLACE(TRIM(GrossAmount), ",", ""), "$", "")',
+        ("QuantityClean", 'REPLACE(TRIM(QuantitySoldText), ",", "")', str_col("QuantityClean", 50)),
+        ("AmountClean", 'REPLACE(REPLACE(TRIM(GrossAmountText), ",", ""), "$", "")',
          str_col("AmountClean", 50)),
         ("PartnerCurrencyCode", 'UPPER(LEFT(TRIM(ISNULL(CurrencyCode) ? "USD" : CurrencyCode), 3))',
          str_col("PartnerCurrencyCode", 3)),
         ("PartnerCountryCode", 'UPPER(LEFT(TRIM(CountryCode), 3))', str_col("PartnerCountryCode", 3)),
+        # stg.PartnerSale keys every row by partner, outlet and reference and
+        # will not take a row without a batch or a source system.
+        ("PartnerSaleBusinessKey",
+         'LEFT(UPPER(TRIM(PartnerCode)) + "||" + UPPER(TRIM(TransactionReference)), 140)',
+         str_col("PartnerSaleBusinessKey", 140)),
+        ("SourceSystemCode", 'LEFT(@[$Package::SourceSystemCode], 20)',
+         str_col("SourceSystemCode", 20)),
+        ("BatchId", '(DT_I8)@[$Package::BatchId]', bigint_col("BatchId")),
     ])
     flow.data_conversion("Type Partner Measures", [
         ("SaleDateIso", "SaleDate", date_col("SaleDate")),
@@ -2114,7 +2128,12 @@ def stg_load_partner_sale():
         ("Unparsable Amount", 'GrossAmountValue <= 0'),
     ], default_output="Missing Order Reference")
     flow.row_count("Count Partner Rows Loaded", "User::RowsInserted")
-    flow.oledb_destination("STG PartnerSale", CONN_STAGING, "[stg].[PartnerSale]", batch_size=50000)
+    flow.oledb_destination("STG PartnerSale", CONN_STAGING, "[stg].[PartnerSale]", batch_size=50000,
+                           mapping={"TransactionDate": "SaleDate",
+                                    "QuantitySold": "Quantity",
+                                    "GrossAmount": "GrossAmountValue",
+                                    "TransactionCurrencyCode": "PartnerCurrencyCode",
+                                    "CountryCode": "PartnerCountryCode"})
     flow.branch_destination("ERR Partner Unparsable Amount", CONN_STAGING, "[err].[RejectedFileRow]",
                             "Screen Partner Sale", "Unparsable Amount")
     flow.branch_destination("ERR Partner Missing Reference", CONN_STAGING, "[err].[RejectedFileRow]",
