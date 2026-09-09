@@ -6,7 +6,7 @@
   DTS:CreatorComputerName="WWIBUILD01"
   DTS:CreatorName="WWI\etl_build"
   DTS:DTSID="{98ADCD9F-BE18-1AE6-FEC9-D7F4DB7B3811}"
-  DTS:Description="Screen raw.FilePartnerSales before it is trusted: rows must carry exactly eight pipe delimiters, a recognisable date and a parsable amount, and must not contain replacement characters left behind by a code-page mismatch."
+  DTS:Description="Screen raw.FilePartnerSales before it is trusted: every landed row must carry the mandatory agreed fields, a recognisable date and a parsable amount, and must not contain replacement characters left behind by a code-page mismatch."
   DTS:ExecutableType="Microsoft.Package"
   DTS:LastModifiedProductVersion="13.0.4001.0"
   DTS:LocaleID="1033"
@@ -233,7 +233,7 @@
       <DTS:ObjectData>
       <SQLTask:SqlTaskData
         SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
-        SQLTask:SqlStatementSource="DECLARE @Measure DECIMAL(18,4);&#10;SELECT @Measure = CAST(100.0 * SUM(CASE WHEN LEN(RawLine) - LEN(REPLACE(RawLine, N'|', N'')) &lt;&gt; 8 THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) AS DECIMAL(9,4)) FROM raw.FilePartnerSales;&#10;INSERT INTO etl.DataQualityResult&#10;    (BatchId, PackageExecutionId, ObjectName, RuleCode, MeasuredValue, EvaluatedAtUtc)&#10;VALUES (?, ?, N'raw.FilePartnerSales', N'DQ_FILE_MALFORMED_RATE', @Measure, SYSUTCDATETIME());&#10;SELECT @Measure AS MeasuredValue;"
+        SQLTask:SqlStatementSource="DECLARE @Measure DECIMAL(18,4);&#10;SELECT @Measure = CAST(100.0 * (SELECT COUNT_BIG(*) FROM err.RejectedFileRow WHERE RejectReasonCode IN (N'COLUMN_COUNT', N'BAD_ENCODING')) / NULLIF((SELECT COUNT_BIG(*) FROM raw.FilePartnerSales), 0) AS DECIMAL(9,4));&#10;INSERT INTO etl.DataQualityResult&#10;    (BatchId, PackageExecutionId, ObjectName, RuleCode, MeasuredValue, EvaluatedAtUtc)&#10;VALUES (?, ?, N'raw.FilePartnerSales', N'DQ_FILE_MALFORMED_RATE', @Measure, SYSUTCDATETIME());&#10;SELECT @Measure AS MeasuredValue;"
         SQLTask:ResultType="ResultSetType_SingleRow"
         SQLTask:TimeOut="0"
         SQLTask:SqlStmtSourceType="DirectInput"
@@ -262,12 +262,15 @@
             <properties>
               <property dataType="System.Int32" description="The number of seconds before a command times out." name="CommandTimeout">3600</property>
               <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset"></property>
-              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT FileRowId, SourceFileName, FileLineNumber, RawLine,
-       LEN(RawLine) - LEN(REPLACE(RawLine, N'|', N'')) AS DelimiterCount,
-       SaleDateText, AmountText, PartnerCode
+              <property dataType="System.String" description="Specifies the variable that contains the name of the database object used to open a rowset." name="OpenRowsetVariable"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand">SELECT SourceFileName, SourceRowNumber, PartnerCode, TransactionReference,
+       TransactionDate, GrossAmount, CurrencyCode, PartnerProductDesc
 FROM raw.FilePartnerSales WHERE BatchId = ?;</property>
-              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.String" description="The variable that contains the SQL command to be executed." name="SqlCommandVariable"></property>
               <property dataType="System.Int32" description="Specifies the column code page to use when code page information is unavailable." name="DefaultCodePage">1252</property>
+              <property dataType="System.Boolean" description="Forces the use of the DefaultCodePage property value when describing character data." name="AlwaysUseDefaultCodePage">false</property>
+              <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">2</property>
+              <property dataType="System.String" description="The mapping from parameter to variables." name="ParameterMapping">"Parameter0:Input",{E09CE56B-C548-A03C-5C07-F648F3FC9E00};</property>
             </properties>
             <connections>
               <connection refId="Package\DFT Screen Partner File\RAW File Partner Sales.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The connection used to access the source." name="OleDbConnection" />
@@ -275,36 +278,36 @@ FROM raw.FilePartnerSales WHERE BatchId = ?;</property>
             <outputs>
               <output refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
                 <outputColumns>
-                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[FileRowId]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[FileRowId]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[FileRowId]" name="FileRowId" truncationRowDisposition="RedirectRow" />
-                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SourceFileName]" dataType="wstr" length="200" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[SourceFileName]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SourceFileName]" name="SourceFileName" truncationRowDisposition="RedirectRow" />
-                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[FileLineNumber]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[FileLineNumber]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[FileLineNumber]" name="FileLineNumber" truncationRowDisposition="RedirectRow" />
-                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[RawLine]" dataType="wstr" length="1000" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[RawLine]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[RawLine]" name="RawLine" truncationRowDisposition="RedirectRow" />
-                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[DelimiterCount]" dataType="i4" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[DelimiterCount]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[DelimiterCount]" name="DelimiterCount" truncationRowDisposition="RedirectRow" />
-                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SaleDateText]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[SaleDateText]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SaleDateText]" name="SaleDateText" truncationRowDisposition="RedirectRow" />
-                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[AmountText]" dataType="wstr" length="20" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[AmountText]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[AmountText]" name="AmountText" truncationRowDisposition="RedirectRow" />
-                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[PartnerCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[PartnerCode]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[PartnerCode]" name="PartnerCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SourceFileName]" dataType="wstr" length="260" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[SourceFileName]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SourceFileName]" name="SourceFileName" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SourceRowNumber]" dataType="i8" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[SourceRowNumber]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SourceRowNumber]" name="SourceRowNumber" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[PartnerCode]" dataType="wstr" length="30" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[PartnerCode]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[PartnerCode]" name="PartnerCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[TransactionReference]" dataType="wstr" length="60" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[TransactionReference]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[TransactionReference]" name="TransactionReference" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[TransactionDate]" dataType="wstr" length="40" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[TransactionDate]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[TransactionDate]" name="TransactionDate" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[GrossAmount]" dataType="wstr" length="50" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[GrossAmount]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[GrossAmount]" name="GrossAmount" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[CurrencyCode]" dataType="wstr" length="10" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[CurrencyCode]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[CurrencyCode]" name="CurrencyCode" truncationRowDisposition="RedirectRow" />
+                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[PartnerProductDesc]" dataType="wstr" length="400" errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[PartnerProductDesc]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[PartnerProductDesc]" name="PartnerProductDesc" truncationRowDisposition="RedirectRow" />
                 </outputColumns>
                 <externalMetadataColumns isUsed="True">
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[FileRowId]" dataType="i8" name="FileRowId" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[SourceFileName]" dataType="wstr" length="200" name="SourceFileName" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[FileLineNumber]" dataType="i4" name="FileLineNumber" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[RawLine]" dataType="wstr" length="1000" name="RawLine" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[DelimiterCount]" dataType="i4" name="DelimiterCount" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[SaleDateText]" dataType="wstr" length="20" name="SaleDateText" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[AmountText]" dataType="wstr" length="20" name="AmountText" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[PartnerCode]" dataType="wstr" length="10" name="PartnerCode" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[SourceFileName]" dataType="wstr" length="260" name="SourceFileName" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[SourceRowNumber]" dataType="i8" name="SourceRowNumber" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[PartnerCode]" dataType="wstr" length="30" name="PartnerCode" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[TransactionReference]" dataType="wstr" length="60" name="TransactionReference" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[TransactionDate]" dataType="wstr" length="40" name="TransactionDate" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[GrossAmount]" dataType="wstr" length="50" name="GrossAmount" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[CurrencyCode]" dataType="wstr" length="10" name="CurrencyCode" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].ExternalColumns[PartnerProductDesc]" dataType="wstr" length="400" name="PartnerProductDesc" />
                 </externalMetadataColumns>
               </output>
               <output refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
                 <outputColumns>
-                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[FileRowId]" dataType="i8" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[FileRowId]" name="FileRowId" />
-                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[SourceFileName]" dataType="wstr" length="200" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[SourceFileName]" name="SourceFileName" />
-                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[FileLineNumber]" dataType="i4" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[FileLineNumber]" name="FileLineNumber" />
-                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[RawLine]" dataType="wstr" length="1000" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[RawLine]" name="RawLine" />
-                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[DelimiterCount]" dataType="i4" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[DelimiterCount]" name="DelimiterCount" />
-                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[SaleDateText]" dataType="wstr" length="20" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[SaleDateText]" name="SaleDateText" />
-                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[AmountText]" dataType="wstr" length="20" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[AmountText]" name="AmountText" />
-                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[PartnerCode]" dataType="wstr" length="10" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[PartnerCode]" name="PartnerCode" />
+                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[SourceFileName]" dataType="wstr" length="260" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[SourceFileName]" name="SourceFileName" />
+                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[SourceRowNumber]" dataType="i8" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[SourceRowNumber]" name="SourceRowNumber" />
+                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[PartnerCode]" dataType="wstr" length="30" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[PartnerCode]" name="PartnerCode" />
+                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[TransactionReference]" dataType="wstr" length="60" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[TransactionReference]" name="TransactionReference" />
+                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[TransactionDate]" dataType="wstr" length="40" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[TransactionDate]" name="TransactionDate" />
+                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[GrossAmount]" dataType="wstr" length="50" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[GrossAmount]" name="GrossAmount" />
+                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[CurrencyCode]" dataType="wstr" length="10" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[CurrencyCode]" name="CurrencyCode" />
+                  <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[PartnerProductDesc]" dataType="wstr" length="400" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[PartnerProductDesc]" name="PartnerProductDesc" />
                   <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
                   <outputColumn refId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="1" />
                 </outputColumns>
@@ -325,73 +328,132 @@ FROM raw.FilePartnerSales WHERE BatchId = ?;</property>
           </component>
           <component refId="Package\DFT Screen Partner File\Evaluate File Row Rules" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Evaluate File Row Rules" usesDispositions="true">
             <inputs>
-              <input refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Inputs[Derived Column Input]" name="Derived Column Input" />
+              <input refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Inputs[Derived Column Input]" name="Derived Column Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Inputs[Derived Column Input].Columns[PartnerCode]" cachedDataType="wstr" cachedLength="30" cachedName="PartnerCode" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[PartnerCode]" name="PartnerCode" usageType="readOnly" />
+                  <inputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Inputs[Derived Column Input].Columns[TransactionReference]" cachedDataType="wstr" cachedLength="60" cachedName="TransactionReference" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[TransactionReference]" name="TransactionReference" usageType="readOnly" />
+                  <inputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Inputs[Derived Column Input].Columns[TransactionDate]" cachedDataType="wstr" cachedLength="40" cachedName="TransactionDate" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[TransactionDate]" name="TransactionDate" usageType="readOnly" />
+                  <inputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Inputs[Derived Column Input].Columns[GrossAmount]" cachedDataType="wstr" cachedLength="50" cachedName="GrossAmount" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[GrossAmount]" name="GrossAmount" usageType="readOnly" />
+                  <inputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Inputs[Derived Column Input].Columns[CurrencyCode]" cachedDataType="wstr" cachedLength="10" cachedName="CurrencyCode" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[CurrencyCode]" name="CurrencyCode" usageType="readOnly" />
+                  <inputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Inputs[Derived Column Input].Columns[PartnerProductDesc]" cachedDataType="wstr" cachedLength="400" cachedName="PartnerProductDesc" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[PartnerProductDesc]" name="PartnerProductDesc" usageType="readOnly" />
+                </inputColumns>
+              </input>
             </inputs>
             <outputs>
               <output refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\DFT Screen Partner File\Evaluate File Row Rules.Inputs[Derived Column Input]">
                 <outputColumns>
-                  <outputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[DelimiterBreachFlag]" dataType="wstr" length="1" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[DelimiterBreachFlag]" name="DelimiterBreachFlag">
+                  <outputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[IncompleteRowFlag]" dataType="wstr" length="1" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[IncompleteRowFlag]" name="IncompleteRowFlag" truncationRowDisposition="FailComponent">
                     <properties>
-                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">DelimiterCount != 8 ? "Y" : "N"</property>
-                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">DelimiterCount != 8 ? "Y" : "N"</property>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(PartnerCode) || LEN(TRIM(PartnerCode)) == 0 || ISNULL(TransactionReference) || LEN(TRIM(TransactionReference)) == 0 || ISNULL(CurrencyCode) || LEN(TRIM(CurrencyCode)) == 0 ? "Y" : "N"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(PartnerCode) || LEN(TRIM(PartnerCode)) == 0 || ISNULL(TransactionReference) || LEN(TRIM(TransactionReference)) == 0 || ISNULL(CurrencyCode) || LEN(TRIM(CurrencyCode)) == 0 ? "Y" : "N"</property>
                     </properties>
                   </outputColumn>
-                  <outputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableDateFlag]" dataType="wstr" length="1" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableDateFlag]" name="UnparsableDateFlag">
+                  <outputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableDateFlag]" dataType="wstr" length="1" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableDateFlag]" name="UnparsableDateFlag" truncationRowDisposition="FailComponent">
                     <properties>
-                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(SaleDateText) || LEN(TRIM(SaleDateText)) &lt; 8 || (FINDSTRING(SaleDateText, "/", 1) == 0 &amp;&amp; FINDSTRING(SaleDateText, "-", 1) == 0) ? "Y" : "N"</property>
-                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(SaleDateText) || LEN(TRIM(SaleDateText)) &lt; 8 || (FINDSTRING(SaleDateText, "/", 1) == 0 &amp;&amp; FINDSTRING(SaleDateText, "-", 1) == 0) ? "Y" : "N"</property>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(TransactionDate) || LEN(TRIM(TransactionDate)) &lt; 8 || (FINDSTRING(TransactionDate, "/", 1) == 0 &amp;&amp; FINDSTRING(TransactionDate, "-", 1) == 0) ? "Y" : "N"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(TransactionDate) || LEN(TRIM(TransactionDate)) &lt; 8 || (FINDSTRING(TransactionDate, "/", 1) == 0 &amp;&amp; FINDSTRING(TransactionDate, "-", 1) == 0) ? "Y" : "N"</property>
                     </properties>
                   </outputColumn>
-                  <outputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableAmountFlag]" dataType="wstr" length="1" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableAmountFlag]" name="UnparsableAmountFlag">
+                  <outputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableAmountFlag]" dataType="wstr" length="1" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableAmountFlag]" name="UnparsableAmountFlag" truncationRowDisposition="FailComponent">
                     <properties>
-                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(AmountText) || LEN(REPLACE(REPLACE(REPLACE(TRIM(AmountText), ",", ""), "$", ""), ".", "")) == 0 ? "Y" : "N"</property>
-                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(AmountText) || LEN(REPLACE(REPLACE(REPLACE(TRIM(AmountText), ",", ""), "$", ""), ".", "")) == 0 ? "Y" : "N"</property>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">ISNULL(GrossAmount) || LEN(REPLACE(REPLACE(REPLACE(TRIM(GrossAmount), ",", ""), "$", ""), ".", "")) == 0 ? "Y" : "N"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">ISNULL(GrossAmount) || LEN(REPLACE(REPLACE(REPLACE(TRIM(GrossAmount), ",", ""), "$", ""), ".", "")) == 0 ? "Y" : "N"</property>
                     </properties>
                   </outputColumn>
-                  <outputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[HighBitFlag]" dataType="wstr" length="1" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[HighBitFlag]" name="HighBitFlag">
+                  <outputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[HighBitFlag]" dataType="wstr" length="1" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[HighBitFlag]" name="HighBitFlag" truncationRowDisposition="FailComponent">
                     <properties>
-                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">FINDSTRING(RawLine, "\uFFFD", 1) &gt; 0 ? "Y" : "N"</property>
-                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">FINDSTRING(RawLine, "\uFFFD", 1) &gt; 0 ? "Y" : "N"</property>
-                    </properties>
-                  </outputColumn>
-                  <outputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[RejectReasonCode]" dataType="wstr" length="30" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[RejectReasonCode]" name="RejectReasonCode">
-                    <properties>
-                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">DelimiterCount != 8 ? "DQ_FILE_DELIMITER" : (ISNULL(SaleDateText) ? "DQ_FILE_DATE" : "DQ_FILE_AMOUNT")</property>
-                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">DelimiterCount != 8 ? "DQ_FILE_DELIMITER" : (ISNULL(SaleDateText) ? "DQ_FILE_DATE" : "DQ_FILE_AMOUNT")</property>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">FINDSTRING(PartnerProductDesc, "\xFFFD", 1) &gt; 0 ? "Y" : "N"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">FINDSTRING(PartnerProductDesc, "\xFFFD", 1) &gt; 0 ? "Y" : "N"</property>
                     </properties>
                   </outputColumn>
                 </outputColumns>
                 <externalMetadataColumns />
               </output>
+              <output refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Error Output]" exclusionGroup="1" isErrorOut="true" name="Derived Column Error Output" synchronousInputId="Package\DFT Screen Partner File\Evaluate File Row Rules.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="2" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
             </outputs>
           </component>
-          <component refId="Package\DFT Screen Partner File\Route File Failures" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Route File Failures">
+          <component refId="Package\DFT Screen Partner File\Evaluate File Row Rules 2" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Evaluate File Row Rules 2" usesDispositions="true">
             <inputs>
-              <input refId="Package\DFT Screen Partner File\Route File Failures.Inputs[Conditional Split Input]" name="Conditional Split Input" />
+              <input refId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Inputs[Derived Column Input]" name="Derived Column Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Inputs[Derived Column Input].Columns[IncompleteRowFlag]" cachedDataType="wstr" cachedLength="1" cachedName="IncompleteRowFlag" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[IncompleteRowFlag]" name="IncompleteRowFlag" usageType="readOnly" />
+                  <inputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Inputs[Derived Column Input].Columns[UnparsableDateFlag]" cachedDataType="wstr" cachedLength="1" cachedName="UnparsableDateFlag" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableDateFlag]" name="UnparsableDateFlag" usageType="readOnly" />
+                  <inputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Inputs[Derived Column Input].Columns[HighBitFlag]" cachedDataType="wstr" cachedLength="1" cachedName="HighBitFlag" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[HighBitFlag]" name="HighBitFlag" usageType="readOnly" />
+                </inputColumns>
+              </input>
             </inputs>
             <outputs>
-              <output refId="Package\DFT Screen Partner File\Route File Failures.Outputs[Well Formed Row]" exclusionGroup="1" name="Well Formed Row" synchronousInputId="Package\DFT Screen Partner File\Route File Failures.Inputs[Conditional Split Input]">
+              <output refId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Outputs[Derived Column Output].Columns[RejectReasonCode]" dataType="wstr" length="50" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Outputs[Derived Column Output].Columns[RejectReasonCode]" name="RejectReasonCode" truncationRowDisposition="FailComponent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">IncompleteRowFlag == "Y" ? "COLUMN_COUNT" : (HighBitFlag == "Y" ? "BAD_ENCODING" : (UnparsableDateFlag == "Y" ? "UNPARSEABLE_DATE" : "UNPARSEABLE_AMOUNT"))</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">IncompleteRowFlag == "Y" ? "COLUMN_COUNT" : (HighBitFlag == "Y" ? "BAD_ENCODING" : (UnparsableDateFlag == "Y" ? "UNPARSEABLE_DATE" : "UNPARSEABLE_AMOUNT"))</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Outputs[Derived Column Error Output]" exclusionGroup="1" isErrorOut="true" name="Derived Column Error Output" synchronousInputId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Outputs[Derived Column Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Outputs[Derived Column Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Outputs[Derived Column Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Outputs[Derived Column Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="2" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Screen Partner File\Route File Failures" componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name="Route File Failures" usesDispositions="true">
+            <inputs>
+              <input refId="Package\DFT Screen Partner File\Route File Failures.Inputs[Conditional Split Input]" name="Conditional Split Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Screen Partner File\Route File Failures.Inputs[Conditional Split Input].Columns[IncompleteRowFlag]" cachedDataType="wstr" cachedLength="1" cachedName="IncompleteRowFlag" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[IncompleteRowFlag]" name="IncompleteRowFlag" usageType="readOnly" />
+                  <inputColumn refId="Package\DFT Screen Partner File\Route File Failures.Inputs[Conditional Split Input].Columns[UnparsableDateFlag]" cachedDataType="wstr" cachedLength="1" cachedName="UnparsableDateFlag" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableDateFlag]" name="UnparsableDateFlag" usageType="readOnly" />
+                  <inputColumn refId="Package\DFT Screen Partner File\Route File Failures.Inputs[Conditional Split Input].Columns[UnparsableAmountFlag]" cachedDataType="wstr" cachedLength="1" cachedName="UnparsableAmountFlag" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableAmountFlag]" name="UnparsableAmountFlag" usageType="readOnly" />
+                  <inputColumn refId="Package\DFT Screen Partner File\Route File Failures.Inputs[Conditional Split Input].Columns[HighBitFlag]" cachedDataType="wstr" cachedLength="1" cachedName="HighBitFlag" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[HighBitFlag]" name="HighBitFlag" usageType="readOnly" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Screen Partner File\Route File Failures.Outputs[Well Formed Row]" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" exclusionGroup="1" name="Well Formed Row" synchronousInputId="Package\DFT Screen Partner File\Route File Failures.Inputs[Conditional Split Input]" truncationRowDisposition="FailComponent">
                 <properties>
-                  <property dataType="System.String" description="The condition for this output." name="Expression">DelimiterBreachFlag == "N" &amp;&amp; UnparsableDateFlag == "N" &amp;&amp; UnparsableAmountFlag == "N" &amp;&amp; HighBitFlag == "N"</property>
-                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">DelimiterBreachFlag == "N" &amp;&amp; UnparsableDateFlag == "N" &amp;&amp; UnparsableAmountFlag == "N" &amp;&amp; HighBitFlag == "N"</property>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">IncompleteRowFlag == "N" &amp;&amp; UnparsableDateFlag == "N" &amp;&amp; UnparsableAmountFlag == "N" &amp;&amp; HighBitFlag == "N"</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">IncompleteRowFlag == "N" &amp;&amp; UnparsableDateFlag == "N" &amp;&amp; UnparsableAmountFlag == "N" &amp;&amp; HighBitFlag == "N"</property>
                   <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">0</property>
                 </properties>
               </output>
-              <output refId="Package\DFT Screen Partner File\Route File Failures.Outputs[Malformed Delimiters]" exclusionGroup="1" name="Malformed Delimiters" synchronousInputId="Package\DFT Screen Partner File\Route File Failures.Inputs[Conditional Split Input]">
+              <output refId="Package\DFT Screen Partner File\Route File Failures.Outputs[Incomplete Row]" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" exclusionGroup="1" name="Incomplete Row" synchronousInputId="Package\DFT Screen Partner File\Route File Failures.Inputs[Conditional Split Input]" truncationRowDisposition="FailComponent">
                 <properties>
-                  <property dataType="System.String" description="The condition for this output." name="Expression">DelimiterBreachFlag == "Y"</property>
-                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">DelimiterBreachFlag == "Y"</property>
+                  <property dataType="System.String" description="The condition for this output." name="Expression">IncompleteRowFlag == "Y"</property>
+                  <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">IncompleteRowFlag == "Y"</property>
                   <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">1</property>
                 </properties>
               </output>
-              <output refId="Package\DFT Screen Partner File\Route File Failures.Outputs[Unparsable Date]" exclusionGroup="1" name="Unparsable Date" synchronousInputId="Package\DFT Screen Partner File\Route File Failures.Inputs[Conditional Split Input]">
+              <output refId="Package\DFT Screen Partner File\Route File Failures.Outputs[Unparsable Date]" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" exclusionGroup="1" name="Unparsable Date" synchronousInputId="Package\DFT Screen Partner File\Route File Failures.Inputs[Conditional Split Input]" truncationRowDisposition="FailComponent">
                 <properties>
                   <property dataType="System.String" description="The condition for this output." name="Expression">UnparsableDateFlag == "Y"</property>
                   <property dataType="System.String" description="The condition as displayed." name="FriendlyExpression">UnparsableDateFlag == "Y"</property>
                   <property dataType="System.Int32" description="Evaluation order." name="EvaluationOrder">2</property>
                 </properties>
               </output>
-              <output refId="Package\DFT Screen Partner File\Route File Failures.Outputs[Unparsable Amount]" exclusionGroup="1" isDefaultOut="true" name="Unparsable Amount" synchronousInputId="Package\DFT Screen Partner File\Route File Failures.Inputs[Conditional Split Input]" />
+              <output refId="Package\DFT Screen Partner File\Route File Failures.Outputs[Unparsable Amount]" exclusionGroup="1" name="Unparsable Amount" synchronousInputId="Package\DFT Screen Partner File\Route File Failures.Inputs[Conditional Split Input]">
+                <properties>
+                  <property dataType="System.Boolean" description="Specifies the default output." name="IsDefaultOut">true</property>
+                </properties>
+              </output>
+              <output refId="Package\DFT Screen Partner File\Route File Failures.Outputs[Conditional Split Error Output]" exclusionGroup="1" isErrorOut="true" name="Conditional Split Error Output" synchronousInputId="Package\DFT Screen Partner File\Route File Failures.Inputs[Conditional Split Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Screen Partner File\Route File Failures.Outputs[Conditional Split Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Screen Partner File\Route File Failures.Outputs[Conditional Split Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Screen Partner File\Route File Failures.Outputs[Conditional Split Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Screen Partner File\Route File Failures.Outputs[Conditional Split Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="2" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
             </outputs>
           </component>
           <component refId="Package\DFT Screen Partner File\Count File Rows Passing" componentClassID="Microsoft.RowCount" description="Row Count" name="Count File Rows Passing">
@@ -405,10 +467,74 @@ FROM raw.FilePartnerSales WHERE BatchId = ?;</property>
               <output refId="Package\DFT Screen Partner File\Count File Rows Passing.Outputs[Row Count Output]" name="Row Count Output" synchronousInputId="Package\DFT Screen Partner File\Count File Rows Passing.Inputs[Row Count Input]" />
             </outputs>
           </component>
+          <component refId="Package\DFT Screen Partner File\Describe File Screen Result" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Describe File Screen Result" usesDispositions="true">
+            <inputs>
+              <input refId="Package\DFT Screen Partner File\Describe File Screen Result.Inputs[Derived Column Input]" name="Derived Column Input">
+                <inputColumns>
+                  <inputColumn refId="Package\DFT Screen Partner File\Describe File Screen Result.Inputs[Derived Column Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="260" cachedName="SourceFileName" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SourceFileName]" name="SourceFileName" usageType="readOnly" />
+                  <inputColumn refId="Package\DFT Screen Partner File\Describe File Screen Result.Inputs[Derived Column Input].Columns[SourceRowNumber]" cachedDataType="i8" cachedName="SourceRowNumber" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SourceRowNumber]" name="SourceRowNumber" usageType="readOnly" />
+                </inputColumns>
+              </input>
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\DFT Screen Partner File\Describe File Screen Result.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output].Columns[BatchId]" dataType="i8" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output].Columns[BatchId]" name="BatchId" truncationRowDisposition="FailComponent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[$Package::BatchId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[$Package::BatchId]</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output].Columns[PackageExecutionId]" dataType="i8" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output].Columns[PackageExecutionId]" name="PackageExecutionId" truncationRowDisposition="FailComponent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[User::PackageExecutionId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[User::PackageExecutionId]</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output].Columns[ObjectName]" dataType="wstr" length="200" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output].Columns[ObjectName]" name="ObjectName" truncationRowDisposition="FailComponent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"raw.FilePartnerSales"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"raw.FilePartnerSales"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output].Columns[RuleCode]" dataType="wstr" length="30" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output].Columns[RuleCode]" name="RuleCode" truncationRowDisposition="FailComponent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"FILE_ROW_SCREEN"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"FILE_ROW_SCREEN"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output].Columns[ResultStatus]" dataType="wstr" length="20" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output].Columns[ResultStatus]" name="ResultStatus" truncationRowDisposition="FailComponent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"Passed"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"Passed"</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output].Columns[DetailText]" dataType="wstr" length="2000" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output].Columns[DetailText]" name="DetailText" truncationRowDisposition="FailComponent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"Row " + (DT_WSTR,20)SourceRowNumber + " of " + SourceFileName + " carries the mandatory fields, a recognisable date and a parsable amount."</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"Row " + (DT_WSTR,20)SourceRowNumber + " of " + SourceFileName + " carries the mandatory fields, a recognisable date and a parsable amount."</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Error Output]" exclusionGroup="1" isErrorOut="true" name="Derived Column Error Output" synchronousInputId="Package\DFT Screen Partner File\Describe File Screen Result.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="2" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
           <component refId="Package\DFT Screen Partner File\DQ File Pass Log" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="DQ File Pass Log" usesDispositions="true" version="4">
             <properties>
               <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
               <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[etl].[DataQualityResult]</property>
+              <property dataType="System.String" description="Specifies the variable that contains the name of the database object used to open a rowset." name="OpenRowsetVariable"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand"></property>
+              <property dataType="System.Boolean" description="Forces the use of the DefaultCodePage property value when describing character data." name="AlwaysUseDefaultCodePage">false</property>
+              <property dataType="System.Boolean" description="Indicates whether the columns containing null will have null inserted in the destination." name="FastLoadKeepNulls">false</property>
               <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
               <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
               <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
@@ -421,45 +547,84 @@ FROM raw.FilePartnerSales WHERE BatchId = ?;</property>
             <inputs>
               <input refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
                 <inputColumns>
-                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[FileRowId]" cachedDataType="i8" cachedName="FileRowId" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[FileRowId]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[FileRowId]" name="FileRowId" />
-                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="200" cachedName="SourceFileName" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SourceFileName]" name="SourceFileName" />
-                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[FileLineNumber]" cachedDataType="i4" cachedName="FileLineNumber" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[FileLineNumber]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[FileLineNumber]" name="FileLineNumber" />
-                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[RawLine]" cachedDataType="wstr" cachedLength="1000" cachedName="RawLine" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[RawLine]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[RawLine]" name="RawLine" />
-                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[DelimiterCount]" cachedDataType="i4" cachedName="DelimiterCount" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterCount]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[DelimiterCount]" name="DelimiterCount" />
-                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[SaleDateText]" cachedDataType="wstr" cachedLength="20" cachedName="SaleDateText" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[SaleDateText]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SaleDateText]" name="SaleDateText" />
-                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[AmountText]" cachedDataType="wstr" cachedLength="20" cachedName="AmountText" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[AmountText]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[AmountText]" name="AmountText" />
-                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[PartnerCode]" cachedDataType="wstr" cachedLength="10" cachedName="PartnerCode" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[PartnerCode]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[PartnerCode]" name="PartnerCode" />
-                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[DelimiterBreachFlag]" cachedDataType="wstr" cachedLength="1" cachedName="DelimiterBreachFlag" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterBreachFlag]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[DelimiterBreachFlag]" name="DelimiterBreachFlag" />
-                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[UnparsableDateFlag]" cachedDataType="wstr" cachedLength="1" cachedName="UnparsableDateFlag" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[UnparsableDateFlag]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableDateFlag]" name="UnparsableDateFlag" />
-                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[UnparsableAmountFlag]" cachedDataType="wstr" cachedLength="1" cachedName="UnparsableAmountFlag" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[UnparsableAmountFlag]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableAmountFlag]" name="UnparsableAmountFlag" />
-                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[HighBitFlag]" cachedDataType="wstr" cachedLength="1" cachedName="HighBitFlag" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[HighBitFlag]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[HighBitFlag]" name="HighBitFlag" />
-                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[RejectReasonCode]" cachedDataType="wstr" cachedLength="30" cachedName="RejectReasonCode" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[RejectReasonCode]" name="RejectReasonCode" />
+                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[BatchId]" cachedDataType="i8" cachedName="BatchId" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[BatchId]" lineageId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output].Columns[BatchId]" name="BatchId" />
+                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[PackageExecutionId]" cachedDataType="i8" cachedName="PackageExecutionId" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" lineageId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output].Columns[PackageExecutionId]" name="PackageExecutionId" />
+                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[ObjectName]" cachedDataType="wstr" cachedLength="200" cachedName="ObjectName" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[ObjectName]" lineageId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output].Columns[ObjectName]" name="ObjectName" />
+                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[RuleCode]" cachedDataType="wstr" cachedLength="30" cachedName="RuleCode" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[RuleCode]" lineageId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output].Columns[RuleCode]" name="RuleCode" />
+                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[ResultStatus]" cachedDataType="wstr" cachedLength="20" cachedName="ResultStatus" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[ResultStatus]" lineageId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output].Columns[ResultStatus]" name="ResultStatus" />
+                  <inputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].Columns[DetailText]" cachedDataType="wstr" cachedLength="2000" cachedName="DetailText" externalMetadataColumnId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[DetailText]" lineageId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output].Columns[DetailText]" name="DetailText" />
                 </inputColumns>
                 <externalMetadataColumns isUsed="True">
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[FileRowId]" dataType="i8" name="FileRowId" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="200" name="SourceFileName" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[FileLineNumber]" dataType="i4" name="FileLineNumber" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[RawLine]" dataType="wstr" length="1000" name="RawLine" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterCount]" dataType="i4" name="DelimiterCount" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[SaleDateText]" dataType="wstr" length="20" name="SaleDateText" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[AmountText]" dataType="wstr" length="20" name="AmountText" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[PartnerCode]" dataType="wstr" length="10" name="PartnerCode" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterBreachFlag]" dataType="wstr" length="1" name="DelimiterBreachFlag" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[UnparsableDateFlag]" dataType="wstr" length="1" name="UnparsableDateFlag" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[UnparsableAmountFlag]" dataType="wstr" length="1" name="UnparsableAmountFlag" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[HighBitFlag]" dataType="wstr" length="1" name="HighBitFlag" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" dataType="wstr" length="30" name="RejectReasonCode" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[DataQualityResultId]" dataType="i8" name="DataQualityResultId" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[BatchId]" dataType="i8" name="BatchId" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[ObjectName]" dataType="wstr" length="200" name="ObjectName" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[RuleCode]" dataType="wstr" length="30" name="RuleCode" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[MeasuredValue]" dataType="numeric" precision="18" scale="4" name="MeasuredValue" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[ThresholdValue]" dataType="numeric" precision="18" scale="4" name="ThresholdValue" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[RowsEvaluated]" dataType="i8" name="RowsEvaluated" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[ResultStatus]" dataType="wstr" length="20" name="ResultStatus" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[RegionCode]" dataType="wstr" length="10" name="RegionCode" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[DetailText]" dataType="wstr" length="2000" name="DetailText" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input].ExternalColumns[EvaluatedAtUtc]" dataType="dbTimeStamp2" scale="3" name="EvaluatedAtUtc" />
                 </externalMetadataColumns>
               </input>
             </inputs>
             <outputs>
-              <output refId="Package\DFT Screen Partner File\DQ File Pass Log.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+              <output refId="Package\DFT Screen Partner File\DQ File Pass Log.Outputs[OLE DB Destination Error Output]" exclusionGroup="1" isErrorOut="true" name="OLE DB Destination Error Output" synchronousInputId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Outputs[OLE DB Destination Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Screen Partner File\DQ File Pass Log.Outputs[OLE DB Destination Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Screen Partner File\DQ File Pass Log.Outputs[OLE DB Destination Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Screen Partner File\DQ File Pass Log.Outputs[OLE DB Destination Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="2" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
             </outputs>
           </component>
-          <component refId="Package\DFT Screen Partner File\ERR File Delimiters" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="ERR File Delimiters" usesDispositions="true" version="4">
+          <component refId="Package\DFT Screen Partner File\Describe File Incomplete Reject" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Describe File Incomplete Reject" usesDispositions="true">
+            <inputs>
+              <input refId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Outputs[Derived Column Output].Columns[BatchId]" dataType="i8" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Outputs[Derived Column Output].Columns[BatchId]" name="BatchId" truncationRowDisposition="FailComponent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[$Package::BatchId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[$Package::BatchId]</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Outputs[Derived Column Output].Columns[RejectReason]" dataType="wstr" length="500" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Outputs[Derived Column Output].Columns[RejectReason]" name="RejectReason" truncationRowDisposition="FailComponent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"A mandatory agreed field is missing from the landed row."</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"A mandatory agreed field is missing from the landed row."</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Outputs[Derived Column Output].Columns[RejectStage]" dataType="wstr" length="50" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Outputs[Derived Column Output].Columns[RejectStage]" name="RejectStage" truncationRowDisposition="FailComponent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"Screen"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"Screen"</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Outputs[Derived Column Error Output]" exclusionGroup="1" isErrorOut="true" name="Derived Column Error Output" synchronousInputId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Outputs[Derived Column Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Outputs[Derived Column Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Outputs[Derived Column Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Outputs[Derived Column Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="2" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Screen Partner File\ERR File Incomplete" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="ERR File Incomplete" usesDispositions="true" version="4">
             <properties>
               <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
               <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedFileRow]</property>
+              <property dataType="System.String" description="Specifies the variable that contains the name of the database object used to open a rowset." name="OpenRowsetVariable"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand"></property>
+              <property dataType="System.Boolean" description="Forces the use of the DefaultCodePage property value when describing character data." name="AlwaysUseDefaultCodePage">false</property>
+              <property dataType="System.Boolean" description="Indicates whether the columns containing null will have null inserted in the destination." name="FastLoadKeepNulls">false</property>
               <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
               <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
               <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
@@ -467,50 +632,97 @@ FROM raw.FilePartnerSales WHERE BatchId = ?;</property>
               <property dataType="System.Int32" description="Default code page." name="DefaultCodePage">1252</property>
             </properties>
             <connections>
-              <connection refId="Package\DFT Screen Partner File\ERR File Delimiters.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
+              <connection refId="Package\DFT Screen Partner File\ERR File Incomplete.Connections[OleDbConnection]" connectionManagerID="{E4540100-D4C7-0578-F0D3-C329706F8FFE}:external" connectionManagerRefId="Project.ConnectionManagers[WWI_Staging_DB]" description="The OLE DB runtime connection used to access the database." name="OleDbConnection" />
             </connections>
             <inputs>
-              <input refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
+              <input refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
                 <inputColumns>
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].Columns[FileRowId]" cachedDataType="i8" cachedName="FileRowId" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[FileRowId]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[FileRowId]" name="FileRowId" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="200" cachedName="SourceFileName" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SourceFileName]" name="SourceFileName" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].Columns[FileLineNumber]" cachedDataType="i4" cachedName="FileLineNumber" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[FileLineNumber]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[FileLineNumber]" name="FileLineNumber" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].Columns[RawLine]" cachedDataType="wstr" cachedLength="1000" cachedName="RawLine" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[RawLine]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[RawLine]" name="RawLine" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].Columns[DelimiterCount]" cachedDataType="i4" cachedName="DelimiterCount" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterCount]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[DelimiterCount]" name="DelimiterCount" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].Columns[SaleDateText]" cachedDataType="wstr" cachedLength="20" cachedName="SaleDateText" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[SaleDateText]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SaleDateText]" name="SaleDateText" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].Columns[AmountText]" cachedDataType="wstr" cachedLength="20" cachedName="AmountText" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[AmountText]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[AmountText]" name="AmountText" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].Columns[PartnerCode]" cachedDataType="wstr" cachedLength="10" cachedName="PartnerCode" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[PartnerCode]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[PartnerCode]" name="PartnerCode" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].Columns[DelimiterBreachFlag]" cachedDataType="wstr" cachedLength="1" cachedName="DelimiterBreachFlag" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterBreachFlag]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[DelimiterBreachFlag]" name="DelimiterBreachFlag" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].Columns[UnparsableDateFlag]" cachedDataType="wstr" cachedLength="1" cachedName="UnparsableDateFlag" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[UnparsableDateFlag]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableDateFlag]" name="UnparsableDateFlag" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].Columns[UnparsableAmountFlag]" cachedDataType="wstr" cachedLength="1" cachedName="UnparsableAmountFlag" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[UnparsableAmountFlag]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableAmountFlag]" name="UnparsableAmountFlag" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].Columns[HighBitFlag]" cachedDataType="wstr" cachedLength="1" cachedName="HighBitFlag" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[HighBitFlag]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[HighBitFlag]" name="HighBitFlag" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].Columns[RejectReasonCode]" cachedDataType="wstr" cachedLength="30" cachedName="RejectReasonCode" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[RejectReasonCode]" name="RejectReasonCode" />
+                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].Columns[BatchId]" cachedDataType="i8" cachedName="BatchId" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[BatchId]" lineageId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Outputs[Derived Column Output].Columns[BatchId]" name="BatchId" />
+                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="260" cachedName="SourceFileName" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SourceFileName]" name="SourceFileName" />
+                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].Columns[SourceRowNumber]" cachedDataType="i8" cachedName="SourceRowNumber" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[SourceRowNumber]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SourceRowNumber]" name="SourceRowNumber" />
+                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].Columns[RejectReasonCode]" cachedDataType="wstr" cachedLength="50" cachedName="RejectReasonCode" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Outputs[Derived Column Output].Columns[RejectReasonCode]" name="RejectReasonCode" />
+                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].Columns[RejectReason]" cachedDataType="wstr" cachedLength="500" cachedName="RejectReason" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[RejectReason]" lineageId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Outputs[Derived Column Output].Columns[RejectReason]" name="RejectReason" />
+                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].Columns[RejectStage]" cachedDataType="wstr" cachedLength="50" cachedName="RejectStage" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[RejectStage]" lineageId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Outputs[Derived Column Output].Columns[RejectStage]" name="RejectStage" />
                 </inputColumns>
                 <externalMetadataColumns isUsed="True">
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[FileRowId]" dataType="i8" name="FileRowId" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="200" name="SourceFileName" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[FileLineNumber]" dataType="i4" name="FileLineNumber" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[RawLine]" dataType="wstr" length="1000" name="RawLine" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterCount]" dataType="i4" name="DelimiterCount" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[SaleDateText]" dataType="wstr" length="20" name="SaleDateText" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[AmountText]" dataType="wstr" length="20" name="AmountText" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[PartnerCode]" dataType="wstr" length="10" name="PartnerCode" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterBreachFlag]" dataType="wstr" length="1" name="DelimiterBreachFlag" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[UnparsableDateFlag]" dataType="wstr" length="1" name="UnparsableDateFlag" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[UnparsableAmountFlag]" dataType="wstr" length="1" name="UnparsableAmountFlag" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[HighBitFlag]" dataType="wstr" length="1" name="HighBitFlag" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" dataType="wstr" length="30" name="RejectReasonCode" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[RejectId]" dataType="i8" name="RejectId" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[BatchId]" dataType="i8" name="BatchId" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="260" name="SourceFileName" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[FileFormatVersion]" dataType="wstr" length="10" name="FileFormatVersion" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[SourceRowNumber]" dataType="i8" name="SourceRowNumber" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[RawRowText]" dataType="nText" name="RawRowText" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedColumnCount]" dataType="i2" name="ExpectedColumnCount" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[ActualColumnCount]" dataType="i2" name="ActualColumnCount" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterUsed]" dataType="wstr" length="10" name="DelimiterUsed" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[DecimalSeparatorUsed]" dataType="wstr" length="5" name="DecimalSeparatorUsed" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[DateFormatAssumed]" dataType="wstr" length="20" name="DateFormatAssumed" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" dataType="wstr" length="50" name="RejectReasonCode" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[RejectReason]" dataType="wstr" length="500" name="RejectReason" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[RejectStage]" dataType="wstr" length="50" name="RejectStage" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[ReprocessStatusCode]" dataType="wstr" length="20" name="ReprocessStatusCode" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[ReprocessAttemptCount]" dataType="i2" name="ReprocessAttemptCount" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[ReprocessedInBatchId]" dataType="i8" name="ReprocessedInBatchId" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input].ExternalColumns[RejectedAtUtc]" dataType="dbTimeStamp2" scale="3" name="RejectedAtUtc" />
                 </externalMetadataColumns>
               </input>
             </inputs>
             <outputs>
-              <output refId="Package\DFT Screen Partner File\ERR File Delimiters.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+              <output refId="Package\DFT Screen Partner File\ERR File Incomplete.Outputs[OLE DB Destination Error Output]" exclusionGroup="1" isErrorOut="true" name="OLE DB Destination Error Output" synchronousInputId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Outputs[OLE DB Destination Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Screen Partner File\ERR File Incomplete.Outputs[OLE DB Destination Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Screen Partner File\ERR File Incomplete.Outputs[OLE DB Destination Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Screen Partner File\ERR File Incomplete.Outputs[OLE DB Destination Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="2" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Screen Partner File\Describe File Date Reject" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Describe File Date Reject" usesDispositions="true">
+            <inputs>
+              <input refId="Package\DFT Screen Partner File\Describe File Date Reject.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Screen Partner File\Describe File Date Reject.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\DFT Screen Partner File\Describe File Date Reject.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Date Reject.Outputs[Derived Column Output].Columns[BatchId]" dataType="i8" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Describe File Date Reject.Outputs[Derived Column Output].Columns[BatchId]" name="BatchId" truncationRowDisposition="FailComponent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[$Package::BatchId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[$Package::BatchId]</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Date Reject.Outputs[Derived Column Output].Columns[RejectReason]" dataType="wstr" length="500" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Describe File Date Reject.Outputs[Derived Column Output].Columns[RejectReason]" name="RejectReason" truncationRowDisposition="FailComponent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"The landed transaction date is not a recognisable date."</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"The landed transaction date is not a recognisable date."</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Date Reject.Outputs[Derived Column Output].Columns[RejectStage]" dataType="wstr" length="50" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Describe File Date Reject.Outputs[Derived Column Output].Columns[RejectStage]" name="RejectStage" truncationRowDisposition="FailComponent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"Screen"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"Screen"</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\DFT Screen Partner File\Describe File Date Reject.Outputs[Derived Column Error Output]" exclusionGroup="1" isErrorOut="true" name="Derived Column Error Output" synchronousInputId="Package\DFT Screen Partner File\Describe File Date Reject.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Date Reject.Outputs[Derived Column Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Screen Partner File\Describe File Date Reject.Outputs[Derived Column Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Date Reject.Outputs[Derived Column Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Screen Partner File\Describe File Date Reject.Outputs[Derived Column Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="2" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
             </outputs>
           </component>
           <component refId="Package\DFT Screen Partner File\ERR File Date" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="ERR File Date" usesDispositions="true" version="4">
             <properties>
               <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
               <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedFileRow]</property>
+              <property dataType="System.String" description="Specifies the variable that contains the name of the database object used to open a rowset." name="OpenRowsetVariable"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand"></property>
+              <property dataType="System.Boolean" description="Forces the use of the DefaultCodePage property value when describing character data." name="AlwaysUseDefaultCodePage">false</property>
+              <property dataType="System.Boolean" description="Indicates whether the columns containing null will have null inserted in the destination." name="FastLoadKeepNulls">false</property>
               <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
               <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
               <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
@@ -523,45 +735,92 @@ FROM raw.FilePartnerSales WHERE BatchId = ?;</property>
             <inputs>
               <input refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
                 <inputColumns>
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[FileRowId]" cachedDataType="i8" cachedName="FileRowId" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[FileRowId]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[FileRowId]" name="FileRowId" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="200" cachedName="SourceFileName" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SourceFileName]" name="SourceFileName" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[FileLineNumber]" cachedDataType="i4" cachedName="FileLineNumber" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[FileLineNumber]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[FileLineNumber]" name="FileLineNumber" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[RawLine]" cachedDataType="wstr" cachedLength="1000" cachedName="RawLine" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[RawLine]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[RawLine]" name="RawLine" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[DelimiterCount]" cachedDataType="i4" cachedName="DelimiterCount" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterCount]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[DelimiterCount]" name="DelimiterCount" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[SaleDateText]" cachedDataType="wstr" cachedLength="20" cachedName="SaleDateText" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[SaleDateText]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SaleDateText]" name="SaleDateText" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[AmountText]" cachedDataType="wstr" cachedLength="20" cachedName="AmountText" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[AmountText]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[AmountText]" name="AmountText" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[PartnerCode]" cachedDataType="wstr" cachedLength="10" cachedName="PartnerCode" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[PartnerCode]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[PartnerCode]" name="PartnerCode" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[DelimiterBreachFlag]" cachedDataType="wstr" cachedLength="1" cachedName="DelimiterBreachFlag" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterBreachFlag]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[DelimiterBreachFlag]" name="DelimiterBreachFlag" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[UnparsableDateFlag]" cachedDataType="wstr" cachedLength="1" cachedName="UnparsableDateFlag" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[UnparsableDateFlag]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableDateFlag]" name="UnparsableDateFlag" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[UnparsableAmountFlag]" cachedDataType="wstr" cachedLength="1" cachedName="UnparsableAmountFlag" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[UnparsableAmountFlag]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableAmountFlag]" name="UnparsableAmountFlag" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[HighBitFlag]" cachedDataType="wstr" cachedLength="1" cachedName="HighBitFlag" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[HighBitFlag]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[HighBitFlag]" name="HighBitFlag" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[RejectReasonCode]" cachedDataType="wstr" cachedLength="30" cachedName="RejectReasonCode" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[RejectReasonCode]" name="RejectReasonCode" />
+                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[BatchId]" cachedDataType="i8" cachedName="BatchId" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[BatchId]" lineageId="Package\DFT Screen Partner File\Describe File Date Reject.Outputs[Derived Column Output].Columns[BatchId]" name="BatchId" />
+                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="260" cachedName="SourceFileName" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SourceFileName]" name="SourceFileName" />
+                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[SourceRowNumber]" cachedDataType="i8" cachedName="SourceRowNumber" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[SourceRowNumber]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SourceRowNumber]" name="SourceRowNumber" />
+                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[RejectReasonCode]" cachedDataType="wstr" cachedLength="50" cachedName="RejectReasonCode" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Outputs[Derived Column Output].Columns[RejectReasonCode]" name="RejectReasonCode" />
+                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[RejectReason]" cachedDataType="wstr" cachedLength="500" cachedName="RejectReason" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[RejectReason]" lineageId="Package\DFT Screen Partner File\Describe File Date Reject.Outputs[Derived Column Output].Columns[RejectReason]" name="RejectReason" />
+                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].Columns[RejectStage]" cachedDataType="wstr" cachedLength="50" cachedName="RejectStage" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[RejectStage]" lineageId="Package\DFT Screen Partner File\Describe File Date Reject.Outputs[Derived Column Output].Columns[RejectStage]" name="RejectStage" />
                 </inputColumns>
                 <externalMetadataColumns isUsed="True">
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[FileRowId]" dataType="i8" name="FileRowId" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="200" name="SourceFileName" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[FileLineNumber]" dataType="i4" name="FileLineNumber" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[RawLine]" dataType="wstr" length="1000" name="RawLine" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterCount]" dataType="i4" name="DelimiterCount" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[SaleDateText]" dataType="wstr" length="20" name="SaleDateText" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[AmountText]" dataType="wstr" length="20" name="AmountText" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[PartnerCode]" dataType="wstr" length="10" name="PartnerCode" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterBreachFlag]" dataType="wstr" length="1" name="DelimiterBreachFlag" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[UnparsableDateFlag]" dataType="wstr" length="1" name="UnparsableDateFlag" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[UnparsableAmountFlag]" dataType="wstr" length="1" name="UnparsableAmountFlag" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[HighBitFlag]" dataType="wstr" length="1" name="HighBitFlag" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" dataType="wstr" length="30" name="RejectReasonCode" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[RejectId]" dataType="i8" name="RejectId" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[BatchId]" dataType="i8" name="BatchId" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="260" name="SourceFileName" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[FileFormatVersion]" dataType="wstr" length="10" name="FileFormatVersion" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[SourceRowNumber]" dataType="i8" name="SourceRowNumber" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[RawRowText]" dataType="nText" name="RawRowText" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedColumnCount]" dataType="i2" name="ExpectedColumnCount" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[ActualColumnCount]" dataType="i2" name="ActualColumnCount" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterUsed]" dataType="wstr" length="10" name="DelimiterUsed" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[DecimalSeparatorUsed]" dataType="wstr" length="5" name="DecimalSeparatorUsed" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[DateFormatAssumed]" dataType="wstr" length="20" name="DateFormatAssumed" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" dataType="wstr" length="50" name="RejectReasonCode" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[RejectReason]" dataType="wstr" length="500" name="RejectReason" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[RejectStage]" dataType="wstr" length="50" name="RejectStage" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[ReprocessStatusCode]" dataType="wstr" length="20" name="ReprocessStatusCode" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[ReprocessAttemptCount]" dataType="i2" name="ReprocessAttemptCount" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[ReprocessedInBatchId]" dataType="i8" name="ReprocessedInBatchId" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input].ExternalColumns[RejectedAtUtc]" dataType="dbTimeStamp2" scale="3" name="RejectedAtUtc" />
                 </externalMetadataColumns>
               </input>
             </inputs>
             <outputs>
-              <output refId="Package\DFT Screen Partner File\ERR File Date.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+              <output refId="Package\DFT Screen Partner File\ERR File Date.Outputs[OLE DB Destination Error Output]" exclusionGroup="1" isErrorOut="true" name="OLE DB Destination Error Output" synchronousInputId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Screen Partner File\ERR File Date.Outputs[OLE DB Destination Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Screen Partner File\ERR File Date.Outputs[OLE DB Destination Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Screen Partner File\ERR File Date.Outputs[OLE DB Destination Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Screen Partner File\ERR File Date.Outputs[OLE DB Destination Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="2" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+            </outputs>
+          </component>
+          <component refId="Package\DFT Screen Partner File\Describe File Amount Reject" componentClassID="Microsoft.DerivedColumn" description="Derived Column" name="Describe File Amount Reject" usesDispositions="true">
+            <inputs>
+              <input refId="Package\DFT Screen Partner File\Describe File Amount Reject.Inputs[Derived Column Input]" name="Derived Column Input" />
+            </inputs>
+            <outputs>
+              <output refId="Package\DFT Screen Partner File\Describe File Amount Reject.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\DFT Screen Partner File\Describe File Amount Reject.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Amount Reject.Outputs[Derived Column Output].Columns[BatchId]" dataType="i8" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Describe File Amount Reject.Outputs[Derived Column Output].Columns[BatchId]" name="BatchId" truncationRowDisposition="FailComponent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">@[$Package::BatchId]</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">@[$Package::BatchId]</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Amount Reject.Outputs[Derived Column Output].Columns[RejectReason]" dataType="wstr" length="500" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Describe File Amount Reject.Outputs[Derived Column Output].Columns[RejectReason]" name="RejectReason" truncationRowDisposition="FailComponent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"The landed gross amount is not a parsable amount."</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"The landed gross amount is not a parsable amount."</property>
+                    </properties>
+                  </outputColumn>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Amount Reject.Outputs[Derived Column Output].Columns[RejectStage]" dataType="wstr" length="50" errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId="Package\DFT Screen Partner File\Describe File Amount Reject.Outputs[Derived Column Output].Columns[RejectStage]" name="RejectStage" truncationRowDisposition="FailComponent">
+                    <properties>
+                      <property dataType="System.String" description="The expression used to compute this column." name="Expression">"Screen"</property>
+                      <property dataType="System.String" description="The expression as displayed in the designer." name="FriendlyExpression">"Screen"</property>
+                    </properties>
+                  </outputColumn>
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
+              <output refId="Package\DFT Screen Partner File\Describe File Amount Reject.Outputs[Derived Column Error Output]" exclusionGroup="1" isErrorOut="true" name="Derived Column Error Output" synchronousInputId="Package\DFT Screen Partner File\Describe File Amount Reject.Inputs[Derived Column Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Amount Reject.Outputs[Derived Column Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Screen Partner File\Describe File Amount Reject.Outputs[Derived Column Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Screen Partner File\Describe File Amount Reject.Outputs[Derived Column Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Screen Partner File\Describe File Amount Reject.Outputs[Derived Column Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="2" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
             </outputs>
           </component>
           <component refId="Package\DFT Screen Partner File\ERR File Amount" componentClassID="Microsoft.OLEDBDestination" contactInfo="OLE DB Destination" description="OLE DB Destination" name="ERR File Amount" usesDispositions="true" version="4">
             <properties>
               <property dataType="System.Int32" description="Command timeout in seconds." name="CommandTimeout">0</property>
               <property dataType="System.String" description="Specifies the name of the database object used to open a rowset." name="OpenRowset">[err].[RejectedFileRow]</property>
+              <property dataType="System.String" description="Specifies the variable that contains the name of the database object used to open a rowset." name="OpenRowsetVariable"></property>
+              <property dataType="System.String" description="The SQL command to be executed." name="SqlCommand"></property>
+              <property dataType="System.Boolean" description="Forces the use of the DefaultCodePage property value when describing character data." name="AlwaysUseDefaultCodePage">false</property>
+              <property dataType="System.Boolean" description="Indicates whether the columns containing null will have null inserted in the destination." name="FastLoadKeepNulls">false</property>
               <property dataType="System.Int32" description="Specifies the mode used to access the database." name="AccessMode">3</property>
               <property dataType="System.Boolean" description="Keep identity values." name="FastLoadKeepIdentity">false</property>
               <property dataType="System.String" description="Options used with fast load." name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
@@ -574,51 +833,62 @@ FROM raw.FilePartnerSales WHERE BatchId = ?;</property>
             <inputs>
               <input refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input]" errorOrTruncationOperation="Insert" errorRowDisposition="FailComponent" hasSideEffects="true" name="OLE DB Destination Input">
                 <inputColumns>
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[FileRowId]" cachedDataType="i8" cachedName="FileRowId" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[FileRowId]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[FileRowId]" name="FileRowId" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="200" cachedName="SourceFileName" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SourceFileName]" name="SourceFileName" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[FileLineNumber]" cachedDataType="i4" cachedName="FileLineNumber" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[FileLineNumber]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[FileLineNumber]" name="FileLineNumber" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[RawLine]" cachedDataType="wstr" cachedLength="1000" cachedName="RawLine" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[RawLine]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[RawLine]" name="RawLine" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[DelimiterCount]" cachedDataType="i4" cachedName="DelimiterCount" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterCount]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[DelimiterCount]" name="DelimiterCount" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[SaleDateText]" cachedDataType="wstr" cachedLength="20" cachedName="SaleDateText" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[SaleDateText]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SaleDateText]" name="SaleDateText" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[AmountText]" cachedDataType="wstr" cachedLength="20" cachedName="AmountText" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[AmountText]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[AmountText]" name="AmountText" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[PartnerCode]" cachedDataType="wstr" cachedLength="10" cachedName="PartnerCode" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[PartnerCode]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[PartnerCode]" name="PartnerCode" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[DelimiterBreachFlag]" cachedDataType="wstr" cachedLength="1" cachedName="DelimiterBreachFlag" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterBreachFlag]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[DelimiterBreachFlag]" name="DelimiterBreachFlag" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[UnparsableDateFlag]" cachedDataType="wstr" cachedLength="1" cachedName="UnparsableDateFlag" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[UnparsableDateFlag]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableDateFlag]" name="UnparsableDateFlag" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[UnparsableAmountFlag]" cachedDataType="wstr" cachedLength="1" cachedName="UnparsableAmountFlag" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[UnparsableAmountFlag]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[UnparsableAmountFlag]" name="UnparsableAmountFlag" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[HighBitFlag]" cachedDataType="wstr" cachedLength="1" cachedName="HighBitFlag" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[HighBitFlag]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[HighBitFlag]" name="HighBitFlag" />
-                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[RejectReasonCode]" cachedDataType="wstr" cachedLength="30" cachedName="RejectReasonCode" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output].Columns[RejectReasonCode]" name="RejectReasonCode" />
+                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[BatchId]" cachedDataType="i8" cachedName="BatchId" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[BatchId]" lineageId="Package\DFT Screen Partner File\Describe File Amount Reject.Outputs[Derived Column Output].Columns[BatchId]" name="BatchId" />
+                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[SourceFileName]" cachedDataType="wstr" cachedLength="260" cachedName="SourceFileName" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SourceFileName]" name="SourceFileName" />
+                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[SourceRowNumber]" cachedDataType="i8" cachedName="SourceRowNumber" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[SourceRowNumber]" lineageId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output].Columns[SourceRowNumber]" name="SourceRowNumber" />
+                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[RejectReasonCode]" cachedDataType="wstr" cachedLength="50" cachedName="RejectReasonCode" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" lineageId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Outputs[Derived Column Output].Columns[RejectReasonCode]" name="RejectReasonCode" />
+                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[RejectReason]" cachedDataType="wstr" cachedLength="500" cachedName="RejectReason" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[RejectReason]" lineageId="Package\DFT Screen Partner File\Describe File Amount Reject.Outputs[Derived Column Output].Columns[RejectReason]" name="RejectReason" />
+                  <inputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].Columns[RejectStage]" cachedDataType="wstr" cachedLength="50" cachedName="RejectStage" externalMetadataColumnId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[RejectStage]" lineageId="Package\DFT Screen Partner File\Describe File Amount Reject.Outputs[Derived Column Output].Columns[RejectStage]" name="RejectStage" />
                 </inputColumns>
                 <externalMetadataColumns isUsed="True">
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[FileRowId]" dataType="i8" name="FileRowId" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="200" name="SourceFileName" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[FileLineNumber]" dataType="i4" name="FileLineNumber" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[RawLine]" dataType="wstr" length="1000" name="RawLine" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterCount]" dataType="i4" name="DelimiterCount" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[SaleDateText]" dataType="wstr" length="20" name="SaleDateText" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[AmountText]" dataType="wstr" length="20" name="AmountText" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[PartnerCode]" dataType="wstr" length="10" name="PartnerCode" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterBreachFlag]" dataType="wstr" length="1" name="DelimiterBreachFlag" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[UnparsableDateFlag]" dataType="wstr" length="1" name="UnparsableDateFlag" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[UnparsableAmountFlag]" dataType="wstr" length="1" name="UnparsableAmountFlag" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[HighBitFlag]" dataType="wstr" length="1" name="HighBitFlag" />
-                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" dataType="wstr" length="30" name="RejectReasonCode" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[RejectId]" dataType="i8" name="RejectId" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[BatchId]" dataType="i8" name="BatchId" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[PackageExecutionId]" dataType="i8" name="PackageExecutionId" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[SourceSystemCode]" dataType="wstr" length="20" name="SourceSystemCode" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[SourceFileName]" dataType="wstr" length="260" name="SourceFileName" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[FileFormatVersion]" dataType="wstr" length="10" name="FileFormatVersion" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[SourceRowNumber]" dataType="i8" name="SourceRowNumber" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[RawRowText]" dataType="nText" name="RawRowText" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[ExpectedColumnCount]" dataType="i2" name="ExpectedColumnCount" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[ActualColumnCount]" dataType="i2" name="ActualColumnCount" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[DelimiterUsed]" dataType="wstr" length="10" name="DelimiterUsed" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[DecimalSeparatorUsed]" dataType="wstr" length="5" name="DecimalSeparatorUsed" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[DateFormatAssumed]" dataType="wstr" length="20" name="DateFormatAssumed" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[RejectReasonCode]" dataType="wstr" length="50" name="RejectReasonCode" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[RejectReason]" dataType="wstr" length="500" name="RejectReason" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[RejectStage]" dataType="wstr" length="50" name="RejectStage" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[ReprocessStatusCode]" dataType="wstr" length="20" name="ReprocessStatusCode" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[ReprocessAttemptCount]" dataType="i2" name="ReprocessAttemptCount" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[ReprocessedInBatchId]" dataType="i8" name="ReprocessedInBatchId" />
+                  <externalMetadataColumn refId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input].ExternalColumns[RejectedAtUtc]" dataType="dbTimeStamp2" scale="3" name="RejectedAtUtc" />
                 </externalMetadataColumns>
               </input>
             </inputs>
             <outputs>
-              <output refId="Package\DFT Screen Partner File\ERR File Amount.Outputs[OLE DB Destination Error Output]" isErrorOut="true" name="OLE DB Destination Error Output" />
+              <output refId="Package\DFT Screen Partner File\ERR File Amount.Outputs[OLE DB Destination Error Output]" exclusionGroup="1" isErrorOut="true" name="OLE DB Destination Error Output" synchronousInputId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input]">
+                <outputColumns>
+                  <outputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Outputs[OLE DB Destination Error Output].Columns[ErrorCode]" dataType="i4" lineageId="Package\DFT Screen Partner File\ERR File Amount.Outputs[OLE DB Destination Error Output].Columns[ErrorCode]" name="ErrorCode" specialFlags="1" />
+                  <outputColumn refId="Package\DFT Screen Partner File\ERR File Amount.Outputs[OLE DB Destination Error Output].Columns[ErrorColumn]" dataType="i4" lineageId="Package\DFT Screen Partner File\ERR File Amount.Outputs[OLE DB Destination Error Output].Columns[ErrorColumn]" name="ErrorColumn" specialFlags="2" />
+                </outputColumns>
+                <externalMetadataColumns />
+              </output>
             </outputs>
           </component>
         </components>
         <paths>
           <path refId="Package\DFT Screen Partner File.Paths[OLE DB Source Output]" endId="Package\DFT Screen Partner File\Count File Rows Screened.Inputs[Row Count Input]" name="OLE DB Source Output" startId="Package\DFT Screen Partner File\RAW File Partner Sales.Outputs[OLE DB Source Output]" />
           <path refId="Package\DFT Screen Partner File.Paths[Row Count Output]" endId="Package\DFT Screen Partner File\Evaluate File Row Rules.Inputs[Derived Column Input]" name="Row Count Output" startId="Package\DFT Screen Partner File\Count File Rows Screened.Outputs[Row Count Output]" />
-          <path refId="Package\DFT Screen Partner File.Paths[Derived Column Output]" endId="Package\DFT Screen Partner File\Route File Failures.Inputs[Conditional Split Input]" name="Derived Column Output" startId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output]" />
+          <path refId="Package\DFT Screen Partner File.Paths[Derived Column Output]" endId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Inputs[Derived Column Input]" name="Derived Column Output" startId="Package\DFT Screen Partner File\Evaluate File Row Rules.Outputs[Derived Column Output]" />
+          <path refId="Package\DFT Screen Partner File.Paths[Derived Column Output 1]" endId="Package\DFT Screen Partner File\Route File Failures.Inputs[Conditional Split Input]" name="Derived Column Output 1" startId="Package\DFT Screen Partner File\Evaluate File Row Rules 2.Outputs[Derived Column Output]" />
           <path refId="Package\DFT Screen Partner File.Paths[Well Formed Row]" endId="Package\DFT Screen Partner File\Count File Rows Passing.Inputs[Row Count Input]" name="Well Formed Row" startId="Package\DFT Screen Partner File\Route File Failures.Outputs[Well Formed Row]" />
-          <path refId="Package\DFT Screen Partner File.Paths[Row Count Output 1]" endId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input]" name="Row Count Output 1" startId="Package\DFT Screen Partner File\Count File Rows Passing.Outputs[Row Count Output]" />
-          <path refId="Package\DFT Screen Partner File.Paths[Malformed Delimiters]" endId="Package\DFT Screen Partner File\ERR File Delimiters.Inputs[OLE DB Destination Input]" name="Malformed Delimiters" startId="Package\DFT Screen Partner File\Route File Failures.Outputs[Malformed Delimiters]" />
-          <path refId="Package\DFT Screen Partner File.Paths[Unparsable Date]" endId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input]" name="Unparsable Date" startId="Package\DFT Screen Partner File\Route File Failures.Outputs[Unparsable Date]" />
-          <path refId="Package\DFT Screen Partner File.Paths[Unparsable Amount]" endId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input]" name="Unparsable Amount" startId="Package\DFT Screen Partner File\Route File Failures.Outputs[Unparsable Amount]" />
+          <path refId="Package\DFT Screen Partner File.Paths[Row Count Output 1]" endId="Package\DFT Screen Partner File\Describe File Screen Result.Inputs[Derived Column Input]" name="Row Count Output 1" startId="Package\DFT Screen Partner File\Count File Rows Passing.Outputs[Row Count Output]" />
+          <path refId="Package\DFT Screen Partner File.Paths[Derived Column Output 2]" endId="Package\DFT Screen Partner File\DQ File Pass Log.Inputs[OLE DB Destination Input]" name="Derived Column Output 2" startId="Package\DFT Screen Partner File\Describe File Screen Result.Outputs[Derived Column Output]" />
+          <path refId="Package\DFT Screen Partner File.Paths[Incomplete Row]" endId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Inputs[Derived Column Input]" name="Incomplete Row" startId="Package\DFT Screen Partner File\Route File Failures.Outputs[Incomplete Row]" />
+          <path refId="Package\DFT Screen Partner File.Paths[Derived Column Output 3]" endId="Package\DFT Screen Partner File\ERR File Incomplete.Inputs[OLE DB Destination Input]" name="Derived Column Output 3" startId="Package\DFT Screen Partner File\Describe File Incomplete Reject.Outputs[Derived Column Output]" />
+          <path refId="Package\DFT Screen Partner File.Paths[Unparsable Date]" endId="Package\DFT Screen Partner File\Describe File Date Reject.Inputs[Derived Column Input]" name="Unparsable Date" startId="Package\DFT Screen Partner File\Route File Failures.Outputs[Unparsable Date]" />
+          <path refId="Package\DFT Screen Partner File.Paths[Derived Column Output 4]" endId="Package\DFT Screen Partner File\ERR File Date.Inputs[OLE DB Destination Input]" name="Derived Column Output 4" startId="Package\DFT Screen Partner File\Describe File Date Reject.Outputs[Derived Column Output]" />
+          <path refId="Package\DFT Screen Partner File.Paths[Unparsable Amount]" endId="Package\DFT Screen Partner File\Describe File Amount Reject.Inputs[Derived Column Input]" name="Unparsable Amount" startId="Package\DFT Screen Partner File\Route File Failures.Outputs[Unparsable Amount]" />
+          <path refId="Package\DFT Screen Partner File.Paths[Derived Column Output 5]" endId="Package\DFT Screen Partner File\ERR File Amount.Inputs[OLE DB Destination Input]" name="Derived Column Output 5" startId="Package\DFT Screen Partner File\Describe File Amount Reject.Outputs[Derived Column Output]" />
         </paths>
       </pipeline>
       </DTS:ObjectData>
@@ -636,7 +906,7 @@ FROM raw.FilePartnerSales WHERE BatchId = ?;</property>
       <DTS:ObjectData>
       <SQLTask:SqlTaskData
         SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
-        SQLTask:SqlStatementSource="DECLARE @RejectId BIGINT, @Key NVARCHAR(200), @Reason NVARCHAR(50);&#10;DECLARE dq_cur CURSOR LOCAL FAST_FORWARD FOR&#10;    SELECT r.RejectedRowId, r.BusinessKey, r.RejectReasonCode&#10;    FROM [err].[RejectedFileRow] AS r&#10;    WHERE r.BatchId = ? AND r.LoggedToControl = 0;&#10;OPEN dq_cur;&#10;FETCH NEXT FROM dq_cur INTO @RejectId, @Key, @Reason;&#10;WHILE @@FETCH_STATUS = 0&#10;BEGIN&#10;    EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @BatchId = ?, @SourceSystemCode = ?, @ObjectName = N'raw.FilePartnerSales', @BusinessKey = @Key, @RejectReasonCode = @Reason, @RejectStage = N'Extract';&#10;    UPDATE [err].[RejectedFileRow] SET LoggedToControl = 1 WHERE RejectedRowId = @RejectId;&#10;    FETCH NEXT FROM dq_cur INTO @RejectId, @Key, @Reason;&#10;END&#10;CLOSE dq_cur;&#10;DEALLOCATE dq_cur;"
+        SQLTask:SqlStatementSource="DECLARE @BatchId BIGINT = ?, @Filter NVARCHAR(1000), @RejectedRowCount BIGINT;&#10;SET @Filter = N'BatchId = ' + CAST(@BatchId AS NVARCHAR(20));&#10;EXEC etl.usp_LogRejectedRecordSet @ObjectName = N'raw.FilePartnerSales', @BatchId = @BatchId,&#10;     @PackageExecutionId = ?, @SourceSystemCode = ?, @RejectStage = N'Extract',&#10;     @SourceTable = N'err.RejectedFileRow', @SourceFilter = @Filter,&#10;     @RejectedRowCount = @RejectedRowCount OUTPUT;"
         SQLTask:ResultType="ResultSetType_None"
         SQLTask:TimeOut="0"
         SQLTask:SqlStmtSourceType="DirectInput"
@@ -644,25 +914,24 @@ FROM raw.FilePartnerSales WHERE BatchId = ?;</property>
         xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
         <SQLTask:ParameterBinding SQLTask:ParameterName="0" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="3" SQLTask:ParameterSize="-1" />
         <SQLTask:ParameterBinding SQLTask:ParameterName="1" SQLTask:DtsVariableName="User::PackageExecutionId" SQLTask:ParameterDirection="Input" SQLTask:DataType="3" SQLTask:ParameterSize="-1" />
-        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::BatchId" SQLTask:ParameterDirection="Input" SQLTask:DataType="3" SQLTask:ParameterSize="-1" />
-        <SQLTask:ParameterBinding SQLTask:ParameterName="3" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="130" SQLTask:ParameterSize="4000" />
+        <SQLTask:ParameterBinding SQLTask:ParameterName="2" SQLTask:DtsVariableName="$Package::SourceSystemCode" SQLTask:ParameterDirection="Input" SQLTask:DataType="130" SQLTask:ParameterSize="4000" />
       </SQLTask:SqlTaskData>
       </DTS:ObjectData>
     </DTS:Executable>
     <DTS:Executable
-      DTS:refId="Package\Evaluate Rules - FILEROW"
+      DTS:refId="Package\Evaluate Rules - FILE"
       DTS:CreationName="Microsoft.ExecuteSQLTask"
       DTS:Description="Execute SQL Task"
-      DTS:DTSID="{1FC9A5C6-177A-822C-A799-D8A5E1BADC06}"
+      DTS:DTSID="{52135AA5-5E3F-C095-93A9-B8FD9CA8DF23}"
       DTS:ExecutableType="Microsoft.ExecuteSQLTask"
       DTS:LocaleID="-1"
-      DTS:ObjectName="Evaluate Rules - FILEROW"
+      DTS:ObjectName="Evaluate Rules - FILE"
       DTS:ThreadHint="0">
       <DTS:Variables />
       <DTS:ObjectData>
       <SQLTask:SqlTaskData
         SQLTask:Connection="{E4540100-D4C7-0578-F0D3-C329706F8FFE}"
-        SQLTask:SqlStatementSource="EXEC etl.usp_EvaluateDataQualityRules @BatchId = ?, @PackageExecutionId = ?, @RuleGroupCode = N'FILEROW', @ObjectName = N'raw.FilePartnerSales', @FailedRuleCount = ? OUTPUT;"
+        SQLTask:SqlStatementSource="EXEC etl.usp_EvaluateDataQualityRules @BatchId = ?, @PackageExecutionId = ?, @RuleGroupCode = N'FILE', @ObjectName = N'err.RejectedFileRow', @FailedRuleCount = ? OUTPUT;"
         SQLTask:ResultType="ResultSetType_None"
         SQLTask:TimeOut="0"
         SQLTask:SqlStmtSourceType="DirectInput"
@@ -810,12 +1079,12 @@ FROM raw.FilePartnerSales WHERE BatchId = ?;</property>
       DTS:From="Package\Register Quality Rejects - raw_FilePartnerSales"
       DTS:LogicalAnd="True"
       DTS:ObjectName="Constraint 3"
-      DTS:To="Package\Evaluate Rules - FILEROW" />
+      DTS:To="Package\Evaluate Rules - FILE" />
     <DTS:PrecedenceConstraint
       DTS:refId="Package.PrecedenceConstraints[Constraint 4]"
       DTS:CreationName=""
       DTS:DTSID="{ECE947C3-894C-50BE-8D5D-A80F2E4D9C27}"
-      DTS:From="Package\Evaluate Rules - FILEROW"
+      DTS:From="Package\Evaluate Rules - FILE"
       DTS:LogicalAnd="True"
       DTS:ObjectName="Constraint 4"
       DTS:To="Package\Log Row Counts" />

@@ -32,6 +32,7 @@ from ssisgen import (  # noqa: E402
     Expression,
     bigint_col,
     date_col,
+    day_col,
     int_col,
     money_col,
     str_col,
@@ -186,7 +187,9 @@ def stg_load_customer():
         "       CREDIT_CCY, CREATED_DT, LAST_UPD_DT\n"
         "FROM raw.OracleCustomerMaster\n"
         "WHERE BatchId = ? AND NULLIF(LTRIM(RTRIM(CUST_CODE)), '') IS NOT NULL;",
-        src_cols, timeout=3600)
+        src_cols, timeout=3600,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Rows Read", "User::RowsRead")
     flow.derived_column("Cleanse Customer Attributes", [
         ("CustomerCode", 'UPPER(TRIM(CUST_CODE))', str_col("CustomerCode", 20)),
@@ -275,7 +278,7 @@ def stg_load_customer_address():
             "       POSTAL_CD, COUNTRY_CD, REGION_CD, EFF_FROM_DT\n"
             "FROM raw.OracleCustomerAddress\n"
             "WHERE BatchId = ? AND UPPER(LTRIM(RTRIM(REGION_CD))) = N'%s';" % region,
-            cols)
+            cols, parameters=("$Package::BatchId",))
         flow.row_count("Count %s Rows Read" % region, "User::RowsRead")
         flow.derived_column("Standardize %s Address" % region, derivations)
         flow.lookup(
@@ -382,7 +385,9 @@ def stg_load_supplier():
         "FROM raw.OracleSupplierMaster\n"
         "WHERE BatchId = ?\n"
         "ORDER BY TAX_ID, LAST_UPD_DT DESC;",
-        cols)
+        cols,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Rows Read", "User::RowsRead")
     flow.derived_column("Cleanse Supplier Attributes", [
         ("SupplierCode", 'UPPER(TRIM(SUPP_CODE))', str_col("SupplierCode", 20)),
@@ -401,7 +406,7 @@ def stg_load_supplier():
     flow.lookup(
         "Lookup Payment Terms (Partial Cache)", CONN_STAGING,
         "SELECT PaymentTermsCode, NetDays, DiscountPercent, DiscountDays\n"
-        "FROM stg.PaymentTerms WHERE IsCurrent = 1;",
+        "FROM stg.PaymentTerms WHERE IsActive = 1;",
         ["PaymentTermsCode"],
         [int_col("NetDays"), dec_col("DiscountPercent", 9, 4), int_col("DiscountDays")],
         no_match="RD")
@@ -454,7 +459,9 @@ def stg_load_product():
         "SELECT PROD_CODE, PROD_DESC, PROD_FAMILY_CD, BASE_UOM_CD, PACK_QTY, LIST_PRICE_AMT,\n"
         "       LIST_PRICE_CCY, NET_WEIGHT, WEIGHT_UOM_CD, HAZMAT_FLG, DISCONTINUED_FLG, LAST_UPD_DT\n"
         "FROM raw.OracleProductMaster WHERE BatchId = ?;",
-        cols)
+        cols,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Rows Read", "User::RowsRead")
     flow.derived_column("Cleanse Product Attributes", [
         ("ProductCode", 'UPPER(TRIM(PROD_CODE))', str_col("ProductCode", 25)),
@@ -473,7 +480,7 @@ def stg_load_product():
     flow.lookup(
         "Lookup UoM Conversion (Full Cache)", CONN_STAGING,
         "SELECT FromUomCode, ToUomCode, ConversionFactor\n"
-        "FROM ref.UomConversion WHERE ToUomCode = N'EA' AND IsActive = 1;",
+        "FROM ref.UomConversion WHERE ToUomCode = N'EA';",
         ["BaseUomCode"],
         [dec_col("ConversionFactor", 18, 6)], no_match="IG")
     flow.lookup(
@@ -537,7 +544,9 @@ def stg_load_geography():
         "SELECT GEO_CODE, CITY_NAME, STATE_PROV_CD, STATE_PROV_NAME, COUNTRY_CD, REGION_CD,\n"
         "       SALES_TERR_CD, LATITUDE, LONGITUDE, POPULATION\n"
         "FROM raw.OracleGeography WHERE BatchId = ?;",
-        cols)
+        cols,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Rows Read", "User::RowsRead")
     flow.derived_column("Cleanse Geography", [
         ("GeographyCode", 'UPPER(TRIM(GEO_CODE))', str_col("GeographyCode", 16)),
@@ -594,22 +603,29 @@ def stg_load_geography():
 @package
 def stg_load_currency():
     """raw.OracleCurrency + raw.OracleFxRate -> stg.Currency, stg.FxRate."""
+    # raw.OracleCurrency keeps the extract's own column names and lands every
+    # value as text; it carries no region, which stg.Currency does not ask for.
     ccy_cols = [
-        str_col("CCY_CODE", 3), str_col("CCY_NAME", 60), int_col("MINOR_UNITS"),
-        str_col("REGION_CD", 4), str_col("ACTIVE_FLG", 1),
+        str_col("CURRENCY_CD", 10), str_col("CURRENCY_NAME", 100),
+        str_col("MINOR_UNIT_DIGITS", 10), str_col("ACTIVE_FLG", 5),
     ]
     ccy = DataFlow("DFT Conform Currency", "Currency master with minor-unit defaults")
     ccy.oledb_source(
         "RAW Oracle Currency", CONN_STAGING,
-        "SELECT CCY_CODE, CCY_NAME, MINOR_UNITS, REGION_CD, ACTIVE_FLG\n"
+        "SELECT CURRENCY_CD, CURRENCY_NAME, MINOR_UNIT_DIGITS, ACTIVE_FLG\n"
         "FROM raw.OracleCurrency WHERE BatchId = ?;",
-        ccy_cols)
+        ccy_cols,
+        parameters=("$Package::BatchId",),
+    )
     ccy.row_count("Count Currency Rows Read", "User::RowsRead")
     ccy.derived_column("Cleanse Currency", [
-        ("CurrencyCode", 'UPPER(TRIM(CCY_CODE))', str_col("CurrencyCode", 3)),
-        ("CurrencyName", 'TRIM(CCY_NAME)', str_col("CurrencyName", 60)),
-        ("MinorUnits", 'ISNULL(MINOR_UNITS) ? 2 : MINOR_UNITS', int_col("MinorUnits")),
-        ("IsActiveFlag", 'UPPER(TRIM(ISNULL(ACTIVE_FLG) ? "Y" : ACTIVE_FLG))', str_col("IsActiveFlag", 1)),
+        ("CurrencyCode", 'UPPER(TRIM(CURRENCY_CD))', str_col("CurrencyCode", 3)),
+        ("CurrencyName", 'TRIM(CURRENCY_NAME)', str_col("CurrencyName", 60)),
+        ("MinorUnits",
+         'ISNULL(MINOR_UNIT_DIGITS) || TRIM(MINOR_UNIT_DIGITS) == "" ? 2 '
+         ': (DT_I4)TRIM(MINOR_UNIT_DIGITS)', int_col("MinorUnits")),
+        ("IsActiveFlag", 'UPPER(SUBSTRING(TRIM(ISNULL(ACTIVE_FLG) ? "Y" : ACTIVE_FLG), 1, 1))',
+         str_col("IsActiveFlag", 1)),
     ])
     ccy.conditional_split("Validate Currency Code", [
         ("Valid Currency", 'LEN(CurrencyCode) == 3'),
@@ -618,20 +634,31 @@ def stg_load_currency():
     ccy.branch_destination("ERR Currency Invalid", CONN_STAGING, "[err].[RejectedConstraintViolation]",
                            "Validate Currency Code", "Invalid Currency")
 
+    # Both feeds land as text and neither carries an end date: a rate is current
+    # until the next one for the pair supersedes it, which is why the sort below
+    # de-duplicates on pair and effective date.
     fx_cols = [
-        str_col("FROM_CCY", 3), str_col("TO_CCY", 3), date_col("EFF_FROM_DT"), date_col("EFF_TO_DT"),
-        dec_col("RATE", 18, 8), str_col("RATE_TYPE_CD", 8), str_col("SRC_SYSTEM_CD", 10),
+        str_col("FROM_CCY", 10), str_col("TO_CCY", 10), day_col("EFF_FROM_DT"),
+        dec_col("RATE", 18, 8), str_col("RATE_TYPE_CD", 20), str_col("SRC_SYSTEM_CD", 20),
     ]
     fx = DataFlow("DFT Conform FX Rate", "Effective-dated FX rates with USD triangulation")
     fx.oledb_source(
         "RAW Oracle FX Rate", CONN_STAGING,
-        "SELECT FROM_CCY, TO_CCY, EFF_FROM_DT, EFF_TO_DT, RATE, RATE_TYPE_CD, SRC_SYSTEM_CD\n"
+        "SELECT FROM_CURRENCY_CD AS FROM_CCY, TO_CURRENCY_CD AS TO_CCY,\n"
+        "       TRY_CONVERT(DATE, RATE_DT) AS EFF_FROM_DT,\n"
+        "       TRY_CONVERT(DECIMAL(18,8), CONVERSION_RATE) AS RATE,\n"
+        "       RATE_TYPE_CD, RATE_SOURCE_CD AS SRC_SYSTEM_CD\n"
         "FROM raw.OracleFxRate\n"
-        "WHERE BatchId = ? AND RATE > 0\n"
+        "WHERE BatchId = ? AND TRY_CONVERT(DECIMAL(18,8), CONVERSION_RATE) > 0\n"
         "UNION ALL\n"
-        "SELECT FROM_CCY, TO_CCY, EFF_FROM_DT, EFF_TO_DT, RATE, N'OVERRIDE', N'FILE_FX'\n"
+        "SELECT FromCurrencyCode, ToCurrencyCode,\n"
+        "       TRY_CONVERT(DATE, RateDate),\n"
+        "       TRY_CONVERT(DECIMAL(18,8), ConversionRate),\n"
+        "       N'OVERRIDE', N'FILE_FX'\n"
         "FROM raw.FileFxOverride WHERE BatchId = ?;",
-        fx_cols)
+        fx_cols,
+        parameters=("$Package::BatchId", "$Package::BatchId"),
+    )
     fx.row_count("Count FX Rows Read", "User::RowsRead")
     fx.derived_column("Normalise FX Rate", [
         ("FromCurrencyCode", 'UPPER(TRIM(FROM_CCY))', str_col("FromCurrencyCode", 3)),
@@ -639,9 +666,7 @@ def stg_load_currency():
         ("RateTypeCode", 'UPPER(TRIM(ISNULL(RATE_TYPE_CD) ? "SPOT" : RATE_TYPE_CD))',
          str_col("RateTypeCode", 8)),
         ("EffectiveFromDate", '(DT_DBDATE)EFF_FROM_DT', Column("EffectiveFromDate", "date")),
-        ("EffectiveToDate",
-         'ISNULL(EFF_TO_DT) ? (DT_DBDATE)"9999-12-31" : (DT_DBDATE)EFF_TO_DT',
-         Column("EffectiveToDate", "date")),
+        ("EffectiveToDate", '(DT_DBDATE)"9999-12-31"', Column("EffectiveToDate", "date")),
         ("ExchangeRate", '(DT_NUMERIC,18,8)RATE', dec_col("ExchangeRate", 18, 8)),
         ("InverseRate", 'RATE == 0 ? (DT_NUMERIC,18,8)0 : (DT_NUMERIC,18,8)(1 / RATE)',
          dec_col("InverseRate", 18, 8)),
@@ -650,8 +675,10 @@ def stg_load_currency():
             eliminate_duplicates=True)
     fx.lookup(
         "Lookup USD Cross Rate (Partial Cache)", CONN_STAGING,
-        "SELECT CurrencyCode AS ToCurrencyCode, UsdCrossRate\n"
-        "FROM stg.FxRate WHERE RateTypeCode = N'SPOT' AND EffectiveToDate = '9999-12-31';",
+        # The cross rate is the currency's own SPOT rate into USD, which is a row
+        # of stg.FxRate rather than a column of one.
+        "SELECT FromCurrencyCode AS ToCurrencyCode, ConversionRate AS UsdCrossRate\n"
+        "FROM stg.FxRate WHERE RateTypeCode = N'SPOT' AND ToCurrencyCode = N'USD';",
         ["ToCurrencyCode"], [dec_col("UsdCrossRate", 18, 8)], no_match="IG")
     fx.derived_column("Triangulate Through USD", [
         ("UsdEquivalentRate",
@@ -690,7 +717,9 @@ def stg_load_tax_and_terms():
         "SELECT TAX_CODE, TAX_TYPE_CD, COUNTRY_CD, REGION_CD, JURISDICTION_CD, RATE_PCT,\n"
         "       EFF_FROM_DT, EFF_TO_DT, RECOVERABLE_FLG\n"
         "FROM raw.OracleTaxRate WHERE BatchId = ?;",
-        tax_cols)
+        tax_cols,
+        parameters=("$Package::BatchId",),
+    )
     tax.row_count("Count Tax Rows Read", "User::RowsRead")
     tax.derived_column("Derive Regional Tax Attributes", [
         ("TaxCode", 'UPPER(TRIM(TAX_CODE))', str_col("TaxCode", 12)),
@@ -734,7 +763,9 @@ def stg_load_tax_and_terms():
         "RAW Oracle Payment Terms", CONN_STAGING,
         "SELECT TERMS_CODE, TERMS_DESC, NET_DAYS, DISC_PCT, DISC_DAYS, REGION_CD\n"
         "FROM raw.OraclePaymentTerms WHERE BatchId = ?;",
-        terms_cols)
+        terms_cols,
+        parameters=("$Package::BatchId",),
+    )
     terms.derived_column("Cleanse Payment Terms", [
         ("PaymentTermsCode", 'UPPER(REPLACE(TRIM(TERMS_CODE)," ",""))', str_col("PaymentTermsCode", 10)),
         ("PaymentTermsDescription", 'TRIM(ISNULL(TERMS_DESC) ? "" : TERMS_DESC)',
@@ -747,8 +778,8 @@ def stg_load_tax_and_terms():
     ])
     terms.lookup(
         "Lookup Terms Crosswalk (Full Cache)", CONN_STAGING,
-        "SELECT SourceCode AS PaymentTermsCode, TargetCode AS ConformedTermsCode\n"
-        "FROM ref.CodeCrosswalk WHERE CodeSetName = N'PAYMENT_TERMS';",
+        "SELECT SourceCodeValue AS PaymentTermsCode, ConformedCodeValue AS ConformedTermsCode\n"
+        "FROM ref.CodeCrosswalk WHERE CodeDomainCode = N'PAYMENT_TERMS';",
         ["PaymentTermsCode"], [str_col("ConformedTermsCode", 10)], no_match="RD")
     terms.oledb_destination("STG PaymentTerms", CONN_STAGING, "[stg].[PaymentTerms]", batch_size=5000)
     terms.reject_destination("ERR Terms Unmapped", CONN_STAGING, "[err].[RejectedLookupFailure]",
@@ -781,7 +812,9 @@ def stg_load_cost_center():
         "SELECT CC_CODE, CC_NAME, PARENT_CC_CODE, COMPANY_CD, REGION_CD, FUNCTION_CD,\n"
         "       ACTIVE_FLG, VALID_FROM_DT\n"
         "FROM raw.OracleCostCenter WHERE BatchId = ?;",
-        cols)
+        cols,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Rows Read", "User::RowsRead")
     flow.derived_column("Cleanse Cost Center", [
         ("CostCenterCode", 'UPPER(REPLACE(TRIM(CC_CODE)," ",""))', str_col("CostCenterCode", 12)),
@@ -797,7 +830,7 @@ def stg_load_cost_center():
     flow.lookup(
         "Lookup Parent Cost Center (No Cache)", CONN_STAGING,
         "SELECT CostCenterCode AS ParentCostCenterCode, CostCenterName AS ParentCostCenterName,\n"
-        "       FunctionCode AS ParentFunctionCode\n"
+        "       FunctionalAreaCode AS ParentFunctionCode\n"
         "FROM stg.CostCenter;",
         ["ParentCostCenterCode"],
         [str_col("ParentCostCenterName", 80), str_col("ParentFunctionCode", 8)], no_match="IG")
@@ -848,7 +881,9 @@ def stg_load_vendor_contract():
         "SELECT CONTRACT_NBR, SUPP_CODE, CONTRACT_TYPE_CD, START_DT, END_DT, COMMIT_AMT,\n"
         "       COMMIT_CCY, DISC_PCT, REGION_CD, STATUS_CD\n"
         "FROM raw.OracleVendorContract WHERE BatchId = ?;",
-        cols)
+        cols,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Rows Read", "User::RowsRead")
     flow.derived_column("Cleanse Contract", [
         ("ContractNumber", 'UPPER(TRIM(CONTRACT_NBR))', str_col("ContractNumber", 20)),
@@ -865,13 +900,13 @@ def stg_load_vendor_contract():
     ])
     flow.lookup(
         "Lookup Supplier (Full Cache)", CONN_STAGING,
-        "SELECT SupplierCode, SupplierName, DefaultCurrencyCode AS SupplierCurrencyCode\n"
+        "SELECT SupplierCode, SupplierName, TransactionCurrencyCode AS SupplierCurrencyCode\n"
         "FROM stg.Supplier;",
         ["SupplierCode"], [str_col("SupplierName", 100), str_col("SupplierCurrencyCode", 3)],
         no_match="RD")
     flow.lookup(
         "Lookup Contract FX Rate (Partial Cache)", CONN_STAGING,
-        "SELECT FromCurrencyCode AS CommitCurrencyCode, ExchangeRate AS ContractFxRate\n"
+        "SELECT FromCurrencyCode AS CommitCurrencyCode, ConversionRate AS ContractFxRate\n"
         "FROM stg.FxRate\n"
         "WHERE ToCurrencyCode = N'USD' AND RateTypeCode = N'CONTRACT';",
         ["CommitCurrencyCode"], [dec_col("ContractFxRate", 18, 8)], no_match="RD")
@@ -929,7 +964,9 @@ def stg_load_purchase_order():
         "       PO_TOTAL_AMT, PO_DT, PROMISED_DT, LAST_UPD_DT\n"
         "FROM raw.OraclePurchaseOrderHdr\n"
         "WHERE LAST_UPD_DT > CONVERT(datetime2(3), ?) AND LAST_UPD_DT <= CONVERT(datetime2(3), ?);",
-        hdr_cols, timeout=7200)
+        hdr_cols, timeout=7200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     hdr.row_count("Count Header Rows Read", "User::RowsRead")
     hdr.derived_column("Standardize PO Header", [
         ("PurchaseOrderNumber", 'UPPER(TRIM(PO_NBR))', str_col("PurchaseOrderNumber", 20)),
@@ -989,7 +1026,9 @@ def stg_load_purchase_order():
         "FROM raw.OraclePurchaseOrderLine AS l\n"
         "     INNER JOIN raw.OraclePurchaseOrderHdr AS h ON h.PO_NBR = l.PO_NBR\n"
         "WHERE h.LAST_UPD_DT > CONVERT(datetime2(3), ?) AND h.LAST_UPD_DT <= CONVERT(datetime2(3), ?);",
-        line_cols, timeout=7200)
+        line_cols, timeout=7200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     line.derived_column("Standardize PO Line", [
         ("PurchaseOrderNumber", 'UPPER(TRIM(PO_NBR))', str_col("PurchaseOrderNumber", 20)),
         ("LineNumber", 'PO_LINE_NBR', int_col("LineNumber")),
@@ -1004,7 +1043,7 @@ def stg_load_purchase_order():
     line.lookup(
         "Lookup Product Crosswalk (Partial Cache)", CONN_STAGING,
         "SELECT SourceItemCode, ProductKey, StockItemId\n"
-        "FROM work.ProductCrosswalk WHERE SourceSystemCode = N'ORA_ERP';",
+        "FROM work.ProductCrosswalk WHERE ResolvedFlag = 1;",
         ["SourceItemCode"], [int_col("ProductKey"), int_col("StockItemId")], no_match="RD")
     line.derived_column("Convert PO Line Quantities", [
         ("OrderQuantityBase", '(DT_NUMERIC,18,4)(ORDER_QTY * ConversionFactor)', dec_col("OrderQuantityBase", 18, 4)),
@@ -1060,7 +1099,9 @@ def stg_load_ap_invoice():
         "       INVOICE_DT, DUE_DT, TERMS_CD, HOLD_FLAG\n"
         "FROM raw.OracleApInvoiceHdr\n"
         "WHERE INVOICE_DT > CONVERT(datetime2(3), ?) AND INVOICE_DT <= CONVERT(datetime2(3), ?);",
-        hdr_cols, timeout=7200)
+        hdr_cols, timeout=7200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     hdr.row_count("Count Invoice Rows Read", "User::RowsRead")
     hdr.derived_column("Classify Invoice Tax", [
         ("InvoiceNumber", 'UPPER(TRIM(INVOICE_NBR))', str_col("InvoiceNumber", 30)),
@@ -1128,7 +1169,9 @@ def stg_load_ap_invoice():
         "FROM raw.OracleApInvoiceLine AS l\n"
         "     INNER JOIN raw.OracleApInvoiceHdr AS h ON h.INVOICE_NBR = l.INVOICE_NBR\n"
         "WHERE h.INVOICE_DT > CONVERT(datetime2(3), ?) AND h.INVOICE_DT <= CONVERT(datetime2(3), ?);",
-        line_cols, timeout=7200)
+        line_cols, timeout=7200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     line.derived_column("Standardize Invoice Line", [
         ("InvoiceNumber", 'UPPER(TRIM(INVOICE_NBR))', str_col("InvoiceNumber", 30)),
         ("LineNumber", 'INV_LINE_NBR', int_col("LineNumber")),
@@ -1189,7 +1232,9 @@ def stg_load_payment():
         "       PAY_DT, VALUE_DT, PAY_STATUS_CD, REGION_CD\n"
         "FROM raw.OracleApPayment\n"
         "WHERE PAY_DT > CONVERT(datetime2(3), ?) AND PAY_DT <= CONVERT(datetime2(3), ?);",
-        cols, timeout=3600)
+        cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     flow.row_count("Count Payment Rows Read", "User::RowsRead")
     flow.data_conversion("Convert Payment Types", [
         ("PAY_AMT", "PaymentAmount", money_col("PaymentAmount")),
@@ -1211,8 +1256,9 @@ def stg_load_payment():
     ])
     flow.lookup(
         "Lookup Payment Method Crosswalk (Full Cache)", CONN_STAGING,
-        "SELECT SourceCode AS SourcePaymentMethodCode, TargetCode AS PaymentMethodCode, Description\n"
-        "FROM ref.CodeCrosswalk WHERE CodeSetName = N'PAYMENT_METHOD' AND SourceSystemCode = N'ORA_ERP';",
+        "SELECT SourceCodeValue AS SourcePaymentMethodCode, ConformedCodeValue AS PaymentMethodCode,\n"
+        "       SourceCodeDescription AS Description\n"
+        "FROM ref.CodeCrosswalk WHERE CodeDomainCode = N'PAYMENT_METHOD' AND SourceSystemCode = N'ORA_ERP';",
         ["SourcePaymentMethodCode"],
         [str_col("PaymentMethodCode", 12), str_col("PaymentMethodDescription", 80)], no_match="RD")
     flow.derived_column("Derive Payment Hash", [
@@ -1261,7 +1307,9 @@ def stg_load_gl_journal():
         "       JRNL_CCY, DEBIT_AMT, CREDIT_AMT, ACCOUNTING_DT, PERIOD_NAME, SOURCE_CD, REGION_CD\n"
         "FROM raw.OracleGlJournalLine\n"
         "WHERE ACCOUNTING_DT > CONVERT(datetime2(3), ?) AND ACCOUNTING_DT <= CONVERT(datetime2(3), ?);",
-        cols, timeout=7200)
+        cols, timeout=7200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     flow.row_count("Count Journal Rows Read", "User::RowsRead")
     flow.derived_column("Derive Fiscal Attributes", [
         ("JournalId", 'UPPER(TRIM(JOURNAL_ID))', str_col("JournalId", 30)),
@@ -1339,7 +1387,9 @@ def stg_load_order():
         "       CustomerPurchaseOrderNumber, IsUndersupplyBackordered, Comments, LastEditedWhen\n"
         "FROM raw.SqlOrder\n"
         "WHERE LastEditedWhen > CONVERT(datetime2(3), ?) AND LastEditedWhen <= CONVERT(datetime2(3), ?);",
-        hdr_cols, timeout=3600)
+        hdr_cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     hdr.row_count("Count Order Rows Read", "User::RowsRead")
     hdr.derived_column("Clean Order Header", [
         ("OrderId", 'OrderID', int_col("OrderId")),
@@ -1380,7 +1430,9 @@ def stg_load_order():
         "FROM raw.SqlOrderLine AS l\n"
         "     INNER JOIN raw.SqlOrder AS o ON o.OrderID = l.OrderID\n"
         "WHERE o.LastEditedWhen > CONVERT(datetime2(3), ?) AND o.LastEditedWhen <= CONVERT(datetime2(3), ?);",
-        line_cols, timeout=3600)
+        line_cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     line.derived_column("Extend Order Line", [
         ("OrderLineId", 'OrderLineID', int_col("OrderLineId")),
         ("OrderId", 'OrderID', int_col("OrderId")),
@@ -1439,7 +1491,9 @@ def stg_load_sale():
         "       CurrencyCode, ConfirmedDeliveryTime, LastEditedWhen\n"
         "FROM raw.SqlInvoice\n"
         "WHERE LastEditedWhen > CONVERT(datetime2(3), ?) AND LastEditedWhen <= CONVERT(datetime2(3), ?);",
-        hdr_cols, timeout=3600)
+        hdr_cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     hdr.row_count("Count Sale Rows Read", "User::RowsRead")
     hdr.derived_column("Tag Sale Region", [
         ("InvoiceId", 'InvoiceID', int_col("InvoiceId")),
@@ -1489,7 +1543,9 @@ def stg_load_sale():
         "FROM raw.SqlInvoiceLine AS l\n"
         "     INNER JOIN raw.SqlInvoice AS i ON i.InvoiceID = l.InvoiceID\n"
         "WHERE i.LastEditedWhen > CONVERT(datetime2(3), ?) AND i.LastEditedWhen <= CONVERT(datetime2(3), ?);",
-        line_cols, timeout=3600)
+        line_cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     line.derived_column("Recompute Sale Line Tax", [
         ("InvoiceLineId", 'InvoiceLineID', int_col("InvoiceLineId")),
         ("InvoiceId", 'InvoiceID', int_col("InvoiceId")),
@@ -1610,7 +1666,9 @@ def stg_load_stock_movement():
         "FROM raw.SqlStockMovement\n"
         "WHERE TransactionOccurredWhen > CONVERT(datetime2(3), ?)\n"
         "  AND TransactionOccurredWhen <= CONVERT(datetime2(3), ?);",
-        cols, timeout=7200)
+        cols, timeout=7200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     flow.row_count("Count Movement Rows Read", "User::RowsRead")
     flow.lookup(
         "Lookup Transaction Type (Full Cache)", CONN_STAGING,
@@ -1673,7 +1731,9 @@ def stg_load_shipment():
         "       DestinationPostalCode, GrossWeightKg, DespatchedWhen, DeliveredWhen\n"
         "FROM raw.SqlShipment\n"
         "WHERE DespatchedWhen > CONVERT(datetime2(3), ?) AND DespatchedWhen <= CONVERT(datetime2(3), ?);",
-        hdr_cols, timeout=3600)
+        hdr_cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     hdr.row_count("Count Shipment Rows Read", "User::RowsRead")
     hdr.derived_column("Standardize Shipment", [
         ("ShipmentId", 'ShipmentID', int_col("ShipmentId")),
@@ -1717,7 +1777,9 @@ def stg_load_shipment():
         "FROM raw.SqlShipmentLine AS l\n"
         "     INNER JOIN raw.SqlShipment AS s ON s.ShipmentID = l.ShipmentID\n"
         "WHERE s.DespatchedWhen > CONVERT(datetime2(3), ?) AND s.DespatchedWhen <= CONVERT(datetime2(3), ?);",
-        line_cols, timeout=3600)
+        line_cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     line.derived_column("Rebase Line Weight", [
         ("ShipmentLineId", 'ShipmentLineID', int_col("ShipmentLineId")),
         ("ShipmentId", 'ShipmentID', int_col("ShipmentId")),
@@ -1761,7 +1823,9 @@ def stg_load_return_and_credit():
         "       RegionCode, ReturnedWhen\n"
         "FROM raw.SqlReturnLine\n"
         "WHERE ReturnedWhen > CONVERT(datetime2(3), ?) AND ReturnedWhen <= CONVERT(datetime2(3), ?);",
-        ret_cols, timeout=3600)
+        ret_cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     ret.row_count("Count Return Rows Read", "User::RowsRead")
     ret.derived_column("Apply Return Window", [
         ("ReturnLineId", 'ReturnLineID', int_col("ReturnLineId")),
@@ -1779,8 +1843,9 @@ def stg_load_return_and_credit():
     ])
     ret.lookup(
         "Lookup Return Reason (Full Cache)", CONN_STAGING,
-        "SELECT SourceCode AS SourceReturnReasonCode, TargetCode AS ReturnReasonCode, Description\n"
-        "FROM ref.CodeCrosswalk WHERE CodeSetName = N'RETURN_REASON';",
+        "SELECT SourceCodeValue AS SourceReturnReasonCode, ConformedCodeValue AS ReturnReasonCode,\n"
+        "       SourceCodeDescription AS Description\n"
+        "FROM ref.CodeCrosswalk WHERE CodeDomainCode = N'RETURN_REASON';",
         ["SourceReturnReasonCode"],
         [str_col("ReturnReasonCode", 12), str_col("ReturnReasonDescription", 80)], no_match="RD")
     ret.conditional_split("Screen Return", [
@@ -1805,7 +1870,9 @@ def stg_load_return_and_credit():
         "       IssuedWhen, ApprovedBy\n"
         "FROM raw.SqlCreditNote\n"
         "WHERE IssuedWhen > CONVERT(datetime2(3), ?) AND IssuedWhen <= CONVERT(datetime2(3), ?);",
-        credit_cols, timeout=3600)
+        credit_cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     credit.derived_column("Band Credit Notes", [
         ("CreditNoteId", 'CreditNoteID', int_col("CreditNoteId")),
         ("InvoiceId", 'InvoiceID', int_col("InvoiceId")),
@@ -1855,7 +1922,9 @@ def stg_load_loyalty_ledger():
         "       EntryDate, ExpiryDate\n"
         "FROM raw.SqlLoyaltyLedger\n"
         "WHERE EntryDate > CONVERT(datetime2(3), ?) AND EntryDate <= CONVERT(datetime2(3), ?);",
-        cols, timeout=3600)
+        cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     flow.row_count("Count Loyalty Rows Read", "User::RowsRead")
     flow.derived_column("Type Loyalty Entries", [
         ("LoyaltyEntryId", 'LoyaltyEntryID', bigint_col("LoyaltyEntryId")),
@@ -1925,7 +1994,9 @@ def stg_load_web_session():
         "       LandingPageUrl, PageViewCount, DurationSeconds, ConsentFlag, SessionStartWhen\n"
         "FROM raw.SqlWebSession\n"
         "WHERE SessionStartWhen > CONVERT(datetime2(3), ?) AND SessionStartWhen <= CONVERT(datetime2(3), ?);",
-        cols, timeout=7200)
+        cols, timeout=7200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     flow.row_count("Count Session Rows Read", "User::RowsRead")
     flow.lookup(
         "Lookup Country Region (Full Cache)", CONN_STAGING,
@@ -1983,64 +2054,92 @@ def stg_load_web_session():
 @package
 def stg_load_partner_sale():
     """raw.FilePartnerSales -> stg.PartnerSale (flat file feed, all columns arrive as text)."""
+    # The landing table names the agreed feed fields; every one of them lands as
+    # text, which is why the parsing below happens here and not in the loader.
+    # The text columns keep a Text suffix: stg.PartnerSale names its typed
+    # columns TransactionDate, QuantitySold and GrossAmount, and a buffer column
+    # of the same name carrying text is what the destination cannot insert.
     cols = [
-        str_col("PartnerCode", 10), str_col("PartnerOrderRef", 30), str_col("SaleDateText", 20),
-        str_col("CustomerRef", 40), str_col("ItemRef", 30), str_col("QuantityText", 20),
-        str_col("AmountText", 20), str_col("CurrencyText", 10), str_col("CountryText", 20),
-        str_col("SourceFileName", 200),
+        str_col("PartnerCode", 30), str_col("TransactionReference", 60),
+        str_col("TransactionDateText", 40), str_col("CustomerReference", 60),
+        str_col("PartnerProductCode", 60), str_col("QuantitySoldText", 50),
+        str_col("GrossAmountText", 50), str_col("CurrencyCode", 10), str_col("CountryCode", 10),
+        str_col("SourceFileName", 260),
     ]
     flow = DataFlow("DFT Conform Partner Sales", "Parse and type the partner sales flat file feed")
     flow.oledb_source(
         "RAW File Partner Sales", CONN_STAGING,
-        "SELECT PartnerCode, PartnerOrderRef, SaleDateText, CustomerRef, ItemRef, QuantityText,\n"
-        "       AmountText, CurrencyText, CountryText, SourceFileName\n"
+        "SELECT PartnerCode, TransactionReference,\n"
+        "       TransactionDate AS TransactionDateText, CustomerReference,\n"
+        "       PartnerProductCode, QuantitySold AS QuantitySoldText,\n"
+        "       GrossAmount AS GrossAmountText, CurrencyCode, CountryCode,\n"
+        "       SourceFileName\n"
         "FROM raw.FilePartnerSales\n"
         "WHERE BatchId = ?;",
-        cols, timeout=3600)
+        cols, timeout=3600,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Partner Rows Read", "User::RowsRead")
     flow.derived_column("Normalize Partner Text", [
-        ("PartnerCode", 'UPPER(TRIM(PartnerCode))', str_col("PartnerCode", 10)),
-        ("PartnerOrderRef", 'UPPER(TRIM(PartnerOrderRef))', str_col("PartnerOrderRef", 30)),
-        ("CustomerRef", 'UPPER(TRIM(CustomerRef))', str_col("CustomerRef", 40)),
-        ("ItemRef", 'UPPER(REPLACE(TRIM(ItemRef), " ", ""))', str_col("ItemRef", 30)),
+        ("PartnerCode", 'UPPER(TRIM(PartnerCode))', str_col("PartnerCode", 30)),
+        ("PartnerOrderRef", 'UPPER(TRIM(TransactionReference))', str_col("PartnerOrderRef", 60)),
+        ("CustomerRef", 'UPPER(TRIM(CustomerReference))', str_col("CustomerRef", 60)),
+        ("ItemRef", 'UPPER(REPLACE(TRIM(PartnerProductCode), " ", ""))', str_col("ItemRef", 60)),
         # Partners send DD/MM/YYYY, the legacy loader only ever handled YYYY-MM-DD.
         ("SaleDateIso",
-         'FINDSTRING(SaleDateText, "/", 1) > 0 ? '
-         'RIGHT(TRIM(SaleDateText), 4) + "-" + SUBSTRING(TRIM(SaleDateText), 4, 2) + "-" + '
-         'LEFT(TRIM(SaleDateText), 2) : LEFT(TRIM(SaleDateText), 10)',
+         'FINDSTRING(TransactionDateText, "/", 1) > 0 ? '
+         'RIGHT(TRIM(TransactionDateText), 4) + "-" + '
+         'SUBSTRING(TRIM(TransactionDateText), 4, 2) + "-" + '
+         'LEFT(TRIM(TransactionDateText), 2) : LEFT(TRIM(TransactionDateText), 10)',
          str_col("SaleDateIso", 10)),
-        ("QuantityText", 'REPLACE(TRIM(QuantityText), ",", "")', str_col("QuantityText", 20)),
-        ("AmountText", 'REPLACE(REPLACE(TRIM(AmountText), ",", ""), "$", "")', str_col("AmountText", 20)),
-        ("PartnerCurrencyCode", 'UPPER(LEFT(TRIM(ISNULL(CurrencyText) ? "USD" : CurrencyText), 3))',
+        ("QuantityClean", 'REPLACE(TRIM(QuantitySoldText), ",", "")', str_col("QuantityClean", 50)),
+        ("AmountClean", 'REPLACE(REPLACE(TRIM(GrossAmountText), ",", ""), "$", "")',
+         str_col("AmountClean", 50)),
+        ("PartnerCurrencyCode", 'UPPER(LEFT(TRIM(ISNULL(CurrencyCode) ? "USD" : CurrencyCode), 3))',
          str_col("PartnerCurrencyCode", 3)),
-        ("CountryName", 'UPPER(TRIM(CountryText))', str_col("CountryName", 20)),
+        ("PartnerCountryCode", 'UPPER(LEFT(TRIM(CountryCode), 3))', str_col("PartnerCountryCode", 3)),
+        # stg.PartnerSale keys every row by partner, outlet and reference and
+        # will not take a row without a batch or a source system.
+        ("PartnerSaleBusinessKey",
+         'LEFT(UPPER(TRIM(PartnerCode)) + "||" + UPPER(TRIM(TransactionReference)), 140)',
+         str_col("PartnerSaleBusinessKey", 140)),
+        ("SourceSystemCode", 'LEFT(@[$Package::SourceSystemCode], 20)',
+         str_col("SourceSystemCode", 20)),
+        ("BatchId", '(DT_I8)@[$Package::BatchId]', bigint_col("BatchId")),
     ])
     flow.data_conversion("Type Partner Measures", [
         ("SaleDateIso", "SaleDate", date_col("SaleDate")),
-        ("QuantityText", "Quantity", int_col("Quantity")),
-        ("AmountText", "GrossAmount", money_col("GrossAmount")),
+        ("QuantityClean", "Quantity", int_col("Quantity")),
+        ("AmountClean", "GrossAmountValue", money_col("GrossAmountValue")),
     ])
+    # The feed carries an ISO country code, not the country name older partner
+    # documentation described.
     flow.lookup(
-        "Lookup Country By Name (Full Cache)", CONN_STAGING,
-        "SELECT UPPER(CountryName) AS CountryName, CountryCode, RegionCode FROM ref.Country;",
-        ["CountryName"], [str_col("CountryCode", 3), str_col("RegionCode", 4)], no_match="RD")
+        "Lookup Country By Code (Full Cache)", CONN_STAGING,
+        "SELECT CountryCode AS PartnerCountryCode, RegionCode FROM ref.Country;",
+        ["PartnerCountryCode"], [str_col("RegionCode", 4)], no_match="RD")
     flow.lookup(
         "Lookup Partner Customer Crosswalk (Partial Cache)", CONN_STAGING,
-        "SELECT SourceCode AS CustomerRef, TargetCode AS CustomerCode\n"
-        "FROM ref.CodeCrosswalk WHERE CodeSetName = N'PARTNER_CUSTOMER';",
+        "SELECT SourceCodeValue AS CustomerRef, ConformedCodeValue AS CustomerCode\n"
+        "FROM ref.CodeCrosswalk WHERE CodeDomainCode = N'CUSTOMER';",
         ["CustomerRef"], [str_col("CustomerCode", 20)], no_match="RD")
     flow.conditional_split("Screen Partner Sale", [
-        ("Valid Partner Row", 'Quantity > 0 && GrossAmount > 0 && LEN(PartnerOrderRef) > 0'),
-        ("Unparsable Amount", 'GrossAmount <= 0'),
+        ("Valid Partner Row", 'Quantity > 0 && GrossAmountValue > 0 && LEN(PartnerOrderRef) > 0'),
+        ("Unparsable Amount", 'GrossAmountValue <= 0'),
     ], default_output="Missing Order Reference")
     flow.row_count("Count Partner Rows Loaded", "User::RowsInserted")
-    flow.oledb_destination("STG PartnerSale", CONN_STAGING, "[stg].[PartnerSale]", batch_size=50000)
+    flow.oledb_destination("STG PartnerSale", CONN_STAGING, "[stg].[PartnerSale]", batch_size=50000,
+                           mapping={"TransactionDate": "SaleDate",
+                                    "QuantitySold": "Quantity",
+                                    "GrossAmount": "GrossAmountValue",
+                                    "TransactionCurrencyCode": "PartnerCurrencyCode",
+                                    "CountryCode": "PartnerCountryCode"})
     flow.branch_destination("ERR Partner Unparsable Amount", CONN_STAGING, "[err].[RejectedFileRow]",
                             "Screen Partner Sale", "Unparsable Amount")
     flow.branch_destination("ERR Partner Missing Reference", CONN_STAGING, "[err].[RejectedFileRow]",
                             "Screen Partner Sale", "Missing Order Reference")
     flow.reject_destination("ERR Partner Unknown Country", CONN_STAGING, "[err].[RejectedFileRow]",
-                            "Lookup Country By Name (Full Cache)", "Lookup No Match Output")
+                            "Lookup Country By Code (Full Cache)", "Lookup No Match Output")
     flow.reject_destination("ERR Partner Unknown Customer", CONN_STAGING, "[err].[RejectedFileRow]",
                             "Lookup Partner Customer Crosswalk (Partial Cache)", "Lookup No Match Output")
     flow.reject_destination("ERR Partner Conversion Errors", CONN_STAGING, "[err].[RejectedFileRow]",

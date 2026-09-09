@@ -71,12 +71,34 @@ def mutate_conmgr_literal_token(text):
 
 
 def mutate_conmgr_expression_password(text):
-    """Put the credential back into the expression - the 0xC0017010 defect."""
-    if '+ ";" : "Integrated Security=SSPI;"' not in text:
+    """Put the credential back into an expression - the 0xC0017010 defect."""
+    if "<DTS:ObjectData>" not in text:
         return None
-    return text.replace('+ ";" : "Integrated Security=SSPI;"',
-                        '+ ";Password=" + @[$Project::SqlServerPassword] + ";" '
-                        ': "Integrated Security=SSPI;"', 1)
+    return text.replace(
+        "  <DTS:ObjectData>",
+        '  <DTS:PropertyExpression DTS:Name="Password">'
+        '@[$Project::SqlServerPassword]</DTS:PropertyExpression>\n'
+        "  <DTS:ObjectData>", 1)
+
+
+def mutate_conmgr_expressed_connection_string(text):
+    """Retarget the whole connection string - the live login failure.
+
+    An OLE DB connection manager whose ConnectionString is expressed is
+    rebuilt from that expression when the connection opens, which drops the
+    password the catalog applied to CM.<connection>.Password, so every task
+    fails with 'Login failed for user' and then
+    DTS_E_CANNOTACQUIRECONNECTIONFROMCONNECTIONMANAGER.
+    """
+    match = re.search(r'(?s)\n[ \t]*<DTS:PropertyExpression DTS:Name="ServerName">.*?'
+                      r'</DTS:PropertyExpression>', text)
+    if not match or "MSOLEDBSQL19.1" not in text:
+        return None
+    return text.replace(
+        match.group(0),
+        '\n  <DTS:PropertyExpression DTS:Name="ConnectionString">'
+        '"Data Source=" + @[$Project::SqlServerHost] + ";Provider=MSOLEDBSQL19.1;"'
+        "</DTS:PropertyExpression>", 1)
 
 
 def mutate_dtproj_drop_cm_password(text):
@@ -129,6 +151,45 @@ def mutate_dtsx_unbound_flatfile(text):
         '@[User::CurrentFilePath]</DTS:PropertyExpression>',
         '<DTS:PropertyExpression DTS:Name="ConnectionString">'
         '@[$Project::InboundFileRoot]</DTS:PropertyExpression>', 1)
+
+
+def mutate_dtsx_file_system_attributes(text):
+    """Spell FileSystemData the way the task host does not read."""
+    if "TaskOperationType=" not in text:
+        return None
+    for serialised, ignored in (("TaskOperationType", "Operation"),
+                               ("TaskSourcePath", "SourcePath"),
+                               ("TaskIsSourceVariable", "IsSourcePathVariable"),
+                               ("TaskDestinationPath", "DestinationPath"),
+                               ("TaskIsDestinationVariable", "IsDestinationPathVariable")):
+        text = text.replace(serialised + "=", ignored + "=")
+    return text
+
+
+def mutate_dtsx_file_task_validates_early(text):
+    """Validate a path-variable File System Task at package start.
+
+    The variables are still empty then, which is how executions 81-83 of
+    Master_File_Ingestion failed on 'Variable "CurrentFilePath" is used as a
+    source or destination and is empty.'
+    """
+    index = text.find("<FileSystemData")
+    if index < 0:
+        return None
+    start = text.rfind("<DTS:Executable", 0, index)
+    head = re.sub(r'\s*DTS:DelayValidation="True"', "", text[start:index], count=1)
+    return text[:start] + head + text[index:]
+
+
+def mutate_dtsx_drop_oledb_property(text):
+    """Omit OpenRowsetVariable from an OLE DB source - the VS_ISCORRUPT defect."""
+    return re.sub(r'\s*<property [^>]*name="OpenRowsetVariable"[^>]*>(?:</property>)?', "",
+                  text, count=1) or None
+
+
+def mutate_dtsx_drop_oledb_parameter_mapping(text):
+    """Leave a ? in an OLE DB command with nothing bound to it."""
+    return re.sub(r'(name="ParameterMapping">)[^<]+(</property>)', r"\1\2", text, count=1)
 
 
 def mutate_dtsx_cm_id_by_dtsid(text):
@@ -246,6 +307,243 @@ def mutate_sql_duplicate_when_matched(text):
     return text.replace(match.group(0), match.group(0) * 2, 1)
 
 
+def mutate_dtsx_multi_statement_expression(text):
+    """String a second assignment onto an Expression Task, as execution 102 hit."""
+    match = re.search(r'<ExpressionTask Expression="([^"]+)"', text)
+    if not match:
+        return None
+    return text.replace(
+        match.group(0),
+        '<ExpressionTask Expression="%s; @[User::CurrentFileName] = &quot;x&quot;"'
+        % match.group(1), 1)
+
+
+def mutate_dtsx_unknown_source_column(text):
+    """Select a column raw.FilePartnerSales does not have, as execution 105 did."""
+    match = re.search(r'(SELECT\s+)(\w+)(,[^<(]*?FROM raw\.FilePartnerSales)', text)
+    if not match:
+        return None
+    return text.replace(match.group(0),
+                        "%sAmountText%s" % (match.group(1), match.group(3)), 1)
+
+
+def mutate_dtsx_renamed_unknown_column(text):
+    """Rename a column the table does not have, as STG_Load_PartnerSale did.
+
+    The lookup that selected SourceCode AS CustomerRef out of ref.CodeCrosswalk
+    loaded no metadata against the live server (0x80040E14, VS_ISBROKEN); an
+    alias hides the missing column from a check that reads the select list
+    verbatim.
+    """
+    if "ConformedCodeValue AS " not in text:
+        return None
+    return text.replace("ConformedCodeValue AS ", "TargetCode AS ", 1)
+
+
+def mutate_dtsx_unknown_filter_column(text):
+    """Filter on a column the table does not have, as STG_Load_PartnerSale did."""
+    if "WHERE CodeDomainCode = " not in text:
+        return None
+    return text.replace("WHERE CodeDomainCode = ", "WHERE CodeSetName = ", 1)
+
+
+def mutate_dtsx_drop_fastparse(text):
+    """Drop FastParse from a flat file column, as execution 123 failed on."""
+    if 'name="FastParse"' not in text:
+        return None
+    return re.sub(r'\s*<property [^>]*name="FastParse">[^<]*</property>', "", text, count=1)
+
+
+def mutate_dtsx_drop_derived_error_output(text):
+    """Leave a Derived Column with one output, as execution 126 failed on."""
+    match = re.search(r'(?s)<component [^>]*componentClassID="Microsoft.DerivedColumn".*?</component>',
+                      text)
+    if not match:
+        return None
+    component = match.group(0)
+    error_output = re.search(r'(?s)\s*<output [^>]*isErrorOut="true".*?</output>', component)
+    if not error_output:
+        return None
+    return text.replace(component, component.replace(error_output.group(0), "", 1), 1)
+
+
+def mutate_dtsx_default_output_as_case(text):
+    """Write a conditional split's default output as another case."""
+    if 'name="IsDefaultOut">true' not in text:
+        return None
+    return text.replace('name="IsDefaultOut">true', 'name="IsDefaultOut">false', 1)
+
+
+def mutate_dtsx_directory_expression_on_container(text):
+    """Move the Directory expression onto the loop, where it is never applied.
+
+    This is how etl.FileIngestionLog came to record
+    C:\\$WINRE_BACKUP_PARTITION.MARKER as a feed file.
+    """
+    match = re.search(r'(?s)(<DTS:ForEachEnumerator\b.*?>)(\s*<DTS:PropertyExpression '
+                      r'DTS:Name="Directory">.*?</DTS:PropertyExpression>)', text)
+    if not match:
+        return None
+    return text.replace(match.group(0), match.group(1), 1).replace(
+        "<DTS:ForEachEnumerator", match.group(2).strip() + "\n      <DTS:ForEachEnumerator", 1)
+
+
+def mutate_dtsx_single_row_without_aggregate(text):
+    """Read a table directly into a single row result set, as execution 124 did."""
+    match = re.search(r'SQLTask:SqlStatementSource="SELECT ISNULL\(MAX\((\w+)\), 0\) AS (\w+)'
+                      r' *FROM +([\w\.]+)([^"]*)"', text)
+    if not match:
+        return None
+    return text.replace(
+        match.group(0),
+        'SQLTask:SqlStatementSource="SELECT %s AS %s FROM %s%s"'
+        % (match.group(1), match.group(2), match.group(3), match.group(4)), 1)
+
+
+def mutate_dtsx_buffer_shaped_destination(text):
+    """Publish a buffer column as external metadata, as executions 144-147 did.
+
+    The destination then advertises a column its table does not have, which is
+    what SSIS answers VS_NEEDSNEWMETADATA to when it revalidates at run time.
+    """
+    match = re.search(r'(<externalMetadataColumn refId="[^"]*\.Inputs\[[^"]*ExternalColumns\[)(\w+)'
+                      r'(\][^>]*name=")(\w+)(" />)', text)
+    if not match:
+        return None
+    return text.replace(
+        match.group(0),
+        "%sRecordType%sRecordType%s" % (match.group(1), match.group(3), match.group(5)), 1)
+
+
+def mutate_dtsx_uncached_input_column(text):
+    """Cache only a name on a replaced Derived Column input.
+
+    The component then has nothing to compare against the buffer and answers
+    VS_NEEDSNEWMETADATA at validation - 'does not have a valid cache' - which
+    is how the live STG_Load_PartnerSale validation failed.
+    """
+    match = re.search(r'<inputColumn ([^>]*?)usageType="readWrite"', text)
+    if not match or "cachedDataType" not in match.group(1):
+        return None
+    stripped = re.sub(r'cached(?!Name)\w+="[^"]*" ', "", match.group(1))
+    return text.replace(match.group(0),
+                        '<inputColumn %susageType="readWrite"' % stripped, 1)
+
+
+def mutate_dtsx_undisposed_written_column(text):
+    """Drop the dispositions from a written Derived Column input.
+
+    The computed column then validates as VS_ISCORRUPT - 'has an invalid error
+    or truncation row disposition' - which is how the live STG_Load_PartnerSale
+    validation failed once its cache was repaired.
+    """
+    match = re.search(r'<inputColumn [^>]*?errorRowDisposition="[^"]*"[^>]*?'
+                      r'usageType="readWrite"[^>]*?>', text)
+    if not match:
+        return None
+    stripped = re.sub(r'(errorOrTruncationOperation|errorRowDisposition|'
+                      r'truncationRowDisposition)="[^"]*" ', "", match.group(0))
+    return text.replace(match.group(0), stripped, 1)
+
+
+def mutate_dtsx_undisposed_lookup_output(text):
+    """Drop the dispositions from a column a lookup copies out of its reference.
+
+    The column then names a copy whose failure has no consequence and the
+    lookup validates as VS_ISCORRUPT - 'has an invalid error or truncation row
+    disposition' - which is how the live STG_Load_Currency validation failed
+    once its property set was complete.
+    """
+    match = re.search(r'<outputColumn [^>]*?errorOrTruncationOperation="Copy Column"'
+                      r'[^>]*?truncationRowDisposition="[^"]*"[^>]*?>', text)
+    if not match:
+        return None
+    stripped = re.sub(r'(errorOrTruncationOperation|'
+                      r'truncationRowDisposition)="[^"]*" ?', "", match.group(0))
+    return text.replace(match.group(0), stripped, 1)
+
+
+def mutate_dtsx_attributed_lookup_copy(text):
+    """Name the copied reference column in an attribute instead of a property.
+
+    The lookup reads the copy off the output column's CopyFromReferenceColumn
+    property and never off an attribute, so a column written this way copies
+    nothing and the component fails validation with 0xC0010009 - which is how
+    the live STG_Load_Currency and STG_Load_PartnerSale validations failed.
+    """
+    match = re.search(r'\s*<properties>\s*<property [^>]*name="CopyFromReferenceColumn"[^>]*>'
+                      r'([^<]*)</property>\s*</properties>', text)
+    if not match:
+        return None
+    return text.replace(match.group(0),
+                        ' copyFromReferenceColumn="%s"' % match.group(1), 1)
+
+
+def mutate_dtsx_undeclared_lookup_property(text):
+    """Drop a property the lookup gives itself from a lookup component.
+
+    The runtime restores the component from what the package holds and fills
+    nothing in, so the component fails with DTS_E_ELEMENTNOTFOUND (0xC0010009)
+    as soon as it reads the property, whatever its value would have been. That
+    is how the live STG_Load_Currency and STG_Load_PartnerSale validations
+    failed on a catalog that matched the built packages byte for byte.
+    """
+    match = re.search(r'<property [^>]*name="MaxMemoryUsage64"[^>]*>[^<]*</property>\s*', text)
+    if not match:
+        return None
+    return text.replace(match.group(0), "", 1)
+
+
+def mutate_dtsx_unjoined_lookup_column(text):
+    """Drop a lookup's join to its reference column.
+
+    The component then has no relation to the reference set it queries and
+    fails validation with 0xC0010009, which is how the live STG_Load_Currency
+    validation failed.
+    """
+    match = re.search(r'<inputColumn [^>]*?joinToReferenceColumn="[^"]*"[^>]*?/>', text)
+    if not match:
+        return None
+    return text.replace(
+        match.group(0),
+        re.sub(r'joinToReferenceColumn="[^"]*" ', "", match.group(0)), 1)
+
+
+def _destination_debt_names():
+    """The (data flow, destination) pairs the debt register already excuses."""
+    path = os.path.join(REPO_ROOT, "ssis", "destination-metadata-debt.txt")
+    pairs = set()
+    if not os.path.exists(path):
+        return pairs
+    with open(path, errors="replace") as handle:
+        for line in handle:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                fields = line.split("|")
+                if len(fields) >= 2:
+                    pairs.add((fields[0].strip(), fields[1].strip()))
+    return pairs
+
+
+def mutate_dtsx_empty_destination_input(text):
+    """Leave an OLE DB destination input with no columns at all.
+
+    'The number of input columns for ... cannot be zero' is what SSIS reports
+    for it, as VS_ISBROKEN, and is how the live STG_Load_Currency validation
+    failed.
+    """
+    debt = _destination_debt_names()
+    for match in re.finditer(r'(?s)(<input refId="([^"]*)\.Inputs\[OLE DB Destination Input\]"'
+                             r'[^>]*>\s*<inputColumns>)(.*?)(</inputColumns>)', text):
+        if "<inputColumn " not in match.group(3):
+            continue
+        parts = match.group(2).split("\\")
+        if len(parts) >= 3 and (parts[1], parts[2]) in debt:
+            continue  # a destination the register already excuses stays a warning
+        return text.replace(match.group(0), match.group(1) + match.group(4), 1)
+    return None
+
+
 # (label, artifact glob root, extension, expected check, mutation)
 FIXTURES = (
     ("duplicate pipeline refId", "ssis/07_dimensions", ".dtsx", "dtsx-pipeline",
@@ -266,6 +564,8 @@ FIXTURES = (
      mutate_conmgr_literal_token),
     ("credential named by an expression", "ssis/04_staging", ".conmgr", "conmgr-credentials",
      mutate_conmgr_expression_password),
+    ("whole connection string expressed", "ssis/04_staging", ".conmgr", "conmgr-binding",
+     mutate_conmgr_expressed_connection_string),
     ("CM password parameter removed", "ssis/04_staging", ".dtproj", "catalog-binding",
      mutate_dtproj_drop_cm_password),
     ("sensitive project parameter re-added", "ssis/04_staging", ".params", "catalog-binding",
@@ -274,6 +574,14 @@ FIXTURES = (
      "file-locality", mutate_dtsx_drop_directory_expression),
     ("flat file manager not bound to the loop variable", "ssis/03_file_ingestion", ".dtsx",
      "file-locality", mutate_dtsx_unbound_flatfile),
+    ("File System Task the task host ignores", "ssis/03_file_ingestion", ".dtsx",
+     "file-system-task", mutate_dtsx_file_system_attributes),
+    ("File System Task validating before the loop runs", "ssis/03_file_ingestion", ".dtsx",
+     "file-task-validation", mutate_dtsx_file_task_validates_early),
+    ("OLE DB source without OpenRowsetVariable", "ssis/05_data_quality", ".dtsx",
+     "oledb-source-properties", mutate_dtsx_drop_oledb_property),
+    ("OLE DB marker with no ParameterMapping", "ssis/05_data_quality", ".dtsx",
+     "oledb-source-properties", mutate_dtsx_drop_oledb_parameter_mapping),
     ("package connection addressed by DTSID", "ssis/03_file_ingestion", ".dtsx",
      "dtsx-connection-refs", mutate_dtsx_cm_id_by_dtsid),
     ("component connection nothing declares", "ssis/07_dimensions", ".dtsx",
@@ -302,6 +610,40 @@ FIXTURES = (
      "execution-parameters", mutate_ps1_hardcoded_adoption),
     ("SSM payload written with a BOM", "deployment/lib", ".ps1",
      "ssm-payload", mutate_ps1_bom_ssm_payload),
+    ("Expression Task with two assignments", "ssis/03_file_ingestion", ".dtsx",
+     "expression-task-statements", mutate_dtsx_multi_statement_expression),
+    ("source selects a column the table lacks", "ssis/05_data_quality", ".dtsx",
+     "sql-column-contract", mutate_dtsx_unknown_source_column),
+    ("renamed source column the table lacks", "ssis/04_staging", ".dtsx",
+     "sql-column-contract", mutate_dtsx_renamed_unknown_column),
+    ("filter on a column the table lacks", "ssis/04_staging", ".dtsx",
+     "sql-column-contract", mutate_dtsx_unknown_filter_column),
+    ("flat file column without FastParse", "ssis/03_file_ingestion", ".dtsx",
+     "component-contracts", mutate_dtsx_drop_fastparse),
+    ("Derived Column without its error output", "ssis/05_data_quality", ".dtsx",
+     "component-contracts", mutate_dtsx_drop_derived_error_output),
+    ("conditional split default output as a case", "ssis/03_file_ingestion", ".dtsx",
+     "component-contracts", mutate_dtsx_default_output_as_case),
+    ("Directory expression on the loop container", "ssis/03_file_ingestion", ".dtsx",
+     "foreach-file-enumerator", mutate_dtsx_directory_expression_on_container),
+    ("single row result set over a table", "ssis/03_file_ingestion", ".dtsx",
+     "single-row-result-set", mutate_dtsx_single_row_without_aggregate),
+    ("destination metadata shaped by its buffer", "ssis/03_file_ingestion", ".dtsx",
+     "destination-metadata", mutate_dtsx_buffer_shaped_destination),
+    ("input column that caches only a name", "ssis/04_staging", ".dtsx",
+     "input-column-cache", mutate_dtsx_uncached_input_column),
+    ("destination input with no columns", "ssis/04_staging", ".dtsx",
+     "destination-metadata", mutate_dtsx_empty_destination_input),
+    ("written input column without dispositions", "ssis/04_staging", ".dtsx",
+     "input-column-disposition", mutate_dtsx_undisposed_written_column),
+    ("lookup key joined to no reference column", "ssis/04_staging", ".dtsx",
+     "lookup-reference-mapping", mutate_dtsx_unjoined_lookup_column),
+    ("lookup missing a property of its own set", "ssis/04_staging", ".dtsx",
+     "component-property-set", mutate_dtsx_undeclared_lookup_property),
+    ("copied lookup column without dispositions", "ssis/04_staging", ".dtsx",
+     "lookup-reference-mapping", mutate_dtsx_undisposed_lookup_output),
+    ("lookup copy named in an attribute", "ssis/04_staging", ".dtsx",
+     "lookup-reference-mapping", mutate_dtsx_attributed_lookup_copy),
 )
 
 
@@ -325,8 +667,8 @@ def run_checker(root, prefix):
         [sys.executable, CHECKER, "--json", "--path", prefix],
         cwd=REPO_ROOT, env=dict(os.environ, WWI_ESTATE_ROOT=root),
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-    if result.returncode not in (0, 1):
-        raise RuntimeError("checker failed: %s" % result.stderr.strip())
+    if result.returncode not in (0, 1) or not result.stdout.strip():
+        raise RuntimeError("checker failed: %s" % (result.stderr.strip() or result.stdout.strip()))
     return json.loads(result.stdout)
 
 

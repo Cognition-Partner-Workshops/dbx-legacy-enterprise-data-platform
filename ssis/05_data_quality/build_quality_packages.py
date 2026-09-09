@@ -143,27 +143,26 @@ def record_measure(name, object_name, measure_code, sql_expression, threshold_va
     )
 
 
-def register_rejects(err_table, object_name, key_expression, reason_column, stage="Quality"):
-    """Row-by-row reject registration through the control framework."""
+def register_rejects(err_table, object_name, stage="Quality"):
+    """Register a batch's err.* rows with the control framework.
+
+    etl.usp_LogRejectedRecordSet is the set-based path for a load that has
+    already isolated its rejects in an err.* table: the err.* tables do not
+    share a column list, so the procedure looks up the columns it can use on
+    the table it is given and registers the rest as NULL. The alternative -
+    naming a key and a reason column here - assumes a shape no err.* table
+    actually has.
+    """
+    # The filter reaches dynamic SQL inside the procedure, so it carries the
+    # batch id as a converted integer and nothing else.
     sql = (
-        "DECLARE @RejectId BIGINT, @Key NVARCHAR(200), @Reason NVARCHAR(50);\n"
-        "DECLARE dq_cur CURSOR LOCAL FAST_FORWARD FOR\n"
-        "    SELECT r.RejectedRowId, %s, r.%s\n"
-        "    FROM %s AS r\n"
-        "    WHERE r.BatchId = ? AND r.LoggedToControl = 0;\n"
-        "OPEN dq_cur;\n"
-        "FETCH NEXT FROM dq_cur INTO @RejectId, @Key, @Reason;\n"
-        "WHILE @@FETCH_STATUS = 0\n"
-        "BEGIN\n"
-        "    EXEC etl.usp_LogRejectedRecord @PackageExecutionId = ?, @BatchId = ?, "
-        "@SourceSystemCode = ?, @ObjectName = N'%s', @BusinessKey = @Key, "
-        "@RejectReasonCode = @Reason, @RejectStage = N'%s';\n"
-        "    UPDATE %s SET LoggedToControl = 1 WHERE RejectedRowId = @RejectId;\n"
-        "    FETCH NEXT FROM dq_cur INTO @RejectId, @Key, @Reason;\n"
-        "END\n"
-        "CLOSE dq_cur;\n"
-        "DEALLOCATE dq_cur;"
-        % (key_expression, reason_column, err_table, object_name, stage, err_table)
+        "DECLARE @BatchId BIGINT = ?, @Filter NVARCHAR(1000), @RejectedRowCount BIGINT;\n"
+        "SET @Filter = N'BatchId = ' + CAST(@BatchId AS NVARCHAR(20));\n"
+        "EXEC etl.usp_LogRejectedRecordSet @ObjectName = N'%s', @BatchId = @BatchId,\n"
+        "     @PackageExecutionId = ?, @SourceSystemCode = ?, @RejectStage = N'%s',\n"
+        "     @SourceTable = N'%s', @SourceFilter = @Filter,\n"
+        "     @RejectedRowCount = @RejectedRowCount OUTPUT;"
+        % (object_name, stage, err_table.replace("[", "").replace("]", ""))
     )
     return ExecuteSql(
         "Register Quality Rejects - %s" % object_name,
@@ -172,9 +171,9 @@ def register_rejects(err_table, object_name, key_expression, reason_column, stag
         parameter_bindings=[
             ("$Package::BatchId", 0, "LONG"),
             ("User::PackageExecutionId", 1, "LONG"),
-            ("$Package::BatchId", 2, "LONG"),
-            ("$Package::SourceSystemCode", 3, "NVARCHAR"),
+            ("$Package::SourceSystemCode", 2, "NVARCHAR"),
         ],
+        is_stored_procedure=False,
     )
 
 
@@ -265,7 +264,9 @@ def dq_customer_screen():
         "SELECT CustomerCode, CustomerName, CountryCode, RegionCode, CustomerClassCode,\n"
         "       TaxRegistrationNumber, MarketingConsentFlag, RetentionMonths, CreditLimitAmount\n"
         "FROM stg.Customer WHERE BatchId = ?;",
-        cols, timeout=3600)
+        cols, timeout=3600,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Customers Screened", "User::RowsRead")
     flow.derived_column("Evaluate Customer Rules", [
         ("NameMissingFlag", 'ISNULL(CustomerName) || TRIM(CustomerName) == "" ? "Y" : "N"',
@@ -326,8 +327,7 @@ def dq_customer_screen():
                (raise_gate("Fail On Customer Rule Breach",
                            "One or more blocking customer quality rules failed.", "Failure"),
                 "@[User::FailedRuleCount] > 0")],
-        reject_task=register_rejects("[err].[RejectedCustomer]", "stg.Customer", "r.CustomerCode",
-                                     "RejectReasonCode"))
+        reject_task=register_rejects("[err].[RejectedCustomer]", "stg.Customer"))
 
 
 @package
@@ -344,7 +344,9 @@ def dq_supplier_screen():
         "SELECT SupplierCode, SupplierName, TaxIdentifier, PaymentTermsCode, CountryCode,\n"
         "       RegionCode, IsActive\n"
         "FROM stg.Supplier WHERE BatchId = ?;",
-        cols, timeout=3600)
+        cols, timeout=3600,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Suppliers Screened", "User::RowsRead")
     flow.derived_column("Normalize Tax Identifier", [
         ("NormalizedTaxId",
@@ -352,14 +354,14 @@ def dq_supplier_screen():
          str_col("NormalizedTaxId", 30)),
         ("TermsMissingFlag", 'ISNULL(PaymentTermsCode) || TRIM(PaymentTermsCode) == "" ? "Y" : "N"',
          str_col("TermsMissingFlag", 1)),
+        ("RejectReasonCode",
+         'ISNULL(PaymentTermsCode) || TRIM(PaymentTermsCode) == "" ? "DQ_SUPP_TERMS_NULL" : '
+         '"DQ_SUPP_TAXID_DUP"', str_col("RejectReasonCode", 30)),
         # EU suppliers must present a VAT-shaped identifier; APAC uses a national
         # business number, NA an EIN. Only the EU shape is machine-checkable here.
         ("TaxShapeInvalidFlag",
          'RegionCode == "EU" && (LEN(NormalizedTaxId) < 8 || SUBSTRING(NormalizedTaxId, 1, 2) != '
          'SUBSTRING(UPPER(TRIM(CountryCode)), 1, 2)) ? "Y" : "N"', str_col("TaxShapeInvalidFlag", 1)),
-        ("RejectReasonCode",
-         'ISNULL(PaymentTermsCode) || TRIM(PaymentTermsCode) == "" ? "DQ_SUPP_TERMS_NULL" : '
-         '"DQ_SUPP_TAXID_DUP"', str_col("RejectReasonCode", 30)),
     ])
     flow.sort("Sort By Normalized Tax Identifier", ["NormalizedTaxId", "SupplierCode"])
     flow.aggregate("Count Suppliers Per Tax Identifier", ["NormalizedTaxId"], [
@@ -396,8 +398,7 @@ def dq_supplier_screen():
                (raise_gate("Fail On Supplier Rule Breach",
                            "One or more blocking supplier quality rules failed.", "Failure"),
                 "@[User::FailedRuleCount] > 0")],
-        reject_task=register_rejects("[err].[RejectedSupplier]", "stg.Supplier", "r.SupplierCode",
-                                     "RejectReasonCode"))
+        reject_task=register_rejects("[err].[RejectedSupplier]", "stg.Supplier"))
 
 
 @package
@@ -415,7 +416,9 @@ def dq_order_line_screen():
         "FROM stg.OrderLine AS l\n"
         "     INNER JOIN stg.[Order] AS o ON o.OrderId = l.OrderId\n"
         "WHERE l.BatchId = ?;",
-        cols, timeout=7200)
+        cols, timeout=7200,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Order Lines Screened", "User::RowsRead")
     flow.lookup(
         "Lookup Order Customer (No Cache)", CONN_STAGING,
@@ -470,8 +473,7 @@ def dq_order_line_screen():
                (raise_gate("Fail On Order Line Rule Breach",
                            "One or more blocking order line quality rules failed.", "Failure"),
                 "@[User::FailedRuleCount] > 0")],
-        reject_task=register_rejects("[err].[RejectedOrderLine]", "stg.OrderLine", "r.BusinessKey",
-                                     "RejectReasonCode"))
+        reject_task=register_rejects("[err].[RejectedOrderLine]", "stg.OrderLine"))
 
 
 @package
@@ -491,7 +493,9 @@ def dq_invoice_line_screen():
         "FROM stg.SaleLine AS l\n"
         "     INNER JOIN stg.Sale AS s ON s.InvoiceId = l.InvoiceId\n"
         "WHERE l.BatchId = ?;",
-        cols, timeout=7200)
+        cols, timeout=7200,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Invoice Lines Screened", "User::RowsRead")
     flow.lookup(
         "Lookup Currency Domain (Full Cache)", CONN_STAGING,
@@ -546,8 +550,7 @@ def dq_invoice_line_screen():
                (raise_gate("Fail On Invoice Line Rule Breach",
                            "One or more blocking invoice line quality rules failed.", "Failure"),
                 "@[User::FailedRuleCount] > 0")],
-        reject_task=register_rejects("[err].[RejectedInvoiceLine]", "stg.SaleLine", "r.BusinessKey",
-                                     "RejectReasonCode"))
+        reject_task=register_rejects("[err].[RejectedInvoiceLine]", "stg.SaleLine"))
 
 
 @package
@@ -567,7 +570,9 @@ def dq_payment_screen():
         "FROM stg.Payment AS p\n"
         "     LEFT OUTER JOIN work.PaymentMatched AS m ON m.PaymentNumber = p.PaymentNumber\n"
         "WHERE p.BatchId = ?;",
-        cols, timeout=3600)
+        cols, timeout=3600,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Payments Screened", "User::RowsRead")
     flow.derived_column("Evaluate Payment Rules", [
         ("OrphanFlag", 'MatchTypeCode == "UNMATCHED" ? "Y" : "N"', str_col("OrphanFlag", 1)),
@@ -611,70 +616,109 @@ def dq_payment_screen():
                (raise_gate("Fail On Payment Rule Breach",
                            "One or more blocking payment quality rules failed.", "Failure"),
                 "@[User::FailedRuleCount] > 0")],
-        reject_task=register_rejects("[err].[RejectedPayment]", "stg.Payment", "r.PaymentNumber",
-                                     "RejectReasonCode"))
+        reject_task=register_rejects("[err].[RejectedPayment]", "stg.Payment"))
 
 
 @package
 def dq_file_screen():
     """Structural screening of the partner sales file landing."""
+    # raw.FilePartnerSales lands the parsed fields as text, one column per
+    # agreed field; the delimited line itself and its column count only survive
+    # on the rows the ingestion packages rejected, in err.RejectedFileRow.
     cols = [
-        bigint_col("FileRowId"), str_col("SourceFileName", 200), int_col("FileLineNumber"),
-        str_col("RawLine", 1000), int_col("DelimiterCount"), str_col("SaleDateText", 20),
-        str_col("AmountText", 20), str_col("PartnerCode", 10),
+        str_col("SourceFileName", 260), bigint_col("SourceRowNumber"), str_col("PartnerCode", 30),
+        str_col("TransactionReference", 60), str_col("TransactionDate", 40),
+        str_col("GrossAmount", 50), str_col("CurrencyCode", 10),
+        str_col("PartnerProductDesc", 400),
     ]
-    flow = DataFlow("DFT Screen Partner File", "Delimiter, encoding and parse screening of file rows")
+    flow = DataFlow("DFT Screen Partner File", "Completeness, encoding and parse screening of file rows")
     flow.oledb_source(
         "RAW File Partner Sales", CONN_STAGING,
-        "SELECT FileRowId, SourceFileName, FileLineNumber, RawLine,\n"
-        "       LEN(RawLine) - LEN(REPLACE(RawLine, N'|', N'')) AS DelimiterCount,\n"
-        "       SaleDateText, AmountText, PartnerCode\n"
+        "SELECT SourceFileName, SourceRowNumber, PartnerCode, TransactionReference,\n"
+        "       TransactionDate, GrossAmount, CurrencyCode, PartnerProductDesc\n"
         "FROM raw.FilePartnerSales WHERE BatchId = ?;",
-        cols, timeout=3600)
+        cols, timeout=3600,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count File Rows Screened", "User::RowsRead")
     flow.derived_column("Evaluate File Row Rules", [
-        # The agreed interface is nine pipe-delimited fields; partners have been
-        # known to send eight (dropping currency) or ten (an unescaped pipe).
-        ("DelimiterBreachFlag", 'DelimiterCount != 8 ? "Y" : "N"', str_col("DelimiterBreachFlag", 1)),
+        # The agreed interface carries nine fields; a short line lands with the
+        # trailing ones empty rather than as a delimiter count the row can show.
+        ("IncompleteRowFlag",
+         'ISNULL(PartnerCode) || LEN(TRIM(PartnerCode)) == 0 '
+         '|| ISNULL(TransactionReference) || LEN(TRIM(TransactionReference)) == 0 '
+         '|| ISNULL(CurrencyCode) || LEN(TRIM(CurrencyCode)) == 0 ? "Y" : "N"',
+         str_col("IncompleteRowFlag", 1)),
         ("UnparsableDateFlag",
-         'ISNULL(SaleDateText) || LEN(TRIM(SaleDateText)) < 8 || '
-         '(FINDSTRING(SaleDateText, "/", 1) == 0 && FINDSTRING(SaleDateText, "-", 1) == 0) ? "Y" : "N"',
+         'ISNULL(TransactionDate) || LEN(TRIM(TransactionDate)) < 8 || '
+         '(FINDSTRING(TransactionDate, "/", 1) == 0 && FINDSTRING(TransactionDate, "-", 1) == 0) ? "Y" : "N"',
          str_col("UnparsableDateFlag", 1)),
         ("UnparsableAmountFlag",
-         'ISNULL(AmountText) || LEN(REPLACE(REPLACE(REPLACE(TRIM(AmountText), ",", ""), "$", ""), ".", "")) == 0 '
+         'ISNULL(GrossAmount) || LEN(REPLACE(REPLACE(REPLACE(TRIM(GrossAmount), ",", ""), "$", ""), ".", "")) == 0 '
          '? "Y" : "N"', str_col("UnparsableAmountFlag", 1)),
-        ("HighBitFlag", 'FINDSTRING(RawLine, "\\uFFFD", 1) > 0 ? "Y" : "N"', str_col("HighBitFlag", 1)),
+        ("HighBitFlag", 'FINDSTRING(PartnerProductDesc, "\\xFFFD", 1) > 0 ? "Y" : "N"',
+         str_col("HighBitFlag", 1)),
+        # The reason codes err.RejectedFileRow documents, so a screened row and
+        # an ingestion reject describe the same defect with the same code.
         ("RejectReasonCode",
-         'DelimiterCount != 8 ? "DQ_FILE_DELIMITER" : (ISNULL(SaleDateText) ? "DQ_FILE_DATE" : '
-         '"DQ_FILE_AMOUNT")', str_col("RejectReasonCode", 30)),
+         'IncompleteRowFlag == "Y" ? "COLUMN_COUNT" : (HighBitFlag == "Y" ? "BAD_ENCODING" : '
+         '(UnparsableDateFlag == "Y" ? "UNPARSEABLE_DATE" : "UNPARSEABLE_AMOUNT"))',
+         str_col("RejectReasonCode", 50)),
     ])
     flow.conditional_split("Route File Failures", [
         ("Well Formed Row",
-         'DelimiterBreachFlag == "N" && UnparsableDateFlag == "N" && UnparsableAmountFlag == "N" '
+         'IncompleteRowFlag == "N" && UnparsableDateFlag == "N" && UnparsableAmountFlag == "N" '
          '&& HighBitFlag == "N"'),
-        ("Malformed Delimiters", 'DelimiterBreachFlag == "Y"'),
+        ("Incomplete Row", 'IncompleteRowFlag == "Y"'),
         ("Unparsable Date", 'UnparsableDateFlag == "Y"'),
     ], default_output="Unparsable Amount")
     flow.row_count("Count File Rows Passing", "User::RowsInserted")
+    # etl.DataQualityResult identifies every result by the object and the rule
+    # that produced it; a screened row that carries neither is not a result.
+    flow.derived_column("Describe File Screen Result", [
+        ("BatchId", "@[$Package::BatchId]", bigint_col("BatchId")),
+        ("PackageExecutionId", "@[User::PackageExecutionId]", bigint_col("PackageExecutionId")),
+        ("ObjectName", '"raw.FilePartnerSales"', str_col("ObjectName", 200)),
+        ("RuleCode", '"FILE_ROW_SCREEN"', str_col("RuleCode", 30)),
+        ("ResultStatus", '"Passed"', str_col("ResultStatus", 20)),
+        ("DetailText",
+         '"Row " + (DT_WSTR,20)SourceRowNumber + " of " + SourceFileName '
+         '+ " carries the mandatory fields, a recognisable date and a parsable amount."',
+         str_col("DetailText", 2000)),
+    ])
     flow.oledb_destination("DQ File Pass Log", CONN_STAGING, "[etl].[DataQualityResult]", batch_size=20000)
-    flow.branch_destination("ERR File Delimiters", CONN_STAGING, "[err].[RejectedFileRow]",
-                            "Route File Failures", "Malformed Delimiters")
-    flow.branch_destination("ERR File Date", CONN_STAGING, "[err].[RejectedFileRow]",
-                            "Route File Failures", "Unparsable Date")
-    flow.branch_destination("ERR File Amount", CONN_STAGING, "[err].[RejectedFileRow]",
-                            "Route File Failures", "Unparsable Amount")
+    for name, output, reason in [
+        ("Incomplete", "Incomplete Row", "A mandatory agreed field is missing from the landed row."),
+        ("Date", "Unparsable Date", "The landed transaction date is not a recognisable date."),
+        ("Amount", "Unparsable Amount", "The landed gross amount is not a parsable amount."),
+    ]:
+        # err.RejectedFileRow will not take a reject without the batch that
+        # produced it and the stage that rejected it.
+        describe = "Describe File %s Reject" % name
+        flow.derived_column(describe, [
+            ("BatchId", "@[$Package::BatchId]", bigint_col("BatchId")),
+            ("RejectReason", '"%s"' % reason, str_col("RejectReason", 500)),
+            ("RejectStage", '"Screen"', str_col("RejectStage", 50)),
+        ], source=("Route File Failures", output))
+        flow.branch_destination("ERR File %s" % name, CONN_STAGING, "[err].[RejectedFileRow]",
+                                describe, "Derived Column Output")
     return build_quality_package(
         "DQ_File_Screen",
-        "Screen raw.FilePartnerSales before it is trusted: rows must carry exactly eight pipe "
-        "delimiters, a recognisable date and a parsable amount, and must not contain replacement "
-        "characters left behind by a code-page mismatch.",
+        "Screen raw.FilePartnerSales before it is trusted: every landed row must carry the "
+        "mandatory agreed fields, a recognisable date and a parsable amount, and must not "
+        "contain replacement characters left behind by a code-page mismatch.",
         FILE, "raw.FilePartnerSales", [flow],
+        # Structural damage never lands: it is rejected during ingestion, so the
+        # malformed rate is measured over the rejects against the rows that did land.
         pre_tasks=[record_measure("Measure File Malformed Rate", "raw.FilePartnerSales",
                                   "DQ_FILE_MALFORMED_RATE",
-                                  "CAST(100.0 * SUM(CASE WHEN LEN(RawLine) - LEN(REPLACE(RawLine, N'|', N'')) "
-                                  "<> 8 THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) AS DECIMAL(9,4)) "
-                                  "FROM raw.FilePartnerSales", "User::MeasuredValue")],
-        post_tasks=[evaluate_rules("FILEROW", "raw.FilePartnerSales")],
+                                  "CAST(100.0 * (SELECT COUNT_BIG(*) FROM err.RejectedFileRow "
+                                  "WHERE RejectReasonCode IN (N'COLUMN_COUNT', N'BAD_ENCODING')) "
+                                  "/ NULLIF((SELECT COUNT_BIG(*) FROM raw.FilePartnerSales), 0) "
+                                  "AS DECIMAL(9,4))", "User::MeasuredValue")],
+        # etl.DataQualityRule seeds the file rules under the FILE group against
+        # err.RejectedFileRow; any other pair evaluates no rules at all.
+        post_tasks=[evaluate_rules("FILE", "err.RejectedFileRow")],
         gates=[(raise_gate("Warn On Malformed File Rows",
                            "Malformed partner file row rate exceeded tolerance.", "Warning"),
                 "@[User::MeasuredValue] > 1"),
@@ -682,7 +726,7 @@ def dq_file_screen():
                            "The partner file failed a blocking structural rule.", "Failure"),
                 "@[User::MeasuredValue] > 25 || @[User::FailedRuleCount] > 0")],
         reject_task=register_rejects("[err].[RejectedFileRow]", "raw.FilePartnerSales",
-                                     "r.BusinessKey", "RejectReasonCode", stage="Extract"))
+                                     stage="Extract"))
 
 
 @package
@@ -697,7 +741,9 @@ def dq_referential_screen():
         "STG Order Line Keys", CONN_STAGING,
         "SELECT OrderLineId, StockItemId, PackageTypeCode, N'stg.OrderLine' AS SourceObjectName\n"
         "FROM stg.OrderLine WHERE BatchId = ?;",
-        order_cols, timeout=7200)
+        order_cols, timeout=7200,
+        parameters=("$Package::BatchId",),
+    )
     order.row_count("Count Order Keys Checked", "User::RowsRead")
     order.lookup(
         "Lookup Stock Item Key (Full Cache)", CONN_STAGING,
@@ -731,7 +777,9 @@ def dq_referential_screen():
         "       N'stg.SaleLine' AS SourceObjectName\n"
         "FROM stg.SaleLine AS l INNER JOIN stg.Sale AS s ON s.InvoiceId = l.InvoiceId\n"
         "WHERE l.BatchId = ?;",
-        sale_cols, timeout=7200)
+        sale_cols, timeout=7200,
+        parameters=("$Package::BatchId",),
+    )
     sale.lookup(
         "Lookup Sale Currency (Full Cache)", CONN_STAGING,
         "SELECT CurrencyCode AS SaleCurrencyCode, CurrencyName FROM ref.Currency;",
@@ -768,8 +816,7 @@ def dq_referential_screen():
                (raise_gate("Fail On Excessive Orphans",
                            "Orphan foreign key count exceeded the blocking threshold.", "Failure"),
                 "@[User::MeasuredValue] > 1000")],
-        reject_task=register_rejects("[err].[RejectedLookupFailure]", "stg.OrderLine",
-                                     "r.BusinessKey", "RejectReasonCode", stage="Referential"))
+        reject_task=register_rejects("[err].[RejectedLookupFailure]", "stg.OrderLine", stage="Referential"))
 
 
 @package
@@ -867,7 +914,7 @@ def dq_rule_engine():
                            "Blocking data quality rules failed for this batch.", "Failure"),
                 "@[User::FailedRuleCount] > 10")],
         reject_task=register_rejects("[err].[RejectedConstraintViolation]", "etl.DataQualityResult",
-                                     "r.BusinessKey", "RejectReasonCode", stage="RuleEngine"))
+                                     stage="RuleEngine"))
 
 
 @package
@@ -930,7 +977,7 @@ def dq_reject_reprocess():
                            "Rejected rows remain unresolved after the retry window.", "Warning"),
                 "@[User::FailedRuleCount] > 0")],
         reject_task=register_rejects("[err].[RejectedLookupFailure]", "err.RejectedLookupFailure",
-                                     "r.BusinessKey", "RejectReasonCode", stage="Reprocess"))
+                                     stage="Reprocess"))
 
 
 @package
@@ -951,7 +998,9 @@ def dq_threshold_gate():
         "     INNER JOIN etl.PackageExecution AS e ON e.PackageExecutionId = a.PackageExecutionId\n"
         "WHERE e.BatchId = ?\n"
         "GROUP BY a.ObjectName;",
-        cols, timeout=1800)
+        cols, timeout=1800,
+        parameters=("$Package::BatchId",),
+    )
     flow.row_count("Count Objects Reconciled", "User::RowsRead")
     flow.derived_column("Compute Variance Percent", [
         ("RejectPercent",
@@ -1026,7 +1075,7 @@ def dq_threshold_gate():
                            "The batch quality scorecard fell below the acceptable score.", "Failure"),
                 "@[User::QualityScore] < 90")],
         reject_task=register_rejects("[err].[RejectedConstraintViolation]", "etl.RowCountAudit",
-                                     "r.BusinessKey", "RejectReasonCode", stage="Reconciliation"))
+                                     stage="Reconciliation"))
 
 
 # ---------------------------------------------------------------------------

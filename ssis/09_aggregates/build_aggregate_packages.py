@@ -202,6 +202,7 @@ def build_agg_refresh_daily_sales_summary():
         "GROUP BY f.[Invoice Date Key], c.[Region Code], ISNULL(f.[Sales Channel Code], N'DIRECT');",
         columns,
         timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
     flow.derived_column(
         "Derive Summary Ratios",
@@ -303,6 +304,7 @@ def build_agg_refresh_daily_inventory_health():
         "GROUP BY f.[Position Date Key], f.[Warehouse Code], si.[Product Category Code];",
         columns,
         timeout=3600,
+        parameters=("$Package::StockOutThreshold", "User::WatermarkFrom", "User::WatermarkTo"),
     )
     flow.derived_column(
         "Derive Health Indicators",
@@ -408,6 +410,7 @@ def build_agg_refresh_delivery_performance_summary():
         "         f.[Destination Country ISO Code];",
         columns,
         timeout=1800,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
     flow.derived_column(
         "Derive Performance Ratios",
@@ -520,6 +523,7 @@ def build_agg_refresh_monthly_sales_summary():
         "GROUP BY d.[Accounting Period Code], c.[Region Code], d.[Fiscal Period Label];",
         columns,
         timeout=3600,
+        parameters=("$Package::RebuildPriorPeriods", "$Package::AccountingPeriodCode", "$Package::AccountingPeriodCode"),
     )
     flow.derived_column(
         "Derive Period Measures",
@@ -624,6 +628,7 @@ def build_agg_refresh_monthly_margin_analysis():
         "         ISNULL(f.[Sales Channel Code], N'DIRECT');",
         columns,
         timeout=3600,
+        parameters=("$Package::RebuildPriorPeriods", "$Package::AccountingPeriodCode", "$Package::AccountingPeriodCode"),
     )
     flow.derived_column(
         "Derive Margin Bridge",
@@ -857,6 +862,7 @@ def build_agg_refresh_customer_rolling_12_month():
         "GROUP BY f.[Customer Key], p.[Accounting Period Code], c.[Region Code];",
         columns,
         timeout=7200,
+        parameters=("$Package::RebuildPriorPeriods", "$Package::AccountingPeriodCode", "$Package::AccountingPeriodCode"),
     )
     flow.derived_column(
         "Derive Rolling Trends",
@@ -978,6 +984,7 @@ def build_agg_refresh_product_performance():
         "GROUP BY f.[Stock Item Key], d.[Accounting Period Code], si.[Product Category Code];",
         columns,
         timeout=7200,
+        parameters=("$Package::AccountingPeriodCode",),
     )
     flow.derived_column(
         "Derive Product Ratios",
@@ -1109,6 +1116,7 @@ def build_agg_refresh_supplier_performance():
         "GROUP BY f.[Supplier Key], d.[Accounting Period Code], s.[Region Code];",
         columns,
         timeout=3600,
+        parameters=("$Package::AccountingPeriodCode",),
     )
     flow.derived_column(
         "Derive Supplier Scores",
@@ -1223,6 +1231,7 @@ def build_agg_refresh_regional_sales_performance():
         "GROUP BY d.[Accounting Period Code], c.[Region Code], t.[Sales Territory Key];",
         columns,
         timeout=3600,
+        parameters=("$Package::AccountingPeriodCode",),
     )
     flow.derived_column(
         "Derive Regional Measures",
@@ -1372,6 +1381,7 @@ def build_agg_refresh_finance_close_summary():
         "GROUP BY gl.[Accounting Period Code], gl.[Legal Entity Code], a.[Account Type Code];",
         columns,
         timeout=3600,
+        parameters=("$Package::AccountingPeriodCode",),
     )
     flow.derived_column(
         "Derive Close Controls",
@@ -1478,6 +1488,7 @@ def build_agg_refresh_promotion_effectiveness():
         "GROUP BY f.[Promotion Key], d.[Accounting Period Code], c.[Region Code];",
         columns,
         timeout=3600,
+        parameters=("$Package::AccountingPeriodCode",),
     )
     flow.derived_column(
         "Derive Uplift Measures",

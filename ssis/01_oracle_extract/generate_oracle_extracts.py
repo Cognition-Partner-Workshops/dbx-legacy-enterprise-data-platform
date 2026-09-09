@@ -183,7 +183,10 @@ WHERE   c.LAST_UPDATE_DT >= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')
 ORDER BY c.CUST_ID"""
 
     df = DataFlow("Extract Customer Master", "Incremental customer master with credit and classification.")
-    df.oledb_source("ORA CUST_MASTER", CONN_ORACLE, sql, cols, timeout=3600)
+    df.oledb_source(
+        "ORA CUST_MASTER", CONN_ORACLE, sql, cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Add Audit Columns",
         audit_derivations(SRC_GLOBAL) + [("DeleteFlag", '"N"', str_col("DeleteFlag", 1))],
@@ -234,7 +237,10 @@ WHERE   cg.TABLE_NAME = 'CUST_MASTER'
   AND   cg.CHANGE_DT <  TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')"""
 
     deletes = DataFlow("Detect Deleted Customers", "Delete detection from the ERP change log.")
-    deletes.oledb_source("ORA CHANGE_LOG Customer Deletes", CONN_ORACLE, delete_sql, delete_cols, timeout=900)
+    deletes.oledb_source(
+        "ORA CHANGE_LOG Customer Deletes", CONN_ORACLE, delete_sql, delete_cols, timeout=900,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     deletes.derived_column(
         "Flag Deleted Rows",
         audit_derivations(SRC_GLOBAL) + [("DeleteFlag", '"Y"', str_col("DeleteFlag", 1))],
@@ -324,7 +330,10 @@ WHERE   a.LAST_UPDATE_DT >= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')
   AND   a.ADDRESS_TYPE_CD IN ('BILL', 'SHIP', 'STMT')"""
 
     df = DataFlow("Extract Customer Addresses")
-    df.oledb_source("ORA V_CUSTOMER_ADDRESS_CURRENT", CONN_ORACLE, sql, cols, timeout=1800)
+    df.oledb_source(
+        "ORA V_CUSTOMER_ADDRESS_CURRENT", CONN_ORACLE, sql, cols, timeout=1800,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Standardise Address",
         [
@@ -464,7 +473,10 @@ WHERE   s.LAST_UPDATE_DT >= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')
   AND   s.MERGE_TARGET_SUPP_ID IS NULL"""
 
     df = DataFlow("Extract Supplier Master")
-    df.oledb_source("ORA SUPP_MASTER", CONN_ORACLE, sql, cols, timeout=2400)
+    df.oledb_source(
+        "ORA SUPP_MASTER", CONN_ORACLE, sql, cols, timeout=2400,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Derive Supplier Attributes",
         [
@@ -567,7 +579,10 @@ WHERE   p.LAST_UPDATE_DT >= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')
   AND   p.LAST_UPDATE_DT <  TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')"""
 
     df = DataFlow("Extract Product Master")
-    df.oledb_source("ORA PRODUCT_MASTER", CONN_ORACLE, sql, cols, timeout=1800)
+    df.oledb_source(
+        "ORA PRODUCT_MASTER", CONN_ORACLE, sql, cols, timeout=1800,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.data_conversion(
         "Convert ERP Numerics",
         [
@@ -617,7 +632,10 @@ WHERE   cg.TABLE_NAME = 'PRODUCT_MASTER'
   AND   cg.CHANGE_DT >= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')"""
 
     deletes = DataFlow("Detect Obsoleted Products")
-    deletes.oledb_source("ORA CHANGE_LOG Product Deletes", CONN_ORACLE, delete_sql, delete_cols, timeout=600)
+    deletes.oledb_source(
+        "ORA CHANGE_LOG Product Deletes", CONN_ORACLE, delete_sql, delete_cols, timeout=600,
+        parameters=("User::WatermarkFrom",),
+    )
     deletes.derived_column(
         "Flag Obsoleted Rows",
         audit_derivations(SRC_GLOBAL) + [("DeleteFlag", '"Y"', str_col("DeleteFlag", 1))],
@@ -781,7 +799,10 @@ WHERE   h.LAST_UPDATE_DT >= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')
   AND   h.PURCH_ORG_CD NOT IN ('TEST', 'TRNG')"""
 
     df = DataFlow("Extract Purchase Orders")
-    df.oledb_source("ORA V_PURCHASE_ORDER_EXTRACT", CONN_ORACLE, sql, cols, timeout=2400)
+    df.oledb_source(
+        "ORA V_PURCHASE_ORDER_EXTRACT", CONN_ORACLE, sql, cols, timeout=2400,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Derive Order Attributes",
         [
@@ -885,7 +906,10 @@ WHERE   l.PO_LINE_ID > ?
 ORDER BY l.PO_LINE_ID"""
 
     df = DataFlow("Extract Purchase Order Lines")
-    df.oledb_source("ORA V_PO_LINE_EXTRACT", CONN_ORACLE, sql, cols, timeout=3600)
+    df.oledb_source(
+        "ORA V_PO_LINE_EXTRACT", CONN_ORACLE, sql, cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Derive Line Metrics",
         [
@@ -994,7 +1018,10 @@ WHERE   rl.RECEIPT_LINE_ID > ?
 ORDER BY rl.RECEIPT_LINE_ID"""
 
     df = DataFlow("Extract Receipt Lines")
-    df.oledb_source("ORA PO_RECEIPT_LINE", CONN_ORACLE, sql, cols, timeout=3600)
+    df.oledb_source(
+        "ORA PO_RECEIPT_LINE", CONN_ORACLE, sql, cols, timeout=3600,
+        parameters=("User::WatermarkFrom",),
+    )
     df.derived_column(
         "Classify Variance",
         [
@@ -1217,7 +1244,10 @@ WHERE   i.LAST_UPDATE_DT >= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')
         )"""
 
     df = DataFlow("Extract AP Invoice Headers")
-    df.oledb_source("ORA V_AP_INVOICE_EXTRACT", CONN_ORACLE, sql, cols, timeout=3600)
+    df.oledb_source(
+        "ORA V_AP_INVOICE_EXTRACT", CONN_ORACLE, sql, cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Derive Tax Split",
         [
@@ -1322,7 +1352,10 @@ WHERE   l.AP_INVOICE_LINE_ID > ?
 ORDER BY l.AP_INVOICE_LINE_ID"""
 
     df = DataFlow("Extract AP Invoice Lines")
-    df.oledb_source("ORA AP_INVOICE_LINE", CONN_ORACLE, sql, cols, timeout=3600)
+    df.oledb_source(
+        "ORA AP_INVOICE_LINE", CONN_ORACLE, sql, cols, timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.lookup(
         "Lookup Cost Center",
         CONN_STAGING,
@@ -1429,7 +1462,10 @@ WHERE   p.LAST_UPDATE_DT >= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')
   AND   p.LAST_UPDATE_DT <  TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')"""
 
     df = DataFlow("Extract AP Payments")
-    df.oledb_source("ORA V_AP_PAYMENT_EXTRACT", CONN_ORACLE, sql, cols, timeout=2400)
+    df.oledb_source(
+        "ORA V_AP_PAYMENT_EXTRACT", CONN_ORACLE, sql, cols, timeout=2400,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Derive Payment Attributes",
         [
@@ -1529,7 +1565,10 @@ WHERE   a.PAYMENT_APPLY_ID > ?
 ORDER BY a.PAYMENT_APPLY_ID"""
 
     df = DataFlow("Extract Payment Applications")
-    df.oledb_source("ORA AP_PAYMENT_APPLY", CONN_ORACLE, sql, cols, timeout=1800)
+    df.oledb_source(
+        "ORA AP_PAYMENT_APPLY", CONN_ORACLE, sql, cols, timeout=1800,
+        parameters=("User::WatermarkFrom",),
+    )
     df.derived_column(
         "Derive Settlement Metrics",
         [
@@ -1716,7 +1755,10 @@ WHERE   h.ACCOUNTING_DT >= TO_DATE(?, 'YYYY-MM-DD')
 ORDER BY h.ACCOUNTING_DT, l.GL_JOURNAL_LINE_ID"""
 
     df = DataFlow("Extract GL Journal Lines")
-    df.oledb_source("ORA GL_JOURNAL_LINE", CONN_ORACLE, sql, cols, timeout=7200)
+    df.oledb_source(
+        "ORA GL_JOURNAL_LINE", CONN_ORACLE, sql, cols, timeout=7200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Derive Ledger Attributes",
         [
@@ -2176,7 +2218,10 @@ WHERE   usd_from.TO_CURRENCY_CD = 'USD'
   AND   usd_from.FROM_CURRENCY_CD <> usd_to.FROM_CURRENCY_CD"""
 
     df = DataFlow("Extract FX Rates")
-    df.oledb_source("ORA FX_RATE_DAILY", CONN_ORACLE, sql, cols, timeout=1200)
+    df.oledb_source(
+        "ORA FX_RATE_DAILY", CONN_ORACLE, sql, cols, timeout=1200,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo", "User::WatermarkFrom", "User::WatermarkTo"),
+    )
     df.derived_column(
         "Derive Rate Key",
         [

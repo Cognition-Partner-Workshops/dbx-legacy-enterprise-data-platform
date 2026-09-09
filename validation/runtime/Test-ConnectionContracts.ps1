@@ -3,19 +3,19 @@
     Open the generated connection contracts against the installed providers.
 
 .DESCRIPTION
-    The generated connection managers carry a ConnectionString property
-    expression, and that expression - not the literal attribute, and not
-    anything dtexec sets on the connection manager - is what the provider
-    receives, because the package re-evaluates it when the connection opens.
-    This test therefore evaluates the same expression the runtime evaluates
-    (validation/checks/connection_expression.py), injects the project
-    parameters from the environment exactly as
-    deployment/ssis/Invoke-EstateOrchestration.ps1 does, and opens the result.
+    The string a generated connection manager hands the provider is its
+    design-time literal with the ServerName / InitialCatalog / UserName
+    property expressions folded back into it and the password the catalog
+    applied to CM.<connection>.Password appended. This test composes exactly
+    that (validation/checks/connection_expression.py), injects the project
+    parameters and the two passwords from the environment exactly as
+    deployment/ssis/Invoke-EstateOrchestration.ps1 and the catalog do, and
+    opens the result.
 
     Two things it proves that no static check can:
 
       * OraOLEDB.Oracle.1 and MSOLEDBSQL19.1 authenticate with the password
-        carried by $Project::OraclePassword / $Project::SqlServerPassword;
+        carried by CM.<connection>.Password;
       * OLE DB Driver 19 honours "Trust Server Certificate=True;" and not the
         unspaced SqlClient spelling, which it parses as an unknown keyword.
 
@@ -56,10 +56,12 @@ function Get-ConnectionString {
     #>
     param(
         [Parameter(Mandatory)][string]   $ConnectionManager,
+        [string]   $PasswordEnv = '',
         [string[]] $Set = @()
     )
     $arguments = @((Join-Path $repoRoot 'validation/checks/connection_expression.py'),
                    (Join-Path $repoRoot $ConnectionManager), '--unmasked')
+    if ($PasswordEnv) { $arguments += @('--password-env', $PasswordEnv) }
     foreach ($assignment in $Set) { $arguments += @('--set', $assignment) }
     $rendered = & python @arguments
     if ($LASTEXITCODE -ne 0) {
@@ -97,9 +99,9 @@ function Test-OleDbConnection {
 Add-Type -AssemblyName System.Data
 $failures = @()
 
-# 1. Oracle: the expression must carry $Project::OraclePassword to OraOLEDB.
-$oracle = Test-OleDbConnection -ConnectionString (Get-ConnectionString $OracleConnectionManager) `
-    -Probe 'SELECT 1 FROM DUAL'
+# 1. Oracle: CM.WWI_Oracle_ERP.Password must reach OraOLEDB.
+$oracle = Test-OleDbConnection -Probe 'SELECT 1 FROM DUAL' -ConnectionString (
+    Get-ConnectionString $OracleConnectionManager -PasswordEnv 'ORACLE_PASSWORD')
 if ($oracle.Succeeded) {
     Write-WwiLog 'PASS  Oracle contract authenticates with the runtime OraclePassword'
 } else {
@@ -121,7 +123,7 @@ if ($wrongOracle.Succeeded) {
 # 3. SQL Server: SQL authentication through $Project::SqlServerPassword with
 #    the TLS keyword OLE DB Driver 19 actually parses.
 $sql = Test-OleDbConnection -Probe 'SELECT 1' -ConnectionString (
-    Get-ConnectionString $SqlServerConnectionManager)
+    Get-ConnectionString $SqlServerConnectionManager -PasswordEnv 'SQLSERVER_PASSWORD')
 if ($sql.Succeeded) {
     Write-WwiLog 'PASS  SQL Server contract authenticates with the runtime SqlServerPassword'
 } else {
@@ -142,7 +144,7 @@ if ($wrongSql.Succeeded) {
 #    Driver 19 does not recognise it, so it cannot switch certificate
 #    validation off. Only assert on it when the certificate is in fact
 #    untrusted, otherwise there is nothing for the keyword to do.
-$correct = Get-ConnectionString $SqlServerConnectionManager
+$correct = Get-ConnectionString $SqlServerConnectionManager -PasswordEnv 'SQLSERVER_PASSWORD'
 $unspaced = $correct.Replace('Trust Server Certificate=True;', 'TrustServerCertificate=True;')
 $untrusted = Test-OleDbConnection -Probe 'SELECT 1' -ConnectionString (
     $correct.Replace('Trust Server Certificate=True;', ''))
