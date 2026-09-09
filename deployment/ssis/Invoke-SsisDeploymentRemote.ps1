@@ -31,6 +31,11 @@
       .\deployment\ssis\Invoke-SsisDeploymentRemote.ps1 -InstanceId i-0... -Step environment
       .\deployment\ssis\Invoke-SsisDeploymentRemote.ps1 -InstanceId i-0... -Step preflight
 
+    The parity step answers what the verify step cannot: verify counts projects
+    and packages, which a stale deployment satisfies just as well as a current
+    one. Parity hashes every .dtsx inside the built .ispac files, ships that
+    manifest, and compares it to the project streams SSISDB actually holds.
+
     The preflight step is the same read-only Preflight.ps1 the deploy host runs,
     executed where the catalog spawns ISServerExec, which is the only place its
     answer means anything.
@@ -39,7 +44,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string] $InstanceId,
-    [ValidateSet('deploy', 'verify', 'environment', 'preflight')][string] $Step = 'deploy',
+    [ValidateSet('deploy', 'verify', 'environment', 'preflight', 'parity')][string] $Step = 'deploy',
     [string] $Region = $env:AWS_DEFAULT_REGION,
     [string] $RemoteRoot = 'C:\WWI\deploy',
     [string] $Folder = 'WWI_DEV',
@@ -178,6 +183,16 @@ if ($Step -eq 'deploy') {
     }
     $payloadFiles += @(Get-ChildItem -Path $artifacts -Filter '*.ispac' -File)
 }
+if ($Step -eq 'parity') {
+    if (-not (Test-Path $artifacts)) {
+        Stop-WwiWithError "$artifacts does not exist. Run deployment/ssis/Build-SsisProject.ps1 first."
+    }
+    $manifestPath = Join-Path $artifacts 'package-manifest.json'
+    $builder = Join-Path $repoRoot 'validation\checks\build_package_manifest.py'
+    & python $builder $artifacts --output $manifestPath | ForEach-Object { Write-WwiLog "manifest $_" }
+    if ($LASTEXITCODE -ne 0) { Stop-WwiWithError 'building the package manifest failed.' }
+    $payloadFiles += @(Get-Item -LiteralPath $manifestPath)
+}
 if ($Step -eq 'preflight') {
     $preflight = Join-Path $repoRoot 'deployment\preflight'
     $payloadFiles += @(Get-ChildItem -Path $preflight -File |
@@ -289,6 +304,10 @@ elseif ($Step -eq 'preflight') {
         "`$env:WWI_LANDING_ROOT = [Environment]::GetEnvironmentVariable('WWI_LANDING_ROOT', 'Machine')",
         "& '$RemoteRoot\deployment\preflight\Preflight.ps1' -Connectivity -ExecutionHost"
     )
+}
+elseif ($Step -eq 'parity') {
+    $run += ("& '$RemoteRoot\deployment\ssis\Test-SsisCatalogParity.ps1'" +
+             " -ManifestPath '$RemoteRoot\artifacts\package-manifest.json'")
 }
 else {
     $deployArguments = if ($Step -eq 'verify') { '-VerifyOnly' } else { '-UseCatalogProcedure' }
