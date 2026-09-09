@@ -521,7 +521,11 @@ def build_mnt_archive_processedfiles():
     move_loop = Container(
         "Archive Each File",
         kind="foreach",
-        enumerator={"folder": "%INBOUND_FILE_ROOT%\\processed", "file_spec": "*.*"},
+        enumerator={
+            "folder": os.path.join(project.INBOUND_ROOT, "processed"),
+            "file_spec": "*.*",
+        },
+        folder_expression='@[$Project::InboundFileRoot] + "\\\\processed"',
         variable_mappings=["User::CurrentFile"],
         description="Moves each settled processed file into the dated archive folder.",
     )

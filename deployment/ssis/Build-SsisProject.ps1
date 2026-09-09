@@ -15,9 +15,13 @@
         agents have instead of Visual Studio;
       * a hand-rolled .ispac (a zip of the manifest, the project parameters, the
         connection managers and the project's .dtsx files) - the fallback for
-        hosts with neither. It has always been the awkward part of this build.
+        hosts with neither.
 
-    This script has not been executed on a build host.
+    Whichever path builds it, the .ispac is opened afterwards and checked before
+    it is accepted: an .ispac whose manifest omits the project parameters and
+    the CM.<connection>.Password connection-manager parameters deploys perfectly
+    and then connects with an empty password, because the catalog has nothing to
+    bind the credential to. That is a build defect, so the build fails on it.
 
     Usage: .\deployment\ssis\Build-SsisProject.ps1 [-OutputPath artifacts] [-DryRun]
 #>
@@ -60,16 +64,37 @@ $devenv = Get-Command devenv.com -ErrorAction SilentlyContinue
 $ssisBuild = Get-Command SSISBuild.exe -ErrorAction SilentlyContinue
 
 function Build-WwiIspacFromFolder {
-    <# Zips a project folder into an .ispac when no SSIS build tool is present. #>
+    <#
+        Assembles an .ispac from a project folder when no SSIS build tool is
+        present.
+
+        The manifest is not synthesised any more. The .dtproj already carries the
+        real one under DeploymentModelSpecificContent/Manifest - the same
+        document a build tool writes out as @Project.manifest - including
+        <SSIS:DeploymentInfo>, the project parameters and the
+        CM.<connection>.Password connection-manager parameters. Rebuilding it
+        from a directory listing dropped all of that, which is what made the
+        fallback's output undeployable in practice: the project appeared in the
+        catalog with no parameters at all, so every binding was a silent no-op.
+    #>
     param(
         [Parameter(Mandatory)][string] $ProjectDirectory,
         [Parameter(Mandatory)][string] $ProjectName,
+        [Parameter(Mandatory)][string] $DtprojPath,
         [Parameter(Mandatory)][string] $IspacPath
     )
 
     $packages = @(Get-ChildItem -Path $ProjectDirectory -Filter '*.dtsx' -File)
     if ($packages.Count -eq 0) {
         Stop-WwiWithError "no .dtsx packages found in $ProjectDirectory."
+    }
+
+    $dtproj = [xml] (Get-Content -Path $DtprojPath -Raw)
+    $manifestNode = $dtproj.SelectSingleNode(
+        '/*[local-name()="Project"]/*[local-name()="DeploymentModelSpecificContent"]/*[local-name()="Manifest"]/*[local-name()="Project"]')
+    if (-not $manifestNode) {
+        Stop-WwiWithError ("$DtprojPath has no DeploymentModelSpecificContent/Manifest project element, so no " +
+                           'deployable manifest can be produced. Regenerate the project with tools/ssisgen.')
     }
 
     $staging = Join-Path ([System.IO.Path]::GetTempPath()) ("wwi-ispac-" + [guid]::NewGuid().ToString('N'))
@@ -81,35 +106,9 @@ function Build-WwiIspacFromFolder {
                 ForEach-Object { Copy-Item -Path $_.FullName -Destination $staging -Force }
         }
 
-        # The manifest lists every part; ISDeploymentWizard rejects an .ispac
-        # whose manifest and contents disagree, which is how the fallback used
-        # to fail silently before the manifest was generated from the folder.
-        $manifest = [xml] @"
-<?xml version="1.0" encoding="utf-8"?>
-<SSIS:Project SSIS:ProtectionLevel="DontSaveSensitive" xmlns:SSIS="www.microsoft.com/SqlServer/SSIS">
-  <SSIS:Properties>
-    <SSIS:Property SSIS:Name="Name">$ProjectName</SSIS:Property>
-    <SSIS:Property SSIS:Name="VersionMajor">1</SSIS:Property>
-    <SSIS:Property SSIS:Name="VersionMinor">0</SSIS:Property>
-  </SSIS:Properties>
-  <SSIS:Packages />
-  <SSIS:ConnectionManagers />
-</SSIS:Project>
-"@
-        $packagesNode = $manifest.SelectSingleNode('//*[local-name()="Packages"]')
-        foreach ($package in $packages) {
-            $node = $manifest.CreateElement('SSIS', 'Package', 'www.microsoft.com/SqlServer/SSIS')
-            $node.SetAttribute('Name', 'www.microsoft.com/SqlServer/SSIS', $package.Name)
-            $node.SetAttribute('EntryPoint', 'www.microsoft.com/SqlServer/SSIS',
-                               $(if ($package.Name -like 'Master_*') { '1' } else { '0' }))
-            [void] $packagesNode.AppendChild($node)
-        }
-        $connectionsNode = $manifest.SelectSingleNode('//*[local-name()="ConnectionManagers"]')
-        foreach ($connection in (Get-ChildItem -Path $ProjectDirectory -Filter '*.conmgr' -File -ErrorAction SilentlyContinue)) {
-            $node = $manifest.CreateElement('SSIS', 'ConnectionManager', 'www.microsoft.com/SqlServer/SSIS')
-            $node.SetAttribute('Name', 'www.microsoft.com/SqlServer/SSIS', $connection.Name)
-            [void] $connectionsNode.AppendChild($node)
-        }
+        $manifest = New-Object System.Xml.XmlDocument
+        [void] $manifest.AppendChild($manifest.CreateXmlDeclaration('1.0', 'utf-8', $null))
+        [void] $manifest.AppendChild($manifest.ImportNode($manifestNode, $true))
         $manifest.Save((Join-Path $staging '@Project.manifest'))
 
         if (Test-Path $IspacPath) { Remove-Item $IspacPath -Force }
@@ -118,6 +117,70 @@ function Build-WwiIspacFromFolder {
     }
     finally {
         Remove-Item -Path $staging -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-WwiIspac {
+    <#
+        Opens the produced .ispac and checks it is deployable, whichever path
+        built it.
+
+        An .ispac is a zip. It must contain @Project.manifest, Project.params and
+        every .dtsx and .conmgr the manifest names, and the manifest must declare
+        a Sensitive CM.<connection>.Password parameter for each OLE DB connection
+        manager - that parameter is the only thing the catalog environment can
+        bind a credential to now that no expression carries one.
+    #>
+    param(
+        [Parameter(Mandatory)][string] $IspacPath,
+        [Parameter(Mandatory)][int]    $ExpectedPackages
+    )
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($IspacPath)
+    try {
+        $entries = @($archive.Entries | ForEach-Object { $_.FullName })
+        $problems = @()
+
+        if ($entries -notcontains '@Project.manifest') { $problems += 'no @Project.manifest' }
+        if ($entries -notcontains 'Project.params')    { $problems += 'no Project.params' }
+
+        $packageEntries = @($entries | Where-Object { $_ -like '*.dtsx' })
+        if ($packageEntries.Count -ne $ExpectedPackages) {
+            $problems += "holds $($packageEntries.Count) package(s), the project has $ExpectedPackages"
+        }
+
+        $manifestEntry = $archive.GetEntry('@Project.manifest')
+        if ($manifestEntry) {
+            $reader = New-Object System.IO.StreamReader $manifestEntry.Open()
+            try { $manifestXml = [xml] $reader.ReadToEnd() } finally { $reader.Dispose() }
+
+            $declared = @($manifestXml.SelectNodes('//*[local-name()="Parameter"]') |
+                ForEach-Object { $_.GetAttribute('Name', 'www.microsoft.com/SqlServer/SSIS') })
+            if ($declared.Count -eq 0) {
+                $problems += 'the manifest declares no parameters at all'
+            }
+
+            foreach ($entry in @($entries | Where-Object { $_ -like '*.conmgr' })) {
+                $conmgrEntry = $archive.GetEntry($entry)
+                $reader = New-Object System.IO.StreamReader $conmgrEntry.Open()
+                try { $conmgrXml = [xml] $reader.ReadToEnd() } finally { $reader.Dispose() }
+                $creationName = $conmgrXml.DocumentElement.GetAttribute(
+                    'CreationName', 'www.microsoft.com/SqlServer/Dts')
+                if ($creationName -ne 'OLEDB') { continue }
+                $parameter = 'CM.' + [System.IO.Path]::GetFileNameWithoutExtension($entry) + '.Password'
+                if ($declared -notcontains $parameter) {
+                    $problems += "the manifest does not declare $parameter"
+                }
+            }
+        }
+
+        if ($problems.Count -gt 0) {
+            Stop-WwiWithError ("$IspacPath is not deployable: {0}." -f ($problems -join '; '))
+        }
+    }
+    finally {
+        $archive.Dispose()
     }
 }
 
@@ -163,9 +226,11 @@ foreach ($dtproj in $projects) {
     }
     else {
         Write-WwiLog "no SSIS build tool available for $projectName; assembling the .ispac by hand." 'WARN'
-        Build-WwiIspacFromFolder -ProjectDirectory $projectDir -ProjectName $projectName -IspacPath $ispacPath
+        Build-WwiIspacFromFolder -ProjectDirectory $projectDir -ProjectName $projectName `
+                                 -DtprojPath $dtproj.FullName -IspacPath $ispacPath
     }
 
+    Test-WwiIspac -IspacPath $ispacPath -ExpectedPackages $packageCount
     Write-WwiLog ("built {0} ({1} package(s)) -> {2}" -f $projectName, $packageCount, $ispacPath)
     $built += $ispacPath
 }

@@ -70,15 +70,65 @@ def mutate_conmgr_literal_token(text):
                   r"\1@[$Project::SqlServerHost]\2", text, count=1)
 
 
-def mutate_conmgr_drop_password(text):
-    if "@[$Project::SqlServerPassword]" not in text:
+def mutate_conmgr_expression_password(text):
+    """Put the credential back into the expression - the 0xC0017010 defect."""
+    if '+ ";" : "Integrated Security=SSPI;"' not in text:
         return None
-    return text.replace('+ ";Password=" + @[$Project::SqlServerPassword] ', "", 1)
+    return text.replace('+ ";" : "Integrated Security=SSPI;"',
+                        '+ ";Password=" + @[$Project::SqlServerPassword] + ";" '
+                        ': "Integrated Security=SSPI;"', 1)
+
+
+def mutate_dtproj_drop_cm_password(text):
+    """Remove a CM.<connection>.Password parameter from the project manifest."""
+    match = re.search(
+        r'(?s)\s*<SSIS:Parameter SSIS:Name="CM\.[^"]*\.Password">.*?</SSIS:Parameter>', text)
+    if not match:
+        return None
+    return text.replace(match.group(0), "", 1)
+
+
+def mutate_params_sensitive_parameter(text):
+    """Re-declare a Sensitive project parameter, which would be Required and unbound."""
+    if "</SSIS:Parameters>" not in text:
+        return None
+    return text.replace("</SSIS:Parameters>", """  <SSIS:Parameter SSIS:Name="SqlServerPassword">
+    <SSIS:Properties>
+      <SSIS:Property SSIS:Name="ID">{00000000-0000-0000-0000-000000000000}</SSIS:Property>
+      <SSIS:Property SSIS:Name="CreationName"></SSIS:Property>
+      <SSIS:Property SSIS:Name="Description">re-added by a negative fixture</SSIS:Property>
+      <SSIS:Property SSIS:Name="IncludeInDebugDump">0</SSIS:Property>
+      <SSIS:Property SSIS:Name="Required">1</SSIS:Property>
+      <SSIS:Property SSIS:Name="Sensitive">1</SSIS:Property>
+      <SSIS:Property SSIS:Name="DataType">18</SSIS:Property>
+    </SSIS:Properties>
+  </SSIS:Parameter>
+</SSIS:Parameters>""", 1)
 
 
 def mutate_conmgr_unspaced_tls(text):
     return text.replace("Trust Server Certificate=True;",
                         "TrustServerCertificate=True;", 1)
+
+
+def mutate_dtsx_drop_directory_expression(text):
+    """A Foreach loop left with only its design-time folder."""
+    match = re.search(r'\n\s*<DTS:PropertyExpression DTS:Name="Directory">.*?'
+                      r'</DTS:PropertyExpression>', text, re.S)
+    if not match:
+        return None
+    return text.replace(match.group(0), "", 1)
+
+
+def mutate_dtsx_unbound_flatfile(text):
+    """A flat file manager pinned to whatever file existed at generation."""
+    if "@[User::CurrentFilePath]</DTS:PropertyExpression>" not in text:
+        return None
+    return text.replace(
+        '<DTS:PropertyExpression DTS:Name="ConnectionString">'
+        '@[User::CurrentFilePath]</DTS:PropertyExpression>',
+        '<DTS:PropertyExpression DTS:Name="ConnectionString">'
+        '@[$Project::InboundFileRoot]</DTS:PropertyExpression>', 1)
 
 
 def mutate_xml_malformed(text):
@@ -116,8 +166,16 @@ FIXTURES = (
      mutate_conmgr_drop_expression),
     ("connection string left as a token", "ssis/04_staging", ".conmgr", "conmgr-binding",
      mutate_conmgr_literal_token),
-    ("SQL connection without a password", "ssis/04_staging", ".conmgr", "conmgr-credentials",
-     mutate_conmgr_drop_password),
+    ("credential named by an expression", "ssis/04_staging", ".conmgr", "conmgr-credentials",
+     mutate_conmgr_expression_password),
+    ("CM password parameter removed", "ssis/04_staging", ".dtproj", "catalog-binding",
+     mutate_dtproj_drop_cm_password),
+    ("sensitive project parameter re-added", "ssis/04_staging", ".params", "catalog-binding",
+     mutate_params_sensitive_parameter),
+    ("Foreach loop without a Directory expression", "ssis/03_file_ingestion", ".dtsx",
+     "file-locality", mutate_dtsx_drop_directory_expression),
+    ("flat file manager not bound to the loop variable", "ssis/03_file_ingestion", ".dtsx",
+     "file-locality", mutate_dtsx_unbound_flatfile),
     ("TLS keyword OLE DB 19 ignores", "ssis/04_staging", ".conmgr", "conmgr-credentials",
      mutate_conmgr_unspaced_tls),
     ("EXEC argument is an expression", "sqlserver/procedures/facts", ".sql",

@@ -306,13 +306,21 @@ TLS_KEYWORD = "Trust Server Certificate=True;"
 TLS_KEYWORD_WRONG = re.compile(r"TrustServerCertificate\s*=")
 
 
-def check_conmgr_credentials(result, prefixes):
-    """Connection expressions must consume the sensitive project parameters.
+SENSITIVE_TOKEN_RE = re.compile(
+    r"@\[\$Project::(\w*(?:Password|Secret|Pwd)\w*)\]", re.IGNORECASE)
 
-    The password reaches the provider only through the ConnectionString
-    property expression: the expression is re-evaluated when the connection is
-    opened, so a password set on the connection manager itself - by dtexec /Set
-    or otherwise - is overwritten before it is used.
+
+def check_conmgr_credentials(result, prefixes):
+    """No connection expression may name a credential.
+
+    A Sensitive project parameter cannot be read by the SSIS expression
+    evaluator: the package fails validation with 0xC0017010 before the
+    credential would ever be used. The password therefore travels on the
+    connection manager's own ``CM.<connection>.Password`` project parameter,
+    which the runtime applies to the connection manager object before the
+    ConnectionString expression is evaluated, and which the catalog environment
+    binds by reference. Everything else about the connection string - host,
+    port, service, catalog, provider, user, TLS - stays in the expression.
     """
     ns = {"DTS": "www.microsoft.com/SqlServer/Dts"}
     oracle = sql = 0
@@ -327,19 +335,19 @@ def check_conmgr_credentials(result, prefixes):
                 expression = node.text or ""
         if not expression:
             continue
+        for match in SENSITIVE_TOKEN_RE.finditer(expression):
+            result.fail("conmgr-credentials", rel,
+                        "connection expression references the sensitive project parameter "
+                        "$Project::%s; a sensitive parameter cannot be read by the "
+                        "expression evaluator (0xC0017010) - bind the credential through "
+                        "CM.<connection>.Password" % match.group(1))
         if "OracleProvider" in expression:
             oracle += 1
-            if "@[$Project::OraclePassword]" not in expression:
-                result.fail("conmgr-credentials", rel,
-                            "Oracle connection expression does not consume $Project::OraclePassword")
             if "@[$Project::OracleUser]" not in expression:
                 result.fail("conmgr-credentials", rel,
                             "Oracle connection expression does not consume $Project::OracleUser")
         if "SqlServerProvider" in expression:
             sql += 1
-            if "@[$Project::SqlServerPassword]" not in expression:
-                result.fail("conmgr-credentials", rel,
-                            "SQL Server connection expression does not consume $Project::SqlServerPassword")
             if "Integrated Security=SSPI;" not in expression:
                 result.fail("conmgr-credentials", rel,
                             "SQL Server connection expression has no Windows authentication branch")
@@ -352,6 +360,172 @@ def check_conmgr_credentials(result, prefixes):
                             "keyword, which OLE DB Driver 19 ignores")
     result.count("oracle_connections_checked", oracle)
     result.count("sqlserver_connections_checked", sql)
+
+
+def check_catalog_binding_surface(result, prefixes):
+    """Every OLE DB connection must expose a sensitive CM.<name>.Password.
+
+    This is the other half of check_conmgr_credentials. Taking the password out
+    of the expression only works if something else carries it, and the only
+    thing the catalog can bind is the connection manager parameter declared in
+    the project manifest. A project whose manifest lacks it deploys happily and
+    then connects with an empty password.
+
+    Project.params is checked at the same time: a Sensitive project parameter
+    left there would be Required=1 and unbound, which fails the execution at
+    validation.
+    """
+    ssis_ns = "www.microsoft.com/SqlServer/SSIS"
+    dts_ns = "www.microsoft.com/SqlServer/Dts"
+    projects = 0
+    bindings = 0
+    for rel, full in walk_files(prefixes, (".dtproj",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        manifest = root.find("DeploymentModelSpecificContent/Manifest")
+        if manifest is None:
+            continue
+        projects += 1
+        declared = {}
+        for node in manifest.iter("{%s}Parameter" % ssis_ns):
+            name = node.get("{%s}Name" % ssis_ns)
+            sensitive = "0"
+            for prop in node.iter("{%s}Property" % ssis_ns):
+                if prop.get("{%s}Name" % ssis_ns) == "Sensitive":
+                    sensitive = (prop.text or "0").strip()
+            declared[name] = sensitive
+
+        directory = os.path.dirname(full)
+        for conmgr in sorted(name for name in os.listdir(directory) if name.endswith(".conmgr")):
+            try:
+                cm_root = ET.parse(os.path.join(directory, conmgr)).getroot()
+            except ET.ParseError:
+                continue
+            if cm_root.get("{%s}CreationName" % dts_ns) != "OLEDB":
+                continue
+            parameter = "CM.%s.Password" % conmgr[:-len(".conmgr")]
+            if parameter not in declared:
+                result.fail("catalog-binding", rel,
+                            "manifest does not declare %s, so the catalog has nothing to "
+                            "bind the credential to" % parameter)
+            elif declared[parameter] != "1":
+                result.fail("catalog-binding", rel,
+                            "%s is not Sensitive=1" % parameter)
+            else:
+                bindings += 1
+
+    for rel, full in walk_files(prefixes, (".params",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for node in root.iter("{%s}Parameter" % ssis_ns):
+            name = node.get("{%s}Name" % ssis_ns)
+            for prop in node.iter("{%s}Property" % ssis_ns):
+                if (prop.get("{%s}Name" % ssis_ns) == "Sensitive"
+                        and (prop.text or "0").strip() == "1"):
+                    result.fail("catalog-binding", rel,
+                                "project parameter %s is Sensitive=1; credentials belong on "
+                                "CM.<connection>.Password, not on a project parameter" % name)
+    result.count("catalog_projects_checked", projects)
+    result.count("catalog_password_bindings", bindings)
+
+
+def check_file_locality(result, prefixes):
+    """A file package must resolve its folder and its file at run time.
+
+    Two defects make an ING_FILE_* package succeed while loading nothing. A
+    Foreach Loop with only a design-time ``FEFE Folder`` enumerates whatever
+    literal path was baked in at generation, so the catalog reads a directory
+    that does not exist on the execution host and reports success over zero
+    files. And a flat file source pointed at a project-level FILE connection
+    manager has no per-iteration file at all; the source needs a FLATFILE
+    manager whose ConnectionString expression is the loop variable.
+    """
+    dts = "www.microsoft.com/SqlServer/Dts"
+    loops = 0
+    managers = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+
+        for executable in root.iter("{%s}Executable" % dts):
+            if executable.get("{%s}CreationName" % dts) != "STOCK:FOREACHLOOP":
+                continue
+            if executable.find(".//{%s}ForEachEnumerator" % dts) is None:
+                continue
+            enumerator = executable.find(".//{%s}ForEachEnumerator" % dts)
+            if enumerator.find(".//FEFE") is None:
+                continue  # not a file enumerator
+            loops += 1
+            name = executable.get("{%s}ObjectName" % dts)
+            expressions = [node.text or "" for node in executable
+                           if node.tag == "{%s}PropertyExpression" % dts
+                           and node.get("{%s}Name" % dts) == "Directory"]
+            if not expressions:
+                result.fail("file-locality", rel,
+                            "Foreach loop %r has no Directory property expression, so it "
+                            "enumerates the design-time folder on the execution host" % name)
+            elif not any("$Project::InboundFileRoot" in text
+                         or "$Project::QuarantineFileRoot" in text for text in expressions):
+                result.fail("file-locality", rel,
+                            "Foreach loop %r derives its Directory from neither "
+                            "InboundFileRoot nor QuarantineFileRoot" % name)
+
+        for manager in root.iter("{%s}ConnectionManager" % dts):
+            if manager.get("{%s}CreationName" % dts) != "FLATFILE":
+                continue
+            managers += 1
+            name = manager.get("{%s}ObjectName" % dts)
+            bound = [node.text or "" for node in manager
+                     if node.tag == "{%s}PropertyExpression" % dts
+                     and node.get("{%s}Name" % dts) == "ConnectionString"]
+            if not any("User::CurrentFilePath" in text for text in bound):
+                result.fail("file-locality", rel,
+                            "flat file connection manager %r is not bound to "
+                            "User::CurrentFilePath, so every iteration reads the same "
+                            "design-time file" % name)
+    result.count("foreach_file_loops_checked", loops)
+    result.count("flatfile_managers_checked", managers)
+
+
+def check_feed_manifest(result, prefixes):
+    """The preflight's feed manifest must still match config/landing-zone.yaml.
+
+    The preflight runs in PowerShell on the execution host and reads JSON rather
+    than YAML, so the manifest is a rendering of the landing zone document. A
+    stale rendering means the preflight proves the wrong layout.
+    """
+    sys.path.insert(0, os.path.join(REPO_ROOT, "tools", "landing"))
+    try:
+        import render_feed_manifest
+    except ImportError as error:
+        result.fail("feed-manifest", "tools/landing/render_feed_manifest.py",
+                    "cannot be imported: %s" % error)
+        return
+
+    relative = "deployment/preflight/feed-manifest.json"
+    path = os.path.join(REPO_ROOT, relative)
+    if not os.path.exists(path):
+        result.fail("feed-manifest", relative,
+                    "is missing; run tools/landing/render_feed_manifest.py")
+        return
+    with open(path) as handle:
+        try:
+            current = json.load(handle)
+        except ValueError as error:
+            result.fail("feed-manifest", relative, "is not valid JSON: %s" % error)
+            return
+    expected = render_feed_manifest.render()
+    if current != expected:
+        result.fail("feed-manifest", relative,
+                    "is stale against config/landing-zone.yaml; run "
+                    "tools/landing/render_feed_manifest.py")
+    result.count("feed_manifest_feeds", len(expected["feeds"]))
 
 
 def check_project_reference_scope(result, prefixes):
@@ -660,6 +834,9 @@ CHECKS = [
     ("dtproj-structure", check_dtproj_structure),
     ("conmgr-binding", check_conmgr_binding),
     ("conmgr-credentials", check_conmgr_credentials),
+    ("catalog-binding", check_catalog_binding_surface),
+    ("file-locality", check_file_locality),
+    ("feed-manifest", check_feed_manifest),
     ("orchestration-edges", check_project_reference_scope),
     ("sql-exec-arguments", check_sql_exec_arguments),
     ("sql-merge", check_sql_merge_clauses),
@@ -692,6 +869,9 @@ def main():
     check_dtproj_structure(result, prefixes)
     check_conmgr_binding(result, prefixes)
     check_conmgr_credentials(result, prefixes)
+    check_catalog_binding_surface(result, prefixes)
+    check_file_locality(result, prefixes)
+    check_feed_manifest(result, prefixes)
     check_project_reference_scope(result, prefixes)
     check_sql_exec_arguments(result, prefixes)
     check_sql_merge_clauses(result, prefixes)

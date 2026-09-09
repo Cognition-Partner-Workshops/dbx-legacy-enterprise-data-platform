@@ -5,25 +5,56 @@ original ``wwi-ssis/wwi-ssis/Daily ETL.dtproj``: a ``DeploymentModelSpecificCont
 manifest carrying ``SSIS:Project`` with its packages, connection managers and
 deployment info. Anything else is rejected by the SSIS build tooling.
 
-Connection managers never contain credentials. The connection string is a
-property expression built from project parameters, so the deployed package
-picks the environment up at runtime; the literal ``ConnectionString`` attribute
-is only the design-time default. The credential itself travels in the sensitive
-``OraclePassword`` / ``SqlServerPassword`` project parameters, which the
-expression consumes, so a runtime that binds those parameters - the SSIS
-catalog environment or ``dtexec /Parameter`` against the .ispac - reaches the
-provider. A property expression is re-evaluated at connect time, so setting
-``ConnectionString`` or ``Password`` on the connection manager directly is
-discarded; the parameters are the only binding surface (see config/README.md
-and .env.example).
+Connection managers never contain credentials, and no credential is ever named
+by an expression. The connection string is a property expression built from the
+non-sensitive project parameters - host, port, service, catalog, provider, user
+- so the deployed package picks the environment up at runtime; the literal
+``ConnectionString`` attribute is only the design-time default.
+
+The password is not part of that expression. A sensitive parameter read from an
+expression fails the package at validation with 0xC0017010 ("the variable is
+used in an expression but is not accessible"), because the expression evaluator
+refuses to read a sensitive value. The supported binding surface is the
+connection manager's own parameter, ``CM.<connection>.Password``, a project
+parameter the SSIS runtime applies to the connection manager object itself
+before the ConnectionString expression is evaluated; the catalog environment
+binds it by reference. That is why the OLE DB connection managers emit
+``CM.<name>.Password`` / ``CM.<name>.UserName`` into the project manifest and
+why no ``;Password=`` fragment appears in any expression.
+
+File roots come from the landing zone, not from this module: the SSIS roots are
+derived from ``generators.wwigen.landing.DEFAULT_ROOT`` so the packages, the
+loaders and the staged feeds cannot point at different trees.
 """
 
 from __future__ import annotations
 
 import os
+import sys
 
 from ssisgen import guid
 from xml.sax.saxutils import escape, quoteattr
+
+_GENERATORS = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "generators")
+if _GENERATORS not in sys.path:
+    sys.path.insert(0, _GENERATORS)
+from wwigen.landing import DEFAULT_ROOT as LANDING_ROOT  # noqa: E402
+
+_CHECKS = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "validation", "checks")
+if _CHECKS not in sys.path:
+    sys.path.insert(0, _CHECKS)
+from connection_expression import assert_no_sensitive  # noqa: E402
+
+# The three file roots the packages know about, all beneath the one landing
+# root. 'reject' is not a landing-zone directory - malformed records go to
+# quarantine - so the parameter is QuarantineFileRoot.
+INBOUND_ROOT = os.path.join(LANDING_ROOT, "inbound").replace("/", "\\")
+ARCHIVE_ROOT = os.path.join(LANDING_ROOT, "archive").replace("/", "\\")
+QUARANTINE_ROOT = os.path.join(LANDING_ROOT, "quarantine").replace("/", "\\")
 
 # Provider used by the SQL Server connection managers. The estate was authored
 # against SQLNCLI11.1, which is out of support and absent from current build
@@ -56,7 +87,7 @@ def _sql_connection(catalog_param):
         '+ ";Provider=" + @[$Project::SqlServerProvider] '
         '+ ";Auto Translate=False;" '
         '+ (LEN(@[$Project::SqlServerUser]) > 0 ? "User ID=" + @[$Project::SqlServerUser] '
-        '+ ";Password=" + @[$Project::SqlServerPassword] + ";" : "Integrated Security=SSPI;") '
+        '+ ";" : "Integrated Security=SSPI;") '
         '+ (@[$Project::SqlServerTrustServerCertificate] ? "%s" : "")'
         % (catalog_param[0], SQLSERVER_TRUST_KEYWORD)
     )
@@ -74,7 +105,6 @@ _ORACLE_EXPRESSION = (
     '"Data Source=" + @[$Project::OracleHost] + ":" + (DT_WSTR, 12) @[$Project::OraclePort] '
     '+ "/" + @[$Project::OracleService] '
     '+ ";User ID=" + @[$Project::OracleUser] '
-    '+ ";Password=" + @[$Project::OraclePassword] '
     '+ ";Provider=" + @[$Project::OracleProvider] + ";"'
 )
 
@@ -106,20 +136,20 @@ CONNECTION_MANAGERS = {
     "WWI_Inbound_Files": (
         "FILE",
         "Inbound partner/carrier/bank file drop root.",
-        "D:\\WWI\\inbound",
+        INBOUND_ROOT,
         '@[$Project::InboundFileRoot]',
     ),
     "WWI_Archive_Files": (
         "FILE",
         "Archive root for successfully processed inbound files.",
-        "D:\\WWI\\archive",
+        ARCHIVE_ROOT,
         '@[$Project::ArchiveFileRoot]',
     ),
-    "WWI_Reject_Files": (
+    "WWI_Quarantine_Files": (
         "FILE",
-        "Reject root for malformed inbound records.",
-        "D:\\WWI\\reject",
-        '@[$Project::RejectFileRoot]',
+        "Quarantine root for malformed inbound records.",
+        QUARANTINE_ROOT,
+        '@[$Project::QuarantineFileRoot]',
     ),
 }
 
@@ -130,20 +160,18 @@ PROJECT_PARAMETERS = [
     ("OracleService", "String", "WWIGERP", False, "ORACLE_SERVICE"),
     ("OracleUser", "String", "WWI_EXTRACT", False, "ORACLE_USER"),
     ("OracleProvider", "String", ORACLE_PROVIDER, False, "Oracle OLE DB provider progid"),
-    ("OraclePassword", "String", "", True, "ORACLE_PASSWORD - supplied at deploy time, never committed"),
     ("SqlServerHost", "String", "sqlserver.internal.example", False, "SQLSERVER_HOST"),
     ("SqlServerPort", "Int32", "1433", False, "SQLSERVER_PORT"),
     ("SqlServerUser", "String", "", False, "SQLSERVER_USER - empty selects Windows authentication"),
     ("SqlServerProvider", "String", SQLSERVER_PROVIDER, False, "SQL Server OLE DB provider progid"),
     ("SqlServerTrustServerCertificate", "Boolean", "false", False,
      "Trust a server certificate that is not chain-validated (non-production only)"),
-    ("SqlServerPassword", "String", "", True, "SQLSERVER_PASSWORD - supplied at deploy time, never committed"),
     ("SqlServerOltpDb", "String", "WideWorldImporters", False, "SQLSERVER_OLTP_DB"),
     ("SqlServerStagingDb", "String", "WideWorldImporters_Staging", False, "SQLSERVER_STAGING_DB"),
     ("SqlServerDwDb", "String", "WideWorldImportersDW", False, "SQLSERVER_DW_DB"),
-    ("InboundFileRoot", "String", "D:\\WWI\\inbound", False, "ETL_INBOUND_FILE_ROOT"),
-    ("ArchiveFileRoot", "String", "D:\\WWI\\archive", False, "ETL_ARCHIVE_FILE_ROOT"),
-    ("RejectFileRoot", "String", "D:\\WWI\\reject", False, "ETL_REJECT_FILE_ROOT"),
+    ("InboundFileRoot", "String", INBOUND_ROOT, False, "ETL_INBOUND_FILE_ROOT"),
+    ("ArchiveFileRoot", "String", ARCHIVE_ROOT, False, "ETL_ARCHIVE_FILE_ROOT"),
+    ("QuarantineFileRoot", "String", QUARANTINE_ROOT, False, "ETL_QUARANTINE_FILE_ROOT"),
     ("DefaultBatchSize", "Int32", "100000", False, "ETL_DEFAULT_BATCH_SIZE"),
     ("SourceQueryTimeoutSeconds", "Int32", "3600", False, "ETL_SOURCE_QUERY_TIMEOUT_SECONDS"),
     ("MaxRejectPercent", "Int32", "5", False, "ETL_MAX_REJECT_PERCENT"),
@@ -163,8 +191,28 @@ def connection_string(name):
     return CONNECTION_MANAGERS[name][2]
 
 
+def assert_expressions_are_credential_free():
+    """Generation-time guard: no connection expression may name a secret.
+
+    Called before anything is written, so a generator change that puts a
+    password back into an expression fails the build rather than shipping a
+    package that dies at validation with 0xC0017010.
+    """
+    for name, (_kind, _description, _literal, expression) in sorted(CONNECTION_MANAGERS.items()):
+        assert_no_sensitive(expression, "connection manager %s" % name)
+    sensitive = [entry[0] for entry in PROJECT_PARAMETERS if entry[3]]
+    if sensitive:
+        raise ValueError(
+            "sensitive project parameters %s are still declared; credentials "
+            "belong on CM.<connection>.Password" % ", ".join(sensitive))
+
+
+assert_expressions_are_credential_free()
+
+
 def write_conmgr(directory, name):
     kind, description, conn, expression = CONNECTION_MANAGERS[name]
+    assert_no_sensitive(expression, "connection manager %s" % name)
     body = (
         '<?xml version="1.0"?>\n'
         '<DTS:ConnectionManager xmlns:DTS="www.microsoft.com/SqlServer/Dts"\n'

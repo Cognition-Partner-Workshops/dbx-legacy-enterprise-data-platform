@@ -26,7 +26,7 @@ from ssisgen import (Column, DataFlow, DataFlowTask, ExecuteSql, Expression,  # 
                      date_col, int_col, money_col, str_col)
 
 PROJECT_NAME = "WWI_Procurement"
-CONNECTIONS = ["WWI_Staging_DB", "WWI_DW_Destination_DB", "WWI_Archive_Files", "WWI_Reject_Files"]
+CONNECTIONS = ["WWI_Staging_DB", "WWI_DW_Destination_DB", "WWI_Archive_Files", "WWI_Quarantine_Files"]
 
 
 def bool_col(name):

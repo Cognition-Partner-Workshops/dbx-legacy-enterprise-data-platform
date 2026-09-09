@@ -36,7 +36,7 @@ from ssisgen import (Column, Container, DataFlow, DataFlowTask, ExecuteSql,  # n
 
 PROJECT_NAME = "WWI_ErrorHandling"
 CONNECTIONS = ["WWI_Staging_DB", "WWI_DW_Destination_DB", "WWI_Inbound_Files",
-               "WWI_Archive_Files", "WWI_Reject_Files"]
+               "WWI_Archive_Files", "WWI_Quarantine_Files"]
 
 
 def bool_col(name):
@@ -606,7 +606,11 @@ def build_err_quarantine_badfiles():
     move_loop = Container(
         "Quarantine Each File",
         kind="foreach",
-        enumerator={"folder": "%INBOUND_FILE_ROOT%\\failed", "file_spec": "*.*"},
+        enumerator={
+            "folder": os.path.join(project.INBOUND_ROOT, "failed"),
+            "file_spec": "*.*",
+        },
+        folder_expression='@[$Project::InboundFileRoot] + "\\\\failed"',
         variable_mappings=["User::CurrentFilePath"],
         description="Moves each unparsable file in the failed landing folder into quarantine.",
     )

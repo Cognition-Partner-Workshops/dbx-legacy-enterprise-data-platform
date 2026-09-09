@@ -1,25 +1,34 @@
 <#
     Runs one master's orchestration from ssis/orchestration-plan.json.
 
-    The estate is deployed as 17 project-deployment .ispac files. An Execute
-    Package Task with UseProjectReference resolves its child inside the
-    executing project, so a master in WWI_Orchestration cannot reach a child
-    held in another .ispac; those edges are generated into the plan instead of
-    into the packages, and this driver is what executes them: one dtexec per
-    child, against the .ispac that owns it, in the order the plan records.
+    The estate is deployed as 17 project-deployment projects in one SSISDB
+    folder. An Execute Package Task with UseProjectReference resolves its child
+    inside the executing project, so a master in WWI_Orchestration cannot reach
+    a child held in another project; those edges are generated into the plan
+    instead of into the packages, and this driver is what executes them: one
+    catalog execution per child, against the project that owns it, in the order
+    the plan records.
+
+    Execution is through the catalog, not through dtexec against an .ispac on
+    disk. Each child is a catalog.create_execution against the deployed project
+    with the project's environment reference attached, run SYNCHRONIZED so
+    start_execution returns only when the package has finished, and judged on
+    catalog.executions.status plus the estate's own row counts - never on a
+    process exit code, which for a synchronous catalog execution says nothing
+    about the package at all.
+
+    That also removes the runner from the credential path entirely: the
+    passwords live in the SSISDB environment as sensitive variables bound to the
+    connection managers' CM.<connection>.Password parameters, so no secret is
+    read, passed or logged here.
 
     The control framework the master owns (etl.usp_StartBatch, a batch step per
-    phase, the reconciliation assert, etl.usp_EndBatch) is reproduced here
-    through sqlcmd so a child still runs inside the step its phase opened.
-
-    Credentials are read from the environment and passed as project parameters
-    (/Par). They are never written to a log: every emitted command line is
-    redacted through Format-RedactedCommand, and the sqlcmd calls take the
-    password through the SQLCMDPASSWORD environment variable.
+    phase, the reconciliation assert, etl.usp_EndBatch) is reproduced here so a
+    child still runs inside the step its phase opened.
 
     Usage:
       .\deployment\ssis\Invoke-EstateOrchestration.ps1 -Root Master_Daily_ETL `
-          [-IspacPath artifacts] [-LogPath logs] [-DryRun]
+          [-LogPath logs] [-DryRun]
       .\deployment\ssis\Invoke-EstateOrchestration.ps1 -ListRoots
 #>
 
@@ -27,14 +36,15 @@
 param(
     [string]   $Root,
     [switch]   $ListRoots,
-    [string]   $IspacPath = 'artifacts',
     [string]   $LogPath = 'logs/orchestration',
     [string]   $PlanPath,
+    [int]      $LoggingLevel = 1,
     [string]   $BusinessDate = ((Get-Date).ToUniversalTime().AddDays(-1).ToString('yyyy-MM-dd')),
     [switch]   $DryRun
 )
 
 . (Join-Path (Join-Path (Join-Path $PSScriptRoot '..') 'lib') 'Common.ps1')
+. (Join-Path (Join-Path (Join-Path $PSScriptRoot '..') 'lib') 'SsisCatalog.ps1')
 $script:WwiLogPrefix = 'wwi-orchestrate'
 
 $repoRoot = Get-WwiRepositoryRoot
@@ -55,67 +65,21 @@ if (-not $Root) { Stop-WwiWithError 'specify -Root <master package> or -ListRoot
 $rootPlan = $plan.roots | Where-Object { $_.root -eq $Root }
 if (-not $rootPlan) { Stop-WwiWithError "the plan holds no root named '$Root'." }
 
+# The runner needs the catalog and the control database. It deliberately does
+# not require ORACLE_PASSWORD or SQLSERVER_PASSWORD as package inputs: those are
+# sensitive SSISDB environment variables bound to the connection managers, and
+# nothing here ever reads them.
 Assert-WwiEnvironmentVariable @(
-    'ORACLE_HOST', 'ORACLE_PORT', 'ORACLE_SERVICE', 'ORACLE_USER', 'ORACLE_PASSWORD',
+    'SSIS_SERVER', 'SSIS_FOLDER', 'SSIS_ENVIRONMENT',
     'SQLSERVER_HOST', 'SQLSERVER_PORT', 'SQLSERVER_USER', 'SQLSERVER_PASSWORD',
-    'SQLSERVER_OLTP_DB', 'SQLSERVER_STAGING_DB', 'SQLSERVER_DW_DB',
-    'ETL_INBOUND_FILE_ROOT', 'ETL_ARCHIVE_FILE_ROOT', 'ETL_REJECT_FILE_ROOT')
+    'SQLSERVER_STAGING_DB')
 $environmentCode = Get-WwiEnvironmentCode
 Confirm-WwiProduction
 
-$artifacts = if ([System.IO.Path]::IsPathRooted($IspacPath)) { $IspacPath } else { Join-Path $repoRoot $IspacPath }
+$folder      = $env:SSIS_FOLDER
+$environment = $env:SSIS_ENVIRONMENT
 $logs = if ([System.IO.Path]::IsPathRooted($LogPath)) { $LogPath } else { Join-Path $repoRoot $LogPath }
 if (-not $DryRun -and -not (Test-Path $logs)) { New-Item -ItemType Directory -Path $logs -Force | Out-Null }
-
-# 32-bit DTExec cannot load the 64-bit Oracle and MSOLEDBSQL19 providers the
-# estate binds to, so the 64-bit one is required rather than whatever is first
-# on PATH.
-$dtexec = Join-Path $env:ProgramFiles 'Microsoft SQL Server\160\DTS\Binn\DTExec.exe'
-if (-not (Test-Path $dtexec)) {
-    $candidate = Get-ChildItem -Path (Join-Path $env:ProgramFiles 'Microsoft SQL Server') -Filter 'DTExec.exe' -Recurse -File -ErrorAction SilentlyContinue |
-                 Sort-Object FullName -Descending | Select-Object -First 1
-    if (-not $candidate) { Stop-WwiWithError 'no 64-bit DTExec.exe found under Program Files\Microsoft SQL Server.' }
-    $dtexec = $candidate.FullName
-}
-Assert-WwiTool -Name 'sqlcmd' -Hint 'install the SQL Server command line tools.'
-
-# ---------------------------------------------------------------------------
-# project parameters
-# ---------------------------------------------------------------------------
-
-# Name -> value. The two password parameters are the runtime binding surface
-# for the connection managers: the generated ConnectionString expressions read
-# them, so setting the connection string itself would be overwritten.
-$projectParameters = [ordered] @{
-    'OracleHost'                      = $env:ORACLE_HOST
-    'OraclePort'                      = $env:ORACLE_PORT
-    'OracleService'                   = $env:ORACLE_SERVICE
-    'OracleUser'                      = $env:ORACLE_USER
-    'OraclePassword'                  = $env:ORACLE_PASSWORD
-    'SqlServerHost'                   = $env:SQLSERVER_HOST
-    'SqlServerPort'                   = $env:SQLSERVER_PORT
-    'SqlServerUser'                   = $env:SQLSERVER_USER
-    'SqlServerPassword'               = $env:SQLSERVER_PASSWORD
-    'SqlServerOltpDb'                 = $env:SQLSERVER_OLTP_DB
-    'SqlServerStagingDb'              = $env:SQLSERVER_STAGING_DB
-    'SqlServerDwDb'                   = $env:SQLSERVER_DW_DB
-    'SqlServerTrustServerCertificate' = $(if ($env:SQLSERVER_TRUST_SERVER_CERTIFICATE) { $env:SQLSERVER_TRUST_SERVER_CERTIFICATE } else { 'False' })
-    'InboundFileRoot'                 = $env:ETL_INBOUND_FILE_ROOT
-    'ArchiveFileRoot'                 = $env:ETL_ARCHIVE_FILE_ROOT
-    'RejectFileRoot'                  = $env:ETL_REJECT_FILE_ROOT
-    'EnvironmentCode'                 = $environmentCode
-}
-$sensitiveParameters = @('OraclePassword', 'SqlServerPassword')
-
-function Format-RedactedCommand {
-    <# The command line as it would be logged, with every secret removed. #>
-    param([Parameter(Mandatory)][string[]] $ArgumentList)
-    $redacted = foreach ($argument in $ArgumentList) {
-        $match = $sensitiveParameters | Where-Object { $argument -like ('*::{0};*' -f $_) }
-        if ($match) { ($argument -replace ';.*$', ';********') } else { $argument }
-    }
-    return ($redacted -join ' ')
-}
 
 # ---------------------------------------------------------------------------
 # control framework
@@ -123,24 +87,17 @@ function Format-RedactedCommand {
 
 function Invoke-EtlScalar {
     <# Runs one statement against the staging database and returns its scalar. #>
-    param([Parameter(Mandatory)][string] $Query)
+    param([Parameter(Mandatory)][string] $Query, [hashtable] $Parameters = @{})
 
     if ($DryRun) {
-        Write-WwiLog ("WHATIF sqlcmd {0}" -f ($Query -replace '\s+', ' '))
+        Write-WwiLog ("WHATIF control {0}" -f ($Query -replace '\s+', ' '))
         return 0
     }
-    $previous = $env:SQLCMDPASSWORD
-    $env:SQLCMDPASSWORD = $env:SQLSERVER_PASSWORD
-    try {
-        $output = & sqlcmd -S ("{0},{1}" -f $env:SQLSERVER_HOST, $env:SQLSERVER_PORT) `
-                           -U $env:SQLSERVER_USER -d $env:SQLSERVER_STAGING_DB `
-                           -C -b -h -1 -W -Q $Query
-        if ($LASTEXITCODE -ne 0) { Stop-WwiWithError "control statement failed with exit code $LASTEXITCODE." }
-    }
-    finally {
-        $env:SQLCMDPASSWORD = $previous
-    }
-    return (($output | Where-Object { $_ -match '^\s*-?\d+\s*$' } | Select-Object -First 1) -as [long])
+    $rows = Invoke-WwiSqlQuery -Database $env:SQLSERVER_STAGING_DB -Query $Query -Parameters $Parameters
+    if (@($rows).Count -eq 0) { return 0 }
+    $first = $rows[0]
+    $value = $first.PSObject.Properties | Select-Object -First 1 | ForEach-Object { $_.Value }
+    return ($value -as [long])
 }
 
 function Start-EtlBatch {
@@ -199,8 +156,81 @@ SELECT @FailedObjectCount;
 
 $script:Executed = @{}
 $script:Results = @()
+$script:References = @{}
+
+# catalog.executions.status. 7 is the only one that means the package ran to
+# completion successfully; 4 and 3 are the two that look like success in a log.
+$script:ExecutionStatusName = @{
+    1 = 'Created'; 2 = 'Running';  3 = 'Cancelled'; 4 = 'Failed'
+    5 = 'Pending'; 6 = 'Ended unexpectedly'; 7 = 'Succeeded'
+    8 = 'Stopping'; 9 = 'Completed'
+}
+
+function Get-EstateReference {
+    <#
+        The project's environment reference id. Every project carries exactly one
+        local reference to the DEV environment; an execution created without it
+        starts with unbound parameters and fails validation, so a missing
+        reference is an error rather than something to run without.
+    #>
+    param([Parameter(Mandatory)][string] $Project)
+
+    if ($script:References.ContainsKey($Project)) { return $script:References[$Project] }
+
+    $rows = Invoke-WwiSqlQuery -Database 'SSISDB' -Parameters @{
+        folder = $folder; project = $Project; environment = $environment
+    } -Query @'
+SELECT r.reference_id, r.reference_type, r.environment_folder_name
+FROM catalog.environment_references AS r
+INNER JOIN catalog.projects AS p ON p.project_id = r.project_id
+INNER JOIN catalog.folders  AS f ON f.folder_id  = p.folder_id
+WHERE f.name = @folder AND p.name = @project AND r.environment_name = @environment;
+'@
+
+    if (@($rows).Count -eq 0) {
+        Stop-WwiWithError ("project $Project has no reference to environment $environment in /SSISDB/$folder. " +
+                           'Run deployment/ssis/Deploy-SsisEnvironment.ps1 first.')
+    }
+    if (@($rows).Count -gt 1) {
+        Stop-WwiWithError "project $Project has more than one reference to environment $environment."
+    }
+
+    $script:References[$Project] = [long] $rows[0].reference_id
+    return $script:References[$Project]
+}
+
+function Get-EstateRowCounts {
+    <#
+        What the package says it moved, from the estate's own control tables.
+        Catalog status 7 only says the package did not error; these counts are
+        the semantic half of the verdict.
+    #>
+    param([Parameter(Mandatory)][long] $BatchId, [Parameter(Mandatory)][string] $Package)
+
+    $rows = Invoke-WwiSqlQuery -Database $env:SQLSERVER_STAGING_DB -Parameters @{
+        batch = $BatchId; package = $Package
+    } -Query @'
+SELECT rows_read     = SUM(ISNULL(e.RowsRead, 0)),
+       rows_inserted = SUM(ISNULL(e.RowsInserted, 0)),
+       executions    = COUNT(*)
+FROM etl.PackageExecution AS e
+WHERE e.BatchId = @batch AND e.PackageName = @package;
+'@
+    if (@($rows).Count -eq 0) { return $null }
+    return $rows[0]
+}
 
 function Invoke-EstatePackage {
+    <#
+        Runs one deployed package as a catalog execution and decides whether it
+        succeeded.
+
+        create_execution -> set_execution_parameter_value (object_type 50 for
+        SYNCHRONIZED and LOGGING_LEVEL, 30 for the package's own parameters) ->
+        start_execution. With SYNCHRONIZED = 1 start_execution returns when the
+        package has finished, and the verdict is read back from
+        catalog.executions.status and catalog.operation_messages.
+    #>
     param(
         [Parameter(Mandatory)][string] $Package,
         [Parameter(Mandatory)][string] $Project,
@@ -215,45 +245,123 @@ function Invoke-EstatePackage {
         return $script:Executed[$Package]
     }
 
-    $ispac = Join-Path $artifacts "$Project.ispac"
-    if (-not (Test-Path $ispac) -and -not $DryRun) {
-        Stop-WwiWithError "$Project.ispac is not in $artifacts; run deployment/ssis/Build-SsisProject.ps1 first."
-    }
-
-    $arguments = @("/Project", $ispac, "/Package", "$Package.dtsx", "/Reporting", "EW")
-    foreach ($name in $projectParameters.Keys) {
-        $arguments += @("/Par", ('$Project::{0};{1}' -f $name, $projectParameters[$name]))
-    }
-    $arguments += @("/Par", ('$Package::BatchId;{0}' -f $BatchId))
+    $parameters = [ordered] @{ 'BatchId' = $BatchId }
     if ($PackageParameters) {
-        foreach ($name in $PackageParameters.Keys) {
-            $arguments += @("/Par", ('$Package::{0};{1}' -f $name, $PackageParameters[$name]))
-        }
+        foreach ($name in $PackageParameters.Keys) { $parameters[$name] = $PackageParameters[$name] }
     }
 
     $started = Get-Date
     if ($DryRun) {
-        Write-WwiLog ("WHATIF dtexec {0}" -f (Format-RedactedCommand -ArgumentList $arguments))
-        $exit = 0
-    }
-    else {
-        $log = Join-Path $logs ("{0}-{1}.log" -f $Package, $started.ToUniversalTime().ToString('yyyyMMddTHHmmssZ'))
-        Write-WwiLog "RUN    $Package ($Project) -> $log"
-        & $dtexec @arguments *>&1 | Tee-Object -FilePath $log | Out-Null
-        $exit = $LASTEXITCODE
+        Write-WwiLog ("WHATIF catalog.create_execution /SSISDB/{0}/{1}/{2}.dtsx (reference to {3}, {4})" -f `
+            $folder, $Project, $Package, $environment,
+            (($parameters.Keys | ForEach-Object { "$_=$($parameters[$_])" }) -join ', '))
+        $script:Executed[$Package] = $true
+        return $true
     }
 
-    $succeeded = ($exit -eq 0)
+    $referenceId = Get-EstateReference -Project $Project
+
+    # The package parameters are applied one call at a time, all inside the
+    # single batch that also starts the execution, so a failure to set one never
+    # leaves a half-configured execution running.
+    $setParameters = ''
+    $arguments = @{
+        folder = $folder; project = $Project; package = ("$Package.dtsx")
+        reference = $referenceId; logging = $LoggingLevel
+    }
+    $index = 0
+    foreach ($name in $parameters.Keys) {
+        $index += 1
+        $arguments["pname$index"] = $name
+        $arguments["pvalue$index"] = [string] $parameters[$name]
+        $setParameters += @"
+
+EXEC catalog.set_execution_parameter_value @execution_id,
+     @object_type = 30, @parameter_name = @pname$index, @parameter_value = @pvalue$index;
+"@
+    }
+
+    $rows = Invoke-WwiSqlQuery -Database 'SSISDB' -TimeoutSeconds 0 -Parameters $arguments -Query @"
+SET NOCOUNT ON;
+DECLARE @execution_id BIGINT;
+
+EXEC catalog.create_execution
+     @folder_name   = @folder,
+     @project_name  = @project,
+     @package_name  = @package,
+     @reference_id  = @reference,
+     @use32bitruntime = 0,
+     @execution_id  = @execution_id OUTPUT;
+
+EXEC catalog.set_execution_parameter_value @execution_id,
+     @object_type = 50, @parameter_name = N'SYNCHRONIZED', @parameter_value = 1;
+EXEC catalog.set_execution_parameter_value @execution_id,
+     @object_type = 50, @parameter_name = N'LOGGING_LEVEL', @parameter_value = @logging;
+$setParameters
+
+EXEC catalog.start_execution @execution_id;
+
+SELECT execution_id = @execution_id;
+"@
+
+    $executionId = [long] $rows[0].execution_id
+
+    $execution = (Invoke-WwiSqlQuery -Database 'SSISDB' -Parameters @{ execution = $executionId } -Query @'
+SELECT e.status, e.start_time, e.end_time
+FROM catalog.executions AS e
+WHERE e.execution_id = @execution;
+'@)[0]
+
+    $status = [int] $execution.status
+    $succeeded = ($status -eq 7)
+    $statusName = if ($script:ExecutionStatusName.ContainsKey($status)) { $script:ExecutionStatusName[$status] } else { "status $status" }
+
+    # message_type 120 is an error and 130 a warning; they are the catalog's own
+    # account of what happened and are kept next to the run's other logs.
+    $messages = Invoke-WwiSqlQuery -Database 'SSISDB' -Parameters @{ execution = $executionId } -Query @'
+SELECT m.message_time, m.message_type, m.message
+FROM catalog.operation_messages AS m
+WHERE m.operation_id = @execution AND m.message_type IN (120, 130)
+ORDER BY m.message_time;
+'@
+
+    $log = Join-Path $logs ("{0}-{1}-{2}.log" -f $Package, $executionId, $started.ToUniversalTime().ToString('yyyyMMddTHHmmssZ'))
+    $messages | ForEach-Object {
+        "{0} {1} {2}" -f $_.message_time, $(if ($_.message_type -eq 120) { 'ERROR' } else { 'WARN ' }), $_.message
+    } | Set-Content -Path $log -Encoding UTF8
+
+    $counts = Get-EstateRowCounts -BatchId $BatchId -Package $Package
+    if ($succeeded -and $counts -and $counts.executions -eq 0) {
+        # The catalog is happy and the package logged nothing: it did not reach
+        # the control framework, so this is not a semantic success.
+        Write-WwiLog "$Package reported catalog success but wrote no etl.PackageExecution row" 'ERROR'
+        $succeeded = $false
+    }
+
     $script:Executed[$Package] = $succeeded
     $script:Results += [pscustomobject] @{
-        Package  = $Package
-        Project  = $Project
-        Started  = $started.ToUniversalTime().ToString('s')
-        Seconds  = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
-        ExitCode = $exit
-        Status   = $(if ($succeeded) { 'Succeeded' } else { 'Failed' })
+        Package      = $Package
+        Project      = $Project
+        ExecutionId  = $executionId
+        Started      = $started.ToUniversalTime().ToString('s')
+        Seconds      = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
+        CatalogStatus = $statusName
+        RowsRead     = $(if ($counts) { $counts.rows_read } else { $null })
+        RowsInserted = $(if ($counts) { $counts.rows_inserted } else { $null })
+        Errors       = @($messages | Where-Object { $_.message_type -eq 120 }).Count
+        Status       = $(if ($succeeded) { 'Succeeded' } else { 'Failed' })
     }
-    if (-not $succeeded) { Write-WwiLog "FAILED $Package (dtexec exit $exit)" 'ERROR' }
+
+    if ($succeeded) {
+        Write-WwiLog ("OK     {0} (execution {1}, {2} rows inserted)" -f `
+            $Package, $executionId, $(if ($counts) { $counts.rows_inserted } else { 'unknown' }))
+    }
+    else {
+        Write-WwiLog "FAILED $Package (execution $executionId, $statusName) - messages in $log" 'ERROR'
+        foreach ($message in @($messages | Where-Object { $_.message_type -eq 120 } | Select-Object -First 5)) {
+            Write-WwiLog ("       {0}" -f $message.message) 'ERROR'
+        }
+    }
     return $succeeded
 }
 
@@ -306,7 +414,8 @@ function Test-NodeShouldRun {
     return $false
 }
 
-Write-WwiLog "orchestrating $Root ($($rootPlan.nodes.Count) node(s), $($rootPlan.edges.Count) edge(s)) from $artifacts"
+Write-WwiLog ("orchestrating {0} ({1} node(s), {2} edge(s)) from /SSISDB/{3} with environment {4}" -f `
+    $Root, $rootPlan.nodes.Count, $rootPlan.edges.Count, $folder, $environment)
 $batchId = 0
 $forceStatus = $null
 

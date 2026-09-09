@@ -17,6 +17,14 @@ Usage:
 
 Without --unmasked every password parameter is rendered as ``********``, so the
 default output is safe to log.
+
+The module is also the static guard for 0xC0017010: ``assert_no_sensitive``
+refuses an expression that names a sensitive project parameter at all. The SSIS
+expression evaluator cannot read a sensitive parameter, so such an expression
+fails the package at validation, long before the credential would be used. The
+supported carrier for a password is the connection manager's own
+``CM.<connection>.Password`` project parameter, which the runtime applies to the
+connection manager object rather than evaluating in an expression.
 """
 
 from __future__ import annotations
@@ -36,19 +44,24 @@ PARAMETER_ENVIRONMENT = {
     "OraclePort": "ORACLE_PORT",
     "OracleService": "ORACLE_SERVICE",
     "OracleUser": "ORACLE_USER",
-    "OraclePassword": "ORACLE_PASSWORD",
     "SqlServerHost": "SQLSERVER_HOST",
     "SqlServerPort": "SQLSERVER_PORT",
     "SqlServerUser": "SQLSERVER_USER",
-    "SqlServerPassword": "SQLSERVER_PASSWORD",
     "SqlServerOltpDb": "SQLSERVER_OLTP_DB",
     "SqlServerStagingDb": "SQLSERVER_STAGING_DB",
     "SqlServerDwDb": "SQLSERVER_DW_DB",
     "InboundFileRoot": "ETL_INBOUND_FILE_ROOT",
     "ArchiveFileRoot": "ETL_ARCHIVE_FILE_ROOT",
-    "RejectFileRoot": "ETL_REJECT_FILE_ROOT",
+    "QuarantineFileRoot": "ETL_QUARANTINE_FILE_ROOT",
 }
+# Project parameters that are Sensitive=1 in the project manifest, plus the
+# connection-manager parameters that carry the credentials. None of them may be
+# named by an expression.
 SENSITIVE_PARAMETERS = ("OraclePassword", "SqlServerPassword")
+SENSITIVE_PARAMETER_RE = re.compile(
+    r"@\[\$Project::(?P<name>\w*(?:Password|Secret|Pwd)\w*|CM\.[\w.]*Password)\]",
+    re.IGNORECASE)
+PARAMETER_TOKEN_RE = re.compile(r"@\[\$Project::(?P<name>[\w.]+)\]")
 
 TOKEN_RE = re.compile(r"""
     (?P<space>\s+)
@@ -184,6 +197,39 @@ def coerce_number(value):
 
 def evaluate(expression, parameters):
     return Parser(tokenize(expression), parameters).parse()
+
+
+def expression_parameters(expression):
+    """Every project parameter an expression names, in order of appearance."""
+    return [match.group("name") for match in PARAMETER_TOKEN_RE.finditer(expression)]
+
+
+def sensitive_references(expression):
+    """The sensitive project parameters an expression names.
+
+    Both the known sensitive parameter names and anything shaped like a
+    credential are reported, so a parameter added later cannot slip into an
+    expression just because this module has not heard of it.
+    """
+    found = []
+    for name in expression_parameters(expression):
+        if name in SENSITIVE_PARAMETERS or SENSITIVE_PARAMETER_RE.search(
+                "@[$Project::%s]" % name):
+            if name not in found:
+                found.append(name)
+    return found
+
+
+def assert_no_sensitive(expression, origin="expression"):
+    """Raise if the expression names a sensitive parameter (0xC0017010 guard)."""
+    found = sensitive_references(expression)
+    if found:
+        raise ExpressionError(
+            "%s references the sensitive project parameter(s) %s; a sensitive "
+            "parameter cannot be read by the SSIS expression evaluator "
+            "(0xC0017010). Bind the credential through the connection manager's "
+            "CM.<connection>.Password parameter instead."
+            % (origin, ", ".join(found)))
 
 
 def connection_expression(conmgr_path):

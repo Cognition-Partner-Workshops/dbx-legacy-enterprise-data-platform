@@ -14,6 +14,11 @@
 
                       Idempotent. Not executed against any catalogue.
 
+                      Every value arrives as a sqlcmd variable, supplied by the
+                      deploy driver from the environment variable named in the
+                      comment above it, falling back to the YAML default. No
+                      host, account or credential value is baked into this file.
+
     sqlcmd variables required: ORACLE_PASSWORD, SQLSERVER_PASSWORD
 */
 
@@ -54,13 +59,14 @@ BEGIN
          @variable_name = N'OracleHost';
 END
 
+DECLARE @Value NVARCHAR(4000) = N'$(OracleHost)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
      @variable_name    = N'OracleHost',
      @data_type        = N'String',
      @sensitive        = 0,
-     @value            = N'oracle-erp-prod.internal.example',
+     @value            = @Value,
      @description      = N'Bound to project parameter OracleHost. Source: ORACLE_HOST.';
 GO
 
@@ -76,13 +82,14 @@ BEGIN
          @variable_name = N'OraclePort';
 END
 
+DECLARE @Value INT = N'$(OraclePort)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
      @variable_name    = N'OraclePort',
      @data_type        = N'Int32',
      @sensitive        = 0,
-     @value            = 1521,
+     @value            = @Value,
      @description      = N'Bound to project parameter OraclePort. Source: ORACLE_PORT.';
 GO
 
@@ -98,13 +105,14 @@ BEGIN
          @variable_name = N'OracleService';
 END
 
+DECLARE @Value NVARCHAR(4000) = N'$(OracleService)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
      @variable_name    = N'OracleService',
      @data_type        = N'String',
      @sensitive        = 0,
-     @value            = N'WWIGERP',
+     @value            = @Value,
      @description      = N'Bound to project parameter OracleService. Source: ORACLE_SERVICE.';
 GO
 
@@ -120,14 +128,38 @@ BEGIN
          @variable_name = N'OracleUser';
 END
 
+DECLARE @Value NVARCHAR(4000) = N'$(OracleUser)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
      @variable_name    = N'OracleUser',
      @data_type        = N'String',
      @sensitive        = 0,
-     @value            = N'WWI_ETL_READER',
+     @value            = @Value,
      @description      = N'Bound to project parameter OracleUser. Source: ORACLE_USER.';
+GO
+
+/* OracleProvider (String) <- ORACLE_PROVIDER */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.environment_variables AS v
+           INNER JOIN SSISDB.catalog.environments AS e ON e.environment_id = v.environment_id
+           INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = e.folder_id
+           WHERE v.name = N'OracleProvider' AND e.name = N'WWI_PROD' AND f.name = N'WWI_PROD')
+BEGIN
+    EXEC SSISDB.catalog.delete_environment_variable
+         @folder_name = N'WWI_PROD', @environment_name = N'WWI_PROD',
+         @variable_name = N'OracleProvider';
+END
+
+DECLARE @Value NVARCHAR(4000) = N'$(OracleProvider)';
+EXEC SSISDB.catalog.create_environment_variable
+     @folder_name      = N'WWI_PROD',
+     @environment_name = N'WWI_PROD',
+     @variable_name    = N'OracleProvider',
+     @data_type        = N'String',
+     @sensitive        = 0,
+     @value            = @Value,
+     @description      = N'Bound to project parameter OracleProvider. Source: ORACLE_PROVIDER.';
 GO
 
 /* OraclePassword (String, sensitive) <- ORACLE_PASSWORD */
@@ -142,13 +174,14 @@ BEGIN
          @variable_name = N'OraclePassword';
 END
 
+DECLARE @Value NVARCHAR(4000) = N'$(OraclePassword)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
      @variable_name    = N'OraclePassword',
      @data_type        = N'String',
      @sensitive        = 1,
-     @value            = N'$(OraclePassword)',
+     @value            = @Value,
      @description      = N'Bound to project parameter OraclePassword. Source: ORACLE_PASSWORD.';
 GO
 
@@ -164,13 +197,14 @@ BEGIN
          @variable_name = N'SqlServerHost';
 END
 
+DECLARE @Value NVARCHAR(4000) = N'$(SqlServerHost)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
      @variable_name    = N'SqlServerHost',
      @data_type        = N'String',
      @sensitive        = 0,
-     @value            = N'sqlprod-oltp.internal.example',
+     @value            = @Value,
      @description      = N'Bound to project parameter SqlServerHost. Source: SQLSERVER_HOST.';
 GO
 
@@ -186,13 +220,14 @@ BEGIN
          @variable_name = N'SqlServerPort';
 END
 
+DECLARE @Value INT = N'$(SqlServerPort)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
      @variable_name    = N'SqlServerPort',
      @data_type        = N'Int32',
      @sensitive        = 0,
-     @value            = 1433,
+     @value            = @Value,
      @description      = N'Bound to project parameter SqlServerPort. Source: SQLSERVER_PORT.';
 GO
 
@@ -208,14 +243,61 @@ BEGIN
          @variable_name = N'SqlServerUser';
 END
 
+DECLARE @Value NVARCHAR(4000) = N'$(SqlServerUser)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
      @variable_name    = N'SqlServerUser',
      @data_type        = N'String',
      @sensitive        = 0,
-     @value            = N'WWI_ETL',
+     @value            = @Value,
      @description      = N'Bound to project parameter SqlServerUser. Source: SQLSERVER_USER.';
+GO
+
+/* SqlServerProvider (String) <- SQLSERVER_PROVIDER */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.environment_variables AS v
+           INNER JOIN SSISDB.catalog.environments AS e ON e.environment_id = v.environment_id
+           INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = e.folder_id
+           WHERE v.name = N'SqlServerProvider' AND e.name = N'WWI_PROD' AND f.name = N'WWI_PROD')
+BEGIN
+    EXEC SSISDB.catalog.delete_environment_variable
+         @folder_name = N'WWI_PROD', @environment_name = N'WWI_PROD',
+         @variable_name = N'SqlServerProvider';
+END
+
+DECLARE @Value NVARCHAR(4000) = N'$(SqlServerProvider)';
+EXEC SSISDB.catalog.create_environment_variable
+     @folder_name      = N'WWI_PROD',
+     @environment_name = N'WWI_PROD',
+     @variable_name    = N'SqlServerProvider',
+     @data_type        = N'String',
+     @sensitive        = 0,
+     @value            = @Value,
+     @description      = N'Bound to project parameter SqlServerProvider. Source: SQLSERVER_PROVIDER.';
+GO
+
+/* SqlServerTrustServerCertificate (Boolean) <- SQLSERVER_TRUST_SERVER_CERTIFICATE */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.environment_variables AS v
+           INNER JOIN SSISDB.catalog.environments AS e ON e.environment_id = v.environment_id
+           INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = e.folder_id
+           WHERE v.name = N'SqlServerTrustServerCertificate' AND e.name = N'WWI_PROD' AND f.name = N'WWI_PROD')
+BEGIN
+    EXEC SSISDB.catalog.delete_environment_variable
+         @folder_name = N'WWI_PROD', @environment_name = N'WWI_PROD',
+         @variable_name = N'SqlServerTrustServerCertificate';
+END
+
+DECLARE @Value BIT = N'$(SqlServerTrustServerCertificate)';
+EXEC SSISDB.catalog.create_environment_variable
+     @folder_name      = N'WWI_PROD',
+     @environment_name = N'WWI_PROD',
+     @variable_name    = N'SqlServerTrustServerCertificate',
+     @data_type        = N'Boolean',
+     @sensitive        = 0,
+     @value            = @Value,
+     @description      = N'Bound to project parameter SqlServerTrustServerCertificate. Source: SQLSERVER_TRUST_SERVER_CERTIFICATE.';
 GO
 
 /* SqlServerPassword (String, sensitive) <- SQLSERVER_PASSWORD */
@@ -230,13 +312,14 @@ BEGIN
          @variable_name = N'SqlServerPassword';
 END
 
+DECLARE @Value NVARCHAR(4000) = N'$(SqlServerPassword)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
      @variable_name    = N'SqlServerPassword',
      @data_type        = N'String',
      @sensitive        = 1,
-     @value            = N'$(SqlServerPassword)',
+     @value            = @Value,
      @description      = N'Bound to project parameter SqlServerPassword. Source: SQLSERVER_PASSWORD.';
 GO
 
@@ -252,13 +335,14 @@ BEGIN
          @variable_name = N'SqlServerOltpDb';
 END
 
+DECLARE @Value NVARCHAR(4000) = N'$(SqlServerOltpDb)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
      @variable_name    = N'SqlServerOltpDb',
      @data_type        = N'String',
      @sensitive        = 0,
-     @value            = N'WideWorldImporters',
+     @value            = @Value,
      @description      = N'Bound to project parameter SqlServerOltpDb. Source: SQLSERVER_OLTP_DB.';
 GO
 
@@ -274,13 +358,14 @@ BEGIN
          @variable_name = N'SqlServerStagingDb';
 END
 
+DECLARE @Value NVARCHAR(4000) = N'$(SqlServerStagingDb)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
      @variable_name    = N'SqlServerStagingDb',
      @data_type        = N'String',
      @sensitive        = 0,
-     @value            = N'WideWorldImporters_Staging',
+     @value            = @Value,
      @description      = N'Bound to project parameter SqlServerStagingDb. Source: SQLSERVER_STAGING_DB.';
 GO
 
@@ -296,13 +381,14 @@ BEGIN
          @variable_name = N'SqlServerDwDb';
 END
 
+DECLARE @Value NVARCHAR(4000) = N'$(SqlServerDwDb)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
      @variable_name    = N'SqlServerDwDb',
      @data_type        = N'String',
      @sensitive        = 0,
-     @value            = N'WideWorldImportersDW',
+     @value            = @Value,
      @description      = N'Bound to project parameter SqlServerDwDb. Source: SQLSERVER_DW_DB.';
 GO
 
@@ -318,13 +404,14 @@ BEGIN
          @variable_name = N'InboundFileRoot';
 END
 
+DECLARE @Value NVARCHAR(4000) = N'$(InboundFileRoot)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
      @variable_name    = N'InboundFileRoot',
      @data_type        = N'String',
      @sensitive        = 0,
-     @value            = N'\\wwi-files\landing\inbound',
+     @value            = @Value,
      @description      = N'Bound to project parameter InboundFileRoot. Source: ETL_INBOUND_FILE_ROOT.';
 GO
 
@@ -340,36 +427,38 @@ BEGIN
          @variable_name = N'ArchiveFileRoot';
 END
 
+DECLARE @Value NVARCHAR(4000) = N'$(ArchiveFileRoot)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
      @variable_name    = N'ArchiveFileRoot',
      @data_type        = N'String',
      @sensitive        = 0,
-     @value            = N'\\wwi-files\landing\archive',
+     @value            = @Value,
      @description      = N'Bound to project parameter ArchiveFileRoot. Source: ETL_ARCHIVE_FILE_ROOT.';
 GO
 
-/* RejectFileRoot (String) <- ETL_REJECT_FILE_ROOT */
+/* QuarantineFileRoot (String) <- ETL_QUARANTINE_FILE_ROOT */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.environment_variables AS v
            INNER JOIN SSISDB.catalog.environments AS e ON e.environment_id = v.environment_id
            INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = e.folder_id
-           WHERE v.name = N'RejectFileRoot' AND e.name = N'WWI_PROD' AND f.name = N'WWI_PROD')
+           WHERE v.name = N'QuarantineFileRoot' AND e.name = N'WWI_PROD' AND f.name = N'WWI_PROD')
 BEGIN
     EXEC SSISDB.catalog.delete_environment_variable
          @folder_name = N'WWI_PROD', @environment_name = N'WWI_PROD',
-         @variable_name = N'RejectFileRoot';
+         @variable_name = N'QuarantineFileRoot';
 END
 
+DECLARE @Value NVARCHAR(4000) = N'$(QuarantineFileRoot)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
-     @variable_name    = N'RejectFileRoot',
+     @variable_name    = N'QuarantineFileRoot',
      @data_type        = N'String',
      @sensitive        = 0,
-     @value            = N'\\wwi-files\landing\quarantine',
-     @description      = N'Bound to project parameter RejectFileRoot. Source: ETL_REJECT_FILE_ROOT.';
+     @value            = @Value,
+     @description      = N'Bound to project parameter QuarantineFileRoot. Source: ETL_QUARANTINE_FILE_ROOT.';
 GO
 
 /* DefaultBatchSize (Int32) <- ETL_DEFAULT_BATCH_SIZE */
@@ -384,13 +473,14 @@ BEGIN
          @variable_name = N'DefaultBatchSize';
 END
 
+DECLARE @Value INT = N'$(DefaultBatchSize)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
      @variable_name    = N'DefaultBatchSize',
      @data_type        = N'Int32',
      @sensitive        = 0,
-     @value            = 100000,
+     @value            = @Value,
      @description      = N'Bound to project parameter DefaultBatchSize. Source: ETL_DEFAULT_BATCH_SIZE.';
 GO
 
@@ -406,13 +496,14 @@ BEGIN
          @variable_name = N'SourceQueryTimeoutSeconds';
 END
 
+DECLARE @Value INT = N'$(SourceQueryTimeoutSeconds)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
      @variable_name    = N'SourceQueryTimeoutSeconds',
      @data_type        = N'Int32',
      @sensitive        = 0,
-     @value            = 3600,
+     @value            = @Value,
      @description      = N'Bound to project parameter SourceQueryTimeoutSeconds. Source: ETL_SOURCE_QUERY_TIMEOUT_SECONDS.';
 GO
 
@@ -428,13 +519,14 @@ BEGIN
          @variable_name = N'MaxRejectPercent';
 END
 
+DECLARE @Value INT = N'$(MaxRejectPercent)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
      @variable_name    = N'MaxRejectPercent',
      @data_type        = N'Int32',
      @sensitive        = 0,
-     @value            = 2,
+     @value            = @Value,
      @description      = N'Bound to project parameter MaxRejectPercent. Source: ETL_MAX_REJECT_PERCENT.';
 GO
 
@@ -450,13 +542,14 @@ BEGIN
          @variable_name = N'EnvironmentCode';
 END
 
+DECLARE @Value NVARCHAR(4000) = N'$(EnvironmentCode)';
 EXEC SSISDB.catalog.create_environment_variable
      @folder_name      = N'WWI_PROD',
      @environment_name = N'WWI_PROD',
      @variable_name    = N'EnvironmentCode',
      @data_type        = N'String',
      @sensitive        = 0,
-     @value            = N'PROD',
+     @value            = @Value,
      @description      = N'Bound to project parameter EnvironmentCode. Source: ETL_ENVIRONMENT_CODE.';
 GO
 
@@ -473,194 +566,441 @@ BEGIN
          @folder_name       = N'WWI_PROD',
          @project_name      = N'WWI_Orchestration',
          @environment_name  = N'WWI_PROD',
-         @reference_location = 'L',            /* local: same folder */
+         @reference_type    = 'R',             /* relative: environment in this folder */
          @reference_id      = @ReferenceId OUTPUT;
 END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'OracleHost',
-     @parameter_value = N'OracleHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleHost <- environment variable OracleHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'OracleHost',
+         @parameter_value = N'OracleHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'OraclePort',
-     @parameter_value = N'OraclePort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OraclePort <- environment variable OraclePort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'OraclePort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'OraclePort',
+         @parameter_value = N'OraclePort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'OracleService',
-     @parameter_value = N'OracleService',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleService <- environment variable OracleService */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleService')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'OracleService',
+         @parameter_value = N'OracleService',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'OracleUser',
-     @parameter_value = N'OracleUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleUser <- environment variable OracleUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'OracleUser',
+         @parameter_value = N'OracleUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'OraclePassword',
-     @parameter_value = N'OraclePassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleProvider <- environment variable OracleProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'OracleProvider',
+         @parameter_value = N'OracleProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'SqlServerHost',
-     @parameter_value = N'SqlServerHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Oracle_ERP.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'CM.WWI_Oracle_ERP.Password',
+         @parameter_value = N'OraclePassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'SqlServerPort',
-     @parameter_value = N'SqlServerPort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerHost <- environment variable SqlServerHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'SqlServerHost',
+         @parameter_value = N'SqlServerHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'SqlServerUser',
-     @parameter_value = N'SqlServerUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerPort <- environment variable SqlServerPort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerPort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'SqlServerPort',
+         @parameter_value = N'SqlServerPort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'SqlServerPassword',
-     @parameter_value = N'SqlServerPassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerUser <- environment variable SqlServerUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'SqlServerUser',
+         @parameter_value = N'SqlServerUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'SqlServerOltpDb',
-     @parameter_value = N'SqlServerOltpDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerProvider <- environment variable SqlServerProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'SqlServerProvider',
+         @parameter_value = N'SqlServerProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'SqlServerStagingDb',
-     @parameter_value = N'SqlServerStagingDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'SqlServerTrustServerCertificate',
+         @parameter_value = N'SqlServerTrustServerCertificate',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'SqlServerDwDb',
-     @parameter_value = N'SqlServerDwDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Source_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Source_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'CM.WWI_Source_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'InboundFileRoot',
-     @parameter_value = N'InboundFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Staging_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Staging_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'CM.WWI_Staging_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'ArchiveFileRoot',
-     @parameter_value = N'ArchiveFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_DW_Destination_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_DW_Destination_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'CM.WWI_DW_Destination_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'RejectFileRoot',
-     @parameter_value = N'RejectFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerOltpDb <- environment variable SqlServerOltpDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerOltpDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'SqlServerOltpDb',
+         @parameter_value = N'SqlServerOltpDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'DefaultBatchSize',
-     @parameter_value = N'DefaultBatchSize',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerStagingDb <- environment variable SqlServerStagingDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerStagingDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'SqlServerStagingDb',
+         @parameter_value = N'SqlServerStagingDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'SourceQueryTimeoutSeconds',
-     @parameter_value = N'SourceQueryTimeoutSeconds',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerDwDb <- environment variable SqlServerDwDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerDwDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'SqlServerDwDb',
+         @parameter_value = N'SqlServerDwDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'MaxRejectPercent',
-     @parameter_value = N'MaxRejectPercent',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* InboundFileRoot <- environment variable InboundFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'InboundFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'InboundFileRoot',
+         @parameter_value = N'InboundFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Orchestration',
-     @parameter_name = N'EnvironmentCode',
-     @parameter_value = N'EnvironmentCode',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* ArchiveFileRoot <- environment variable ArchiveFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'ArchiveFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'ArchiveFileRoot',
+         @parameter_value = N'ArchiveFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-/* Post-condition: every project parameter resolves to an environment variable. */
-SELECT p.parameter_name,
-       p.value_type,
-       p.design_default_value,
-       p.referenced_variable_name
-FROM SSISDB.catalog.object_parameters AS p
-INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
-INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-WHERE f.name = N'WWI_PROD'
-  AND pr.name = N'WWI_Orchestration'
-  AND p.object_type = 20
-ORDER BY p.parameter_name;
+/* QuarantineFileRoot <- environment variable QuarantineFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'QuarantineFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'QuarantineFileRoot',
+         @parameter_value = N'QuarantineFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* DefaultBatchSize <- environment variable DefaultBatchSize */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'DefaultBatchSize')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'DefaultBatchSize',
+         @parameter_value = N'DefaultBatchSize',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* SourceQueryTimeoutSeconds <- environment variable SourceQueryTimeoutSeconds */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'SourceQueryTimeoutSeconds')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'SourceQueryTimeoutSeconds',
+         @parameter_value = N'SourceQueryTimeoutSeconds',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* MaxRejectPercent <- environment variable MaxRejectPercent */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'MaxRejectPercent')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'MaxRejectPercent',
+         @parameter_value = N'MaxRejectPercent',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* EnvironmentCode <- environment variable EnvironmentCode */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Orchestration'
+             AND op.object_type = 20 AND op.parameter_name = N'EnvironmentCode')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Orchestration',
+         @parameter_name = N'EnvironmentCode',
+         @parameter_value = N'EnvironmentCode',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
 /* Project reference and parameter bindings. */
@@ -676,194 +1016,441 @@ BEGIN
          @folder_name       = N'WWI_PROD',
          @project_name      = N'WWI_Extract_Oracle',
          @environment_name  = N'WWI_PROD',
-         @reference_location = 'L',            /* local: same folder */
+         @reference_type    = 'R',             /* relative: environment in this folder */
          @reference_id      = @ReferenceId OUTPUT;
 END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'OracleHost',
-     @parameter_value = N'OracleHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleHost <- environment variable OracleHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'OracleHost',
+         @parameter_value = N'OracleHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'OraclePort',
-     @parameter_value = N'OraclePort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OraclePort <- environment variable OraclePort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'OraclePort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'OraclePort',
+         @parameter_value = N'OraclePort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'OracleService',
-     @parameter_value = N'OracleService',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleService <- environment variable OracleService */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleService')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'OracleService',
+         @parameter_value = N'OracleService',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'OracleUser',
-     @parameter_value = N'OracleUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleUser <- environment variable OracleUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'OracleUser',
+         @parameter_value = N'OracleUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'OraclePassword',
-     @parameter_value = N'OraclePassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleProvider <- environment variable OracleProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'OracleProvider',
+         @parameter_value = N'OracleProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'SqlServerHost',
-     @parameter_value = N'SqlServerHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Oracle_ERP.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'CM.WWI_Oracle_ERP.Password',
+         @parameter_value = N'OraclePassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'SqlServerPort',
-     @parameter_value = N'SqlServerPort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerHost <- environment variable SqlServerHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'SqlServerHost',
+         @parameter_value = N'SqlServerHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'SqlServerUser',
-     @parameter_value = N'SqlServerUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerPort <- environment variable SqlServerPort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerPort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'SqlServerPort',
+         @parameter_value = N'SqlServerPort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'SqlServerPassword',
-     @parameter_value = N'SqlServerPassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerUser <- environment variable SqlServerUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'SqlServerUser',
+         @parameter_value = N'SqlServerUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'SqlServerOltpDb',
-     @parameter_value = N'SqlServerOltpDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerProvider <- environment variable SqlServerProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'SqlServerProvider',
+         @parameter_value = N'SqlServerProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'SqlServerStagingDb',
-     @parameter_value = N'SqlServerStagingDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'SqlServerTrustServerCertificate',
+         @parameter_value = N'SqlServerTrustServerCertificate',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'SqlServerDwDb',
-     @parameter_value = N'SqlServerDwDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Source_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Source_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'CM.WWI_Source_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'InboundFileRoot',
-     @parameter_value = N'InboundFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Staging_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Staging_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'CM.WWI_Staging_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'ArchiveFileRoot',
-     @parameter_value = N'ArchiveFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_DW_Destination_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_DW_Destination_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'CM.WWI_DW_Destination_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'RejectFileRoot',
-     @parameter_value = N'RejectFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerOltpDb <- environment variable SqlServerOltpDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerOltpDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'SqlServerOltpDb',
+         @parameter_value = N'SqlServerOltpDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'DefaultBatchSize',
-     @parameter_value = N'DefaultBatchSize',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerStagingDb <- environment variable SqlServerStagingDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerStagingDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'SqlServerStagingDb',
+         @parameter_value = N'SqlServerStagingDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'SourceQueryTimeoutSeconds',
-     @parameter_value = N'SourceQueryTimeoutSeconds',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerDwDb <- environment variable SqlServerDwDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerDwDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'SqlServerDwDb',
+         @parameter_value = N'SqlServerDwDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'MaxRejectPercent',
-     @parameter_value = N'MaxRejectPercent',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* InboundFileRoot <- environment variable InboundFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'InboundFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'InboundFileRoot',
+         @parameter_value = N'InboundFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_Oracle',
-     @parameter_name = N'EnvironmentCode',
-     @parameter_value = N'EnvironmentCode',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* ArchiveFileRoot <- environment variable ArchiveFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'ArchiveFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'ArchiveFileRoot',
+         @parameter_value = N'ArchiveFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-/* Post-condition: every project parameter resolves to an environment variable. */
-SELECT p.parameter_name,
-       p.value_type,
-       p.design_default_value,
-       p.referenced_variable_name
-FROM SSISDB.catalog.object_parameters AS p
-INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
-INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-WHERE f.name = N'WWI_PROD'
-  AND pr.name = N'WWI_Extract_Oracle'
-  AND p.object_type = 20
-ORDER BY p.parameter_name;
+/* QuarantineFileRoot <- environment variable QuarantineFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'QuarantineFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'QuarantineFileRoot',
+         @parameter_value = N'QuarantineFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* DefaultBatchSize <- environment variable DefaultBatchSize */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'DefaultBatchSize')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'DefaultBatchSize',
+         @parameter_value = N'DefaultBatchSize',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* SourceQueryTimeoutSeconds <- environment variable SourceQueryTimeoutSeconds */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'SourceQueryTimeoutSeconds')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'SourceQueryTimeoutSeconds',
+         @parameter_value = N'SourceQueryTimeoutSeconds',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* MaxRejectPercent <- environment variable MaxRejectPercent */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'MaxRejectPercent')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'MaxRejectPercent',
+         @parameter_value = N'MaxRejectPercent',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* EnvironmentCode <- environment variable EnvironmentCode */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_Oracle'
+             AND op.object_type = 20 AND op.parameter_name = N'EnvironmentCode')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_Oracle',
+         @parameter_name = N'EnvironmentCode',
+         @parameter_value = N'EnvironmentCode',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
 /* Project reference and parameter bindings. */
@@ -879,194 +1466,441 @@ BEGIN
          @folder_name       = N'WWI_PROD',
          @project_name      = N'WWI_Extract_SqlServer',
          @environment_name  = N'WWI_PROD',
-         @reference_location = 'L',            /* local: same folder */
+         @reference_type    = 'R',             /* relative: environment in this folder */
          @reference_id      = @ReferenceId OUTPUT;
 END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'OracleHost',
-     @parameter_value = N'OracleHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleHost <- environment variable OracleHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'OracleHost',
+         @parameter_value = N'OracleHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'OraclePort',
-     @parameter_value = N'OraclePort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OraclePort <- environment variable OraclePort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'OraclePort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'OraclePort',
+         @parameter_value = N'OraclePort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'OracleService',
-     @parameter_value = N'OracleService',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleService <- environment variable OracleService */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleService')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'OracleService',
+         @parameter_value = N'OracleService',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'OracleUser',
-     @parameter_value = N'OracleUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleUser <- environment variable OracleUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'OracleUser',
+         @parameter_value = N'OracleUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'OraclePassword',
-     @parameter_value = N'OraclePassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleProvider <- environment variable OracleProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'OracleProvider',
+         @parameter_value = N'OracleProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'SqlServerHost',
-     @parameter_value = N'SqlServerHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Oracle_ERP.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'CM.WWI_Oracle_ERP.Password',
+         @parameter_value = N'OraclePassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'SqlServerPort',
-     @parameter_value = N'SqlServerPort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerHost <- environment variable SqlServerHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'SqlServerHost',
+         @parameter_value = N'SqlServerHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'SqlServerUser',
-     @parameter_value = N'SqlServerUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerPort <- environment variable SqlServerPort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerPort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'SqlServerPort',
+         @parameter_value = N'SqlServerPort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'SqlServerPassword',
-     @parameter_value = N'SqlServerPassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerUser <- environment variable SqlServerUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'SqlServerUser',
+         @parameter_value = N'SqlServerUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'SqlServerOltpDb',
-     @parameter_value = N'SqlServerOltpDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerProvider <- environment variable SqlServerProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'SqlServerProvider',
+         @parameter_value = N'SqlServerProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'SqlServerStagingDb',
-     @parameter_value = N'SqlServerStagingDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'SqlServerTrustServerCertificate',
+         @parameter_value = N'SqlServerTrustServerCertificate',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'SqlServerDwDb',
-     @parameter_value = N'SqlServerDwDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Source_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Source_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'CM.WWI_Source_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'InboundFileRoot',
-     @parameter_value = N'InboundFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Staging_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Staging_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'CM.WWI_Staging_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'ArchiveFileRoot',
-     @parameter_value = N'ArchiveFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_DW_Destination_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_DW_Destination_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'CM.WWI_DW_Destination_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'RejectFileRoot',
-     @parameter_value = N'RejectFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerOltpDb <- environment variable SqlServerOltpDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerOltpDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'SqlServerOltpDb',
+         @parameter_value = N'SqlServerOltpDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'DefaultBatchSize',
-     @parameter_value = N'DefaultBatchSize',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerStagingDb <- environment variable SqlServerStagingDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerStagingDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'SqlServerStagingDb',
+         @parameter_value = N'SqlServerStagingDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'SourceQueryTimeoutSeconds',
-     @parameter_value = N'SourceQueryTimeoutSeconds',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerDwDb <- environment variable SqlServerDwDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerDwDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'SqlServerDwDb',
+         @parameter_value = N'SqlServerDwDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'MaxRejectPercent',
-     @parameter_value = N'MaxRejectPercent',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* InboundFileRoot <- environment variable InboundFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'InboundFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'InboundFileRoot',
+         @parameter_value = N'InboundFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Extract_SqlServer',
-     @parameter_name = N'EnvironmentCode',
-     @parameter_value = N'EnvironmentCode',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* ArchiveFileRoot <- environment variable ArchiveFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'ArchiveFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'ArchiveFileRoot',
+         @parameter_value = N'ArchiveFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-/* Post-condition: every project parameter resolves to an environment variable. */
-SELECT p.parameter_name,
-       p.value_type,
-       p.design_default_value,
-       p.referenced_variable_name
-FROM SSISDB.catalog.object_parameters AS p
-INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
-INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-WHERE f.name = N'WWI_PROD'
-  AND pr.name = N'WWI_Extract_SqlServer'
-  AND p.object_type = 20
-ORDER BY p.parameter_name;
+/* QuarantineFileRoot <- environment variable QuarantineFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'QuarantineFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'QuarantineFileRoot',
+         @parameter_value = N'QuarantineFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* DefaultBatchSize <- environment variable DefaultBatchSize */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'DefaultBatchSize')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'DefaultBatchSize',
+         @parameter_value = N'DefaultBatchSize',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* SourceQueryTimeoutSeconds <- environment variable SourceQueryTimeoutSeconds */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'SourceQueryTimeoutSeconds')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'SourceQueryTimeoutSeconds',
+         @parameter_value = N'SourceQueryTimeoutSeconds',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* MaxRejectPercent <- environment variable MaxRejectPercent */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'MaxRejectPercent')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'MaxRejectPercent',
+         @parameter_value = N'MaxRejectPercent',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* EnvironmentCode <- environment variable EnvironmentCode */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Extract_SqlServer'
+             AND op.object_type = 20 AND op.parameter_name = N'EnvironmentCode')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Extract_SqlServer',
+         @parameter_name = N'EnvironmentCode',
+         @parameter_value = N'EnvironmentCode',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
 /* Project reference and parameter bindings. */
@@ -1082,194 +1916,441 @@ BEGIN
          @folder_name       = N'WWI_PROD',
          @project_name      = N'WWI_Ingest_Files',
          @environment_name  = N'WWI_PROD',
-         @reference_location = 'L',            /* local: same folder */
+         @reference_type    = 'R',             /* relative: environment in this folder */
          @reference_id      = @ReferenceId OUTPUT;
 END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'OracleHost',
-     @parameter_value = N'OracleHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleHost <- environment variable OracleHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'OracleHost',
+         @parameter_value = N'OracleHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'OraclePort',
-     @parameter_value = N'OraclePort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OraclePort <- environment variable OraclePort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'OraclePort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'OraclePort',
+         @parameter_value = N'OraclePort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'OracleService',
-     @parameter_value = N'OracleService',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleService <- environment variable OracleService */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleService')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'OracleService',
+         @parameter_value = N'OracleService',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'OracleUser',
-     @parameter_value = N'OracleUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleUser <- environment variable OracleUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'OracleUser',
+         @parameter_value = N'OracleUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'OraclePassword',
-     @parameter_value = N'OraclePassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleProvider <- environment variable OracleProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'OracleProvider',
+         @parameter_value = N'OracleProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'SqlServerHost',
-     @parameter_value = N'SqlServerHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Oracle_ERP.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'CM.WWI_Oracle_ERP.Password',
+         @parameter_value = N'OraclePassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'SqlServerPort',
-     @parameter_value = N'SqlServerPort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerHost <- environment variable SqlServerHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'SqlServerHost',
+         @parameter_value = N'SqlServerHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'SqlServerUser',
-     @parameter_value = N'SqlServerUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerPort <- environment variable SqlServerPort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerPort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'SqlServerPort',
+         @parameter_value = N'SqlServerPort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'SqlServerPassword',
-     @parameter_value = N'SqlServerPassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerUser <- environment variable SqlServerUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'SqlServerUser',
+         @parameter_value = N'SqlServerUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'SqlServerOltpDb',
-     @parameter_value = N'SqlServerOltpDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerProvider <- environment variable SqlServerProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'SqlServerProvider',
+         @parameter_value = N'SqlServerProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'SqlServerStagingDb',
-     @parameter_value = N'SqlServerStagingDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'SqlServerTrustServerCertificate',
+         @parameter_value = N'SqlServerTrustServerCertificate',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'SqlServerDwDb',
-     @parameter_value = N'SqlServerDwDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Source_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Source_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'CM.WWI_Source_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'InboundFileRoot',
-     @parameter_value = N'InboundFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Staging_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Staging_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'CM.WWI_Staging_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'ArchiveFileRoot',
-     @parameter_value = N'ArchiveFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_DW_Destination_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_DW_Destination_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'CM.WWI_DW_Destination_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'RejectFileRoot',
-     @parameter_value = N'RejectFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerOltpDb <- environment variable SqlServerOltpDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerOltpDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'SqlServerOltpDb',
+         @parameter_value = N'SqlServerOltpDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'DefaultBatchSize',
-     @parameter_value = N'DefaultBatchSize',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerStagingDb <- environment variable SqlServerStagingDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerStagingDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'SqlServerStagingDb',
+         @parameter_value = N'SqlServerStagingDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'SourceQueryTimeoutSeconds',
-     @parameter_value = N'SourceQueryTimeoutSeconds',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerDwDb <- environment variable SqlServerDwDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerDwDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'SqlServerDwDb',
+         @parameter_value = N'SqlServerDwDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'MaxRejectPercent',
-     @parameter_value = N'MaxRejectPercent',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* InboundFileRoot <- environment variable InboundFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'InboundFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'InboundFileRoot',
+         @parameter_value = N'InboundFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Ingest_Files',
-     @parameter_name = N'EnvironmentCode',
-     @parameter_value = N'EnvironmentCode',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* ArchiveFileRoot <- environment variable ArchiveFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'ArchiveFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'ArchiveFileRoot',
+         @parameter_value = N'ArchiveFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-/* Post-condition: every project parameter resolves to an environment variable. */
-SELECT p.parameter_name,
-       p.value_type,
-       p.design_default_value,
-       p.referenced_variable_name
-FROM SSISDB.catalog.object_parameters AS p
-INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
-INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-WHERE f.name = N'WWI_PROD'
-  AND pr.name = N'WWI_Ingest_Files'
-  AND p.object_type = 20
-ORDER BY p.parameter_name;
+/* QuarantineFileRoot <- environment variable QuarantineFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'QuarantineFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'QuarantineFileRoot',
+         @parameter_value = N'QuarantineFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* DefaultBatchSize <- environment variable DefaultBatchSize */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'DefaultBatchSize')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'DefaultBatchSize',
+         @parameter_value = N'DefaultBatchSize',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* SourceQueryTimeoutSeconds <- environment variable SourceQueryTimeoutSeconds */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'SourceQueryTimeoutSeconds')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'SourceQueryTimeoutSeconds',
+         @parameter_value = N'SourceQueryTimeoutSeconds',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* MaxRejectPercent <- environment variable MaxRejectPercent */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'MaxRejectPercent')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'MaxRejectPercent',
+         @parameter_value = N'MaxRejectPercent',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* EnvironmentCode <- environment variable EnvironmentCode */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Ingest_Files'
+             AND op.object_type = 20 AND op.parameter_name = N'EnvironmentCode')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Ingest_Files',
+         @parameter_name = N'EnvironmentCode',
+         @parameter_value = N'EnvironmentCode',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
 /* Project reference and parameter bindings. */
@@ -1285,194 +2366,441 @@ BEGIN
          @folder_name       = N'WWI_PROD',
          @project_name      = N'WWI_Staging',
          @environment_name  = N'WWI_PROD',
-         @reference_location = 'L',            /* local: same folder */
+         @reference_type    = 'R',             /* relative: environment in this folder */
          @reference_id      = @ReferenceId OUTPUT;
 END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'OracleHost',
-     @parameter_value = N'OracleHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleHost <- environment variable OracleHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'OracleHost',
+         @parameter_value = N'OracleHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'OraclePort',
-     @parameter_value = N'OraclePort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OraclePort <- environment variable OraclePort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'OraclePort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'OraclePort',
+         @parameter_value = N'OraclePort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'OracleService',
-     @parameter_value = N'OracleService',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleService <- environment variable OracleService */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleService')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'OracleService',
+         @parameter_value = N'OracleService',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'OracleUser',
-     @parameter_value = N'OracleUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleUser <- environment variable OracleUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'OracleUser',
+         @parameter_value = N'OracleUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'OraclePassword',
-     @parameter_value = N'OraclePassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleProvider <- environment variable OracleProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'OracleProvider',
+         @parameter_value = N'OracleProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'SqlServerHost',
-     @parameter_value = N'SqlServerHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Oracle_ERP.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'CM.WWI_Oracle_ERP.Password',
+         @parameter_value = N'OraclePassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'SqlServerPort',
-     @parameter_value = N'SqlServerPort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerHost <- environment variable SqlServerHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'SqlServerHost',
+         @parameter_value = N'SqlServerHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'SqlServerUser',
-     @parameter_value = N'SqlServerUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerPort <- environment variable SqlServerPort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerPort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'SqlServerPort',
+         @parameter_value = N'SqlServerPort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'SqlServerPassword',
-     @parameter_value = N'SqlServerPassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerUser <- environment variable SqlServerUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'SqlServerUser',
+         @parameter_value = N'SqlServerUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'SqlServerOltpDb',
-     @parameter_value = N'SqlServerOltpDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerProvider <- environment variable SqlServerProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'SqlServerProvider',
+         @parameter_value = N'SqlServerProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'SqlServerStagingDb',
-     @parameter_value = N'SqlServerStagingDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'SqlServerTrustServerCertificate',
+         @parameter_value = N'SqlServerTrustServerCertificate',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'SqlServerDwDb',
-     @parameter_value = N'SqlServerDwDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Source_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Source_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'CM.WWI_Source_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'InboundFileRoot',
-     @parameter_value = N'InboundFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Staging_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Staging_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'CM.WWI_Staging_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'ArchiveFileRoot',
-     @parameter_value = N'ArchiveFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_DW_Destination_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_DW_Destination_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'CM.WWI_DW_Destination_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'RejectFileRoot',
-     @parameter_value = N'RejectFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerOltpDb <- environment variable SqlServerOltpDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerOltpDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'SqlServerOltpDb',
+         @parameter_value = N'SqlServerOltpDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'DefaultBatchSize',
-     @parameter_value = N'DefaultBatchSize',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerStagingDb <- environment variable SqlServerStagingDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerStagingDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'SqlServerStagingDb',
+         @parameter_value = N'SqlServerStagingDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'SourceQueryTimeoutSeconds',
-     @parameter_value = N'SourceQueryTimeoutSeconds',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerDwDb <- environment variable SqlServerDwDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerDwDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'SqlServerDwDb',
+         @parameter_value = N'SqlServerDwDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'MaxRejectPercent',
-     @parameter_value = N'MaxRejectPercent',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* InboundFileRoot <- environment variable InboundFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'InboundFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'InboundFileRoot',
+         @parameter_value = N'InboundFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Staging',
-     @parameter_name = N'EnvironmentCode',
-     @parameter_value = N'EnvironmentCode',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* ArchiveFileRoot <- environment variable ArchiveFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'ArchiveFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'ArchiveFileRoot',
+         @parameter_value = N'ArchiveFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-/* Post-condition: every project parameter resolves to an environment variable. */
-SELECT p.parameter_name,
-       p.value_type,
-       p.design_default_value,
-       p.referenced_variable_name
-FROM SSISDB.catalog.object_parameters AS p
-INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
-INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-WHERE f.name = N'WWI_PROD'
-  AND pr.name = N'WWI_Staging'
-  AND p.object_type = 20
-ORDER BY p.parameter_name;
+/* QuarantineFileRoot <- environment variable QuarantineFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'QuarantineFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'QuarantineFileRoot',
+         @parameter_value = N'QuarantineFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* DefaultBatchSize <- environment variable DefaultBatchSize */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'DefaultBatchSize')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'DefaultBatchSize',
+         @parameter_value = N'DefaultBatchSize',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* SourceQueryTimeoutSeconds <- environment variable SourceQueryTimeoutSeconds */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'SourceQueryTimeoutSeconds')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'SourceQueryTimeoutSeconds',
+         @parameter_value = N'SourceQueryTimeoutSeconds',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* MaxRejectPercent <- environment variable MaxRejectPercent */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'MaxRejectPercent')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'MaxRejectPercent',
+         @parameter_value = N'MaxRejectPercent',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* EnvironmentCode <- environment variable EnvironmentCode */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Staging'
+             AND op.object_type = 20 AND op.parameter_name = N'EnvironmentCode')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Staging',
+         @parameter_name = N'EnvironmentCode',
+         @parameter_value = N'EnvironmentCode',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
 /* Project reference and parameter bindings. */
@@ -1488,194 +2816,441 @@ BEGIN
          @folder_name       = N'WWI_PROD',
          @project_name      = N'WWI_DataQuality',
          @environment_name  = N'WWI_PROD',
-         @reference_location = 'L',            /* local: same folder */
+         @reference_type    = 'R',             /* relative: environment in this folder */
          @reference_id      = @ReferenceId OUTPUT;
 END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'OracleHost',
-     @parameter_value = N'OracleHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleHost <- environment variable OracleHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'OracleHost',
+         @parameter_value = N'OracleHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'OraclePort',
-     @parameter_value = N'OraclePort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OraclePort <- environment variable OraclePort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'OraclePort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'OraclePort',
+         @parameter_value = N'OraclePort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'OracleService',
-     @parameter_value = N'OracleService',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleService <- environment variable OracleService */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleService')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'OracleService',
+         @parameter_value = N'OracleService',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'OracleUser',
-     @parameter_value = N'OracleUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleUser <- environment variable OracleUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'OracleUser',
+         @parameter_value = N'OracleUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'OraclePassword',
-     @parameter_value = N'OraclePassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleProvider <- environment variable OracleProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'OracleProvider',
+         @parameter_value = N'OracleProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'SqlServerHost',
-     @parameter_value = N'SqlServerHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Oracle_ERP.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'CM.WWI_Oracle_ERP.Password',
+         @parameter_value = N'OraclePassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'SqlServerPort',
-     @parameter_value = N'SqlServerPort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerHost <- environment variable SqlServerHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'SqlServerHost',
+         @parameter_value = N'SqlServerHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'SqlServerUser',
-     @parameter_value = N'SqlServerUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerPort <- environment variable SqlServerPort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerPort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'SqlServerPort',
+         @parameter_value = N'SqlServerPort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'SqlServerPassword',
-     @parameter_value = N'SqlServerPassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerUser <- environment variable SqlServerUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'SqlServerUser',
+         @parameter_value = N'SqlServerUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'SqlServerOltpDb',
-     @parameter_value = N'SqlServerOltpDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerProvider <- environment variable SqlServerProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'SqlServerProvider',
+         @parameter_value = N'SqlServerProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'SqlServerStagingDb',
-     @parameter_value = N'SqlServerStagingDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'SqlServerTrustServerCertificate',
+         @parameter_value = N'SqlServerTrustServerCertificate',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'SqlServerDwDb',
-     @parameter_value = N'SqlServerDwDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Source_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Source_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'CM.WWI_Source_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'InboundFileRoot',
-     @parameter_value = N'InboundFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Staging_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Staging_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'CM.WWI_Staging_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'ArchiveFileRoot',
-     @parameter_value = N'ArchiveFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_DW_Destination_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_DW_Destination_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'CM.WWI_DW_Destination_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'RejectFileRoot',
-     @parameter_value = N'RejectFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerOltpDb <- environment variable SqlServerOltpDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerOltpDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'SqlServerOltpDb',
+         @parameter_value = N'SqlServerOltpDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'DefaultBatchSize',
-     @parameter_value = N'DefaultBatchSize',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerStagingDb <- environment variable SqlServerStagingDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerStagingDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'SqlServerStagingDb',
+         @parameter_value = N'SqlServerStagingDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'SourceQueryTimeoutSeconds',
-     @parameter_value = N'SourceQueryTimeoutSeconds',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerDwDb <- environment variable SqlServerDwDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerDwDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'SqlServerDwDb',
+         @parameter_value = N'SqlServerDwDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'MaxRejectPercent',
-     @parameter_value = N'MaxRejectPercent',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* InboundFileRoot <- environment variable InboundFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'InboundFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'InboundFileRoot',
+         @parameter_value = N'InboundFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_DataQuality',
-     @parameter_name = N'EnvironmentCode',
-     @parameter_value = N'EnvironmentCode',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* ArchiveFileRoot <- environment variable ArchiveFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'ArchiveFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'ArchiveFileRoot',
+         @parameter_value = N'ArchiveFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-/* Post-condition: every project parameter resolves to an environment variable. */
-SELECT p.parameter_name,
-       p.value_type,
-       p.design_default_value,
-       p.referenced_variable_name
-FROM SSISDB.catalog.object_parameters AS p
-INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
-INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-WHERE f.name = N'WWI_PROD'
-  AND pr.name = N'WWI_DataQuality'
-  AND p.object_type = 20
-ORDER BY p.parameter_name;
+/* QuarantineFileRoot <- environment variable QuarantineFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'QuarantineFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'QuarantineFileRoot',
+         @parameter_value = N'QuarantineFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* DefaultBatchSize <- environment variable DefaultBatchSize */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'DefaultBatchSize')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'DefaultBatchSize',
+         @parameter_value = N'DefaultBatchSize',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* SourceQueryTimeoutSeconds <- environment variable SourceQueryTimeoutSeconds */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'SourceQueryTimeoutSeconds')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'SourceQueryTimeoutSeconds',
+         @parameter_value = N'SourceQueryTimeoutSeconds',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* MaxRejectPercent <- environment variable MaxRejectPercent */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'MaxRejectPercent')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'MaxRejectPercent',
+         @parameter_value = N'MaxRejectPercent',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* EnvironmentCode <- environment variable EnvironmentCode */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_DataQuality'
+             AND op.object_type = 20 AND op.parameter_name = N'EnvironmentCode')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_DataQuality',
+         @parameter_name = N'EnvironmentCode',
+         @parameter_value = N'EnvironmentCode',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
 /* Project reference and parameter bindings. */
@@ -1691,194 +3266,441 @@ BEGIN
          @folder_name       = N'WWI_PROD',
          @project_name      = N'WWI_ReferenceData',
          @environment_name  = N'WWI_PROD',
-         @reference_location = 'L',            /* local: same folder */
+         @reference_type    = 'R',             /* relative: environment in this folder */
          @reference_id      = @ReferenceId OUTPUT;
 END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'OracleHost',
-     @parameter_value = N'OracleHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleHost <- environment variable OracleHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'OracleHost',
+         @parameter_value = N'OracleHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'OraclePort',
-     @parameter_value = N'OraclePort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OraclePort <- environment variable OraclePort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'OraclePort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'OraclePort',
+         @parameter_value = N'OraclePort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'OracleService',
-     @parameter_value = N'OracleService',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleService <- environment variable OracleService */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleService')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'OracleService',
+         @parameter_value = N'OracleService',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'OracleUser',
-     @parameter_value = N'OracleUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleUser <- environment variable OracleUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'OracleUser',
+         @parameter_value = N'OracleUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'OraclePassword',
-     @parameter_value = N'OraclePassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleProvider <- environment variable OracleProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'OracleProvider',
+         @parameter_value = N'OracleProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'SqlServerHost',
-     @parameter_value = N'SqlServerHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Oracle_ERP.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'CM.WWI_Oracle_ERP.Password',
+         @parameter_value = N'OraclePassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'SqlServerPort',
-     @parameter_value = N'SqlServerPort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerHost <- environment variable SqlServerHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'SqlServerHost',
+         @parameter_value = N'SqlServerHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'SqlServerUser',
-     @parameter_value = N'SqlServerUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerPort <- environment variable SqlServerPort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerPort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'SqlServerPort',
+         @parameter_value = N'SqlServerPort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'SqlServerPassword',
-     @parameter_value = N'SqlServerPassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerUser <- environment variable SqlServerUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'SqlServerUser',
+         @parameter_value = N'SqlServerUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'SqlServerOltpDb',
-     @parameter_value = N'SqlServerOltpDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerProvider <- environment variable SqlServerProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'SqlServerProvider',
+         @parameter_value = N'SqlServerProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'SqlServerStagingDb',
-     @parameter_value = N'SqlServerStagingDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'SqlServerTrustServerCertificate',
+         @parameter_value = N'SqlServerTrustServerCertificate',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'SqlServerDwDb',
-     @parameter_value = N'SqlServerDwDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Source_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Source_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'CM.WWI_Source_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'InboundFileRoot',
-     @parameter_value = N'InboundFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Staging_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Staging_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'CM.WWI_Staging_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'ArchiveFileRoot',
-     @parameter_value = N'ArchiveFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_DW_Destination_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_DW_Destination_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'CM.WWI_DW_Destination_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'RejectFileRoot',
-     @parameter_value = N'RejectFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerOltpDb <- environment variable SqlServerOltpDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerOltpDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'SqlServerOltpDb',
+         @parameter_value = N'SqlServerOltpDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'DefaultBatchSize',
-     @parameter_value = N'DefaultBatchSize',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerStagingDb <- environment variable SqlServerStagingDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerStagingDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'SqlServerStagingDb',
+         @parameter_value = N'SqlServerStagingDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'SourceQueryTimeoutSeconds',
-     @parameter_value = N'SourceQueryTimeoutSeconds',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerDwDb <- environment variable SqlServerDwDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerDwDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'SqlServerDwDb',
+         @parameter_value = N'SqlServerDwDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'MaxRejectPercent',
-     @parameter_value = N'MaxRejectPercent',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* InboundFileRoot <- environment variable InboundFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'InboundFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'InboundFileRoot',
+         @parameter_value = N'InboundFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ReferenceData',
-     @parameter_name = N'EnvironmentCode',
-     @parameter_value = N'EnvironmentCode',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* ArchiveFileRoot <- environment variable ArchiveFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'ArchiveFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'ArchiveFileRoot',
+         @parameter_value = N'ArchiveFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-/* Post-condition: every project parameter resolves to an environment variable. */
-SELECT p.parameter_name,
-       p.value_type,
-       p.design_default_value,
-       p.referenced_variable_name
-FROM SSISDB.catalog.object_parameters AS p
-INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
-INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-WHERE f.name = N'WWI_PROD'
-  AND pr.name = N'WWI_ReferenceData'
-  AND p.object_type = 20
-ORDER BY p.parameter_name;
+/* QuarantineFileRoot <- environment variable QuarantineFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'QuarantineFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'QuarantineFileRoot',
+         @parameter_value = N'QuarantineFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* DefaultBatchSize <- environment variable DefaultBatchSize */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'DefaultBatchSize')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'DefaultBatchSize',
+         @parameter_value = N'DefaultBatchSize',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* SourceQueryTimeoutSeconds <- environment variable SourceQueryTimeoutSeconds */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'SourceQueryTimeoutSeconds')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'SourceQueryTimeoutSeconds',
+         @parameter_value = N'SourceQueryTimeoutSeconds',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* MaxRejectPercent <- environment variable MaxRejectPercent */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'MaxRejectPercent')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'MaxRejectPercent',
+         @parameter_value = N'MaxRejectPercent',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* EnvironmentCode <- environment variable EnvironmentCode */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ReferenceData'
+             AND op.object_type = 20 AND op.parameter_name = N'EnvironmentCode')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ReferenceData',
+         @parameter_name = N'EnvironmentCode',
+         @parameter_value = N'EnvironmentCode',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
 /* Project reference and parameter bindings. */
@@ -1894,194 +3716,441 @@ BEGIN
          @folder_name       = N'WWI_PROD',
          @project_name      = N'WWI_Dimensions',
          @environment_name  = N'WWI_PROD',
-         @reference_location = 'L',            /* local: same folder */
+         @reference_type    = 'R',             /* relative: environment in this folder */
          @reference_id      = @ReferenceId OUTPUT;
 END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'OracleHost',
-     @parameter_value = N'OracleHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleHost <- environment variable OracleHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'OracleHost',
+         @parameter_value = N'OracleHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'OraclePort',
-     @parameter_value = N'OraclePort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OraclePort <- environment variable OraclePort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'OraclePort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'OraclePort',
+         @parameter_value = N'OraclePort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'OracleService',
-     @parameter_value = N'OracleService',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleService <- environment variable OracleService */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleService')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'OracleService',
+         @parameter_value = N'OracleService',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'OracleUser',
-     @parameter_value = N'OracleUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleUser <- environment variable OracleUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'OracleUser',
+         @parameter_value = N'OracleUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'OraclePassword',
-     @parameter_value = N'OraclePassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleProvider <- environment variable OracleProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'OracleProvider',
+         @parameter_value = N'OracleProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'SqlServerHost',
-     @parameter_value = N'SqlServerHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Oracle_ERP.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'CM.WWI_Oracle_ERP.Password',
+         @parameter_value = N'OraclePassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'SqlServerPort',
-     @parameter_value = N'SqlServerPort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerHost <- environment variable SqlServerHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'SqlServerHost',
+         @parameter_value = N'SqlServerHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'SqlServerUser',
-     @parameter_value = N'SqlServerUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerPort <- environment variable SqlServerPort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerPort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'SqlServerPort',
+         @parameter_value = N'SqlServerPort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'SqlServerPassword',
-     @parameter_value = N'SqlServerPassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerUser <- environment variable SqlServerUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'SqlServerUser',
+         @parameter_value = N'SqlServerUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'SqlServerOltpDb',
-     @parameter_value = N'SqlServerOltpDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerProvider <- environment variable SqlServerProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'SqlServerProvider',
+         @parameter_value = N'SqlServerProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'SqlServerStagingDb',
-     @parameter_value = N'SqlServerStagingDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'SqlServerTrustServerCertificate',
+         @parameter_value = N'SqlServerTrustServerCertificate',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'SqlServerDwDb',
-     @parameter_value = N'SqlServerDwDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Source_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Source_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'CM.WWI_Source_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'InboundFileRoot',
-     @parameter_value = N'InboundFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Staging_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Staging_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'CM.WWI_Staging_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'ArchiveFileRoot',
-     @parameter_value = N'ArchiveFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_DW_Destination_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_DW_Destination_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'CM.WWI_DW_Destination_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'RejectFileRoot',
-     @parameter_value = N'RejectFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerOltpDb <- environment variable SqlServerOltpDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerOltpDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'SqlServerOltpDb',
+         @parameter_value = N'SqlServerOltpDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'DefaultBatchSize',
-     @parameter_value = N'DefaultBatchSize',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerStagingDb <- environment variable SqlServerStagingDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerStagingDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'SqlServerStagingDb',
+         @parameter_value = N'SqlServerStagingDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'SourceQueryTimeoutSeconds',
-     @parameter_value = N'SourceQueryTimeoutSeconds',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerDwDb <- environment variable SqlServerDwDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerDwDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'SqlServerDwDb',
+         @parameter_value = N'SqlServerDwDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'MaxRejectPercent',
-     @parameter_value = N'MaxRejectPercent',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* InboundFileRoot <- environment variable InboundFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'InboundFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'InboundFileRoot',
+         @parameter_value = N'InboundFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Dimensions',
-     @parameter_name = N'EnvironmentCode',
-     @parameter_value = N'EnvironmentCode',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* ArchiveFileRoot <- environment variable ArchiveFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'ArchiveFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'ArchiveFileRoot',
+         @parameter_value = N'ArchiveFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-/* Post-condition: every project parameter resolves to an environment variable. */
-SELECT p.parameter_name,
-       p.value_type,
-       p.design_default_value,
-       p.referenced_variable_name
-FROM SSISDB.catalog.object_parameters AS p
-INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
-INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-WHERE f.name = N'WWI_PROD'
-  AND pr.name = N'WWI_Dimensions'
-  AND p.object_type = 20
-ORDER BY p.parameter_name;
+/* QuarantineFileRoot <- environment variable QuarantineFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'QuarantineFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'QuarantineFileRoot',
+         @parameter_value = N'QuarantineFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* DefaultBatchSize <- environment variable DefaultBatchSize */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'DefaultBatchSize')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'DefaultBatchSize',
+         @parameter_value = N'DefaultBatchSize',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* SourceQueryTimeoutSeconds <- environment variable SourceQueryTimeoutSeconds */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'SourceQueryTimeoutSeconds')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'SourceQueryTimeoutSeconds',
+         @parameter_value = N'SourceQueryTimeoutSeconds',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* MaxRejectPercent <- environment variable MaxRejectPercent */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'MaxRejectPercent')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'MaxRejectPercent',
+         @parameter_value = N'MaxRejectPercent',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* EnvironmentCode <- environment variable EnvironmentCode */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Dimensions'
+             AND op.object_type = 20 AND op.parameter_name = N'EnvironmentCode')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Dimensions',
+         @parameter_name = N'EnvironmentCode',
+         @parameter_value = N'EnvironmentCode',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
 /* Project reference and parameter bindings. */
@@ -2097,194 +4166,441 @@ BEGIN
          @folder_name       = N'WWI_PROD',
          @project_name      = N'WWI_Facts',
          @environment_name  = N'WWI_PROD',
-         @reference_location = 'L',            /* local: same folder */
+         @reference_type    = 'R',             /* relative: environment in this folder */
          @reference_id      = @ReferenceId OUTPUT;
 END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'OracleHost',
-     @parameter_value = N'OracleHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleHost <- environment variable OracleHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'OracleHost',
+         @parameter_value = N'OracleHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'OraclePort',
-     @parameter_value = N'OraclePort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OraclePort <- environment variable OraclePort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'OraclePort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'OraclePort',
+         @parameter_value = N'OraclePort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'OracleService',
-     @parameter_value = N'OracleService',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleService <- environment variable OracleService */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleService')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'OracleService',
+         @parameter_value = N'OracleService',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'OracleUser',
-     @parameter_value = N'OracleUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleUser <- environment variable OracleUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'OracleUser',
+         @parameter_value = N'OracleUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'OraclePassword',
-     @parameter_value = N'OraclePassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleProvider <- environment variable OracleProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'OracleProvider',
+         @parameter_value = N'OracleProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'SqlServerHost',
-     @parameter_value = N'SqlServerHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Oracle_ERP.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'CM.WWI_Oracle_ERP.Password',
+         @parameter_value = N'OraclePassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'SqlServerPort',
-     @parameter_value = N'SqlServerPort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerHost <- environment variable SqlServerHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'SqlServerHost',
+         @parameter_value = N'SqlServerHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'SqlServerUser',
-     @parameter_value = N'SqlServerUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerPort <- environment variable SqlServerPort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerPort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'SqlServerPort',
+         @parameter_value = N'SqlServerPort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'SqlServerPassword',
-     @parameter_value = N'SqlServerPassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerUser <- environment variable SqlServerUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'SqlServerUser',
+         @parameter_value = N'SqlServerUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'SqlServerOltpDb',
-     @parameter_value = N'SqlServerOltpDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerProvider <- environment variable SqlServerProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'SqlServerProvider',
+         @parameter_value = N'SqlServerProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'SqlServerStagingDb',
-     @parameter_value = N'SqlServerStagingDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'SqlServerTrustServerCertificate',
+         @parameter_value = N'SqlServerTrustServerCertificate',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'SqlServerDwDb',
-     @parameter_value = N'SqlServerDwDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Source_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Source_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'CM.WWI_Source_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'InboundFileRoot',
-     @parameter_value = N'InboundFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Staging_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Staging_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'CM.WWI_Staging_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'ArchiveFileRoot',
-     @parameter_value = N'ArchiveFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_DW_Destination_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_DW_Destination_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'CM.WWI_DW_Destination_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'RejectFileRoot',
-     @parameter_value = N'RejectFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerOltpDb <- environment variable SqlServerOltpDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerOltpDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'SqlServerOltpDb',
+         @parameter_value = N'SqlServerOltpDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'DefaultBatchSize',
-     @parameter_value = N'DefaultBatchSize',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerStagingDb <- environment variable SqlServerStagingDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerStagingDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'SqlServerStagingDb',
+         @parameter_value = N'SqlServerStagingDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'SourceQueryTimeoutSeconds',
-     @parameter_value = N'SourceQueryTimeoutSeconds',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerDwDb <- environment variable SqlServerDwDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerDwDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'SqlServerDwDb',
+         @parameter_value = N'SqlServerDwDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'MaxRejectPercent',
-     @parameter_value = N'MaxRejectPercent',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* InboundFileRoot <- environment variable InboundFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'InboundFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'InboundFileRoot',
+         @parameter_value = N'InboundFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Facts',
-     @parameter_name = N'EnvironmentCode',
-     @parameter_value = N'EnvironmentCode',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* ArchiveFileRoot <- environment variable ArchiveFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'ArchiveFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'ArchiveFileRoot',
+         @parameter_value = N'ArchiveFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-/* Post-condition: every project parameter resolves to an environment variable. */
-SELECT p.parameter_name,
-       p.value_type,
-       p.design_default_value,
-       p.referenced_variable_name
-FROM SSISDB.catalog.object_parameters AS p
-INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
-INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-WHERE f.name = N'WWI_PROD'
-  AND pr.name = N'WWI_Facts'
-  AND p.object_type = 20
-ORDER BY p.parameter_name;
+/* QuarantineFileRoot <- environment variable QuarantineFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'QuarantineFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'QuarantineFileRoot',
+         @parameter_value = N'QuarantineFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* DefaultBatchSize <- environment variable DefaultBatchSize */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'DefaultBatchSize')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'DefaultBatchSize',
+         @parameter_value = N'DefaultBatchSize',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* SourceQueryTimeoutSeconds <- environment variable SourceQueryTimeoutSeconds */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'SourceQueryTimeoutSeconds')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'SourceQueryTimeoutSeconds',
+         @parameter_value = N'SourceQueryTimeoutSeconds',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* MaxRejectPercent <- environment variable MaxRejectPercent */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'MaxRejectPercent')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'MaxRejectPercent',
+         @parameter_value = N'MaxRejectPercent',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* EnvironmentCode <- environment variable EnvironmentCode */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Facts'
+             AND op.object_type = 20 AND op.parameter_name = N'EnvironmentCode')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Facts',
+         @parameter_name = N'EnvironmentCode',
+         @parameter_value = N'EnvironmentCode',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
 /* Project reference and parameter bindings. */
@@ -2300,194 +4616,441 @@ BEGIN
          @folder_name       = N'WWI_PROD',
          @project_name      = N'WWI_Aggregates',
          @environment_name  = N'WWI_PROD',
-         @reference_location = 'L',            /* local: same folder */
+         @reference_type    = 'R',             /* relative: environment in this folder */
          @reference_id      = @ReferenceId OUTPUT;
 END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'OracleHost',
-     @parameter_value = N'OracleHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleHost <- environment variable OracleHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'OracleHost',
+         @parameter_value = N'OracleHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'OraclePort',
-     @parameter_value = N'OraclePort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OraclePort <- environment variable OraclePort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'OraclePort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'OraclePort',
+         @parameter_value = N'OraclePort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'OracleService',
-     @parameter_value = N'OracleService',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleService <- environment variable OracleService */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleService')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'OracleService',
+         @parameter_value = N'OracleService',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'OracleUser',
-     @parameter_value = N'OracleUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleUser <- environment variable OracleUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'OracleUser',
+         @parameter_value = N'OracleUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'OraclePassword',
-     @parameter_value = N'OraclePassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleProvider <- environment variable OracleProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'OracleProvider',
+         @parameter_value = N'OracleProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'SqlServerHost',
-     @parameter_value = N'SqlServerHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Oracle_ERP.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'CM.WWI_Oracle_ERP.Password',
+         @parameter_value = N'OraclePassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'SqlServerPort',
-     @parameter_value = N'SqlServerPort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerHost <- environment variable SqlServerHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'SqlServerHost',
+         @parameter_value = N'SqlServerHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'SqlServerUser',
-     @parameter_value = N'SqlServerUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerPort <- environment variable SqlServerPort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerPort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'SqlServerPort',
+         @parameter_value = N'SqlServerPort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'SqlServerPassword',
-     @parameter_value = N'SqlServerPassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerUser <- environment variable SqlServerUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'SqlServerUser',
+         @parameter_value = N'SqlServerUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'SqlServerOltpDb',
-     @parameter_value = N'SqlServerOltpDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerProvider <- environment variable SqlServerProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'SqlServerProvider',
+         @parameter_value = N'SqlServerProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'SqlServerStagingDb',
-     @parameter_value = N'SqlServerStagingDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'SqlServerTrustServerCertificate',
+         @parameter_value = N'SqlServerTrustServerCertificate',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'SqlServerDwDb',
-     @parameter_value = N'SqlServerDwDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Source_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Source_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'CM.WWI_Source_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'InboundFileRoot',
-     @parameter_value = N'InboundFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Staging_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Staging_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'CM.WWI_Staging_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'ArchiveFileRoot',
-     @parameter_value = N'ArchiveFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_DW_Destination_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_DW_Destination_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'CM.WWI_DW_Destination_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'RejectFileRoot',
-     @parameter_value = N'RejectFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerOltpDb <- environment variable SqlServerOltpDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerOltpDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'SqlServerOltpDb',
+         @parameter_value = N'SqlServerOltpDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'DefaultBatchSize',
-     @parameter_value = N'DefaultBatchSize',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerStagingDb <- environment variable SqlServerStagingDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerStagingDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'SqlServerStagingDb',
+         @parameter_value = N'SqlServerStagingDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'SourceQueryTimeoutSeconds',
-     @parameter_value = N'SourceQueryTimeoutSeconds',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerDwDb <- environment variable SqlServerDwDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerDwDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'SqlServerDwDb',
+         @parameter_value = N'SqlServerDwDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'MaxRejectPercent',
-     @parameter_value = N'MaxRejectPercent',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* InboundFileRoot <- environment variable InboundFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'InboundFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'InboundFileRoot',
+         @parameter_value = N'InboundFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Aggregates',
-     @parameter_name = N'EnvironmentCode',
-     @parameter_value = N'EnvironmentCode',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* ArchiveFileRoot <- environment variable ArchiveFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'ArchiveFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'ArchiveFileRoot',
+         @parameter_value = N'ArchiveFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-/* Post-condition: every project parameter resolves to an environment variable. */
-SELECT p.parameter_name,
-       p.value_type,
-       p.design_default_value,
-       p.referenced_variable_name
-FROM SSISDB.catalog.object_parameters AS p
-INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
-INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-WHERE f.name = N'WWI_PROD'
-  AND pr.name = N'WWI_Aggregates'
-  AND p.object_type = 20
-ORDER BY p.parameter_name;
+/* QuarantineFileRoot <- environment variable QuarantineFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'QuarantineFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'QuarantineFileRoot',
+         @parameter_value = N'QuarantineFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* DefaultBatchSize <- environment variable DefaultBatchSize */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'DefaultBatchSize')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'DefaultBatchSize',
+         @parameter_value = N'DefaultBatchSize',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* SourceQueryTimeoutSeconds <- environment variable SourceQueryTimeoutSeconds */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'SourceQueryTimeoutSeconds')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'SourceQueryTimeoutSeconds',
+         @parameter_value = N'SourceQueryTimeoutSeconds',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* MaxRejectPercent <- environment variable MaxRejectPercent */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'MaxRejectPercent')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'MaxRejectPercent',
+         @parameter_value = N'MaxRejectPercent',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* EnvironmentCode <- environment variable EnvironmentCode */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Aggregates'
+             AND op.object_type = 20 AND op.parameter_name = N'EnvironmentCode')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Aggregates',
+         @parameter_name = N'EnvironmentCode',
+         @parameter_value = N'EnvironmentCode',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
 /* Project reference and parameter bindings. */
@@ -2503,194 +5066,441 @@ BEGIN
          @folder_name       = N'WWI_PROD',
          @project_name      = N'WWI_Finance',
          @environment_name  = N'WWI_PROD',
-         @reference_location = 'L',            /* local: same folder */
+         @reference_type    = 'R',             /* relative: environment in this folder */
          @reference_id      = @ReferenceId OUTPUT;
 END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'OracleHost',
-     @parameter_value = N'OracleHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleHost <- environment variable OracleHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'OracleHost',
+         @parameter_value = N'OracleHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'OraclePort',
-     @parameter_value = N'OraclePort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OraclePort <- environment variable OraclePort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'OraclePort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'OraclePort',
+         @parameter_value = N'OraclePort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'OracleService',
-     @parameter_value = N'OracleService',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleService <- environment variable OracleService */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleService')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'OracleService',
+         @parameter_value = N'OracleService',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'OracleUser',
-     @parameter_value = N'OracleUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleUser <- environment variable OracleUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'OracleUser',
+         @parameter_value = N'OracleUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'OraclePassword',
-     @parameter_value = N'OraclePassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleProvider <- environment variable OracleProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'OracleProvider',
+         @parameter_value = N'OracleProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'SqlServerHost',
-     @parameter_value = N'SqlServerHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Oracle_ERP.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'CM.WWI_Oracle_ERP.Password',
+         @parameter_value = N'OraclePassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'SqlServerPort',
-     @parameter_value = N'SqlServerPort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerHost <- environment variable SqlServerHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'SqlServerHost',
+         @parameter_value = N'SqlServerHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'SqlServerUser',
-     @parameter_value = N'SqlServerUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerPort <- environment variable SqlServerPort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerPort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'SqlServerPort',
+         @parameter_value = N'SqlServerPort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'SqlServerPassword',
-     @parameter_value = N'SqlServerPassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerUser <- environment variable SqlServerUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'SqlServerUser',
+         @parameter_value = N'SqlServerUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'SqlServerOltpDb',
-     @parameter_value = N'SqlServerOltpDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerProvider <- environment variable SqlServerProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'SqlServerProvider',
+         @parameter_value = N'SqlServerProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'SqlServerStagingDb',
-     @parameter_value = N'SqlServerStagingDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'SqlServerTrustServerCertificate',
+         @parameter_value = N'SqlServerTrustServerCertificate',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'SqlServerDwDb',
-     @parameter_value = N'SqlServerDwDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Source_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Source_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'CM.WWI_Source_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'InboundFileRoot',
-     @parameter_value = N'InboundFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Staging_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Staging_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'CM.WWI_Staging_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'ArchiveFileRoot',
-     @parameter_value = N'ArchiveFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_DW_Destination_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_DW_Destination_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'CM.WWI_DW_Destination_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'RejectFileRoot',
-     @parameter_value = N'RejectFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerOltpDb <- environment variable SqlServerOltpDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerOltpDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'SqlServerOltpDb',
+         @parameter_value = N'SqlServerOltpDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'DefaultBatchSize',
-     @parameter_value = N'DefaultBatchSize',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerStagingDb <- environment variable SqlServerStagingDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerStagingDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'SqlServerStagingDb',
+         @parameter_value = N'SqlServerStagingDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'SourceQueryTimeoutSeconds',
-     @parameter_value = N'SourceQueryTimeoutSeconds',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerDwDb <- environment variable SqlServerDwDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerDwDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'SqlServerDwDb',
+         @parameter_value = N'SqlServerDwDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'MaxRejectPercent',
-     @parameter_value = N'MaxRejectPercent',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* InboundFileRoot <- environment variable InboundFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'InboundFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'InboundFileRoot',
+         @parameter_value = N'InboundFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Finance',
-     @parameter_name = N'EnvironmentCode',
-     @parameter_value = N'EnvironmentCode',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* ArchiveFileRoot <- environment variable ArchiveFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'ArchiveFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'ArchiveFileRoot',
+         @parameter_value = N'ArchiveFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-/* Post-condition: every project parameter resolves to an environment variable. */
-SELECT p.parameter_name,
-       p.value_type,
-       p.design_default_value,
-       p.referenced_variable_name
-FROM SSISDB.catalog.object_parameters AS p
-INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
-INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-WHERE f.name = N'WWI_PROD'
-  AND pr.name = N'WWI_Finance'
-  AND p.object_type = 20
-ORDER BY p.parameter_name;
+/* QuarantineFileRoot <- environment variable QuarantineFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'QuarantineFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'QuarantineFileRoot',
+         @parameter_value = N'QuarantineFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* DefaultBatchSize <- environment variable DefaultBatchSize */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'DefaultBatchSize')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'DefaultBatchSize',
+         @parameter_value = N'DefaultBatchSize',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* SourceQueryTimeoutSeconds <- environment variable SourceQueryTimeoutSeconds */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'SourceQueryTimeoutSeconds')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'SourceQueryTimeoutSeconds',
+         @parameter_value = N'SourceQueryTimeoutSeconds',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* MaxRejectPercent <- environment variable MaxRejectPercent */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'MaxRejectPercent')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'MaxRejectPercent',
+         @parameter_value = N'MaxRejectPercent',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* EnvironmentCode <- environment variable EnvironmentCode */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Finance'
+             AND op.object_type = 20 AND op.parameter_name = N'EnvironmentCode')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Finance',
+         @parameter_name = N'EnvironmentCode',
+         @parameter_value = N'EnvironmentCode',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
 /* Project reference and parameter bindings. */
@@ -2706,194 +5516,441 @@ BEGIN
          @folder_name       = N'WWI_PROD',
          @project_name      = N'WWI_Sales',
          @environment_name  = N'WWI_PROD',
-         @reference_location = 'L',            /* local: same folder */
+         @reference_type    = 'R',             /* relative: environment in this folder */
          @reference_id      = @ReferenceId OUTPUT;
 END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'OracleHost',
-     @parameter_value = N'OracleHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleHost <- environment variable OracleHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'OracleHost',
+         @parameter_value = N'OracleHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'OraclePort',
-     @parameter_value = N'OraclePort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OraclePort <- environment variable OraclePort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'OraclePort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'OraclePort',
+         @parameter_value = N'OraclePort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'OracleService',
-     @parameter_value = N'OracleService',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleService <- environment variable OracleService */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleService')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'OracleService',
+         @parameter_value = N'OracleService',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'OracleUser',
-     @parameter_value = N'OracleUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleUser <- environment variable OracleUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'OracleUser',
+         @parameter_value = N'OracleUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'OraclePassword',
-     @parameter_value = N'OraclePassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleProvider <- environment variable OracleProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'OracleProvider',
+         @parameter_value = N'OracleProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'SqlServerHost',
-     @parameter_value = N'SqlServerHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Oracle_ERP.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'CM.WWI_Oracle_ERP.Password',
+         @parameter_value = N'OraclePassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'SqlServerPort',
-     @parameter_value = N'SqlServerPort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerHost <- environment variable SqlServerHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'SqlServerHost',
+         @parameter_value = N'SqlServerHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'SqlServerUser',
-     @parameter_value = N'SqlServerUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerPort <- environment variable SqlServerPort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerPort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'SqlServerPort',
+         @parameter_value = N'SqlServerPort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'SqlServerPassword',
-     @parameter_value = N'SqlServerPassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerUser <- environment variable SqlServerUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'SqlServerUser',
+         @parameter_value = N'SqlServerUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'SqlServerOltpDb',
-     @parameter_value = N'SqlServerOltpDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerProvider <- environment variable SqlServerProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'SqlServerProvider',
+         @parameter_value = N'SqlServerProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'SqlServerStagingDb',
-     @parameter_value = N'SqlServerStagingDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'SqlServerTrustServerCertificate',
+         @parameter_value = N'SqlServerTrustServerCertificate',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'SqlServerDwDb',
-     @parameter_value = N'SqlServerDwDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Source_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Source_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'CM.WWI_Source_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'InboundFileRoot',
-     @parameter_value = N'InboundFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Staging_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Staging_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'CM.WWI_Staging_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'ArchiveFileRoot',
-     @parameter_value = N'ArchiveFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_DW_Destination_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_DW_Destination_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'CM.WWI_DW_Destination_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'RejectFileRoot',
-     @parameter_value = N'RejectFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerOltpDb <- environment variable SqlServerOltpDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerOltpDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'SqlServerOltpDb',
+         @parameter_value = N'SqlServerOltpDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'DefaultBatchSize',
-     @parameter_value = N'DefaultBatchSize',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerStagingDb <- environment variable SqlServerStagingDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerStagingDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'SqlServerStagingDb',
+         @parameter_value = N'SqlServerStagingDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'SourceQueryTimeoutSeconds',
-     @parameter_value = N'SourceQueryTimeoutSeconds',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerDwDb <- environment variable SqlServerDwDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerDwDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'SqlServerDwDb',
+         @parameter_value = N'SqlServerDwDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'MaxRejectPercent',
-     @parameter_value = N'MaxRejectPercent',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* InboundFileRoot <- environment variable InboundFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'InboundFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'InboundFileRoot',
+         @parameter_value = N'InboundFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Sales',
-     @parameter_name = N'EnvironmentCode',
-     @parameter_value = N'EnvironmentCode',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* ArchiveFileRoot <- environment variable ArchiveFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'ArchiveFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'ArchiveFileRoot',
+         @parameter_value = N'ArchiveFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-/* Post-condition: every project parameter resolves to an environment variable. */
-SELECT p.parameter_name,
-       p.value_type,
-       p.design_default_value,
-       p.referenced_variable_name
-FROM SSISDB.catalog.object_parameters AS p
-INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
-INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-WHERE f.name = N'WWI_PROD'
-  AND pr.name = N'WWI_Sales'
-  AND p.object_type = 20
-ORDER BY p.parameter_name;
+/* QuarantineFileRoot <- environment variable QuarantineFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'QuarantineFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'QuarantineFileRoot',
+         @parameter_value = N'QuarantineFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* DefaultBatchSize <- environment variable DefaultBatchSize */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'DefaultBatchSize')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'DefaultBatchSize',
+         @parameter_value = N'DefaultBatchSize',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* SourceQueryTimeoutSeconds <- environment variable SourceQueryTimeoutSeconds */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'SourceQueryTimeoutSeconds')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'SourceQueryTimeoutSeconds',
+         @parameter_value = N'SourceQueryTimeoutSeconds',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* MaxRejectPercent <- environment variable MaxRejectPercent */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'MaxRejectPercent')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'MaxRejectPercent',
+         @parameter_value = N'MaxRejectPercent',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* EnvironmentCode <- environment variable EnvironmentCode */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Sales'
+             AND op.object_type = 20 AND op.parameter_name = N'EnvironmentCode')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Sales',
+         @parameter_name = N'EnvironmentCode',
+         @parameter_value = N'EnvironmentCode',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
 /* Project reference and parameter bindings. */
@@ -2909,194 +5966,441 @@ BEGIN
          @folder_name       = N'WWI_PROD',
          @project_name      = N'WWI_Inventory',
          @environment_name  = N'WWI_PROD',
-         @reference_location = 'L',            /* local: same folder */
+         @reference_type    = 'R',             /* relative: environment in this folder */
          @reference_id      = @ReferenceId OUTPUT;
 END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'OracleHost',
-     @parameter_value = N'OracleHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleHost <- environment variable OracleHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'OracleHost',
+         @parameter_value = N'OracleHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'OraclePort',
-     @parameter_value = N'OraclePort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OraclePort <- environment variable OraclePort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'OraclePort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'OraclePort',
+         @parameter_value = N'OraclePort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'OracleService',
-     @parameter_value = N'OracleService',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleService <- environment variable OracleService */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleService')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'OracleService',
+         @parameter_value = N'OracleService',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'OracleUser',
-     @parameter_value = N'OracleUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleUser <- environment variable OracleUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'OracleUser',
+         @parameter_value = N'OracleUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'OraclePassword',
-     @parameter_value = N'OraclePassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleProvider <- environment variable OracleProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'OracleProvider',
+         @parameter_value = N'OracleProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'SqlServerHost',
-     @parameter_value = N'SqlServerHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Oracle_ERP.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'CM.WWI_Oracle_ERP.Password',
+         @parameter_value = N'OraclePassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'SqlServerPort',
-     @parameter_value = N'SqlServerPort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerHost <- environment variable SqlServerHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'SqlServerHost',
+         @parameter_value = N'SqlServerHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'SqlServerUser',
-     @parameter_value = N'SqlServerUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerPort <- environment variable SqlServerPort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerPort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'SqlServerPort',
+         @parameter_value = N'SqlServerPort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'SqlServerPassword',
-     @parameter_value = N'SqlServerPassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerUser <- environment variable SqlServerUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'SqlServerUser',
+         @parameter_value = N'SqlServerUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'SqlServerOltpDb',
-     @parameter_value = N'SqlServerOltpDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerProvider <- environment variable SqlServerProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'SqlServerProvider',
+         @parameter_value = N'SqlServerProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'SqlServerStagingDb',
-     @parameter_value = N'SqlServerStagingDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'SqlServerTrustServerCertificate',
+         @parameter_value = N'SqlServerTrustServerCertificate',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'SqlServerDwDb',
-     @parameter_value = N'SqlServerDwDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Source_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Source_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'CM.WWI_Source_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'InboundFileRoot',
-     @parameter_value = N'InboundFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Staging_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Staging_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'CM.WWI_Staging_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'ArchiveFileRoot',
-     @parameter_value = N'ArchiveFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_DW_Destination_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_DW_Destination_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'CM.WWI_DW_Destination_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'RejectFileRoot',
-     @parameter_value = N'RejectFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerOltpDb <- environment variable SqlServerOltpDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerOltpDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'SqlServerOltpDb',
+         @parameter_value = N'SqlServerOltpDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'DefaultBatchSize',
-     @parameter_value = N'DefaultBatchSize',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerStagingDb <- environment variable SqlServerStagingDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerStagingDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'SqlServerStagingDb',
+         @parameter_value = N'SqlServerStagingDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'SourceQueryTimeoutSeconds',
-     @parameter_value = N'SourceQueryTimeoutSeconds',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerDwDb <- environment variable SqlServerDwDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerDwDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'SqlServerDwDb',
+         @parameter_value = N'SqlServerDwDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'MaxRejectPercent',
-     @parameter_value = N'MaxRejectPercent',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* InboundFileRoot <- environment variable InboundFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'InboundFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'InboundFileRoot',
+         @parameter_value = N'InboundFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Inventory',
-     @parameter_name = N'EnvironmentCode',
-     @parameter_value = N'EnvironmentCode',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* ArchiveFileRoot <- environment variable ArchiveFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'ArchiveFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'ArchiveFileRoot',
+         @parameter_value = N'ArchiveFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-/* Post-condition: every project parameter resolves to an environment variable. */
-SELECT p.parameter_name,
-       p.value_type,
-       p.design_default_value,
-       p.referenced_variable_name
-FROM SSISDB.catalog.object_parameters AS p
-INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
-INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-WHERE f.name = N'WWI_PROD'
-  AND pr.name = N'WWI_Inventory'
-  AND p.object_type = 20
-ORDER BY p.parameter_name;
+/* QuarantineFileRoot <- environment variable QuarantineFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'QuarantineFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'QuarantineFileRoot',
+         @parameter_value = N'QuarantineFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* DefaultBatchSize <- environment variable DefaultBatchSize */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'DefaultBatchSize')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'DefaultBatchSize',
+         @parameter_value = N'DefaultBatchSize',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* SourceQueryTimeoutSeconds <- environment variable SourceQueryTimeoutSeconds */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'SourceQueryTimeoutSeconds')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'SourceQueryTimeoutSeconds',
+         @parameter_value = N'SourceQueryTimeoutSeconds',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* MaxRejectPercent <- environment variable MaxRejectPercent */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'MaxRejectPercent')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'MaxRejectPercent',
+         @parameter_value = N'MaxRejectPercent',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* EnvironmentCode <- environment variable EnvironmentCode */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Inventory'
+             AND op.object_type = 20 AND op.parameter_name = N'EnvironmentCode')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Inventory',
+         @parameter_name = N'EnvironmentCode',
+         @parameter_value = N'EnvironmentCode',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
 /* Project reference and parameter bindings. */
@@ -3112,194 +6416,441 @@ BEGIN
          @folder_name       = N'WWI_PROD',
          @project_name      = N'WWI_Procurement',
          @environment_name  = N'WWI_PROD',
-         @reference_location = 'L',            /* local: same folder */
+         @reference_type    = 'R',             /* relative: environment in this folder */
          @reference_id      = @ReferenceId OUTPUT;
 END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'OracleHost',
-     @parameter_value = N'OracleHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleHost <- environment variable OracleHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'OracleHost',
+         @parameter_value = N'OracleHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'OraclePort',
-     @parameter_value = N'OraclePort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OraclePort <- environment variable OraclePort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'OraclePort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'OraclePort',
+         @parameter_value = N'OraclePort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'OracleService',
-     @parameter_value = N'OracleService',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleService <- environment variable OracleService */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleService')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'OracleService',
+         @parameter_value = N'OracleService',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'OracleUser',
-     @parameter_value = N'OracleUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleUser <- environment variable OracleUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'OracleUser',
+         @parameter_value = N'OracleUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'OraclePassword',
-     @parameter_value = N'OraclePassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleProvider <- environment variable OracleProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'OracleProvider',
+         @parameter_value = N'OracleProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'SqlServerHost',
-     @parameter_value = N'SqlServerHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Oracle_ERP.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'CM.WWI_Oracle_ERP.Password',
+         @parameter_value = N'OraclePassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'SqlServerPort',
-     @parameter_value = N'SqlServerPort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerHost <- environment variable SqlServerHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'SqlServerHost',
+         @parameter_value = N'SqlServerHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'SqlServerUser',
-     @parameter_value = N'SqlServerUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerPort <- environment variable SqlServerPort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerPort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'SqlServerPort',
+         @parameter_value = N'SqlServerPort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'SqlServerPassword',
-     @parameter_value = N'SqlServerPassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerUser <- environment variable SqlServerUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'SqlServerUser',
+         @parameter_value = N'SqlServerUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'SqlServerOltpDb',
-     @parameter_value = N'SqlServerOltpDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerProvider <- environment variable SqlServerProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'SqlServerProvider',
+         @parameter_value = N'SqlServerProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'SqlServerStagingDb',
-     @parameter_value = N'SqlServerStagingDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'SqlServerTrustServerCertificate',
+         @parameter_value = N'SqlServerTrustServerCertificate',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'SqlServerDwDb',
-     @parameter_value = N'SqlServerDwDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Source_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Source_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'CM.WWI_Source_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'InboundFileRoot',
-     @parameter_value = N'InboundFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Staging_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Staging_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'CM.WWI_Staging_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'ArchiveFileRoot',
-     @parameter_value = N'ArchiveFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_DW_Destination_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_DW_Destination_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'CM.WWI_DW_Destination_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'RejectFileRoot',
-     @parameter_value = N'RejectFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerOltpDb <- environment variable SqlServerOltpDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerOltpDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'SqlServerOltpDb',
+         @parameter_value = N'SqlServerOltpDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'DefaultBatchSize',
-     @parameter_value = N'DefaultBatchSize',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerStagingDb <- environment variable SqlServerStagingDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerStagingDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'SqlServerStagingDb',
+         @parameter_value = N'SqlServerStagingDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'SourceQueryTimeoutSeconds',
-     @parameter_value = N'SourceQueryTimeoutSeconds',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerDwDb <- environment variable SqlServerDwDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerDwDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'SqlServerDwDb',
+         @parameter_value = N'SqlServerDwDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'MaxRejectPercent',
-     @parameter_value = N'MaxRejectPercent',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* InboundFileRoot <- environment variable InboundFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'InboundFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'InboundFileRoot',
+         @parameter_value = N'InboundFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Procurement',
-     @parameter_name = N'EnvironmentCode',
-     @parameter_value = N'EnvironmentCode',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* ArchiveFileRoot <- environment variable ArchiveFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'ArchiveFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'ArchiveFileRoot',
+         @parameter_value = N'ArchiveFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-/* Post-condition: every project parameter resolves to an environment variable. */
-SELECT p.parameter_name,
-       p.value_type,
-       p.design_default_value,
-       p.referenced_variable_name
-FROM SSISDB.catalog.object_parameters AS p
-INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
-INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-WHERE f.name = N'WWI_PROD'
-  AND pr.name = N'WWI_Procurement'
-  AND p.object_type = 20
-ORDER BY p.parameter_name;
+/* QuarantineFileRoot <- environment variable QuarantineFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'QuarantineFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'QuarantineFileRoot',
+         @parameter_value = N'QuarantineFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* DefaultBatchSize <- environment variable DefaultBatchSize */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'DefaultBatchSize')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'DefaultBatchSize',
+         @parameter_value = N'DefaultBatchSize',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* SourceQueryTimeoutSeconds <- environment variable SourceQueryTimeoutSeconds */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'SourceQueryTimeoutSeconds')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'SourceQueryTimeoutSeconds',
+         @parameter_value = N'SourceQueryTimeoutSeconds',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* MaxRejectPercent <- environment variable MaxRejectPercent */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'MaxRejectPercent')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'MaxRejectPercent',
+         @parameter_value = N'MaxRejectPercent',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* EnvironmentCode <- environment variable EnvironmentCode */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Procurement'
+             AND op.object_type = 20 AND op.parameter_name = N'EnvironmentCode')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Procurement',
+         @parameter_name = N'EnvironmentCode',
+         @parameter_value = N'EnvironmentCode',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
 /* Project reference and parameter bindings. */
@@ -3315,194 +6866,441 @@ BEGIN
          @folder_name       = N'WWI_PROD',
          @project_name      = N'WWI_Customer360',
          @environment_name  = N'WWI_PROD',
-         @reference_location = 'L',            /* local: same folder */
+         @reference_type    = 'R',             /* relative: environment in this folder */
          @reference_id      = @ReferenceId OUTPUT;
 END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'OracleHost',
-     @parameter_value = N'OracleHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleHost <- environment variable OracleHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'OracleHost',
+         @parameter_value = N'OracleHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'OraclePort',
-     @parameter_value = N'OraclePort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OraclePort <- environment variable OraclePort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'OraclePort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'OraclePort',
+         @parameter_value = N'OraclePort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'OracleService',
-     @parameter_value = N'OracleService',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleService <- environment variable OracleService */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleService')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'OracleService',
+         @parameter_value = N'OracleService',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'OracleUser',
-     @parameter_value = N'OracleUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleUser <- environment variable OracleUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'OracleUser',
+         @parameter_value = N'OracleUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'OraclePassword',
-     @parameter_value = N'OraclePassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleProvider <- environment variable OracleProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'OracleProvider',
+         @parameter_value = N'OracleProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'SqlServerHost',
-     @parameter_value = N'SqlServerHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Oracle_ERP.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'CM.WWI_Oracle_ERP.Password',
+         @parameter_value = N'OraclePassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'SqlServerPort',
-     @parameter_value = N'SqlServerPort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerHost <- environment variable SqlServerHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'SqlServerHost',
+         @parameter_value = N'SqlServerHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'SqlServerUser',
-     @parameter_value = N'SqlServerUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerPort <- environment variable SqlServerPort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerPort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'SqlServerPort',
+         @parameter_value = N'SqlServerPort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'SqlServerPassword',
-     @parameter_value = N'SqlServerPassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerUser <- environment variable SqlServerUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'SqlServerUser',
+         @parameter_value = N'SqlServerUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'SqlServerOltpDb',
-     @parameter_value = N'SqlServerOltpDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerProvider <- environment variable SqlServerProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'SqlServerProvider',
+         @parameter_value = N'SqlServerProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'SqlServerStagingDb',
-     @parameter_value = N'SqlServerStagingDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'SqlServerTrustServerCertificate',
+         @parameter_value = N'SqlServerTrustServerCertificate',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'SqlServerDwDb',
-     @parameter_value = N'SqlServerDwDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Source_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Source_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'CM.WWI_Source_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'InboundFileRoot',
-     @parameter_value = N'InboundFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Staging_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Staging_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'CM.WWI_Staging_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'ArchiveFileRoot',
-     @parameter_value = N'ArchiveFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_DW_Destination_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_DW_Destination_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'CM.WWI_DW_Destination_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'RejectFileRoot',
-     @parameter_value = N'RejectFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerOltpDb <- environment variable SqlServerOltpDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerOltpDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'SqlServerOltpDb',
+         @parameter_value = N'SqlServerOltpDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'DefaultBatchSize',
-     @parameter_value = N'DefaultBatchSize',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerStagingDb <- environment variable SqlServerStagingDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerStagingDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'SqlServerStagingDb',
+         @parameter_value = N'SqlServerStagingDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'SourceQueryTimeoutSeconds',
-     @parameter_value = N'SourceQueryTimeoutSeconds',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerDwDb <- environment variable SqlServerDwDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerDwDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'SqlServerDwDb',
+         @parameter_value = N'SqlServerDwDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'MaxRejectPercent',
-     @parameter_value = N'MaxRejectPercent',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* InboundFileRoot <- environment variable InboundFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'InboundFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'InboundFileRoot',
+         @parameter_value = N'InboundFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Customer360',
-     @parameter_name = N'EnvironmentCode',
-     @parameter_value = N'EnvironmentCode',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* ArchiveFileRoot <- environment variable ArchiveFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'ArchiveFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'ArchiveFileRoot',
+         @parameter_value = N'ArchiveFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-/* Post-condition: every project parameter resolves to an environment variable. */
-SELECT p.parameter_name,
-       p.value_type,
-       p.design_default_value,
-       p.referenced_variable_name
-FROM SSISDB.catalog.object_parameters AS p
-INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
-INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-WHERE f.name = N'WWI_PROD'
-  AND pr.name = N'WWI_Customer360'
-  AND p.object_type = 20
-ORDER BY p.parameter_name;
+/* QuarantineFileRoot <- environment variable QuarantineFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'QuarantineFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'QuarantineFileRoot',
+         @parameter_value = N'QuarantineFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* DefaultBatchSize <- environment variable DefaultBatchSize */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'DefaultBatchSize')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'DefaultBatchSize',
+         @parameter_value = N'DefaultBatchSize',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* SourceQueryTimeoutSeconds <- environment variable SourceQueryTimeoutSeconds */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'SourceQueryTimeoutSeconds')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'SourceQueryTimeoutSeconds',
+         @parameter_value = N'SourceQueryTimeoutSeconds',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* MaxRejectPercent <- environment variable MaxRejectPercent */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'MaxRejectPercent')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'MaxRejectPercent',
+         @parameter_value = N'MaxRejectPercent',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* EnvironmentCode <- environment variable EnvironmentCode */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Customer360'
+             AND op.object_type = 20 AND op.parameter_name = N'EnvironmentCode')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Customer360',
+         @parameter_name = N'EnvironmentCode',
+         @parameter_value = N'EnvironmentCode',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
 /* Project reference and parameter bindings. */
@@ -3518,194 +7316,441 @@ BEGIN
          @folder_name       = N'WWI_PROD',
          @project_name      = N'WWI_ErrorHandling',
          @environment_name  = N'WWI_PROD',
-         @reference_location = 'L',            /* local: same folder */
+         @reference_type    = 'R',             /* relative: environment in this folder */
          @reference_id      = @ReferenceId OUTPUT;
 END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'OracleHost',
-     @parameter_value = N'OracleHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleHost <- environment variable OracleHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'OracleHost',
+         @parameter_value = N'OracleHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'OraclePort',
-     @parameter_value = N'OraclePort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OraclePort <- environment variable OraclePort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'OraclePort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'OraclePort',
+         @parameter_value = N'OraclePort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'OracleService',
-     @parameter_value = N'OracleService',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleService <- environment variable OracleService */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleService')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'OracleService',
+         @parameter_value = N'OracleService',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'OracleUser',
-     @parameter_value = N'OracleUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleUser <- environment variable OracleUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'OracleUser',
+         @parameter_value = N'OracleUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'OraclePassword',
-     @parameter_value = N'OraclePassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleProvider <- environment variable OracleProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'OracleProvider',
+         @parameter_value = N'OracleProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'SqlServerHost',
-     @parameter_value = N'SqlServerHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Oracle_ERP.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'CM.WWI_Oracle_ERP.Password',
+         @parameter_value = N'OraclePassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'SqlServerPort',
-     @parameter_value = N'SqlServerPort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerHost <- environment variable SqlServerHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'SqlServerHost',
+         @parameter_value = N'SqlServerHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'SqlServerUser',
-     @parameter_value = N'SqlServerUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerPort <- environment variable SqlServerPort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerPort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'SqlServerPort',
+         @parameter_value = N'SqlServerPort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'SqlServerPassword',
-     @parameter_value = N'SqlServerPassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerUser <- environment variable SqlServerUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'SqlServerUser',
+         @parameter_value = N'SqlServerUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'SqlServerOltpDb',
-     @parameter_value = N'SqlServerOltpDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerProvider <- environment variable SqlServerProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'SqlServerProvider',
+         @parameter_value = N'SqlServerProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'SqlServerStagingDb',
-     @parameter_value = N'SqlServerStagingDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'SqlServerTrustServerCertificate',
+         @parameter_value = N'SqlServerTrustServerCertificate',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'SqlServerDwDb',
-     @parameter_value = N'SqlServerDwDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Source_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Source_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'CM.WWI_Source_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'InboundFileRoot',
-     @parameter_value = N'InboundFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Staging_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Staging_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'CM.WWI_Staging_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'ArchiveFileRoot',
-     @parameter_value = N'ArchiveFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_DW_Destination_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_DW_Destination_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'CM.WWI_DW_Destination_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'RejectFileRoot',
-     @parameter_value = N'RejectFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerOltpDb <- environment variable SqlServerOltpDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerOltpDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'SqlServerOltpDb',
+         @parameter_value = N'SqlServerOltpDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'DefaultBatchSize',
-     @parameter_value = N'DefaultBatchSize',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerStagingDb <- environment variable SqlServerStagingDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerStagingDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'SqlServerStagingDb',
+         @parameter_value = N'SqlServerStagingDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'SourceQueryTimeoutSeconds',
-     @parameter_value = N'SourceQueryTimeoutSeconds',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerDwDb <- environment variable SqlServerDwDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerDwDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'SqlServerDwDb',
+         @parameter_value = N'SqlServerDwDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'MaxRejectPercent',
-     @parameter_value = N'MaxRejectPercent',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* InboundFileRoot <- environment variable InboundFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'InboundFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'InboundFileRoot',
+         @parameter_value = N'InboundFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_ErrorHandling',
-     @parameter_name = N'EnvironmentCode',
-     @parameter_value = N'EnvironmentCode',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* ArchiveFileRoot <- environment variable ArchiveFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'ArchiveFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'ArchiveFileRoot',
+         @parameter_value = N'ArchiveFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-/* Post-condition: every project parameter resolves to an environment variable. */
-SELECT p.parameter_name,
-       p.value_type,
-       p.design_default_value,
-       p.referenced_variable_name
-FROM SSISDB.catalog.object_parameters AS p
-INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
-INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-WHERE f.name = N'WWI_PROD'
-  AND pr.name = N'WWI_ErrorHandling'
-  AND p.object_type = 20
-ORDER BY p.parameter_name;
+/* QuarantineFileRoot <- environment variable QuarantineFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'QuarantineFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'QuarantineFileRoot',
+         @parameter_value = N'QuarantineFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* DefaultBatchSize <- environment variable DefaultBatchSize */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'DefaultBatchSize')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'DefaultBatchSize',
+         @parameter_value = N'DefaultBatchSize',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* SourceQueryTimeoutSeconds <- environment variable SourceQueryTimeoutSeconds */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'SourceQueryTimeoutSeconds')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'SourceQueryTimeoutSeconds',
+         @parameter_value = N'SourceQueryTimeoutSeconds',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* MaxRejectPercent <- environment variable MaxRejectPercent */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'MaxRejectPercent')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'MaxRejectPercent',
+         @parameter_value = N'MaxRejectPercent',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* EnvironmentCode <- environment variable EnvironmentCode */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_ErrorHandling'
+             AND op.object_type = 20 AND op.parameter_name = N'EnvironmentCode')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_ErrorHandling',
+         @parameter_name = N'EnvironmentCode',
+         @parameter_value = N'EnvironmentCode',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
 /* Project reference and parameter bindings. */
@@ -3721,192 +7766,515 @@ BEGIN
          @folder_name       = N'WWI_PROD',
          @project_name      = N'WWI_Maintenance',
          @environment_name  = N'WWI_PROD',
-         @reference_location = 'L',            /* local: same folder */
+         @reference_type    = 'R',             /* relative: environment in this folder */
          @reference_id      = @ReferenceId OUTPUT;
 END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'OracleHost',
-     @parameter_value = N'OracleHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleHost <- environment variable OracleHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'OracleHost',
+         @parameter_value = N'OracleHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'OraclePort',
-     @parameter_value = N'OraclePort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OraclePort <- environment variable OraclePort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'OraclePort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'OraclePort',
+         @parameter_value = N'OraclePort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'OracleService',
-     @parameter_value = N'OracleService',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleService <- environment variable OracleService */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleService')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'OracleService',
+         @parameter_value = N'OracleService',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'OracleUser',
-     @parameter_value = N'OracleUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleUser <- environment variable OracleUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'OracleUser',
+         @parameter_value = N'OracleUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'OraclePassword',
-     @parameter_value = N'OraclePassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* OracleProvider <- environment variable OracleProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'OracleProvider',
+         @parameter_value = N'OracleProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'SqlServerHost',
-     @parameter_value = N'SqlServerHost',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Oracle_ERP.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'CM.WWI_Oracle_ERP.Password',
+         @parameter_value = N'OraclePassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'SqlServerPort',
-     @parameter_value = N'SqlServerPort',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerHost <- environment variable SqlServerHost */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerHost')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'SqlServerHost',
+         @parameter_value = N'SqlServerHost',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'SqlServerUser',
-     @parameter_value = N'SqlServerUser',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerPort <- environment variable SqlServerPort */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerPort')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'SqlServerPort',
+         @parameter_value = N'SqlServerPort',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'SqlServerPassword',
-     @parameter_value = N'SqlServerPassword',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerUser <- environment variable SqlServerUser */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerUser')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'SqlServerUser',
+         @parameter_value = N'SqlServerUser',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'SqlServerOltpDb',
-     @parameter_value = N'SqlServerOltpDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerProvider <- environment variable SqlServerProvider */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'SqlServerProvider',
+         @parameter_value = N'SqlServerProvider',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'SqlServerStagingDb',
-     @parameter_value = N'SqlServerStagingDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'SqlServerTrustServerCertificate',
+         @parameter_value = N'SqlServerTrustServerCertificate',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'SqlServerDwDb',
-     @parameter_value = N'SqlServerDwDb',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Source_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Source_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'CM.WWI_Source_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'InboundFileRoot',
-     @parameter_value = N'InboundFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_Staging_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_Staging_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'CM.WWI_Staging_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'ArchiveFileRoot',
-     @parameter_value = N'ArchiveFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* CM.WWI_DW_Destination_DB.Password <- environment variable SqlServerPassword */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'CM.WWI_DW_Destination_DB.Password')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'CM.WWI_DW_Destination_DB.Password',
+         @parameter_value = N'SqlServerPassword',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'RejectFileRoot',
-     @parameter_value = N'RejectFileRoot',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerOltpDb <- environment variable SqlServerOltpDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerOltpDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'SqlServerOltpDb',
+         @parameter_value = N'SqlServerOltpDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'DefaultBatchSize',
-     @parameter_value = N'DefaultBatchSize',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerStagingDb <- environment variable SqlServerStagingDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerStagingDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'SqlServerStagingDb',
+         @parameter_value = N'SqlServerStagingDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'SourceQueryTimeoutSeconds',
-     @parameter_value = N'SourceQueryTimeoutSeconds',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* SqlServerDwDb <- environment variable SqlServerDwDb */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'SqlServerDwDb')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'SqlServerDwDb',
+         @parameter_value = N'SqlServerDwDb',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'MaxRejectPercent',
-     @parameter_value = N'MaxRejectPercent',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* InboundFileRoot <- environment variable InboundFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'InboundFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'InboundFileRoot',
+         @parameter_value = N'InboundFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-EXEC SSISDB.catalog.set_object_parameter_value
-     @object_type    = 20,                     /* project parameter */
-     @folder_name    = N'WWI_PROD',
-     @project_name   = N'WWI_Maintenance',
-     @parameter_name = N'EnvironmentCode',
-     @parameter_value = N'EnvironmentCode',
-     @value_type     = 'R';                    /* referenced environment variable */
+/* ArchiveFileRoot <- environment variable ArchiveFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'ArchiveFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'ArchiveFileRoot',
+         @parameter_value = N'ArchiveFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
 GO
 
-/* Post-condition: every project parameter resolves to an environment variable. */
-SELECT p.parameter_name,
-       p.value_type,
-       p.design_default_value,
-       p.referenced_variable_name
-FROM SSISDB.catalog.object_parameters AS p
-INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = p.project_id
-INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+/* QuarantineFileRoot <- environment variable QuarantineFileRoot */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'QuarantineFileRoot')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'QuarantineFileRoot',
+         @parameter_value = N'QuarantineFileRoot',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* DefaultBatchSize <- environment variable DefaultBatchSize */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'DefaultBatchSize')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'DefaultBatchSize',
+         @parameter_value = N'DefaultBatchSize',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* SourceQueryTimeoutSeconds <- environment variable SourceQueryTimeoutSeconds */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'SourceQueryTimeoutSeconds')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'SourceQueryTimeoutSeconds',
+         @parameter_value = N'SourceQueryTimeoutSeconds',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* MaxRejectPercent <- environment variable MaxRejectPercent */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'MaxRejectPercent')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'MaxRejectPercent',
+         @parameter_value = N'MaxRejectPercent',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* EnvironmentCode <- environment variable EnvironmentCode */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
+           WHERE f.name = N'WWI_PROD' AND pr.name = N'WWI_Maintenance'
+             AND op.object_type = 20 AND op.parameter_name = N'EnvironmentCode')
+BEGIN
+    EXEC SSISDB.catalog.set_object_parameter_value
+         @object_type    = 20,                     /* project parameter */
+         @folder_name    = N'WWI_PROD',
+         @project_name   = N'WWI_Maintenance',
+         @parameter_name = N'EnvironmentCode',
+         @parameter_value = N'EnvironmentCode',
+         @value_type     = 'R';                    /* referenced environment variable */
+END
+GO
+
+/* ---------------------------------------------------------------------------
+   Post-conditions. These are the reason this script is worth running twice:
+   a binding that silently did not take looks exactly like a working one until
+   an execution fails with an empty password.
+   --------------------------------------------------------------------------- */
+
+/* 1. Every reference resolves inside this folder - that is what local means,
+      whatever letter the catalog chose to record for reference_type. */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.environment_references AS r
+           INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = r.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f ON f.folder_id  = p.folder_id
+           WHERE f.name = N'WWI_PROD'
+             AND ISNULL(r.environment_folder_name, N'WWI_PROD') <> N'WWI_PROD')
+    THROW 50001, 'An environment reference in this folder points outside it.', 1;
+
+/* 2. Every project in the folder has exactly one reference to the environment. */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.projects AS p
+           INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = p.folder_id
+           LEFT JOIN SSISDB.catalog.environment_references AS r
+                  ON r.project_id = p.project_id
+                 AND r.environment_name = N'WWI_PROD'
+           WHERE f.name = N'WWI_PROD'
+           GROUP BY p.project_id
+           HAVING COUNT(r.reference_id) <> 1)
+    THROW 50002, 'A project in this folder does not have exactly one reference to the environment.', 1;
+
+/* 3. No sensitive parameter carries a literal value. */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f ON f.folder_id  = p.folder_id
+           WHERE f.name = N'WWI_PROD' AND op.sensitive = 1 AND op.value_type = 'V')
+    THROW 50003, 'A sensitive parameter holds a literal value instead of an environment reference.', 1;
+
+/* 4. Every referenced variable actually exists in the environment. */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f ON f.folder_id  = p.folder_id
+           WHERE f.name = N'WWI_PROD' AND op.value_type = 'R'
+             AND NOT EXISTS (SELECT 1
+                             FROM SSISDB.catalog.environment_variables AS v
+                             INNER JOIN SSISDB.catalog.environments AS e
+                                     ON e.environment_id = v.environment_id
+                             INNER JOIN SSISDB.catalog.folders AS ef
+                                     ON ef.folder_id = e.folder_id
+                             WHERE ef.name = N'WWI_PROD'
+                               AND e.name = N'WWI_PROD'
+                               AND v.name = op.referenced_variable_name))
+    THROW 50004, 'A parameter references an environment variable that does not exist.', 1;
+
+/* 5. Every CM.<connection>.Password in the folder is bound by reference. */
+IF EXISTS (SELECT 1
+           FROM SSISDB.catalog.object_parameters AS op
+           INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = op.project_id
+           INNER JOIN SSISDB.catalog.folders  AS f ON f.folder_id  = p.folder_id
+           WHERE f.name = N'WWI_PROD' AND op.object_type = 20
+             AND op.parameter_name LIKE 'CM.%.Password'
+             AND op.value_type <> 'R')
+    THROW 50005, 'A connection manager password parameter is not bound to the environment.', 1;
+
+SELECT p.name          AS project_name,
+       op.parameter_name,
+       op.value_type,
+       op.sensitive,
+       op.referenced_variable_name
+FROM SSISDB.catalog.object_parameters AS op
+INNER JOIN SSISDB.catalog.projects AS p ON p.project_id = op.project_id
+INNER JOIN SSISDB.catalog.folders  AS f ON f.folder_id  = p.folder_id
 WHERE f.name = N'WWI_PROD'
-  AND pr.name = N'WWI_Maintenance'
-  AND p.object_type = 20
-ORDER BY p.parameter_name;
+  AND op.object_type = 20
+ORDER BY p.name, op.parameter_name;
 GO

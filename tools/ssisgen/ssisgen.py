@@ -56,6 +56,11 @@ PARAM_TYPES = {"int": "3", "string": "8", "bool": "11", "datetime": "7", "decima
 SQLTASK_TYPES = {"LONG": 3, "NVARCHAR": 130, "BYTE": 17}
 SQLTASK_SIZES = {"LONG": -1, "NVARCHAR": 4000, "BYTE": -1}
 
+# Flat file columns are persisted with OLE DB type codes. Every feed column is
+# read as text and converted downstream, which is what the estate's packages
+# do, so DT_WSTR is the default.
+FLAT_FILE_TYPES = {"wstr": 130, "str": 129, "i4": 3, "i8": 20}
+
 
 def param_value(value, dtype):
     """Serialise a parameter value the way the SSIS runtime parses it back."""
@@ -212,9 +217,17 @@ class DataFlow:
         self._last_output = (name, "OLE DB Source Output")
         return self
 
-    def flatfile_source(self, name, connection, columns):
+    def flatfile_source(self, name, connection, columns, connection_scope="Project"):
+        """Read a delimited file through a flat file connection manager.
+
+        ``connection_scope`` is ``Package`` for a per-feed flat file connection
+        manager whose ConnectionString is an expression over a package variable
+        (the file the Foreach loop is currently on), which is the only scope
+        that can see such a variable.
+        """
         self._columns = list(columns)
-        self._components.append(dict(kind="flatfile_source", name=name, connection=connection, columns=list(columns)))
+        self._components.append(dict(kind="flatfile_source", name=name, connection=connection,
+                                     columns=list(columns), connection_scope=connection_scope))
         self._last_output = (name, "Flat File Source Output")
         return self
 
@@ -534,11 +547,13 @@ class DataFlow:
                                       "Specifies the name of the output column containing the file name."))
             out.append("%s  </properties>" % pad)
             out.append("%s  <connections>" % pad)
+            scope = comp.get("connection_scope", "Project")
+            manager_id = guid("cm:" + comp["connection"])
             out.append(
                 '%s    <connection refId=%s connectionManagerID="%s" connectionManagerRefId=%s description="The connection used to access the source." name="%s" />'
                 % (pad, quoteattr(ref + ".Connections[%s]" % ("FlatFileConnection" if is_flat else "OleDbConnection")),
-                   guid("cm:" + comp["connection"]) + ":external",
-                   quoteattr("Project.ConnectionManagers[%s]" % comp["connection"]),
+                   manager_id if scope == "Package" else manager_id + ":external",
+                   quoteattr("%s.ConnectionManagers[%s]" % (scope, comp["connection"])),
                    "FlatFileConnection" if is_flat else "OleDbConnection")
             )
             out.append("%s  </connections>" % pad)
@@ -1158,10 +1173,15 @@ class DataFlowTask(Task):
 class Container:
     """Sequence container or Foreach loop holding child executables."""
 
-    def __init__(self, name, kind="sequence", enumerator=None, variable_mappings=None, description=None):
+    def __init__(self, name, kind="sequence", enumerator=None, variable_mappings=None, description=None,
+                 folder_expression=None):
         self.name = safe_name(name)
         self.kind = kind
         self.enumerator = enumerator or {}
+        # The enumerator's Folder is a literal the runtime never evaluates, so a
+        # loop that has to follow a configured root carries a Directory property
+        # expression as well; the literal stays as the design-time value.
+        self.folder_expression = folder_expression
         self.variable_mappings = variable_mappings or []
         self.description = description or ("Sequence Container" if kind == "sequence" else "Foreach Loop Container")
         self.tasks = []
@@ -1191,8 +1211,11 @@ class Container:
             '%s  DTS:ExecutableType="%s"' % (pad, creation),
             '%s  DTS:LocaleID="-1"' % pad,
             "%s  %s>" % (pad, attr("DTS:ObjectName", self.name)),
-            "%s  <DTS:Variables />" % pad,
         ]
+        if self.folder_expression:
+            out.append('%s  <DTS:PropertyExpression DTS:Name="Directory">%s</DTS:PropertyExpression>'
+                       % (pad, escape(self.folder_expression)))
+        out.append("%s  <DTS:Variables />" % pad)
         if self.kind == "foreach":
             out.append("%s  <DTS:ForEachEnumerator" % pad)
             out.append('%s    DTS:ObjectName="ForeachFileEnumerator"' % pad)
@@ -1270,6 +1293,7 @@ class Package:
         self.parameters = []  # (name, value, dtype, required, sensitive, description)
         self.variables = []  # (name, value, dtype, namespace, expression)
         self.connection_managers = []  # project-level connection manager names
+        self.flat_file_connections = []  # package-level FLATFILE connection managers
         self.tasks = []
         self.constraints = []
         self.event_handlers = []  # (event_name, [tasks], [constraints])
@@ -1305,6 +1329,69 @@ class Package:
     def add_event_handler(self, event_name, tasks, constraints=None):
         self.event_handlers.append((event_name, tasks, constraints or []))
         return self
+
+    def add_flat_file_connection(self, name, columns, delimiter=",", code_page=1252,
+                                 header_in_first_row=True, design_time_path="",
+                                 expression="@[User::CurrentFilePath]", description=""):
+        """A package-scoped flat file connection manager for one feed.
+
+        A project connection manager cannot see a package variable, so the file
+        the Foreach loop is currently on can only be bound here. The delimiter,
+        code page and header flag come from config/landing-zone.yaml, which is
+        what the provider actually sends.
+        """
+        self.flat_file_connections.append(
+            dict(name=safe_name(name), columns=list(columns), delimiter=delimiter,
+                 code_page=int(code_page), header_in_first_row=bool(header_in_first_row),
+                 design_time_path=design_time_path, expression=expression,
+                 description=description or ("Flat file connection for %s." % name)))
+        return self.flat_file_connections[-1]["name"]
+
+    def _flat_file_connections_xml(self):
+        if not self.flat_file_connections:
+            return []
+        out = ["  <DTS:ConnectionManagers>"]
+        for spec in self.flat_file_connections:
+            name = spec["name"]
+            cref = "Package.ConnectionManagers[%s]" % name
+            out.append("    <DTS:ConnectionManager")
+            out.append("      %s" % attr("DTS:refId", cref))
+            out.append('      DTS:CreationName="FLATFILE"')
+            out.append('      DTS:DTSID="%s"' % guid("cm:" + name))
+            out.append("      %s" % attr("DTS:Description", spec["description"]))
+            out.append("      %s>" % attr("DTS:ObjectName", name))
+            out.append('      <DTS:PropertyExpression DTS:Name="ConnectionString">%s</DTS:PropertyExpression>'
+                       % escape(spec["expression"]))
+            out.append("      <DTS:ObjectData>")
+            out.append("        <DTS:ConnectionManager")
+            out.append('          DTS:Format="Delimited"')
+            out.append('          DTS:LocaleID="1033"')
+            out.append('          DTS:HeaderRowDelimiter="_x000D__x000A_"')
+            out.append('          DTS:ColumnNamesInFirstDataRow="%s"'
+                       % ("True" if spec["header_in_first_row"] else "False"))
+            out.append('          DTS:RowDelimiter=""')
+            out.append('          DTS:TextQualifier="&quot;"')
+            out.append('          DTS:CodePage="%d"' % spec["code_page"])
+            out.append("          %s>" % attr("DTS:ConnectionString", spec["design_time_path"]))
+            out.append("          <DTS:FlatFileColumns>")
+            last = len(spec["columns"]) - 1
+            for index, col in enumerate(spec["columns"]):
+                out.append("            <DTS:FlatFileColumn")
+                out.append('              DTS:ColumnType="Delimited"')
+                out.append("              %s" % attr(
+                    "DTS:ColumnDelimiter",
+                    "_x000D__x000A_" if index == last else spec["delimiter"]))
+                out.append('              DTS:DataType="%d"' % FLAT_FILE_TYPES.get(col.dtype, 130))
+                out.append('              DTS:MaximumWidth="%d"' % (col.length or 255))
+                out.append('              DTS:DTSID="%s"' % guid("ffcol:%s:%s" % (name, col.name)))
+                out.append('              DTS:TextQualified="True"')
+                out.append("              %s />" % attr("DTS:ObjectName", col.name))
+            out.append("          </DTS:FlatFileColumns>")
+            out.append("        </DTS:ConnectionManager>")
+            out.append("      </DTS:ObjectData>")
+            out.append("    </DTS:ConnectionManager>")
+        out.append("  </DTS:ConnectionManagers>")
+        return out
 
     def add_sql_log_provider(self, connection="WWI_Staging_DB"):
         self.log_providers.append(connection)
@@ -1366,6 +1453,8 @@ class Package:
                            % (PARAM_TYPES[dtype], escape(param_value(value, dtype))))
                 out.append("    </DTS:PackageParameter>")
             out.append("  </DTS:PackageParameters>")
+
+        out.extend(self._flat_file_connections_xml())
 
         if self.variables:
             out.append("  <DTS:Variables>")
