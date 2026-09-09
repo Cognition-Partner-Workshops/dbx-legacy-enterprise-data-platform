@@ -219,13 +219,49 @@ def file_variables(extra=None):
 
 
 def audit_derivations(source_system, region):
+    """The audit columns every landing and reject table carries.
+
+    BatchId is NOT NULL in every raw and err table, so a row that reaches a
+    destination without it is an insert the batch cannot make.
+    """
     return [
+        ("BatchId", "@[$Package::BatchId]", bigint_col("BatchId")),
         ("SourceSystemCode", '"%s"' % source_system, str_col("SourceSystemCode", 20)),
         ("RegionCode", '"%s"' % region, str_col("RegionCode", 8)),
         ("SourceFileName", "@[User::CurrentFileName]", str_col("SourceFileName", 260)),
         ("ExtractedAtUtc", "GETUTCDATE()", date_col("ExtractedAtUtc")),
         ("PackageExecutionId", "@[User::PackageExecutionId]", bigint_col("PackageExecutionId")),
     ]
+
+
+def reject_branch(df, name, from_component, from_output, reason_code, reason, stage="Ingest",
+                  derive_batch=False):
+    """Route a rejected branch into err.RejectedFileRow with its reason attached.
+
+    RejectReasonCode is NOT NULL, and the rows on a split's reject output do not
+    carry one: the branch derives its own before it reaches the table, so the
+    reject says why it was rejected instead of failing the insert.
+    """
+    describe = "Describe %s" % name.replace("err RejectedFileRow", "").strip()
+    # A branch taken before the audit columns are derived carries no BatchId of
+    # its own, and BatchId is NOT NULL on the reject table.
+    df.derived_column(
+        describe,
+        ([("BatchId", "@[$Package::BatchId]", bigint_col("BatchId"))] if derive_batch else [])
+        + [
+            ("RejectReasonCode", '"%s"' % reason_code, str_col("RejectReasonCode", 50)),
+            ("RejectReason", '"%s"' % reason, str_col("RejectReason", 500)),
+            ("RejectStage", '"%s"' % stage, str_col("RejectStage", 50)),
+        ],
+        source=(from_component, from_output),
+    )
+    df.branch_destination(
+        name,
+        CONN_STAGING,
+        "err.RejectedFileRow",
+        from_component=describe,
+        from_output="Derived Column Output",
+    )
 
 
 def conversion_reject_branch(df, source_component, source_system, code_page):
@@ -448,26 +484,43 @@ def ing_file_partner_sales_na():
         default_output="Malformed",
     )
     df.row_count("Count NA Detail Rows", "User::DetailRowCount")
+    # raw.FilePartnerSales lands every value as text, exactly as the file
+    # supplied it; the parsed money and date columns exist for the validation
+    # rules, and the amounts the file does not carry are rendered here.
+    df.derived_column(
+        "Render NA Landing Values",
+        [
+            ("TaxAmountText", "(DT_WSTR,50)TaxAmount", str_col("TaxAmountText", 50)),
+            ("NetAmountText", "(DT_WSTR,50)(LineTotal - TaxAmount)", str_col("NetAmountText", 50)),
+        ],
+    )
     df.oledb_destination(
         "raw FilePartnerSales NA",
         CONN_STAGING,
         "raw.FilePartnerSales",
         batch_size=10000,
         error_disposition="RedirectRow",
+        mapping={
+            "PartnerOutletCode": "StoreNumber",
+            "TransactionReference": "TransactionNumber",
+            "TransactionDate": "TransactionDateText",
+            "PartnerProductCode": "ProductCode",
+            "EanBarcode": "Upc",
+            "QuantitySold": "QuantityText",
+            "GrossAmount": "LineTotalText",
+            "TaxAmount": "TaxAmountText",
+            "NetAmount": "NetAmountText",
+            "CountryCode": "StateCode",
+        },
     )
-    df.branch_destination(
-        "err RejectedFileRow NA",
-        CONN_STAGING,
-        "err.RejectedFileRow",
-        from_component="Validate NA Detail",
-        from_output="Malformed",
+    reject_branch(
+        df, "err RejectedFileRow NA", "Validate NA Detail", "Malformed",
+        "MALFORMED", "NA partner detail row failed the partner, transaction, quantity or total rule.",
     )
-    df.branch_destination(
-        "err RejectedFileRow Unknown Record",
-        CONN_STAGING,
-        "err.RejectedFileRow",
-        from_component="Split Record Types",
-        from_output="Unknown Record Type",
+    reject_branch(
+        df, "err RejectedFileRow Unknown Record", "Split Record Types", "Unknown Record Type",
+        "UNKNOWN_RECORD_TYPE", "The record type marker is not H, D or T.",
+        derive_batch=True,
     )
     conversion_reject_branch(df, "NA Partner Sales File", SRC_PARTNER, feed_code_page("ING_FILE_PartnerSales_NA"))
 
@@ -625,19 +678,35 @@ def ing_file_partner_sales_eu():
         default_output="Malformed",
     )
     df.row_count("Count EU Detail Rows", "User::DetailRowCount")
+    df.derived_column(
+        "Render EU Landing Values",
+        [
+            ("NetAmountText", "(DT_WSTR,50)NetAmount", str_col("NetAmountText", 50)),
+            ("VatAmountText", "(DT_WSTR,50)VatAmount", str_col("VatAmountText", 50)),
+        ],
+    )
     df.oledb_destination(
         "raw FilePartnerSales EU",
         CONN_STAGING,
         "raw.FilePartnerSales",
         batch_size=5000,
         error_disposition="RedirectRow",
+        mapping={
+            "PartnerOutletCode": "OutletCode",
+            "TransactionReference": "ReceiptNumber",
+            "TransactionDate": "TransactionDateText",
+            "PartnerProductCode": "ArticleNumber",
+            "EanBarcode": "Ean",
+            "QuantitySold": "QuantityText",
+            "GrossAmount": "GrossAmountText",
+            "TaxAmount": "VatAmountText",
+            "NetAmount": "NetAmountText",
+            "CustomerReference": "VatRegistrationNumber",
+        },
     )
-    df.branch_destination(
-        "err RejectedFileRow EU",
-        CONN_STAGING,
-        "err.RejectedFileRow",
-        from_component="Validate EU Detail",
-        from_output="Malformed",
+    reject_branch(
+        df, "err RejectedFileRow EU", "Validate EU Detail", "Malformed",
+        "VAT_MISSING", "EU partner row missing a valid VAT registration number, receipt or rate.",
     )
     conversion_reject_branch(df, "EU Partner Sales File", SRC_PARTNER, feed_code_page("ING_FILE_PartnerSales_EU"))
 
@@ -758,19 +827,31 @@ def ing_file_partner_sales_apac():
         default_output="Malformed",
     )
     df.row_count("Count APAC Detail Rows", "User::DetailRowCount")
+    df.derived_column(
+        "Render APAC Landing Values",
+        [("GrossAmountText", "(DT_WSTR,50)GrossAmount", str_col("GrossAmountText", 50))],
+    )
     df.oledb_destination(
         "raw FilePartnerSales APAC",
         CONN_STAGING,
         "raw.FilePartnerSales",
         batch_size=2000,
         error_disposition="RedirectRow",
+        mapping={
+            "PartnerOutletCode": "OutletCode",
+            "PartnerProductDesc": "OutletName",
+            "TransactionReference": "SlipNumber",
+            "TransactionDate": "TransactionDateText",
+            "PartnerProductCode": "ItemCode",
+            "QuantitySold": "QuantityText",
+            "GrossAmount": "GrossAmountText",
+            "TaxAmount": "GstAmountText",
+            "NetAmount": "NetAmountText",
+        },
     )
-    df.branch_destination(
-        "err RejectedFileRow APAC",
-        CONN_STAGING,
-        "err.RejectedFileRow",
-        from_component="Validate APAC Detail",
-        from_output="Malformed",
+    reject_branch(
+        df, "err RejectedFileRow APAC", "Validate APAC Detail", "Malformed",
+        "MALFORMED", "APAC partner detail row failed the slip, item, quantity or GST rule.",
     )
     conversion_reject_branch(df, "APAC Partner Sales File", SRC_PARTNER, feed_code_page("ING_FILE_PartnerSales_APAC"))
 
@@ -889,13 +970,18 @@ def ing_file_carrier_scan():
         "raw.FileCarrierScan",
         batch_size=100000,
         error_disposition="RedirectRow",
+        mapping={
+            "ScanEventCode": "ScanStatusCode",
+            "ScanEventDescription": "ScanStatusDescription",
+            "ScanTimestampLocal": "ScanTimestampText",
+            "DepotCode": "ScanLocationCode",
+            "DepotCountryCode": "ScanCountryCode",
+            "SignatoryName": "SignedByName",
+        },
     )
-    df.branch_destination(
-        "err RejectedFileRow Carrier",
-        CONN_STAGING,
-        "err.RejectedFileRow",
-        from_component="Validate Scan Rows",
-        from_output="Malformed",
+    reject_branch(
+        df, "err RejectedFileRow Carrier", "Validate Scan Rows", "Malformed",
+        "SCAN_MALFORMED", "Carrier scan row missing tracking number, status code or timestamp.",
     )
     conversion_reject_branch(df, "Carrier Scan File", SRC_CARRIER, feed_code_page("ING_FILE_CarrierScan"))
 
@@ -1048,19 +1134,33 @@ def ing_file_supplier_catalog():
         default_output="Malformed",
     )
     df.row_count("Count Catalog Rows", "User::DetailRowCount")
+    # The catalogue arrives in ISO-8859-1 and the landing column is Unicode, a
+    # conversion the destination will not make for itself.
+    df.derived_column(
+        "Render Catalog Landing Values",
+        [("SupplierItemDesc", "(DT_WSTR,400)ItemDescription", str_col("SupplierItemDesc", 400))],
+    )
     df.oledb_destination(
         "raw FileSupplierCatalog",
         CONN_STAGING,
         "raw.FileSupplierCatalog",
         batch_size=20000,
         error_disposition="RedirectRow",
+        mapping={
+            "EffectiveFromDate": "EffectiveFromText",
+            "PackSize": "PackSizeText",
+            "PackUom": "UomCode",
+            "ListPrice": "ListPriceText",
+            "NetPrice": "NetPriceText",
+            "PriceCurrency": "CurrencyCode",
+            "MinimumOrderQuantity": "MinimumOrderQuantityText",
+            "LeadTimeDays": "LeadTimeDaysText",
+            "HazardClass": "HazardClassCode",
+        },
     )
-    df.branch_destination(
-        "err RejectedFileRow Catalog",
-        CONN_STAGING,
-        "err.RejectedFileRow",
-        from_component="Validate Catalog Detail",
-        from_output="Malformed",
+    reject_branch(
+        df, "err RejectedFileRow Catalog", "Validate Catalog Detail", "Malformed",
+        "CATALOG_BAD", "Supplier catalogue row failed the item, price or effective date rule.",
     )
     conversion_reject_branch(df, "Supplier Catalog File", SRC_BANK, feed_code_page("ING_FILE_SupplierCatalog"))
 
@@ -1214,20 +1314,21 @@ def ing_file_fx_override():
         "raw.FileFxOverride",
         batch_size=500,
         error_disposition="RedirectRow",
+        mapping={
+            "RateDate": "RateDateText",
+            "ConversionRate": "OverrideRateText",
+            "OverrideReason": "ReasonText",
+            "RequestedBy": "RequestedByUser",
+            "ApprovedBy": "ApprovedByUser",
+        },
     )
-    df.branch_destination(
-        "err RejectedFileRow Refused Override",
-        CONN_STAGING,
-        "err.RejectedFileRow",
-        from_component="Validate Override",
-        from_output="Refused",
+    reject_branch(
+        df, "err RejectedFileRow Refused Override", "Validate Override", "Refused",
+        "FX_TOLERANCE", "FX override refused: unapproved or outside the tolerance band.",
     )
-    df.branch_destination(
-        "err RejectedFileRow Unknown Pair",
-        CONN_STAGING,
-        "err.RejectedFileRow",
-        from_component="Lookup Published Rate",
-        from_output="Lookup No Match Output",
+    reject_branch(
+        df, "err RejectedFileRow Unknown Pair", "Lookup Published Rate", "Lookup No Match Output",
+        "FX_UNKNOWN_PAIR", "No published ERP spot rate exists for the currency pair and date.",
     )
     conversion_reject_branch(df, "FX Override File", SRC_FX, feed_code_page("ING_FILE_FxOverride"))
 
@@ -1330,19 +1431,30 @@ def ing_file_quarantine_malformed():
         default_output="Unreadable",
     )
     df.row_count("Count Quarantined Rows", "User::DetailRowCount")
+    df.derived_column(
+        "Describe Replayable Row",
+        [("RejectStage", '"Quarantine"', str_col("RejectStage", 50))],
+    )
     df.oledb_destination(
         "err RejectedFileRow Replayable",
         CONN_STAGING,
         "err.RejectedFileRow",
         batch_size=5000,
         error_disposition="IgnoreFailure",
+        mapping={"RawRowText": "RawLine"},
+    )
+    df.derived_column(
+        "Describe Unreadable Row",
+        [("RejectStage", '"Quarantine"', str_col("RejectStage", 50))],
+        source=("Split Replayable Rows", "Unreadable"),
     )
     df.branch_destination(
         "err RejectedFileRow Unreadable",
         CONN_STAGING,
         "err.RejectedFileRow",
-        from_component="Split Replayable Rows",
-        from_output="Unreadable",
+        from_component="Describe Unreadable Row",
+        from_output="Derived Column Output",
+        mapping={"RawRowText": "RawLine"},
     )
 
     loop = feed_loop("Foreach Quarantined File", "ING_FILE_QuarantineMalformed", "Loop everything sitting in the quarantine folder.")

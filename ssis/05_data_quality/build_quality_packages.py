@@ -673,13 +673,35 @@ def dq_file_screen():
         ("Unparsable Date", 'UnparsableDateFlag == "Y"'),
     ], default_output="Unparsable Amount")
     flow.row_count("Count File Rows Passing", "User::RowsInserted")
+    # etl.DataQualityResult identifies every result by the object and the rule
+    # that produced it; a screened row that carries neither is not a result.
+    flow.derived_column("Describe File Screen Result", [
+        ("BatchId", "@[$Package::BatchId]", bigint_col("BatchId")),
+        ("PackageExecutionId", "@[User::PackageExecutionId]", bigint_col("PackageExecutionId")),
+        ("ObjectName", '"raw.FilePartnerSales"', str_col("ObjectName", 200)),
+        ("RuleCode", '"FILE_ROW_SCREEN"', str_col("RuleCode", 30)),
+        ("ResultStatus", '"Passed"', str_col("ResultStatus", 20)),
+        ("DetailText",
+         '"Row " + (DT_WSTR,20)SourceRowNumber + " of " + SourceFileName '
+         '+ " carries the mandatory fields, a recognisable date and a parsable amount."',
+         str_col("DetailText", 2000)),
+    ])
     flow.oledb_destination("DQ File Pass Log", CONN_STAGING, "[etl].[DataQualityResult]", batch_size=20000)
-    flow.branch_destination("ERR File Incomplete", CONN_STAGING, "[err].[RejectedFileRow]",
-                            "Route File Failures", "Incomplete Row")
-    flow.branch_destination("ERR File Date", CONN_STAGING, "[err].[RejectedFileRow]",
-                            "Route File Failures", "Unparsable Date")
-    flow.branch_destination("ERR File Amount", CONN_STAGING, "[err].[RejectedFileRow]",
-                            "Route File Failures", "Unparsable Amount")
+    for name, output, reason in [
+        ("Incomplete", "Incomplete Row", "A mandatory agreed field is missing from the landed row."),
+        ("Date", "Unparsable Date", "The landed transaction date is not a recognisable date."),
+        ("Amount", "Unparsable Amount", "The landed gross amount is not a parsable amount."),
+    ]:
+        # err.RejectedFileRow will not take a reject without the batch that
+        # produced it and the stage that rejected it.
+        describe = "Describe File %s Reject" % name
+        flow.derived_column(describe, [
+            ("BatchId", "@[$Package::BatchId]", bigint_col("BatchId")),
+            ("RejectReason", '"%s"' % reason, str_col("RejectReason", 500)),
+            ("RejectStage", '"Screen"', str_col("RejectStage", 50)),
+        ], source=("Route File Failures", output))
+        flow.branch_destination("ERR File %s" % name, CONN_STAGING, "[err].[RejectedFileRow]",
+                                describe, "Derived Column Output")
     return build_quality_package(
         "DQ_File_Screen",
         "Screen raw.FilePartnerSales before it is trusted: every landed row must carry the "

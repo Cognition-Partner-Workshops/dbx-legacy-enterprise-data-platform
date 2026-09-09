@@ -1931,6 +1931,122 @@ def check_sql_column_contract(result, prefixes):
     result.count("sql_contract_drift_baselined", len(seen))
 
 
+def _ddl_catalog():
+    """The deployed DDL as ordered column metadata, or None when unreadable."""
+    path = os.path.join(SOURCE_ROOT, "tools", "ssisgen")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+    try:
+        import dbschema
+    except ImportError:
+        return None
+    return dbschema
+
+
+def _destination_debt(dbschema):
+    """Destinations recorded as still unable to honour their table contract."""
+    path = os.path.join(SOURCE_ROOT, "ssis", "destination-metadata-debt.txt")
+    entries = {}
+    if not os.path.exists(path):
+        return entries
+    with open(path, errors="replace") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            flow, destination, table, reason = (line.split("|") + ["", "", "", ""])[:4]
+            entries["%s|%s|%s" % (flow.strip(), destination.strip(),
+                                  dbschema.normalise_table(table.strip()))] = reason
+    return entries
+
+
+def check_destination_metadata(result, prefixes):
+    """An OLE DB destination's external metadata must be its target table's.
+
+    The destination revalidates its cached external columns against OpenRowset
+    when the package starts, and a cached shape the table does not have fails
+    the whole task before a row moves:
+
+        "raw FilePartnerSales NA" failed validation and returned validation
+        status "VS_NEEDSNEWMETADATA"
+
+    which is how executions 144-147 failed. A destination that publishes its
+    buffer's columns instead of its table's - the defect behind that run - is
+    reported here, offline, against the DDL this repository deploys. Columns the
+    table has and the flow does not supply are legitimate (the server defaults
+    them), so only NOT NULL columns without a default are required.
+
+    Destinations still carrying the defect are listed in
+    ssis/destination-metadata-debt.txt and reported as warnings; an entry that
+    no longer reproduces has to be removed.
+    """
+    dbschema = _ddl_catalog()
+    if dbschema is None:
+        result.fail("destination-metadata", "tools/ssisgen/dbschema.py",
+                    "the DDL catalog could not be imported, so no destination "
+                    "could be checked against its table")
+        return
+    debt = _destination_debt(dbschema)
+    seen = set()
+    destinations = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for component in root.iter("component"):
+            if component.get("componentClassID") != "Microsoft.OLEDBDestination":
+                continue
+            properties = _component_properties(component)
+            table = (properties.get("OpenRowset") or "").strip()
+            name = component.get("name") or "?"
+            ref = component.get("refId") or ""
+            flow = ref.split("\\")[1] if ref.count("\\") >= 2 else ""
+            if not table or not dbschema.has_table(table):
+                continue
+            destinations += 1
+            key = "%s|%s|%s" % (flow, name, dbschema.normalise_table(table))
+            registered = key in debt
+            columns = dbschema.table_columns(table)
+            declared = [node.get("name") for node in
+                        component.iter("externalMetadataColumn")]
+            mapped = set()
+            for node in component.iter("inputColumn"):
+                external = node.get("externalMetadataColumnId") or ""
+                if "ExternalColumns[" in external:
+                    mapped.add(external.rsplit("ExternalColumns[", 1)[1].rstrip("]"))
+            problems = []
+            if declared != [col.name for col in columns]:
+                problems.append("declares external columns %s; %s has %s"
+                                % (", ".join(declared) or "none", table,
+                                   ", ".join(col.name for col in columns)))
+            else:
+                missing = [col.name for col in columns
+                           if col.name not in mapped and not col.nullable
+                           and not col.identity and not col.has_default]
+                if missing:
+                    problems.append("maps no value into NOT NULL column(s) %s of %s"
+                                    % (", ".join(missing), table))
+            for problem in problems:
+                detail = "destination %r in %r %s" % (name, flow, problem)
+                if registered:
+                    seen.add(key)
+                    result.warn("destination-metadata", rel,
+                                "known destination debt: %s" % detail)
+                else:
+                    result.fail("destination-metadata", rel, detail)
+    for key in sorted(set(debt) - seen):
+        flow, destination, table = key.split("|")
+        if prefixes:
+            continue  # a restricted walk cannot prove an entry is obsolete
+        if not dbschema.has_table(table):
+            continue  # the register also pins destinations with no DDL at all
+        result.warn("destination-metadata", "ssis/destination-metadata-debt.txt",
+                    "entry no longer reproduces, remove it: %s|%s|%s"
+                    % (flow, destination, table))
+    result.count("oledb_destinations_checked", destinations)
+
+
 CHECKS = [
     ("xml", check_dtsx_xml),
     ("dtsx-structure", check_dtsx_structure),
@@ -1943,6 +2059,7 @@ CHECKS = [
     ("execute-sql-parameters", check_execute_sql_parameters),
     ("expression-task-statements", check_expression_task_statements),
     ("sql-column-contract", check_sql_column_contract),
+    ("destination-metadata", check_destination_metadata),
     ("dtproj-structure", check_dtproj_structure),
     ("conmgr-binding", check_conmgr_binding),
     ("conmgr-credentials", check_conmgr_credentials),
@@ -1991,6 +2108,7 @@ def main():
     check_execute_sql_parameters(result, prefixes)
     check_expression_task_statements(result, prefixes)
     check_sql_column_contract(result, prefixes)
+    check_destination_metadata(result, prefixes)
     check_dtproj_structure(result, prefixes)
     check_conmgr_binding(result, prefixes)
     check_conmgr_credentials(result, prefixes)

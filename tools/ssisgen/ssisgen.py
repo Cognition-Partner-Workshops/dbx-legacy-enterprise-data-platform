@@ -35,6 +35,8 @@ import os
 import re
 from xml.sax.saxutils import escape, quoteattr
 
+import dbschema
+
 DTS_NS = "www.microsoft.com/SqlServer/Dts"
 
 # SSIS runtime variable type codes (System.TypeCode)
@@ -112,6 +114,41 @@ def safe_name(name):
 
 class ContractError(ValueError):
     """A spec asks for XML the SSIS runtime would reject at validation."""
+
+
+# Destinations the estate has never been able to describe from their target
+# table: the table is not deployed by any DDL under sqlserver/, or the buffer
+# carries a column the destination cannot insert into the column of that name.
+# They keep the buffer-derived metadata they have always had, which is exactly
+# the metadata SSIS rejects with VS_NEEDSNEWMETADATA, so every entry is a known
+# defect waiting for its package to be repaired - not a licence to write more.
+# The register only shrinks: a destination that can honour its table contract
+# fails generation while it is still listed here, and one that cannot and is not
+# listed fails generation too.
+DEBT_REGISTER = os.path.join(dbschema.REPO_ROOT, "ssis", "destination-metadata-debt.txt")
+
+_DEBT = None
+
+
+def destination_debt():
+    """The registered destinations, keyed 'data flow|destination|table'."""
+    global _DEBT
+    if _DEBT is None:
+        entries = {}
+        if os.path.exists(DEBT_REGISTER):
+            with open(DEBT_REGISTER, encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    flow, destination, table, reason = (line.split("|") + ["", "", "", ""])[:4]
+                    entries[debt_key(flow.strip(), destination.strip(), table.strip())] = reason.strip()
+        _DEBT = entries
+    return _DEBT
+
+
+def debt_key(flow, destination, table):
+    return "%s|%s|%s" % (flow, destination, dbschema.normalise_table(table))
 
 
 def sql_parameter_count(sql):
@@ -403,14 +440,20 @@ class DataFlow:
 
     # -- transforms ---------------------------------------------------------
 
-    def derived_column(self, name, derivations):
-        """derivations: list of (column_name, expression, Column)."""
+    def derived_column(self, name, derivations, source=None):
+        """derivations: list of (column_name, expression, Column).
+
+        ``source`` attaches the derivation to a named upstream output - a split
+        case or an error output - instead of continuing the main path, which is
+        how a branch gets the columns only its own destination needs.
+        """
         for stage, group in enumerate(self._stage_derivations(name, list(derivations))):
             stage_name = name if stage == 0 else "%s %d" % (name, stage + 1)
             self._components.append(dict(kind="derived", name=stage_name, derivations=group))
             for _, _, col in group:
                 self._columns.append(col)
-            self._paths.append((self._last_output, (stage_name, "Derived Column Input")))
+            upstream = source if (stage == 0 and source) else self._last_output
+            self._paths.append((upstream, (stage_name, "Derived Column Input")))
             self._last_output = (stage_name, "Derived Column Output")
         return self
 
@@ -521,8 +564,98 @@ class DataFlow:
 
     # -- destinations -------------------------------------------------------
 
+    def _destination_mapping(self, name, table, mapping):
+        """Validate a spec-supplied ``{target column: pipeline column}`` mapping.
+
+        A mapping naming a column the table does not have, or a buffer column
+        the flow never produces, describes an insert the destination cannot
+        make, so it fails generation instead of the run.
+        """
+        mapping = dict(mapping or {})
+        if not mapping or not dbschema.has_table(table):
+            return mapping
+        table_columns = set(col.name.lower() for col in dbschema.table_columns(table))
+        buffer_columns = set(col.name.lower() for col in self._columns)
+        for target, source in sorted(mapping.items()):
+            if target.lower() not in table_columns:
+                raise ContractError(
+                    "destination %r in %r maps %r to %s, which has no such column"
+                    % (name, self.name, source, table))
+            if source.lower() not in buffer_columns:
+                raise ContractError(
+                    "destination %r in %r maps %s.%s from buffer column %r, which "
+                    "the data flow does not produce" % (name, self.name, table, target, source))
+        return mapping
+
+    def _destination_contract(self, comp, lineage):
+        """The ``(external column, buffer column or None)`` pairs to emit.
+
+        The external columns are the target table's, because that is what the
+        destination revalidates against when the package starts. A destination
+        that cannot be described that way - no DDL deploys its table, or the
+        buffer holds a column the table cannot accept under that name - keeps
+        the buffer-derived metadata the estate has always given it, and only
+        while :data:`DEBT_REGISTER` still records it as unrepaired.
+
+        A destination that describes its table but leaves a NOT NULL column
+        without a default unmapped would validate and then fail its first
+        insert, so it needs a register entry too - it keeps the table-derived
+        metadata, because reverting it to the buffer's would only move the
+        failure back to validation.
+        """
+        key = debt_key(self.name, comp["name"], comp["table"])
+        registered = key in destination_debt()
+        buffer_columns = dict((col.name.lower(), col) for col in comp["columns"])
+        sources = dict((target.lower(), source) for target, source in comp["mapping"].items())
+        broken = None
+        pairs = []
+        if dbschema.has_table(comp["table"]):
+            for target in dbschema.table_columns(comp["table"]):
+                col = buffer_columns.get(sources.get(target.name.lower(), target.name).lower())
+                if col is None or col.name not in lineage:
+                    pairs.append((target, None))
+                    continue
+                if not dbschema.compatible(col.dtype, target.dtype):
+                    broken = ("buffer column %s (%s) cannot be inserted into %s.%s (%s)"
+                              % (col.name, col.dtype, comp["table"], target.name, target.dtype))
+                    break
+                pairs.append((target, col))
+        else:
+            broken = ("no CREATE TABLE under sqlserver/ deploys %s" % comp["table"])
+        unmapped = None
+        if not broken:
+            missing = [target.name for target, col in pairs
+                       if col is None and not target.nullable
+                       and not target.identity and not target.has_default]
+            if missing:
+                unmapped = ("the data flow supplies no value for NOT NULL column(s) %s"
+                            % ", ".join(missing))
+        broken = broken or unmapped
+        if broken and not registered:
+            raise ContractError(
+                "destination %r in %r does not honour its table contract: %s. Fix the "
+                "spec, or record the destination in %s as '%s|%s|%s|<reason>'"
+                % (comp["name"], self.name, broken,
+                   os.path.relpath(DEBT_REGISTER, dbschema.REPO_ROOT).replace(os.sep, "/"),
+                   self.name, comp["name"], comp["table"]))
+        if registered and not broken:
+            raise ContractError(
+                "destination %r in %r now describes %s from its table, so its entry in "
+                "%s is stale and must be deleted"
+                % (comp["name"], self.name, comp["table"],
+                   os.path.relpath(DEBT_REGISTER, dbschema.REPO_ROOT).replace(os.sep, "/")))
+        if broken and not unmapped:
+            return [(col, col) for col in comp["columns"] if col.name in lineage]
+        return pairs
+
     def oledb_destination(self, name, connection, table, fast_load=True, keep_identity=False,
-                          batch_size=100000, error_disposition="FailComponent"):
+                          batch_size=100000, error_disposition="FailComponent", mapping=None):
+        """Insert the buffer into *table*.
+
+        Buffer columns are mapped to the columns of the same name in the target
+        table; ``mapping`` ({target column: buffer column}) carries the pairs
+        whose names differ.
+        """
         self._components.append(
             dict(
                 kind="oledb_dest",
@@ -534,24 +667,28 @@ class DataFlow:
                 batch_size=batch_size,
                 error_disposition=error_disposition,
                 columns=list(self._columns),
+                mapping=self._destination_mapping(name, table, mapping),
             )
         )
         self._paths.append((self._last_output, (name, "OLE DB Destination Input")))
         return self
 
-    def reject_destination(self, name, connection, table, from_component, from_output="OLE DB Source Error Output"):
+    def reject_destination(self, name, connection, table, from_component,
+                           from_output="OLE DB Source Error Output", mapping=None):
         self._components.append(
             dict(kind="oledb_dest", name=name, connection=connection, table=table, fast_load=False,
-                 keep_identity=False, batch_size=0, error_disposition="FailComponent", columns=list(self._columns))
+                 keep_identity=False, batch_size=0, error_disposition="FailComponent",
+                 columns=list(self._columns), mapping=self._destination_mapping(name, table, mapping))
         )
         self._paths.append(((from_component, from_output), (name, "OLE DB Destination Input")))
         return self
 
-    def branch_destination(self, name, connection, table, from_component, from_output):
+    def branch_destination(self, name, connection, table, from_component, from_output, mapping=None):
         """Attach an extra destination to a named upstream output (e.g. a split case)."""
         self._components.append(
             dict(kind="oledb_dest", name=name, connection=connection, table=table, fast_load=True,
-                 keep_identity=False, batch_size=10000, error_disposition="FailComponent", columns=list(self._columns))
+                 keep_identity=False, batch_size=10000, error_disposition="FailComponent",
+                 columns=list(self._columns), mapping=self._destination_mapping(name, table, mapping))
         )
         self._paths.append(((from_component, from_output), (name, "OLE DB Destination Input")))
         return self
@@ -1348,22 +1485,29 @@ class DataFlow:
             out.append("%s  <inputs>" % pad)
             out.append('%s    <input refId=%s errorOrTruncationOperation="Insert" errorRowDisposition="%s" hasSideEffects="true" name="OLE DB Destination Input">'
                        % (pad, quoteattr("%s.Inputs[OLE DB Destination Input]" % ref), comp["error_disposition"]))
-            out.append("%s      <inputColumns>" % pad)
+            # External metadata describes the *table*, which is what the
+            # destination revalidates against when the package starts: metadata
+            # copied from the buffer fails with VS_NEEDSNEWMETADATA before a row
+            # moves. Buffer columns are mapped onto it by name, or by the pairs
+            # the spec supplied where the names differ.
             lineage = lineage_of("OLE DB Destination Input")
-            loaded = [col for col in comp["columns"] if col.name in lineage]
-            for col in loaded:
+            loaded = self._destination_contract(comp, lineage)
+            out.append("%s      <inputColumns>" % pad)
+            for target, col in loaded:
+                if col is None:
+                    continue
                 out.append('%s        <inputColumn refId=%s %s externalMetadataColumnId=%s lineageId=%s name=%s />'
                            % (pad, quoteattr("%s.Inputs[OLE DB Destination Input].Columns[%s]" % (ref, col.name)),
                               col.cached_attrs(),
-                              quoteattr("%s.Inputs[OLE DB Destination Input].ExternalColumns[%s]" % (ref, col.name)),
+                              quoteattr("%s.Inputs[OLE DB Destination Input].ExternalColumns[%s]" % (ref, target.name)),
                               quoteattr(lineage[col.name]),
                               quoteattr(col.name)))
             out.append("%s      </inputColumns>" % pad)
             out.append("%s      <externalMetadataColumns isUsed=\"True\">" % pad)
-            for col in loaded:
+            for target, _col in loaded:
                 out.append('%s        <externalMetadataColumn refId=%s %s name=%s />'
-                           % (pad, quoteattr("%s.Inputs[OLE DB Destination Input].ExternalColumns[%s]" % (ref, col.name)),
-                              col.metadata_attrs(), quoteattr(col.name)))
+                           % (pad, quoteattr("%s.Inputs[OLE DB Destination Input].ExternalColumns[%s]" % (ref, target.name)),
+                              target.metadata_attrs(), quoteattr(target.name)))
             out.append("%s      </externalMetadataColumns>" % pad)
             out.append("%s    </input>" % pad)
             out.append("%s  </inputs>" % pad)
