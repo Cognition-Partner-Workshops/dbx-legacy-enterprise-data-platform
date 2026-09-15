@@ -4,6 +4,8 @@ sales_facts.transforms are exercised end to end."""
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -17,6 +19,9 @@ FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
 @pytest.fixture(scope="session")
 def spark() -> SparkSession:
+    # Workers must run the same interpreter as the driver, whatever `python3` on PATH is.
+    os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
+    os.environ.setdefault("PYSPARK_DRIVER_PYTHON", sys.executable)
     session = (
         SparkSession.builder.master("local[2]")
         .appName("sales_facts_fixtures")
