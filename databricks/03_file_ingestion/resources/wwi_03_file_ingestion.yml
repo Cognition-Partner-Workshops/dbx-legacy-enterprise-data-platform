@@ -1,0 +1,117 @@
+# Job wwi_03_file_ingestion = the WWI_Ingest_Files leg of Master_File_Ingestion
+# (ssis/00_orchestration, phases Partner Drops -> Carrier And Catalog -> Quarantine).
+# Task keys are the legacy package names; edges come from docs/inventories/package-dependencies.csv:
+#   ING_FILE_FxOverride -> ING_FILE_PartnerSales_NA -> ING_FILE_PartnerSales_EU -> ING_FILE_PartnerSales_APAC -> ING_FILE_QuarantineMalformed
+#   ING_FILE_CarrierScan -> ING_FILE_SupplierCatalog -> ING_FILE_QuarantineMalformed
+# The master reaches Quarantine on Completion (and on Partner Drops failure), hence run_if: ALL_DONE.
+resources:
+  jobs:
+    wwi_03_file_ingestion:
+      name: wwi_03_file_ingestion
+      description: >-
+        Partner, carrier, supplier and treasury flat-file ingestion (WWI_Ingest_Files). Auto Loader over the
+        bronze inbound volume, explicit schemas, control totals, archive / quarantine moves, malformed-row
+        screening into silver.err_rejected_file_row and the quarantine sweep.
+      tags:
+        legacy_project: WWI_Ingest_Files
+        legacy_folder: 03_file_ingestion
+        legacy_master: Master_File_Ingestion
+      max_concurrent_runs: 1
+      timeout_seconds: 7200
+
+      # Master_File_Ingestion ran every 15 minutes; on Databricks the inbound volume itself is the trigger.
+      # min_time_between_triggers_seconds keeps the legacy 15-minute cadence as the upper bound on trigger frequency.
+      trigger:
+        pause_status: ${var.file_arrival_pause_status}
+        file_arrival:
+          url: /Volumes/${var.catalog}/bronze/inbound/
+          min_time_between_triggers_seconds: 900
+          wait_after_last_change_seconds: 60
+
+      parameters:
+        - name: BatchId
+          default: "0"
+        - name: BusinessDate
+          default: ${var.businessDate}
+        - name: ReloadFullHistory
+          default: "False"
+        - name: EnvironmentCode
+          default: ${var.environmentCode}
+        - name: RestartFromStep
+          default: ""
+        - name: catalog
+          default: ${var.catalog}
+        - name: ControlTotalMode
+          default: ${var.controlTotalMode}
+        - name: UseAutoLoader
+          default: ${var.useAutoLoader}
+
+      environments:
+        - environment_key: file_ingestion
+          spec:
+            client: "1"
+            dependencies:
+              - ${var.dbx_etl_common_wheel}
+
+      tasks:
+        # ---- Partner Drops (phase, FxOverride first so approved overrides precede the regional drops) ----
+        - task_key: ING_FILE_FxOverride
+          environment_key: file_ingestion
+          notebook_task:
+            notebook_path: ../notebooks/ING_FILE_FxOverride.py
+
+        - task_key: ING_FILE_PartnerSales_NA
+          depends_on:
+            - task_key: ING_FILE_FxOverride
+          environment_key: file_ingestion
+          notebook_task:
+            notebook_path: ../notebooks/ING_FILE_PartnerSales_NA.py
+
+        - task_key: ING_FILE_PartnerSales_EU
+          depends_on:
+            - task_key: ING_FILE_PartnerSales_NA
+          environment_key: file_ingestion
+          notebook_task:
+            notebook_path: ../notebooks/ING_FILE_PartnerSales_EU.py
+
+        - task_key: ING_FILE_PartnerSales_APAC
+          depends_on:
+            - task_key: ING_FILE_PartnerSales_EU
+          environment_key: file_ingestion
+          notebook_task:
+            notebook_path: ../notebooks/ING_FILE_PartnerSales_APAC.py
+
+        # ---- Carrier And Catalog (phase; independent stream in the package inventory) ----
+        - task_key: ING_FILE_CarrierScan
+          environment_key: file_ingestion
+          notebook_task:
+            notebook_path: ../notebooks/ING_FILE_CarrierScan.py
+
+        - task_key: ING_FILE_SupplierCatalog
+          depends_on:
+            - task_key: ING_FILE_CarrierScan
+          environment_key: file_ingestion
+          notebook_task:
+            notebook_path: ../notebooks/ING_FILE_SupplierCatalog.py
+
+        # ---- Quarantine (phase; Completion edges in the master -> runs even when a drop failed) ----
+        - task_key: ING_FILE_QuarantineMalformed
+          depends_on:
+            - task_key: ING_FILE_PartnerSales_APAC
+            - task_key: ING_FILE_SupplierCatalog
+          run_if: ALL_DONE
+          environment_key: file_ingestion
+          notebook_task:
+            notebook_path: ../notebooks/ING_FILE_QuarantineMalformed.py
+
+        # ---- Reconciliation (not a legacy package; ports validation/runtime/02_row_count_reconciliation.sql) ----
+        - task_key: Reconcile_File_Ingestion
+          depends_on:
+            - task_key: ING_FILE_QuarantineMalformed
+          run_if: ALL_DONE
+          environment_key: file_ingestion
+          notebook_task:
+            notebook_path: ../validation/Reconcile_File_Ingestion.py
+            base_parameters:
+              BaselineTable: ""
+              BaselineJson: ""
