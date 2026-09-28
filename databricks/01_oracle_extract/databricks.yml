@@ -1,0 +1,80 @@
+# Databricks Asset Bundle for SSIS project ssis/01_oracle_extract (WWI_Extract_Oracle).
+# 22 EXT_ORA_* packages -> one job `wwi_01_oracle_extract` (resources/wwi_01_oracle_extract.job.yml).
+bundle:
+  name: wwi_01_oracle_extract
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog catalog holding the bronze / silver / gold / etl schemas.
+    default: wwi_${bundle.target}
+  warehouse_id:
+    description: SQL warehouse used by ad-hoc reconciliation queries (not required by the job itself).
+    default: ""
+  businessDate:
+    description: Default BusinessDate job parameter (yyyy-MM-dd); empty = derived by the control layer.
+    default: ""
+  environment_code:
+    description: EnvironmentCode job parameter (mirrors Project.params EnvironmentCode).
+    default: DEV
+  source_mode:
+    description: "'jdbc' reads Oracle through Spark JDBC; 'files' reads generated extract files from extract_volume_path."
+    default: jdbc
+  oracle_host:
+    description: Oracle ERP listener host (Project.params OracleHost). Never hard-code; set per target.
+    default: ""
+  oracle_port:
+    description: Oracle listener port (Project.params OraclePort).
+    default: "1521"
+  oracle_service:
+    description: Oracle service name (Project.params OracleService).
+    default: WWIGERP
+  oracle_user:
+    description: Oracle extract account (Project.params OracleUser). Password comes from the secret scope.
+    default: WWI_EXTRACT
+  oracle_secret_scope:
+    description: Databricks secret scope holding the Oracle password.
+    default: wwi
+  oracle_password_key:
+    description: Secret key (inside oracle_secret_scope) holding the Oracle password.
+    default: oracle-erp-password
+  extract_volume_path:
+    description: UC Volume path with generators/ Oracle extract files (source_mode=files).
+    default: /Volumes/${var.catalog}/bronze/oracle_extracts
+  jdbc_fetch_size:
+    description: JDBC fetch size (Project.params / etl.Configuration OracleFetchArraySize).
+    default: "10000"
+  jdbc_num_partitions:
+    description: numPartitions for partitionColumn reads of the big tables.
+    default: "8"
+  common_wheel_path:
+    description: Workspace path of the session-00 dbx_etl_common wheel (databricks/common/dist).
+    default: /Workspace/Shared/wwi/dbx_etl_common/dbx_etl_common-0.1.0-py3-none-any.whl
+  oracle_jdbc_coordinates:
+    description: Maven coordinates of the Oracle thin JDBC driver (oracle.jdbc.OracleDriver).
+    default: com.oracle.database.jdbc:ojdbc11:23.5.0.24.07
+  spark_version:
+    default: 15.4.x-scala2.12
+  node_type_id:
+    default: Standard_DS3_v2
+  extract_workers:
+    description: Worker count of the extract job cluster (legacy phase ran 4 parallel streams).
+    default: "4"
+
+targets:
+  dev:
+    mode: development
+    default: true
+    variables:
+      environment_code: DEV
+  prod:
+    mode: production
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      environment_code: PROD
+      extract_workers: "8"
+    run_as:
+      user_name: ${workspace.current_user.userName}
