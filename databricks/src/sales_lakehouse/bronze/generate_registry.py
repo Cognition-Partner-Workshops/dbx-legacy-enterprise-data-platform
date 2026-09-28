@@ -20,6 +20,8 @@ from sales_lakehouse.bronze.ddl import findRepoRoot, parseTableFromRepo
 SOURCE_SPECS: list[tuple[str, str, str, str, str | None, int, str | None]] = [
     # --- SQL Server WideWorldImporters OLTP --------------------------------
     ("sqlserver", "Application", "People", "full", None, 0, "EXT_SQL_People"),
+    ("sqlserver", "Application", "SalesTeams", "full", None, 0, None),
+    ("sqlserver", "Application", "SalesTeamMembers", "full", None, 0, None),
     ("sqlserver", "Sales", "BuyingGroups", "full", None, 0, None),
     ("sqlserver", "Sales", "CustomerCategories", "full", None, 0, None),
     ("sqlserver", "Sales", "Customers", "full", None, 0, None),
