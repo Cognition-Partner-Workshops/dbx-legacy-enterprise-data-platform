@@ -1,0 +1,116 @@
+# Job wwi_11_sales: one task per legacy WWI_Sales package.
+# Task keys are the legacy package names so session 00's master job can reference them.
+# Dependencies come from docs/inventories/package-dependencies.csv: the partner feed
+# consumes Fact.Sale rows posted by the three commission loads; quota attainment and
+# promotion redemption only depend on STG_* packages that run in earlier phases.
+resources:
+  jobs:
+    wwi_11_sales:
+      name: wwi_11_sales
+      description: "WWI_Sales mart (ssis/11_sales): regional commission, quota attainment, promotion redemption, partner feed export."
+      tags:
+        ssis_project: WWI_Sales
+        ssis_folder: 11_sales
+        orchestration_phase: Sales Mart
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+
+      environments:
+        - environment_key: wwi_sales_env
+          spec:
+            client: "2"
+            dependencies:
+              - ${var.dbx_etl_common_whl}
+
+      parameters:
+        # Standard parameters shared by every session (all strings).
+        - name: BatchId
+          default: "0"
+        - name: BusinessDate
+          default: ${var.business_date}
+        - name: ReloadFullHistory
+          default: "False"
+        - name: EnvironmentCode
+          default: ${var.environment_code}
+        - name: RestartFromStep
+          default: ""
+        - name: catalog
+          default: ${var.catalog}
+        # Legacy $Package:: parameters of the WWI_Sales packages.
+        - name: CommissionMonth
+          default: ${var.commission_month}
+        - name: HouseAccountRatePercent
+          default: ${var.house_account_rate_percent}
+        - name: CashBasisCountries
+          default: ${var.cash_basis_countries}
+        - name: FiscalPeriod445
+          default: ${var.fiscal_period_445}
+        - name: TeamSplitEnabled
+          default: ${var.team_split_enabled}
+        - name: AttainmentPeriod
+          default: ${var.attainment_period}
+        - name: IncludePartialPeriod
+          default: ${var.include_partial_period}
+        - name: AttributionMode
+          default: ${var.attribution_mode}
+        - name: PartnerScope
+          default: ${var.partner_scope}
+        - name: SuppressUnconsentedEuRows
+          default: ${var.suppress_unconsented_eu_rows}
+        - name: VolumeRoot
+          default: ${var.volume_root}
+
+      tasks:
+        # Stream 1-3 of the legacy "Sales Mart" phase: the three regional commission
+        # loads run in parallel through the single parameterised notebook.
+        - task_key: SLS_NA_Load_Commission
+          environment_key: wwi_sales_env
+          notebook_task:
+            notebook_path: ../notebooks/SLS_Load_Commission.py
+            base_parameters:
+              RegionCode: NA
+
+        - task_key: SLS_EU_Load_Commission
+          environment_key: wwi_sales_env
+          notebook_task:
+            notebook_path: ../notebooks/SLS_Load_Commission.py
+            base_parameters:
+              RegionCode: EU
+
+        - task_key: SLS_APAC_Load_Commission
+          environment_key: wwi_sales_env
+          notebook_task:
+            notebook_path: ../notebooks/SLS_Load_Commission.py
+            base_parameters:
+              RegionCode: APAC
+
+        - task_key: SLS_Load_QuotaAttainment
+          environment_key: wwi_sales_env
+          notebook_task:
+            notebook_path: ../notebooks/SLS_Load_QuotaAttainment.py
+
+        - task_key: SLS_Load_PromotionRedemption
+          environment_key: wwi_sales_env
+          notebook_task:
+            notebook_path: ../notebooks/SLS_Load_PromotionRedemption.py
+
+        - task_key: SLS_Export_PartnerFeed
+          environment_key: wwi_sales_env
+          depends_on:
+            - task_key: SLS_NA_Load_Commission
+            - task_key: SLS_EU_Load_Commission
+            - task_key: SLS_APAC_Load_Commission
+          notebook_task:
+            notebook_path: ../notebooks/SLS_Export_PartnerFeed.py
+
+        # Reconciliation against the SQL Server baseline (row counts + hashes -> etl.row_count_log).
+        - task_key: SLS_Reconcile_SalesMart
+          environment_key: wwi_sales_env
+          depends_on:
+            - task_key: SLS_Load_QuotaAttainment
+            - task_key: SLS_Load_PromotionRedemption
+            - task_key: SLS_Export_PartnerFeed
+          run_if: ALL_DONE
+          notebook_task:
+            notebook_path: ../validation/SLS_Reconcile_SalesMart.py
