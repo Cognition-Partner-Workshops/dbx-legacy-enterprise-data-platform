@@ -146,7 +146,7 @@ with the SQL Server baseline supplied as a Delta table (`baseline_table`) or JSO
 | `RestartFromStep` | accepted and logged; a single-notebook package has no restartable inner steps | – |
 
 Shared wheel: each task lists `libraries: - whl: ${var.common_wheel_path}` (default
-`/Workspace/Shared/wwi/libs/dbx_etl_common-0.1.0-py3-none-any.whl`) so `dbx_etl_common` resolves at cluster start;
+`/Workspace/Shared/wwi/dbx_etl_common/dbx_etl_common-0.1.0-py3-none-any.whl`) so `dbx_etl_common` resolves at cluster start;
 the notebooks add `../src` to `sys.path` for `oracle_extract`. The Oracle thin driver is a Maven library
 (`${var.oracle_jdbc_coordinates}`, default `com.oracle.database.jdbc:ojdbc11:23.5.0.24.07`).
 
