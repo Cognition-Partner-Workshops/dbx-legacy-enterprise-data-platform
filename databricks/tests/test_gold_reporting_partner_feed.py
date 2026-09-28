@@ -51,8 +51,7 @@ def test_eu_feed_drops_unconsented_customers_and_restates_to_eur(spark, cfg, tmp
 
 
 def test_eu_redaction_step_before_suppression(spark, cfg):
-    from sales_lakehouse.gold.inputs import readOrEmpty
-    from sales_lakehouse.gold.inputs import DIM_STOCK_ITEM_SCHEMA
+    from sales_lakehouse.gold.inputs import DIM_STOCK_ITEM_SCHEMA, readOrEmpty
 
     feed = partner_feed.buildPartnerFeed(
         spark.table(cfg.fqn("gold", "fact_sale")),

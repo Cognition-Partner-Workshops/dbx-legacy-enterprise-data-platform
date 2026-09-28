@@ -21,10 +21,12 @@ from sales_lakehouse.gold.fact_support import (
     mergeOnKeys,
     money,
     optionalColumn,
+    pickColumn,
     readOptional,
     surrogateKey,
     withLoadMetadata,
 )
+from sales_lakehouse.gold.inputs import readDimSalesperson
 
 TABLE = "fact_order"
 KEY_COLS = ["order_line_business_key"]
@@ -50,6 +52,14 @@ def _withFulfilmentFlags(df: DataFrame) -> DataFrame:
         .withColumn("flag_shipped", _flag(tokens, "SHIP"))
         .withColumn("flag_promotion", _flag(tokens, "PROMO"))
     )
+
+
+def _lineTax(df: DataFrame) -> Column:
+    """Staged line tax, else tax on the net line value at the line's percent rate (Sales.OrderLines carries only TaxRate)."""
+    if "tax_amount" in df.columns:
+        return F.col("tax_amount").cast("decimal(19,4)")
+    net = pickColumn(df, ["net_line_amount", "net_line_amount_local"], "decimal(19,4)")
+    return money(net * pickColumn(df, ["tax_rate_percent"], "decimal(18,3)") / F.lit(100))
 
 
 def _backorderState(backorders: DataFrame | None) -> DataFrame | None:
@@ -101,7 +111,7 @@ def buildFactOrder(
         F.col("order_business_key").alias("_h_key"),
         optionalColumn(heads, "source_order_id", "string").cast("int").alias("wwi_order_id"),
         optionalColumn(heads, "backorder_order_business_key", "string").alias("wwi_backorder_id"),
-        F.col("customer_business_key"),
+        F.col("customer_business_key").alias("_h_customer_business_key"),
         optionalColumn(heads, "salesperson_business_key", "string").alias("salesperson_business_key"),
         F.col("order_date").alias("_h_order_date"),
         optionalColumn(heads, "expected_delivery_date", "date").alias("requested_delivery_date_key"),
@@ -112,16 +122,23 @@ def buildFactOrder(
         optionalColumn(heads, "sales_channel_code", "string").alias("sales_channel_code"),
         optionalColumn(heads, "sales_territory_code", "string").alias("sales_territory_code"),
         optionalColumn(heads, "order_status_code", "string").alias("order_status_code"),
-        optionalColumn(heads, "transaction_currency_code", "string").alias("_h_currency"),
+        pickColumn(heads, ["transaction_currency_code", "currency_code"], "string").alias("_h_currency"),
         optionalColumn(heads, "region_code", "string").alias("_h_region"),
         optionalColumn(heads, "fulfilment_flags", "string").alias("fulfilment_flags"),
     ).dropDuplicates(["_h_key"])
     df = lines.join(h, lines["order_business_key"] == h["_h_key"], "left").drop("_h_key")
     df = (
-        df.withColumn("order_date", F.coalesce(F.col("order_date"), F.col("_h_order_date")).cast("date"))
+        df.withColumn(
+            "customer_business_key",
+            F.coalesce(optionalColumn(df, "customer_business_key", "string"), F.col("_h_customer_business_key")),
+        )
+        .withColumn("order_date", F.coalesce(F.col("order_date"), F.col("_h_order_date")).cast("date"))
         .withColumn("region_code", F.upper(F.coalesce(optionalColumn(df, "region_code", "string"), F.col("_h_region"))))
-        .withColumn("transaction_currency_code", F.coalesce(F.col("transaction_currency_code"), F.col("_h_currency")))
-        .drop("_h_order_date", "_h_region", "_h_currency")
+        .withColumn(
+            "transaction_currency_code",
+            F.coalesce(pickColumn(df, ["transaction_currency_code", "currency_code"], "string"), F.col("_h_currency")),
+        )
+        .drop("_h_order_date", "_h_region", "_h_currency", "_h_customer_business_key")
     )
 
     # LEGACY QUIRK: zero-quantity lines are quotation-module artefacts and are rejected, not loaded.
@@ -177,13 +194,16 @@ def buildFactOrder(
         # QuantityOutstanding = QuantityOrdered - QuantityPicked, so picked == despatched here.
         .withColumn("quantity_despatched", qtyPicked)
         .withColumn("quantity_open", (qtyOrdered - qtyPicked).cast("decimal(18,4)"))
-        .withColumn("unit_price", F.col("unit_price_amount").cast("decimal(19,4)"))
-        .withColumn("line_discount_amount", money(F.coalesce(F.col("line_discount_amount"), F.lit(0))))
+        .withColumn("unit_price", pickColumn(df, ["unit_price_amount", "unit_price_amount_local"], "decimal(19,4)"))
+        .withColumn(
+            "line_discount_amount",
+            money(F.coalesce(pickColumn(df, ["line_discount_amount", "line_discount_amount_local"], "decimal(19,4)"), F.lit(0))),
+        )
         .withColumn("gross_order_amount", money(qtyOrdered * F.col("unit_price")))
         .withColumn("net_order_amount", money(qtyOrdered * F.col("unit_price") - F.col("line_discount_amount")))
         .withColumn("open_value", money((qtyOrdered - qtyPicked) * F.col("unit_price")))
         .withColumn("fill_rate_percent", F.round(qtyPicked / qtyOrdered * 100, 4).cast("decimal(9,4)"))
-        .withColumn("tax_amount", money(F.coalesce(F.col("tax_amount"), F.lit(0))))
+        .withColumn("tax_amount", money(F.coalesce(_lineTax(df), F.lit(0))))
         .withColumn("total_excluding_tax", F.col("net_order_amount"))
         .withColumn("total_including_tax", money(F.col("net_order_amount") + F.col("tax_amount")))
         .withColumn(
@@ -337,7 +357,7 @@ def run(spark: SparkSession, cfg: PipelineConfig) -> None:
         backorders=readOptional(spark, cfg, "silver", "backorder"),
         holds=readOptional(spark, cfg, "silver", "order_hold"),
         dimCustomer=readOptional(spark, cfg, "silver", "dim_customer"),
-        dimSalesperson=readOptional(spark, cfg, "silver", "dim_salesperson"),
+        dimSalesperson=readDimSalesperson(spark, cfg),
         dimSalesChannel=readOptional(spark, cfg, "silver", "dim_sales_channel"),
         dimSalesTerritory=readOptional(spark, cfg, "silver", "dim_sales_territory"),
         dimStockItem=readOptional(spark, cfg, "silver", "dim_stock_item"),

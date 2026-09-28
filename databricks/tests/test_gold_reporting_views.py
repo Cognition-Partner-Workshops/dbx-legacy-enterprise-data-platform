@@ -89,8 +89,8 @@ def test_rpt_sales_by_territory_month_budget_status(spark, cfg, goldRun):
     assert r["indirect_tax_collected"] == Decimal("124.00") and r["local_currency"] == "USD"
     eu = one(spark, cfg, "gold", "rpt_sales_by_territory_month",
              "territory = 'Germany' AND channel = 'Direct Sales' AND calendar_month = DATE'2024-02-01'")
-    assert eu["budget_status"] == "No Budget" and eu["translation_difference"] == -54.0
-    assert eu["net_sales_at_average_rate"] == 12300.0 and eu["indirect_tax_collected"] == Decimal("2130.00")
+    assert eu["budget_status"] == "No Budget" and eu["translation_difference"] == -1.0  # silver ref_fx_rate: monthly average derived from the daily quotes
+    assert eu["net_sales_at_average_rate"] == 12353.0 and eu["indirect_tax_collected"] == Decimal("2130.00")
 
 
 def test_rpt_order_to_cash_cycle_assessment_and_cohort(spark, cfg, goldRun):

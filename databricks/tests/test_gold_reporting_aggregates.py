@@ -84,9 +84,10 @@ def test_regional_sales_performance_fx_translation_and_budget(spark, cfg, goldRu
              "region_code = 'EU' AND calendar_month = DATE'2024-02-01' AND sales_channel_key = 3")
     assert eu["net_sales_local"] == Decimal("11200.00")
     assert eu["net_sales_daily_rate"] == Decimal("12354.00")
-    # month-average: EUR 1.10 -> 1100 + 11000; GBP->USD has no AVERAGE rate -> 1.0 (LEGACY QUIRK) -> 200
-    assert eu["net_sales_monthly_average_rate"] == 12300.0
-    assert eu["translation_difference"] == -54.0
+    # month-average: EUR 1.10 -> 1100 + 11000; GBP Feb mean of the daily quotes (1.26, 1.27) -> 253
+    # (silver.ref_fx_rate quotes every currency to USD, so a GBP->EUR cross rate implies a GBP->USD rate)
+    assert eu["net_sales_monthly_average_rate"] == 12353.0
+    assert eu["translation_difference"] == -1.0
     assert eu["vat_output_amount"] == Decimal("2130.00") and eu["local_currency_code"] == "EUR"
     rc = one(spark, cfg, "gold", "agg_regional_sales_performance",
              "region_code = 'EU' AND calendar_month = DATE'2024-02-01' AND sales_channel_key = 5")

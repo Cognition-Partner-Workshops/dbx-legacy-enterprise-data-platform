@@ -18,6 +18,7 @@ the column contract holds even before those workstreams land.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from pyspark.sql import SparkSession
@@ -64,10 +65,23 @@ class SqlResolver:
             return ""
         return f"LEFT JOIN {self.table(layer, table)} AS {alias} ON {condition}"
 
+    def currentRow(self, layer: str, table: str, alias: str) -> str:
+        """SCD2 current-row predicate: silver writes ``is_current``, the legacy fixtures ``is_current_row``."""
+        columns = self.spark.table(self.table(layer, table)).columns
+        return f"{alias}.is_current" if "is_current" in columns and "is_current_row" not in columns else f"{alias}.is_current_row"
+
     def optionalCol(self, layer: str, table: str, alias: str, column: str, sqlType: str = "STRING") -> str:
         if not self.exists(layer, table):
             return f"CAST(NULL AS {sqlType})"
         return f"{alias}.{column}"
+
+    def firstCol(self, layer: str, table: str, alias: str, candidates: Sequence[str], sqlType: str = "STRING") -> str:
+        """First of ``candidates`` present on the table (silver name vs legacy ``Dimension.*`` name), else NULL."""
+        columns = self.spark.table(self.table(layer, table)).columns
+        for c in candidates:
+            if c in columns:
+                return f"{alias}.{c}"
+        return f"CAST(NULL AS {sqlType})"
 
 
 def dailySalesTrendSql(r: SqlResolver) -> str:
@@ -93,8 +107,8 @@ SELECT
     r.fiscal_year                                        AS fiscal_year,
     r.fiscal_period                                      AS fiscal_period,
     r.region_code                                        AS region,
-    terr.sales_territory                                 AS territory,
-    ch.sales_channel                                     AS channel,
+    {r.firstCol('silver', 'dim_sales_territory', 'terr', ('sales_territory', 'sales_territory_name'))} AS territory,
+    {r.firstCol('silver', 'dim_sales_channel', 'ch', ('sales_channel', 'sales_channel_name'))} AS channel,
     r.invoice_count                                      AS invoices,
     r.line_count                                         AS lines,
     r.quantity_sold                                      AS quantity_sold,
@@ -130,8 +144,8 @@ def salesByCustomerMonthSql(r: SqlResolver) -> str:
 CREATE OR REPLACE VIEW {r.table('gold', RPT_SALES_BY_CUSTOMER_MONTH)} AS
 SELECT
     m.customer_key                                       AS customer_key,
-    c.customer                                           AS customer_name,
-    c.category                                           AS customer_category,
+    {r.firstCol('silver', 'dim_customer', 'c', ('customer', 'customer_name'))} AS customer_name,
+    {r.firstCol('silver', 'dim_customer', 'c', ('category', 'customer_category_name'))} AS customer_category,
     m.region_code                                        AS region,
     m.fiscal_calendar_code                               AS fiscal_calendar,
     m.fiscal_year                                        AS fiscal_year,
@@ -167,7 +181,7 @@ SELECT
     CASE WHEN m.period_closed_flag THEN 'Closed' ELSE 'Period To Date' END AS period_status,
     m.refreshed_datetime                                 AS data_as_of
 FROM {r.table('gold', 'agg_monthly_sales')} AS m
-LEFT JOIN {r.table('silver', 'dim_customer')} AS c ON c.customer_key = m.customer_key AND c.is_current_row
+LEFT JOIN {r.table('silver', 'dim_customer')} AS c ON c.customer_key = m.customer_key AND {r.currentRow('silver', 'dim_customer', 'c')}
 """
 
 
@@ -233,8 +247,8 @@ SELECT
     r.fiscal_period                                      AS fiscal_period,
     r.fiscal_calendar_code                               AS fiscal_calendar,
     r.region_code                                        AS region,
-    t.sales_territory                                    AS territory,
-    ch.sales_channel                                     AS channel,
+    {r.firstCol('silver', 'dim_sales_territory', 't', ('sales_territory', 'sales_territory_name'))} AS territory,
+    {r.firstCol('silver', 'dim_sales_channel', 'ch', ('sales_channel', 'sales_channel_name'))} AS channel,
     r.local_currency_code                                AS local_currency,
     r.order_count                                        AS orders,
     r.invoice_count                                      AS invoices,
@@ -289,8 +303,8 @@ SELECT
     f.invoice_number                                     AS invoice_number,
     f.despatch_note_number                               AS despatch_note,
     f.region_code                                        AS region,
-    cust.customer                                        AS customer,
-    terr.sales_territory                                 AS territory,
+    {r.firstCol('silver', 'dim_customer', 'cust', ('customer', 'customer_name'))} AS customer,
+    {r.firstCol('silver', 'dim_sales_territory', 'terr', ('sales_territory', 'sales_territory_name'))} AS territory,
     {r.optionalCol('silver', 'dim_warehouse_site', 'site', 'warehouse_site')} AS warehouse_site,
     f.order_date_key                                     AS order_date,
     f.allocation_date_key                                AS allocated,
@@ -329,7 +343,8 @@ SELECT
          ELSE 'Breached' END                             AS cycle_assessment,
     f.last_milestone_update                              AS last_milestone_update
 FROM {fact} AS f
-LEFT JOIN {r.table('silver', 'dim_customer')} AS cust ON cust.customer_key = f.customer_key AND cust.is_current_row
+LEFT JOIN {r.table('silver', 'dim_customer')} AS cust
+    ON cust.customer_key = f.customer_key AND {r.currentRow('silver', 'dim_customer', 'cust')}
 LEFT JOIN {r.table('silver', 'dim_sales_territory')} AS terr ON terr.sales_territory_key = f.sales_territory_key
 {r.optionalJoin('silver', 'dim_warehouse_site', 'site', 'site.warehouse_site_key = f.warehouse_site_key')}
 LEFT JOIN cohort ON cohort.order_fulfilment_key = f.order_fulfilment_key
@@ -345,7 +360,7 @@ SELECT
     m.fiscal_period                                      AS fiscal_period,
     m.region_code                                        AS region,
     {r.optionalCol('silver', 'dim_product_category', 'cat', 'product_category')} AS category,
-    t.sales_territory                                    AS territory,
+    {r.firstCol('silver', 'dim_sales_territory', 't', ('sales_territory', 'sales_territory_name'))} AS territory,
     m.cost_basis_code                                    AS cost_basis,
     m.quantity_sold_base_uom                             AS units,
     m.net_revenue_reporting                              AS net_revenue,

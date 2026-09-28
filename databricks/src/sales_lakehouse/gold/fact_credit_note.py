@@ -25,11 +25,20 @@ from sales_lakehouse.gold.fact_support import (
     surrogateKey,
     withLoadMetadata,
 )
+from sales_lakehouse.gold.inputs import readDimSalesperson, readOrEmpty
 
 TABLE = "fact_credit_note"
 KEY_COLS = ["credit_note_business_key"]
 MILESTONES = ["original_invoice_date_key", "credit_note_date_key", "applied_date_key"]
 SOURCE_TABLE = "silver.credit_note"
+# silver.credit_note contract (no silver producer ships it yet; an absent table loads as empty)
+SILVER_CREDIT_NOTE_SCHEMA = (
+    "credit_note_business_key string, credit_note_number string, customer_business_key string, "
+    "original_sale_business_key string, rma_number string, credit_reason_code string, credit_note_date date, "
+    "net_amount decimal(19,4), tax_amount decimal(19,4), gross_amount decimal(19,4), transaction_currency_code string, "
+    "applied_to_sale_business_key string, approved_by_name string, credit_status_code string, "
+    "vat_credit_note_required_flag boolean, region_code string, batch_id bigint, loaded_at_utc timestamp"
+)
 UNAPPROVED_THRESHOLD = 1000
 
 
@@ -112,7 +121,9 @@ def buildFactCreditNote(
                 F.min(
                     pickColumn(allocations, ["allocated_when_utc", "allocation_date"], "timestamp").cast("date")
                 ).alias("applied_date_key"),
-                F.sum("allocated_amount").cast("decimal(19,4)").alias("applied_amount"),
+                F.sum(pickColumn(allocations, ["allocated_amount_local", "allocated_amount"], "decimal(19,4)"))
+                .cast("decimal(19,4)")
+                .alias("applied_amount"),
             )
         )
         df = df.join(a, "credit_note_business_key", "left")
@@ -213,10 +224,10 @@ def run(spark: SparkSession, cfg: PipelineConfig) -> None:
     df = buildFactCreditNote(
         spark,
         cfg,
-        creditNotes=spark.table(cfg.fqn("silver", "credit_note")),
+        creditNotes=readOrEmpty(spark, cfg, "silver", "credit_note", SILVER_CREDIT_NOTE_SCHEMA),
         sales=readOptional(spark, cfg, "silver", "sale"),
         allocations=readOptional(spark, cfg, "silver", "payment_allocation"),
         dimCustomer=readOptional(spark, cfg, "silver", "dim_customer"),
-        dimSalesperson=readOptional(spark, cfg, "silver", "dim_salesperson"),
+        dimSalesperson=readDimSalesperson(spark, cfg),
     )
     writeFactCreditNote(spark, cfg, df)

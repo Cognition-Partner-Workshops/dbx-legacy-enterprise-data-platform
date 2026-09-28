@@ -47,9 +47,9 @@ def _receipts(payments: DataFrame) -> DataFrame:
         pickColumn(payments, ["transaction_currency_code", "currency_code"], "string").alias(
             "transaction_currency_code"
         ),
-        money(pickColumn(payments, ["payment_amount", "received_amount"], "decimal(19,4)")).alias("payment_amount"),
+        money(pickColumn(payments, ["payment_amount", "payment_amount_local", "received_amount"], "decimal(19,4)")).alias("payment_amount"),
         pickColumn(payments, ["exchange_rate_to_usd", "transaction_fx_rate"], "decimal(19,8)").alias("_bank_fx_rate"),
-        money(F.coalesce(pickColumn(payments, ["bank_charge_amount"], "decimal(19,4)"), F.lit(0))).alias(
+        money(F.coalesce(pickColumn(payments, ["bank_charge_amount", "bank_charge_amount_local"], "decimal(19,4)"), F.lit(0))).alias(
             "bank_charge_amount"
         ),
         money(F.coalesce(pickColumn(payments, ["withholding_tax_amount"], "decimal(19,4)"), F.lit(0))).alias(
@@ -79,7 +79,7 @@ def _allocations(allocations: DataFrame) -> DataFrame:
         pickColumn(allocations, ["target_type_code"], "string").alias("target_type_code"),
         pickColumn(allocations, ["sale_business_key", "invoice_business_key"], "string").alias("sale_business_key"),
         pickColumn(allocations, ["credit_note_business_key"], "string").alias("credit_note_business_key"),
-        money(F.col("allocated_amount")).alias("allocated_amount"),
+        money(pickColumn(allocations, ["allocated_amount", "allocated_amount_local"], "decimal(19,4)")).alias("allocated_amount"),
         money(
             F.coalesce(
                 pickColumn(allocations, ["settlement_discount_amount", "settlement_discount"], "decimal(19,4)"),

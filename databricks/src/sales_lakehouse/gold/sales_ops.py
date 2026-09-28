@@ -34,9 +34,11 @@ from sales_lakehouse.gold import partner_feed
 from sales_lakehouse.gold.inputs import (
     LEGACY_REGION_CURRENCY,
     NA_FISCAL_CALENDAR_CODE,
+    conformDimSalesperson,
     monthlyAverageFxRate,
     naFiscalPeriodLabel,
     notReversal,
+    readDimCustomer,
     readOrEmpty,
 )
 
@@ -398,7 +400,9 @@ def buildCommission(
     matched = (
         matched.withColumn("commission_rate_pct", _planRate(F.col("attainment_pct")).cast("decimal(5,2)"))
         .withColumn("split_factor", F.coalesce(split, F.lit(1.0)).cast("decimal(9,4)"))
-        .withColumn("raw_commission_amount", F.round(F.col("plan_currency_amount") * F.col("commission_rate_pct") / 100 * F.col("split_factor"), 2))
+        .withColumn(
+            "raw_commission_amount", F.round(F.col("plan_currency_amount") * F.col("commission_rate_pct") / 100 * F.col("split_factor"), 2)
+        )
     )
     if region == "EU":
         # LEGACY QUIRK (EU statutory cap): applied per LINE, not per month or per rep:
@@ -487,10 +491,10 @@ def run(spark: SparkSession, cfg: PipelineConfig, outDir: str | None = None, asO
     payment = readTable(spark, cfg, "gold", "fact_payment")
     creditNote = readTable(spark, cfg, "gold", "fact_credit_note")
     salesMargin = readTable(spark, cfg, "gold", "fact_sales_margin")
-    salesperson = readTable(spark, cfg, "silver", "dim_salesperson")
+    salesperson = conformDimSalesperson(readTable(spark, cfg, "silver", "dim_salesperson"))
     territory = readTable(spark, cfg, "silver", "dim_sales_territory")
     channel = readTable(spark, cfg, "silver", "dim_sales_channel")
-    customer = readTable(spark, cfg, "silver", "dim_customer")
+    customer = readDimCustomer(spark, cfg)
     fiscalCalendar = readTable(spark, cfg, "silver", "dim_fiscal_calendar")
     fxRate = readTable(spark, cfg, "silver", "ref_fx_rate")
     quota = readTable(spark, cfg, "bronze", "sqlserver_sales_sales_quotas")
@@ -499,7 +503,9 @@ def run(spark: SparkSession, cfg: PipelineConfig, outDir: str | None = None, asO
     statutoryCap = readOrEmpty(spark, cfg, "silver", "ref_commission_statutory_cap", STATUTORY_CAP_SCHEMA)
 
     attainment, unresolved = buildQuotaAttainment(quota, salesperson, territory, sale, creditNote, order, cfg.batchId)
-    quarantine(spark, cfg, unresolved, "QUOTA_UNRESOLVED_KEY", "sqlserver_sales_sales_quotas", F.lit(True), REJECT_REASONS["QUOTA_UNRESOLVED_KEY"])
+    quarantine(
+        spark, cfg, unresolved, "QUOTA_UNRESOLVED_KEY", "sqlserver_sales_sales_quotas", F.lit(True), REJECT_REASONS["QUOTA_UNRESOLVED_KEY"]
+    )
     overwriteTable(attainment, cfg.fqn("gold", AGG_QUOTA_ATTAINMENT), ["region_code"])
     attainment = spark.table(cfg.fqn("gold", AGG_QUOTA_ATTAINMENT))
 

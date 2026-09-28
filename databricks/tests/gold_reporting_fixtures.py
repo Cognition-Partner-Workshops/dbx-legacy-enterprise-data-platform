@@ -221,13 +221,15 @@ def seedGoldInputs(spark: SparkSession, cfg: PipelineConfig) -> None:
     write(
         "silver", "ref_fx_rate",
         [
-            ("EUR", "USD", "AVERAGE", D(2024, 2, 1), dec(1.10)),
-            ("EUR", "USD", "AVERAGE", D(2024, 3, 1), dec(1.08)),
-            ("AUD", "USD", "AVERAGE", D(2024, 2, 1), dec(0.65)),
-            ("GBP", "EUR", "AVERAGE", D(2024, 2, 1), dec(1.15)),
-            ("GBP", "EUR", "DAILY", D(2024, 2, 22), dec(1.17)),
+            ("EUR", D(2024, 2, 1), dec(1.10), "ECB", D(2024, 2, 1), "ECB", "EU"),
+            ("EUR", D(2024, 3, 1), dec(1.08), "ECB", D(2024, 3, 1), "ECB", "EU"),
+            ("AUD", D(2024, 2, 1), dec(0.65), "BANK", D(2024, 2, 1), "WESTPAC", "APAC"),
+            # GBP Feb month average 1.265 -> GBP->EUR cross rate 1.265 / 1.10 = 1.15
+            ("GBP", D(2024, 2, 1), dec(1.26), "ECB", D(2024, 2, 1), "ECB", "EU"),
+            ("GBP", D(2024, 2, 22), dec(1.27), "ECB", D(2024, 2, 22), "ECB", "EU"),
         ],
-        "from_currency_code STRING, to_currency_code STRING, rate_type_code STRING, effective_date DATE, conversion_rate DECIMAL(18,6)",
+        "currency_code STRING, rate_date DATE, rate_to_usd DECIMAL(19,8), rate_type_code STRING, effective_date DATE, "
+        "rate_source_code STRING, region_code STRING",
     )
     write("silver", "ref_sales_budget", [(1, D(2024, 2, 1), dec(3000))], "sales_territory_key INT, budget_month DATE, budget_amount_reporting DECIMAL(18,2)")
     write("silver", "ref_commission_statutory_cap", [("EU-NET", dec(300))], sales_ops.STATUTORY_CAP_SCHEMA)

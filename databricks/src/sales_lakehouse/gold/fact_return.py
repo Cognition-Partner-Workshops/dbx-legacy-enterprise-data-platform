@@ -24,8 +24,19 @@ from sales_lakehouse.gold.fact_support import (
     surrogateKey,
     withLoadMetadata,
 )
+from sales_lakehouse.gold.inputs import readOrEmpty
 
 TABLE = "fact_return"
+SOURCE_TABLE = "return"
+# silver.return contract (no silver producer ships it yet; an absent table loads as empty)
+SILVER_RETURN_SCHEMA = (
+    "return_line_business_key string, rma_number string, sale_line_business_key string, customer_business_key string, "
+    "stock_item_business_key string, return_reason_code string, return_reason_group_code string, "
+    "returned_quantity decimal(18,4), restocked_quantity decimal(18,4), scrapped_quantity decimal(18,4), "
+    "inspection_result_code string, restocking_fee_amount decimal(19,4), refund_amount decimal(19,4), "
+    "transaction_currency_code string, returned_date date, processed_date date, region_code string, "
+    "batch_id bigint, loaded_at_utc timestamp"
+)
 KEY_COLS = ["return_line_business_key"]
 MILESTONES = ["return_date_key", "received_date_key", "credit_issued_date_key"]
 COST_MISSING = "COST_MISSING"
@@ -281,7 +292,7 @@ def run(spark: SparkSession, cfg: PipelineConfig) -> None:
     df = buildFactReturn(
         spark,
         cfg,
-        returns=spark.table(cfg.fqn("silver", "return")),
+        returns=readOrEmpty(spark, cfg, "silver", SOURCE_TABLE, SILVER_RETURN_SCHEMA),
         factSale=readOptional(spark, cfg, "gold", "fact_sale"),
         creditNotes=readOptional(spark, cfg, "silver", "credit_note"),
         dimCustomer=readOptional(spark, cfg, "silver", "dim_customer"),

@@ -19,6 +19,7 @@ from pyspark.sql import functions as F
 
 from sales_lakehouse.common.config import PipelineConfig
 from sales_lakehouse.common.tables import tableExists
+from sales_lakehouse.silver.business_keys import sourceSystemKey
 from sales_lakehouse.silver.rules.fiscal import na445Parts
 
 # LEGACY QUIRK: cross-region period bucketing uses the NA 4-4-5 calendar
@@ -31,7 +32,9 @@ LEGACY_FISCAL_CALENDAR_LABEL: dict[str, str] = {"NA": "CY12", "EU": "APR12", "AP
 # LEGACY QUIRK: usp_RefreshAggregateRegionalSales hard-codes the local currency per region.
 LEGACY_REGION_CURRENCY: dict[str, str] = {"NA": "USD", "EU": "EUR", "APAC": "AUD"}
 
-FX_RATE_TYPE_AVERAGE = "AVERAGE"
+# silver.ref_fx_rate quotes rate_to_usd; cross rates are derived through this pivot.
+FX_PIVOT_CURRENCY = "USD"
+FX_RATE_TYPE = "decimal(19,8)"
 FX_RATE_TYPE_DAILY = "DAILY"
 
 FACT_RETURN_SCHEMA = (
@@ -72,6 +75,86 @@ def readOrEmpty(
     if tableExists(spark, fqn):
         return spark.table(fqn)
     return spark.createDataFrame([], schemaDdl)
+
+
+def _firstOf(df: DataFrame, candidates: tuple[str, ...], castTo: str) -> Column:
+    for c in candidates:
+        if c in df.columns:
+            return F.col(c).cast(castTo)
+    return F.lit(None).cast(castTo)
+
+
+def conformDimCustomer(customer: DataFrame, territory: DataFrame | None = None) -> DataFrame:
+    """Expose ``silver.dim_customer`` (workstream 3) under the legacy ``Dimension.Customer`` column
+    names the aggregates / sales-ops / partner-feed readers were written against.
+
+    ``is_current_row`` <- ``is_current``; ``customer`` <- ``customer_name``; ``category`` <-
+    ``customer_category_name``; ``source_customer_reference`` <- ``customer_business_key``;
+    ``sales_territory_key`` is resolved through ``dim_sales_territory.wwi_sales_territory_id`` when
+    only ``sales_territory_id`` is present. Columns silver does not carry (``erasure_requested_on``,
+    ``is_house_account``, ``customer_segment_key``, ``account_manager_employee_key``) are NULL.
+    """
+    out = customer
+    if "sales_territory_key" not in out.columns and territory is not None and "sales_territory_id" in out.columns:
+        terr = territory.select(
+            F.col("wwi_sales_territory_id").cast("bigint").alias("_terr_id"),
+            F.col("sales_territory_key").alias("_terr_key"),
+            F.col("region_code").alias("_terr_region"),
+        ).dropDuplicates(["_terr_id"])
+        out = out.join(terr, F.col("sales_territory_id").cast("bigint") == F.col("_terr_id"), "left")
+        out = out.withColumn("sales_territory_key", F.col("_terr_key"))
+        if "region_code" not in out.columns:
+            out = out.withColumn("region_code", F.col("_terr_region"))
+        out = out.drop("_terr_id", "_terr_key", "_terr_region")
+    mapping: dict[str, tuple[tuple[str, ...], str]] = {
+        "is_current_row": (("is_current_row", "is_current"), "boolean"),
+        "customer": (("customer", "customer_name"), "string"),
+        "category": (("category", "customer_category_name"), "string"),
+        "source_customer_reference": (("source_customer_reference", "customer_business_key", "wwi_customer_id"), "string"),
+        "region_code": (("region_code",), "string"),
+        "sales_territory_key": (("sales_territory_key",), "bigint"),
+        "customer_segment_key": (("customer_segment_key",), "bigint"),
+        "account_manager_employee_key": (("account_manager_employee_key",), "bigint"),
+        "primary_contact_email": (("primary_contact_email",), "string"),
+        "credit_limit_amount": (("credit_limit_amount",), "decimal(19,4)"),
+        "marketing_consent_flag": (("marketing_consent_flag",), "boolean"),
+        "erasure_requested_on": (("erasure_requested_on",), "date"),
+        "is_house_account": (("is_house_account",), "boolean"),
+    }
+    for target, (candidates, castTo) in mapping.items():
+        if target not in out.columns:
+            out = out.withColumn(target, _firstOf(out, candidates, castTo))
+    return out
+
+
+def readDimCustomer(spark: SparkSession, cfg: PipelineConfig) -> DataFrame:
+    """``silver.dim_customer`` conformed with :func:`conformDimCustomer`."""
+    customer = spark.table(cfg.fqn("silver", "dim_customer"))
+    terrFqn = cfg.fqn("silver", "dim_sales_territory")
+    territory = spark.table(terrFqn) if tableExists(spark, terrFqn) else None
+    return conformDimCustomer(customer, territory)
+
+
+def conformDimSalesperson(salesperson: DataFrame) -> DataFrame:
+    """Expose ``silver.dim_salesperson`` (workstream 3) under the names the gold readers use.
+
+    ``salesperson_business_key`` <- ``sourceSystemKey(source_system_code, wwi_employee_id)`` (the same
+    ``WWI_OLTP|<PersonID>`` key silver transactions stamp on order / sale rows);
+    ``wwi_person_id`` <- ``wwi_employee_id``.
+    """
+    out = salesperson
+    if "salesperson_business_key" not in out.columns and "wwi_employee_id" in out.columns:
+        system = F.col("source_system_code") if "source_system_code" in out.columns else F.lit("WWI_OLTP")
+        out = out.withColumn("salesperson_business_key", sourceSystemKey(system, F.col("wwi_employee_id")))
+    if "wwi_person_id" not in out.columns:
+        out = out.withColumn("wwi_person_id", _firstOf(out, ("wwi_employee_id",), "int"))
+    return out
+
+
+def readDimSalesperson(spark: SparkSession, cfg: PipelineConfig) -> DataFrame | None:
+    """``silver.dim_salesperson`` conformed with :func:`conformDimSalesperson`; ``None`` when absent."""
+    fqn = cfg.fqn("silver", "dim_salesperson")
+    return conformDimSalesperson(spark.table(fqn)) if tableExists(spark, fqn) else None
 
 
 def naFiscalCalendar(fiscalCalendar: DataFrame) -> DataFrame:
@@ -116,17 +199,35 @@ def naFiscalPeriodLabel(fiscalYear: Column, fiscalPeriod: Column) -> Column:
 def monthlyAverageFxRate(fxRate: DataFrame, toCurrency: str) -> DataFrame:
     """Month-average rate per source currency into ``toCurrency``.
 
-    Returns (fx_from_currency_code, fx_rate_month, monthly_average_rate) with the
-    latest AVERAGE-type rate whose effective_date falls inside the month
-    (legacy stg.FxRateMonthly keyed on the month).
+    ``silver.ref_fx_rate`` quotes every currency against the pivot (``rate_to_usd``
+    per ``rate_date``); the legacy stg.FxRateMonthly month rate is the mean of the
+    month's daily quotes, cross-rated through the pivot when ``toCurrency`` is not
+    the pivot. Returns (fx_from_currency_code, fx_rate_month, monthly_average_rate).
     """
-    avg = fxRate.filter(
-        (F.col("rate_type_code") == FX_RATE_TYPE_AVERAGE) & (F.col("to_currency_code") == toCurrency)
-    ).withColumn("fx_rate_month", F.trunc(F.col("effective_date"), "month"))
-    latest = avg.groupBy("from_currency_code", "fx_rate_month").agg(
-        F.max_by("conversion_rate", "effective_date").alias("monthly_average_rate")
+    monthly = (
+        fxRate.withColumn("fx_rate_month", F.trunc(F.col("rate_date"), "month"))
+        .groupBy(F.upper(F.col("currency_code")).alias("fx_from_currency_code"), "fx_rate_month")
+        .agg(F.avg(F.col("rate_to_usd").cast(FX_RATE_TYPE)).alias("_to_pivot"))
     )
-    return latest.withColumnRenamed("from_currency_code", "fx_from_currency_code")
+    if toCurrency.upper() == FX_PIVOT_CURRENCY:
+        return monthly.withColumn("monthly_average_rate", F.col("_to_pivot").cast(FX_RATE_TYPE)).drop("_to_pivot")
+    target = monthly.filter(F.col("fx_from_currency_code") == toCurrency.upper()).select(
+        "fx_rate_month", F.col("_to_pivot").alias("_target_to_pivot")
+    )
+    return (
+        monthly.join(target, "fx_rate_month", "inner")
+        .withColumn("monthly_average_rate", (F.col("_to_pivot") / F.col("_target_to_pivot")).cast(FX_RATE_TYPE))
+        .drop("_to_pivot", "_target_to_pivot")
+    )
+
+
+def latestMonthlyFxRate(fxRate: DataFrame, toCurrency: str) -> DataFrame:
+    """Most recent month-average rate per source currency (fx_from_currency_code, latest_average_rate)."""
+    return (
+        monthlyAverageFxRate(fxRate, toCurrency)
+        .groupBy("fx_from_currency_code")
+        .agg(F.max_by("monthly_average_rate", "fx_rate_month").alias("latest_average_rate"))
+    )
 
 
 def safePercent(numerator: Column, denominator: Column, scale: int = 2) -> Column:

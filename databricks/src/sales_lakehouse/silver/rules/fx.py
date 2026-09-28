@@ -57,7 +57,9 @@ APAC_FALLBACK_DAYS = 7  # PKG_FX.backoff_days('CORP')
 
 OUTPUT_COLUMNS: tuple[str, ...] = ("fx_rate_to_reporting", "fx_rate_source_code", "fx_rate_effective_date")
 
-_ROW_ID = "_fx_row_id"
+_KEY_CCY = "_fx_key_ccy"
+_KEY_REGION = "_fx_key_region"
+_KEY_ANCHOR = "_fx_key_anchor"
 
 
 def _rateTypePreference(regionCol: Column, rateTypeCol: Column) -> Column:
@@ -103,20 +105,25 @@ def applyFx(
     suffix = f"_{reporting.lower()}"
     derived = [f"{c}{suffix}" for c in amountCols]
     base = df.drop(*[c for c in (*OUTPUT_COLUMNS, *derived) if c in df.columns])
-    base = base.withColumn(_ROW_ID, F.monotonically_increasing_id())
 
     region = F.upper(F.trim(F.col(regionCol).cast(StringType())))
     currency = F.upper(F.trim(F.col(currencyCol).cast(StringType())))
     txnDate = F.col(dateCol).cast("date")
 
-    keys = base.select(
-        F.col(_ROW_ID),
-        currency.alias("_ccy"),
-        region.alias("_region"),
-        txnDate.alias("_txn_date"),
-        _anchorDate(region, txnDate).alias("_anchor"),
-        _lookbackDays(region).alias("_lookback"),
-    ).filter(F.col("_ccy").isNotNull() & (F.col("_ccy") != reporting) & F.col("_anchor").isNotNull())
+    # The rate depends only on (currency, region, anchor date): resolve it once per distinct
+    # key and join back, so the result does not rely on a synthetic row id that a re-evaluated
+    # plan (no caching on serverless) could assign differently.
+    base = (
+        base.withColumn(_KEY_CCY, currency)
+        .withColumn(_KEY_REGION, region)
+        .withColumn(_KEY_ANCHOR, _anchorDate(F.col(_KEY_REGION), txnDate))
+    )
+    keys = (
+        base.select(_KEY_CCY, _KEY_REGION, _KEY_ANCHOR)
+        .filter(F.col(_KEY_CCY).isNotNull() & (F.col(_KEY_CCY) != reporting) & F.col(_KEY_ANCHOR).isNotNull())
+        .distinct()
+        .withColumn("_lookback", _lookbackDays(F.col(_KEY_REGION)))
+    )
 
     rates = spark.table(cfg.fqn("silver", REF_FX_RATE)).select(
         F.upper(F.col("currency_code")).alias("_r_ccy"),
@@ -129,24 +136,38 @@ def applyFx(
     )
     candidates = keys.join(
         rates,
-        (F.col("_ccy") == F.col("_r_ccy"))
-        & (F.col("_r_rate_date") <= F.col("_anchor"))
-        & (F.col("_lookback").isNull() | (F.col("_r_rate_date") >= F.date_sub(F.col("_anchor"), F.col("_lookback")))),
+        (F.col(_KEY_CCY) == F.col("_r_ccy"))
+        & (F.col("_r_rate_date") <= F.col(_KEY_ANCHOR))
+        & (F.col("_lookback").isNull() | (F.col("_r_rate_date") >= F.date_sub(F.col(_KEY_ANCHOR), F.col("_lookback")))),
         "inner",
     )
-    ranking = Window.partitionBy(_ROW_ID).orderBy(
+    ranking = Window.partitionBy(_KEY_CCY, _KEY_REGION, _KEY_ANCHOR).orderBy(
         F.col("_r_rate_date").desc(),
-        F.when(F.col("_r_region") == F.col("_region"), 0).otherwise(1),
-        _rateTypePreference(F.col("_region"), F.col("_r_type")),
+        F.when(F.col("_r_region") == F.col(_KEY_REGION), 0).otherwise(1),
+        _rateTypePreference(F.col(_KEY_REGION), F.col("_r_type")),
         F.col("_r_source"),
     )
     chosen = (
         candidates.withColumn("_rn", F.row_number().over(ranking))
         .filter(F.col("_rn") == 1)
-        .select(_ROW_ID, "_r_rate", "_r_source", "_r_effective_date", "_r_rate_date")
+        .select(
+            F.col(_KEY_CCY).alias("_c_ccy"),
+            F.col(_KEY_REGION).alias("_c_region"),
+            F.col(_KEY_ANCHOR).alias("_c_anchor"),
+            "_r_rate",
+            "_r_source",
+            "_r_effective_date",
+            "_r_rate_date",
+        )
     )
 
-    joined = base.join(chosen, _ROW_ID, "left")
+    joined = base.join(
+        chosen,
+        (F.col(_KEY_CCY) == F.col("_c_ccy"))
+        & F.col(_KEY_REGION).eqNullSafe(F.col("_c_region"))
+        & (F.col(_KEY_ANCHOR) == F.col("_c_anchor")),
+        "left",
+    ).drop("_c_ccy", "_c_region", "_c_anchor")
     sameCurrency = F.coalesce(currency == reporting, F.lit(False))
     # LEGACY QUIRK: a missing rate defaults to 1.0 and is tagged, never NULL
     # and never rejected (usp_LoadFactSale "SET [Fx Rate] = 1.0 ... WHERE [Fx
@@ -172,7 +193,7 @@ def applyFx(
         .withColumn("fx_rate_source_code", sourceOut)
         .withColumn("fx_rate_effective_date", effectiveOut)
     )
-    for col, target in zip(amountCols, derived):
+    for col, target in zip(amountCols, derived, strict=True):
         out = out.withColumn(target, F.round(F.col(col).cast(MONEY) * F.col("fx_rate_to_reporting"), 2).cast(MONEY))
     out = tagDq(out, F.col("fx_rate_source_code") == SOURCE_DEFAULT_1, "WARN", "FX_RATE_DEFAULTED")
-    return out.drop(_ROW_ID, "_r_rate", "_r_source", "_r_effective_date", "_r_rate_date")
+    return out.drop(_KEY_CCY, _KEY_REGION, _KEY_ANCHOR, "_r_rate", "_r_source", "_r_effective_date", "_r_rate_date")

@@ -26,7 +26,7 @@ def test_dedup_survivor_loaded_loser_quarantined(spark, saleCfg):
     assert _row(spark, saleCfg, "INV1-1")["net_amount"] == Decimal("100.0000")
     losers = rejected(spark, saleCfg, "FACT_SALE_DUP")
     assert losers.count() == 1
-    assert '"net_line_amount":99' in losers.collect()[0]["row_json"]
+    assert '"net_line_amount_local":99' in losers.collect()[0]["row_json"]
 
 
 def test_scd2_customer_key_as_of_invoice_date(spark, saleCfg):
@@ -54,7 +54,8 @@ def test_regional_tax_fx_and_fiscal(spark, saleCfg):
     assert apac["tax_amount"] == Decimal("10.0000")  # GST extracted from the inclusive 110
     assert apac["total_excluding_tax"] == Decimal("100.0000")
     assert apac["fx_rate_source_code"] == "DEFAULT_1" and apac["fx_rate_to_reporting"] == Decimal("1.00000000")
-    assert apac["fiscal_period_key"] == -1
+    # silver.rules.fiscal falls back to the APACJUN arithmetic (FN_FISCAL_PERIOD) when the calendar has no APAC rows
+    assert apac["fiscal_period_key"] == 202502
 
 
 def test_merge_is_idempotent(spark, saleCfg):

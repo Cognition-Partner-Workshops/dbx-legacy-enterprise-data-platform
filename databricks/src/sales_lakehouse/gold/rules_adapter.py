@@ -6,202 +6,96 @@ Gold codes against the agreed signatures::
     applyFx(df, spark, cfg, amountCols, currencyCol, dateCol, regionCol)
     resolveFiscalPeriod(df, spark, cfg, dateCol, regionCol)
 
-If the silver rule modules are not on the branch yet, a minimal in-package
-fallback is used (FX lookup on ``ref_fx_rate`` with the legacy 1.0 default,
-calendar lookup on ``dim_fiscal_calendar``, regional tax formulas lifted from
-the SSIS FACT_<region>_Load_Sale derived columns). The integration session
-removes the fallback once workstream 5 lands.
+The silver rule modules are the only implementation of the regional tax / FX /
+fiscal behaviour. This module only translates between the gold fact column
+contract (``tax_amount`` / ``total_excluding_tax`` / ``total_including_tax`` /
+``<amount>_reporting``) and the rule library's (``*_amount_local`` /
+``<amount>_usd``), and derives the legacy Fact.Sale tax descriptors
+(``tax_rate``, ``vat_rate``, ``gst_rate``, ``vat_reverse_charge_flag``,
+``gst_free_flag``, ``tax_regime_code``) from the rule outputs.
 """
 
 from __future__ import annotations
 
-import importlib
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
-from pyspark.sql.window import Window
 
 from sales_lakehouse.common.config import PipelineConfig
-from sales_lakehouse.common.tables import tableExists
+from sales_lakehouse.silver.rules import fiscal, fx, tax
 
-FX_DEFAULT_SOURCE = "DEFAULT_1"
-FX_SAME_CURRENCY_SOURCE = "SAME_CCY"
-FISCAL_CALENDAR_BY_REGION: dict[str, str] = {"NA": "NA445", "EU": "EUCAL", "APAC": "APACJUN"}
+FX_DEFAULT_SOURCE = fx.SOURCE_DEFAULT_1
+FX_SAME_CURRENCY_SOURCE = fx.SOURCE_SAME_CCY
+FISCAL_CALENDAR_BY_REGION: dict[str, str] = dict(fiscal.REGION_CALENDARS)
 
-TaxFn = Callable[..., DataFrame]
-FxFn = Callable[..., DataFrame]
-FiscalFn = Callable[..., DataFrame]
-
-
-def _importRule(module: str, name: str) -> Callable[..., DataFrame] | None:
-    try:
-        mod = importlib.import_module(f"sales_lakehouse.silver.rules.{module}")
-    except ModuleNotFoundError:
-        return None
-    fn = mod.__dict__.get(name)
-    return fn if callable(fn) else None
+MONEY = "decimal(19,4)"
+RATE = "decimal(19,8)"
+_REVERSE_CHARGE_COLUMNS = ("is_reverse_charge", "vat_reverse_charge_flag")
 
 
-def _fallbackApplyTax(
+def _firstPresent(df: DataFrame, candidates: Sequence[str], dataType: str):
+    for name in candidates:
+        if name in df.columns:
+            return F.col(name).cast(dataType)
+    return F.lit(None).cast(dataType)
+
+
+def applyTax(
     df: DataFrame,
     regionCol: str = "region_code",
     netCol: str = "net_amount",
     rateCol: str = "tax_rate_percent",
-    reverseChargeCol: str = "vat_reverse_charge_flag",
+    vatRegCol: str = "vat_registration_number",
 ) -> DataFrame:
-    """Regional tax as specified by the SSIS FACT_{NA,EU,APAC}_Load_Sale expressions."""
-    rate = F.coalesce(F.col(rateCol).cast("decimal(19,8)"), F.lit(0))
-    net = F.col(netCol).cast("decimal(19,4)")
-    reverse = F.col(reverseChargeCol) if reverseChargeCol in df.columns else F.lit(False)
-    region = F.upper(F.col(regionCol))
-    # LEGACY QUIRK: NA sales tax is computed on the discounted line value and added on top.
-    naTax = F.round(net * rate / 100, 4)
-    # LEGACY QUIRK: EU VAT on net; a reverse-charge customer gets 0 VAT applied but keeps the rate.
-    euTax = F.when(reverse == F.lit(True), F.lit(0)).otherwise(F.round(net * rate / 100, 4))
-    # LEGACY QUIRK: APAC prices are GST-inclusive - tax is extracted from the gross, not added.
-    apacTax = F.round(net - net / (1 + rate / 100), 4)
-    out = df.withColumn(
-        "tax_amount",
-        F.when(region == "NA", naTax).when(region == "EU", euTax).when(region == "APAC", apacTax).otherwise(naTax),
-    )
-    out = out.withColumn(
-        "total_excluding_tax",
-        F.when(region == "APAC", net - F.col("tax_amount")).otherwise(net),
-    ).withColumn(
-        "total_including_tax",
-        F.when(region == "APAC", net).otherwise(net + F.col("tax_amount")),
-    )
-    out = out.withColumn(
-        "tax_treatment_code",
-        F.when(region == "NA", F.lit("SALESTAX_ADD"))
-        .when((region == "EU") & (reverse == F.lit(True)), F.lit("VAT_REVERSE_CHARGE"))
-        .when(region == "EU", F.lit("VAT_STANDARD"))
-        .when((region == "APAC") & (rate == 0), F.lit("GST_FREE"))
-        .when(region == "APAC", F.lit("GST_INCLUSIVE"))
-        .otherwise(F.lit("SALESTAX_ADD")),
-    )
-    out = out.withColumn(
-        "tax_regime_code",
-        F.coalesce(
-            F.col("tax_regime_code") if "tax_regime_code" in df.columns else F.lit(None).cast("string"),
-            F.when(region == "EU", F.lit("VAT")).when(region == "APAC", F.lit("GST")).otherwise(F.lit("SALESTAX")),
-        ),
-    )
-    out = out.withColumn("tax_rate", F.col(rateCol).cast("decimal(18,3)"))
-    out = out.withColumn("vat_rate", F.when(region == "EU", F.col("tax_rate")).cast("decimal(18,3)"))
-    out = out.withColumn("gst_rate", F.when(region == "APAC", F.col("tax_rate")).cast("decimal(18,3)"))
-    out = out.withColumn("vat_reverse_charge_flag", (region == "EU") & (reverse == F.lit(True)))
-    out = out.withColumn("gst_free_flag", (region == "APAC") & (rate == 0))
-    return out
+    """Regional tax on the staged line value ``netCol`` (``rateCol`` is a percent).
 
-
-def _fallbackApplyFx(
-    df: DataFrame,
-    spark: SparkSession,
-    cfg: PipelineConfig,
-    amountCols: Sequence[str],
-    currencyCol: str,
-    dateCol: str,
-    regionCol: str,
-) -> DataFrame:
-    """Latest ``ref_fx_rate`` on or before ``dateCol`` for (currency, region);
-    adds ``<amount>_reporting`` for each amount plus ``fx_rate_to_reporting``,
-    ``fx_rate_source_code`` and ``fx_rate_effective_date``."""
-    out = df.withColumn("_rowid", F.monotonically_increasing_id())
-    fxFqn = cfg.fqn("silver", "ref_fx_rate")
-    rateCol = F.lit(None).cast("decimal(19,8)")
-    srcCol = F.lit(None).cast("string")
-    effCol = F.lit(None).cast("date")
-    if tableExists(spark, fxFqn):
-        fx = spark.table(fxFqn)
-        regionMatch = (
-            (F.col("_fx_region").isNull() | (F.col("_fx_region") == F.col(regionCol)))
-            if "region_code" in fx.columns
-            else F.lit(True)
+    NA / EU: tax is added on top of the net. APAC: the staged value is the
+    GST-inclusive price and the tax is backed out of it (``silver.rules.tax``).
+    Adds ``tax_amount``, ``total_excluding_tax``, ``total_including_tax``,
+    ``tax_treatment_code``, ``tax_residual_local`` and the legacy descriptors.
+    """
+    region = F.upper(F.trim(F.col(regionCol)))
+    isApac = region == "APAC"
+    isEu = region == "EU"
+    net = F.col(netCol).cast(MONEY)
+    ratePercent = F.col(rateCol).cast("decimal(18,3)") if rateCol in df.columns else F.lit(None).cast("decimal(18,3)")
+    reverse = F.coalesce(_firstPresent(df, _REVERSE_CHARGE_COLUMNS, "boolean"), F.lit(False))
+    prepared = (
+        df.withColumn("_tax_net", F.when(isApac, F.lit(None).cast(MONEY)).otherwise(net))
+        .withColumn("_tax_gross", F.when(isApac, net).otherwise(F.lit(None).cast(MONEY)))
+        .withColumn("_tax_rate", (ratePercent / F.lit(100)).cast(RATE))
+        .withColumn("_tax_reverse", reverse)
+    )
+    out = tax.applyTax(
+        prepared,
+        regionCol=regionCol,
+        grossCol="_tax_gross",
+        netCol="_tax_net",
+        taxRateCol="_tax_rate",
+        isReverseChargeCol="_tax_reverse",
+        vatRegCol=vatRegCol,
+    )
+    rateOut = F.coalesce(ratePercent, F.lit(0)).cast("decimal(18,3)")
+    existingRegime = F.col("tax_regime_code") if "tax_regime_code" in df.columns else F.lit(None).cast("string")
+    return (
+        out.withColumn("tax_amount", F.col("tax_amount_local"))
+        .withColumn("total_excluding_tax", F.col("net_amount_local"))
+        .withColumn("total_including_tax", F.col("gross_amount_local"))
+        .withColumn("tax_rate", rateOut)
+        .withColumn("vat_rate", F.when(isEu, rateOut).cast("decimal(18,3)"))
+        .withColumn("gst_rate", F.when(isApac, rateOut).cast("decimal(18,3)"))
+        .withColumn("vat_reverse_charge_flag", isEu & F.col("_tax_reverse"))
+        .withColumn("gst_free_flag", isApac & (rateOut == 0))
+        .withColumn(
+            "tax_regime_code",
+            F.coalesce(
+                existingRegime,
+                F.when(isEu, F.lit("VAT")).when(isApac, F.lit("GST")).otherwise(F.lit("SALESTAX")),
+            ),
         )
-        fx = fx.select(
-            F.col("from_currency_code").alias("_fx_from"),
-            F.col("to_currency_code").alias("_fx_to"),
-            (F.col("region_code") if "region_code" in fx.columns else F.lit(None).cast("string")).alias("_fx_region"),
-            F.col("effective_date").cast("date").alias("_fx_date"),
-            F.col("rate").cast("decimal(19,8)").alias("_fx_rate"),
-            F.col("rate_source_code").alias("_fx_source"),
-        ).filter(F.col("_fx_to") == F.lit(cfg.reportingCurrency))
-        cond = (
-            (F.col(currencyCol) == F.col("_fx_from")) & (F.col("_fx_date") <= F.col(dateCol).cast("date")) & regionMatch
-        )
-        w = Window.partitionBy("_rowid").orderBy(F.col("_fx_date").desc(), F.col("_fx_region").desc_nulls_last())
-        out = (
-            out.join(fx, cond, "left")
-            .withColumn("_fx_rn", F.row_number().over(w))
-            .filter(F.col("_fx_rn") == 1)
-            .drop("_fx_rn", "_fx_from", "_fx_to", "_fx_region")
-        )
-        rateCol, srcCol, effCol = F.col("_fx_rate"), F.col("_fx_source"), F.col("_fx_date")
-    sameCcy = F.col(currencyCol) == F.lit(cfg.reportingCurrency)
-    # LEGACY QUIRK: a missing rate is not a rejection - the legacy load defaulted the
-    # rate to 1.0 and carried on; the row is tagged fx_rate_source_code = 'DEFAULT_1'.
-    out = out.withColumn(
-        "fx_rate_to_reporting",
-        F.when(sameCcy, F.lit(1)).otherwise(F.coalesce(rateCol, F.lit(1))).cast("decimal(19,8)"),
+        .drop("_tax_net", "_tax_gross", "_tax_rate", "_tax_reverse")
     )
-    out = out.withColumn(
-        "fx_rate_source_code",
-        F.when(sameCcy, F.lit(FX_SAME_CURRENCY_SOURCE)).otherwise(F.coalesce(srcCol, F.lit(FX_DEFAULT_SOURCE))),
-    )
-    out = out.withColumn(
-        "fx_rate_effective_date", F.when(sameCcy, F.col(dateCol).cast("date")).otherwise(effCol).cast("date")
-    )
-    for c in amountCols:
-        out = out.withColumn(
-            f"{c}_reporting",
-            F.round(F.col(c).cast("decimal(19,4)") * F.col("fx_rate_to_reporting"), 4).cast("decimal(19,4)"),
-        )
-    return out.drop("_rowid", "_fx_rate", "_fx_source", "_fx_date")
-
-
-def _fallbackResolveFiscalPeriod(
-    df: DataFrame, spark: SparkSession, cfg: PipelineConfig, dateCol: str, regionCol: str
-) -> DataFrame:
-    """Regional calendar lookup on ``dim_fiscal_calendar``; adds ``fiscal_calendar_code``,
-    ``fiscal_year``, ``fiscal_period``, ``fiscal_period_key`` (-1 when unresolved)."""
-    mapping = F.create_map(*[F.lit(x) for kv in FISCAL_CALENDAR_BY_REGION.items() for x in kv])
-    out = df.withColumn("fiscal_calendar_code", mapping[F.upper(F.col(regionCol))])
-    calFqn = cfg.fqn("silver", "dim_fiscal_calendar")
-    if tableExists(spark, calFqn):
-        cal = spark.table(calFqn).select(
-            F.col("calendar_code").alias("_cal"),
-            F.col("fiscal_year").cast("int").alias("_fy"),
-            F.col("fiscal_period").cast("int").alias("_fp"),
-            F.col("period_start").cast("date").alias("_ps"),
-            F.col("period_end").cast("date").alias("_pe"),
-        )
-        d = F.col(dateCol).cast("date")
-        cond = (F.col("fiscal_calendar_code") == F.col("_cal")) & (F.col("_ps") <= d) & (d <= F.col("_pe"))
-        out = out.join(cal, cond, "left").drop("_cal", "_ps", "_pe")
-    else:
-        out = out.withColumn("_fy", F.lit(None).cast("int")).withColumn("_fp", F.lit(None).cast("int"))
-    out = out.withColumn("fiscal_year", F.col("_fy").cast("smallint")).withColumn(
-        "fiscal_period", F.col("_fp").cast("smallint")
-    )
-    out = out.withColumn(
-        "fiscal_period_key",
-        F.coalesce(F.col("_fy") * 100 + F.col("_fp"), F.lit(-1)).cast("int"),
-    )
-    return out.drop("_fy", "_fp")
-
-
-_taxRule = _importRule("tax", "applyTax")
-_fxRule = _importRule("fx", "applyFx")
-_fiscalRule = _importRule("fiscal", "resolveFiscalPeriod")
-USING_FALLBACK: dict[str, bool] = {"tax": _taxRule is None, "fx": _fxRule is None, "fiscal": _fiscalRule is None}
-
-
-def applyTax(df: DataFrame, regionCol: str = "region_code") -> DataFrame:
-    if _taxRule is not None:
-        return _taxRule(df, regionCol=regionCol)
-    return _fallbackApplyTax(df, regionCol=regionCol)
 
 
 def applyFx(
@@ -213,14 +107,29 @@ def applyFx(
     dateCol: str,
     regionCol: str,
 ) -> DataFrame:
-    if _fxRule is not None:
-        return _fxRule(df, spark, cfg, amountCols, currencyCol, dateCol, regionCol)
-    return _fallbackApplyFx(df, spark, cfg, amountCols, currencyCol, dateCol, regionCol)
+    """``silver.rules.fx.applyFx`` with each ``<amount>_<reporting ccy>`` exposed as ``<amount>_reporting``."""
+    out = fx.applyFx(
+        df,
+        spark,
+        cfg,
+        amountCols=list(amountCols),
+        currencyCol=currencyCol,
+        dateCol=dateCol,
+        regionCol=regionCol,
+    )
+    suffix = f"_{cfg.reportingCurrency.lower()}"
+    for c in amountCols:
+        out = out.withColumnRenamed(f"{c}{suffix}", f"{c}_reporting")
+    return out
 
 
 def resolveFiscalPeriod(
     df: DataFrame, spark: SparkSession, cfg: PipelineConfig, dateCol: str, regionCol: str
 ) -> DataFrame:
-    if _fiscalRule is not None:
-        return _fiscalRule(df, spark, cfg, dateCol, regionCol)
-    return _fallbackResolveFiscalPeriod(df, spark, cfg, dateCol, regionCol)
+    """``silver.rules.fiscal.resolveFiscalPeriod``; an unresolved period is the ``-1`` unknown member."""
+    out = fiscal.resolveFiscalPeriod(df, spark, cfg, dateCol=dateCol, regionCol=regionCol)
+    return (
+        out.withColumn("fiscal_year", F.col("fiscal_year").cast("smallint"))
+        .withColumn("fiscal_period", F.col("fiscal_period").cast("smallint"))
+        .withColumn("fiscal_period_key", F.coalesce(F.col("fiscal_period_key"), F.lit(-1)).cast("int"))
+    )

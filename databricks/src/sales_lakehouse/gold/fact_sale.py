@@ -24,10 +24,12 @@ from sales_lakehouse.gold.fact_support import (
     mergeOnKeys,
     money,
     optionalColumn,
+    pickColumn,
     readOptional,
     surrogateKey,
     withLoadMetadata,
 )
+from sales_lakehouse.gold.inputs import readDimSalesperson
 
 TABLE = "fact_sale"
 KEY_COLS = ["sale_line_business_key"]
@@ -39,7 +41,7 @@ def _sourceLines(lines: DataFrame, heads: DataFrame, orders: DataFrame | None) -
         F.col("sale_business_key").alias("_h_sale_business_key"),
         F.col("source_invoice_id").cast("int").alias("wwi_invoice_id"),
         F.col("order_business_key").alias("order_number"),
-        F.col("customer_business_key"),
+        F.col("customer_business_key").alias("_h_customer_business_key"),
         F.coalesce(F.col("bill_to_customer_business_key"), F.col("customer_business_key")).alias(
             "bill_to_customer_business_key"
         ),
@@ -49,15 +51,22 @@ def _sourceLines(lines: DataFrame, heads: DataFrame, orders: DataFrame | None) -
         optionalColumn(heads, "is_credit_note", "boolean").alias("_is_credit_note"),
         optionalColumn(heads, "total_dry_items", "int").alias("total_dry_items"),
         optionalColumn(heads, "total_chiller_items", "int").alias("total_chiller_items"),
-        F.col("transaction_currency_code").alias("_h_currency"),
+        pickColumn(heads, ["transaction_currency_code", "currency_code"], "string").alias("_h_currency"),
         F.col("region_code").alias("_h_region"),
     ).dropDuplicates(["_h_sale_business_key"])
     df = lines.join(h, lines["sale_business_key"] == h["_h_sale_business_key"], "left").drop("_h_sale_business_key")
     df = (
-        df.withColumn("invoice_date", F.coalesce(F.col("invoice_date"), F.col("_h_invoice_date")).cast("date"))
+        df.withColumn(
+            "customer_business_key",
+            F.coalesce(optionalColumn(df, "customer_business_key", "string"), F.col("_h_customer_business_key")),
+        )
+        .withColumn("invoice_date", F.coalesce(F.col("invoice_date"), F.col("_h_invoice_date")).cast("date"))
         .withColumn("region_code", F.upper(F.coalesce(F.col("region_code"), F.col("_h_region"))))
-        .withColumn("transaction_currency_code", F.coalesce(F.col("transaction_currency_code"), F.col("_h_currency")))
-        .drop("_h_invoice_date", "_h_region", "_h_currency")
+        .withColumn(
+            "transaction_currency_code",
+            F.coalesce(pickColumn(df, ["transaction_currency_code", "currency_code"], "string"), F.col("_h_currency")),
+        )
+        .drop("_h_invoice_date", "_h_region", "_h_currency", "_h_customer_business_key")
     )
     if orders is not None:
         o = orders.select(
@@ -135,8 +144,8 @@ def buildFactSale(
         df.withColumnRenamed("batch_id", "source_batch_id")
         .withColumnRenamed("loaded_at_utc", "source_loaded_at_utc")
         .withColumn("quantity", F.col("quantity").cast("decimal(18,4)"))
-        .withColumn("unit_price", F.col("unit_price_amount").cast("decimal(19,4)"))
-        .withColumn("net_amount", money(F.col("net_line_amount")))
+        .withColumn("unit_price", pickColumn(df, ["unit_price_amount", "unit_price_amount_local"], "decimal(19,4)"))
+        .withColumn("net_amount", money(pickColumn(df, ["net_line_amount", "net_line_amount_local"], "decimal(19,4)")))
         .withColumn("gross_amount", money(F.col("quantity") * F.col("unit_price")))
         .withColumn("line_discount_amount", money(F.col("gross_amount") - F.col("net_amount")))
     )
@@ -159,7 +168,7 @@ def buildFactSale(
     df = rules_adapter.resolveFiscalPeriod(df, spark, cfg, dateCol="invoice_date", regionCol="region_code")
 
     # Profit / cost: silver carries the staged line profit (legacy [Profit]); cost of sale is net - profit.
-    df = df.withColumn("profit", optionalColumn(df, "line_profit_amount", "decimal(19,4)"))
+    df = df.withColumn("profit", pickColumn(df, ["line_profit_amount", "line_profit_amount_local"], "decimal(19,4)"))
     df = df.withColumn("cost_of_sale_amount", money(F.col("net_amount") - F.col("profit")))
     df = df.withColumn("gross_margin_amount", F.col("profit"))
 
@@ -245,7 +254,7 @@ def buildFactSale(
         F.col("stock_item_business_key"),
         optionalColumn(df, "product_business_key", "string").alias("product_business_key"),
         F.col("salesperson_business_key"),
-        F.col("promotion_business_key"),
+        optionalColumn(df, "promotion_business_key", "string").alias("promotion_business_key"),
         F.col("line_description").alias("description"),
         F.lit(None).cast("string").alias("package"),
         F.col("quantity"),
@@ -273,6 +282,7 @@ def buildFactSale(
         F.col("fiscal_period_key"),
         F.col("tax_regime_code"),
         F.col("tax_treatment_code"),
+        F.col("tax_residual_local"),
         F.col("vat_rate"),
         F.col("vat_reverse_charge_flag"),
         F.lit(None).cast("string").alias("customer_tax_registration"),
@@ -301,7 +311,7 @@ def run(spark: SparkSession, cfg: PipelineConfig, regionCodes: Sequence[str] | N
         heads=spark.table(cfg.fqn("silver", "sale")),
         orders=readOptional(spark, cfg, "silver", "order"),
         dimCustomer=readOptional(spark, cfg, "silver", "dim_customer"),
-        dimSalesperson=readOptional(spark, cfg, "silver", "dim_salesperson"),
+        dimSalesperson=readDimSalesperson(spark, cfg),
         dimSalesChannel=readOptional(spark, cfg, "silver", "dim_sales_channel"),
         dimSalesTerritory=readOptional(spark, cfg, "silver", "dim_sales_territory"),
         dimStockItem=readOptional(spark, cfg, "silver", "dim_stock_item"),

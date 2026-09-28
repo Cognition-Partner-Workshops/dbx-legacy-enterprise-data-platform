@@ -40,6 +40,7 @@ from sales_lakehouse.gold.inputs import (
     monthIndex,
     monthlyAverageFxRate,
     notReversal,
+    readDimCustomer,
     readOrEmpty,
     safeDivide,
     safePercent,
@@ -635,7 +636,9 @@ def buildProductPerformance(sale: DataFrame, ret: DataFrame, stockItem: DataFram
         safeDivide(F.sum("net_amount"), F.sum("quantity_base_uom"), 4).alias("average_selling_price"),
         safeDivide(F.sum("cost_of_sale_amount"), F.sum("quantity_base_uom"), 4).alias("average_unit_cost"),
         F.countDistinct("customer_key").alias("distinct_customer_count"),
-        F.max(F.when(F.col("item_valid_from") > F.add_months(F.col("calendar_month"), -6), True).otherwise(False)).alias("new_product_flag"),
+        F.max(F.when(F.col("item_valid_from") > F.add_months(F.col("calendar_month"), -6), True).otherwise(False)).alias(
+            "new_product_flag"
+        ),
         F.max(F.coalesce(F.col("item_discontinued"), F.lit(False))).alias("discontinued_flag"),
     )
     # LEGACY QUIRK: units returned are looked up per item x month across all regions.
@@ -650,9 +653,14 @@ def buildProductPerformance(sale: DataFrame, ret: DataFrame, stockItem: DataFram
     revRank = catWindow.orderBy(F.col("net_revenue_reporting").desc(), F.col("stock_item_key"))
     grp = (
         grp.withColumn("rank_in_category_by_revenue", F.row_number().over(revRank))
-        .withColumn("rank_in_category_by_margin", F.row_number().over(catWindow.orderBy(F.col("gross_margin_reporting").desc(), F.col("stock_item_key"))))
+        .withColumn(
+            "rank_in_category_by_margin",
+            F.row_number().over(catWindow.orderBy(F.col("gross_margin_reporting").desc(), F.col("stock_item_key"))),
+        )
         .withColumn("category_revenue", F.sum("net_revenue_reporting").over(catWindow))
-        .withColumn("cumulative_revenue", F.sum("net_revenue_reporting").over(revRank.rowsBetween(Window.unboundedPreceding, Window.currentRow)))
+        .withColumn(
+            "cumulative_revenue", F.sum("net_revenue_reporting").over(revRank.rowsBetween(Window.unboundedPreceding, Window.currentRow))
+        )
     )
     grp = grp.withColumn(
         "abc_class",
@@ -665,7 +673,10 @@ def buildProductPerformance(sale: DataFrame, ret: DataFrame, stockItem: DataFram
     itemWindow = Window.partitionBy("stock_item_key", "region_code").orderBy("month_idx")
     trailing = itemWindow.rangeBetween(-11, 0)
     grp = (
-        grp.withColumn("prior_month_abc_class", F.when(F.lag("month_idx").over(itemWindow) == F.col("month_idx") - 1, F.lag("abc_class").over(itemWindow)))
+        grp.withColumn(
+            "prior_month_abc_class",
+            F.when(F.lag("month_idx").over(itemWindow) == F.col("month_idx") - 1, F.lag("abc_class").over(itemWindow)),
+        )
         .withColumn("mean_units", F.avg("units_sold_base_uom").over(trailing))
         .withColumn("std_units", F.stddev_samp("units_sold_base_uom").over(trailing))
     )
@@ -728,7 +739,9 @@ def buildMonthlyMarginAnalysis(salesMargin: DataFrame, fiscalCalendar: DataFrame
         F.sum("gross_margin_reporting").alias("gross_margin_reporting"),
         F.sum(F.col("net_amount_reporting") - stdCostRep).alias("standard_margin_reporting"),
         F.sum(
-            F.col("gross_margin_reporting") - F.coalesce(F.col("freight_cost_amount"), F.lit(0)) + F.coalesce(F.col("rebate_accrual_amount"), F.lit(0))
+            F.col("gross_margin_reporting")
+            - F.coalesce(F.col("freight_cost_amount"), F.lit(0))
+            + F.coalesce(F.col("rebate_accrual_amount"), F.lit(0))
         ).alias("contribution_margin_reporting"),
         F.sum(F.when(F.col("gross_margin_reporting") < 0, 1).otherwise(0)).alias("negative_margin_line_count"),
     )
@@ -788,7 +801,7 @@ def run(spark: SparkSession, cfg: PipelineConfig, asOfDate: dt.date | None = Non
     creditNote = readTable(spark, cfg, "gold", "fact_credit_note")
     salesMargin = readTable(spark, cfg, "gold", "fact_sales_margin")
     ret = readOrEmpty(spark, cfg, "gold", "fact_return", FACT_RETURN_SCHEMA)
-    customer = readTable(spark, cfg, "silver", "dim_customer")
+    customer = readDimCustomer(spark, cfg)
     fiscalCalendar = readTable(spark, cfg, "silver", "dim_fiscal_calendar")
     fxRate = readTable(spark, cfg, "silver", "ref_fx_rate")
     stockItem = readOrEmpty(spark, cfg, "silver", "dim_stock_item", DIM_STOCK_ITEM_SCHEMA)
@@ -819,4 +832,6 @@ def run(spark: SparkSession, cfg: PipelineConfig, asOfDate: dt.date | None = Non
         cfg.fqn("gold", AGG_CUSTOMER_ROLLING_12_MONTH),
     )
     overwriteTable(buildProductPerformance(sale, ret, stockItem, cfg.batchId), cfg.fqn("gold", AGG_PRODUCT_PERFORMANCE), ["region_code"])
-    overwriteTable(buildMonthlyMarginAnalysis(salesMargin, fiscalCalendar, cfg.batchId), cfg.fqn("gold", AGG_MONTHLY_MARGIN_ANALYSIS), ["region_code"])
+    overwriteTable(
+        buildMonthlyMarginAnalysis(salesMargin, fiscalCalendar, cfg.batchId), cfg.fqn("gold", AGG_MONTHLY_MARGIN_ANALYSIS), ["region_code"]
+    )

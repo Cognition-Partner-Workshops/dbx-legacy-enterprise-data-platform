@@ -160,7 +160,7 @@ def buildFactOrderFulfilment(
         if saleLines is not None:
             sl = saleLines.groupBy("sale_business_key").agg(
                 F.sum("quantity").cast("decimal(18,4)").alias("_inv_qty"),
-                F.sum(pickColumn(saleLines, ["net_line_amount_usd", "net_line_amount"], "decimal(19,4)"))
+                F.sum(pickColumn(saleLines, ["net_line_amount_usd", "net_line_amount_local", "net_line_amount"], "decimal(19,4)"))
                 .cast("decimal(19,4)")
                 .alias("_inv_value"),
             )

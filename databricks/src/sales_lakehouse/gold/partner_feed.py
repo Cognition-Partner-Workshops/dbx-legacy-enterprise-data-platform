@@ -19,11 +19,13 @@ from pyspark.sql import functions as F
 
 from sales_lakehouse.common.config import PipelineConfig
 from sales_lakehouse.common.tables import readTable
+from sales_lakehouse.gold.fact_support import pickColumn
 from sales_lakehouse.gold.inputs import (
     DIM_STOCK_ITEM_SCHEMA,
-    FX_RATE_TYPE_AVERAGE,
     LEGACY_REGION_CURRENCY,
+    latestMonthlyFxRate,
     notReversal,
+    readDimCustomer,
     readOrEmpty,
 )
 
@@ -67,16 +69,15 @@ def buildPartnerFeed(
     s = notReversal(sale).filter((F.col("region_code") == region) & (F.col("invoice_date_key") >= F.lit(cutoff)))
     partner = channel.select(
         "sales_channel_key",
-        F.coalesce(F.col("partner_name"), F.col("sales_channel_code"), F.lit("DIRECT")).alias("PartnerCode"),
+        F.coalesce(
+            pickColumn(channel, ["partner_name", "partner_identifier"], "string"), F.col("sales_channel_code"), F.lit("DIRECT")
+        ).alias("PartnerCode"),
     )
     items = stockItem.select("stock_item_key", F.col("wwi_stock_item_id").cast("string").alias("item_code"))
-    # LEGACY QUIRK: partner restatement uses the AVERAGE rate table; a missing rate
+    # LEGACY QUIRK: partner restatement uses the latest month-average rate; a missing rate
     # silently falls back to 1.0 (amount passes through unconverted).
-    fx = (
-        fxRate.filter((F.col("rate_type_code") == FX_RATE_TYPE_AVERAGE) & (F.col("to_currency_code") == settlementCurrency))
-        .groupBy("from_currency_code")
-        .agg(F.max_by("conversion_rate", "effective_date").alias("settlement_rate"))
-        .withColumnRenamed("from_currency_code", "transaction_currency_code")
+    fx = latestMonthlyFxRate(fxRate, settlementCurrency).select(
+        F.col("fx_from_currency_code").alias("transaction_currency_code"), F.col("latest_average_rate").alias("settlement_rate")
     )
     rows = (
         s.join(_shareConsent(customer), "customer_key", "inner")
@@ -155,7 +156,7 @@ def exportPartnerFeed(
 ) -> tuple[str, str]:
     asOf = asOfDate or dt.date.today()
     sale = readTable(spark, cfg, "gold", "fact_sale")
-    customer = readTable(spark, cfg, "silver", "dim_customer")
+    customer = readDimCustomer(spark, cfg)
     channel = readTable(spark, cfg, "silver", "dim_sales_channel")
     fxRate = readTable(spark, cfg, "silver", "ref_fx_rate")
     stockItem = readOrEmpty(spark, cfg, "silver", "dim_stock_item", DIM_STOCK_ITEM_SCHEMA)
