@@ -316,7 +316,7 @@ def test_mdm_xref_edge_cases(data: Data) -> None:
 def test_eu_consent_and_partner_feed(data: Data) -> None:
     customers = byId(data.sql("Sales", "Customers"), "CustomerID")
     keys = {str(k["CustomerID"]) for k in data.keys("EU_CONSENT_N")}
-    assert keys == {c for c, r in customers.items() if r["RegionCode"] == "EU" and r["MarketingConsentFlag"] == "N"}
+    assert keys == {c for c, r in customers.items() if r["RegionCode"] == "EU" and r["MarketingConsentFlag"] == "0"}
     assert len(keys) >= 10
     master = byId(data.ora("WWI_MDM", "CUST_MASTER"), "CUST_ID")
     for x in data.ora("WWI_MDM", "PARTY_XREF"):
@@ -400,7 +400,8 @@ def test_eu_reverse_charge(data: Data) -> None:
     customers = byId(data.sql("Sales", "Customers"), "CustomerID")
     territories = byId(data.sql("Sales", "SalesTerritories"), "SalesTerritoryID")
     rc = {str(k["OrderID"]) for k in data.keys("EU_REVERSE_CHARGE")}
-    assert rc == {o for o, r in orders.items() if r["TaxRegimeCode"] == "EU_RC"} and len(rc) >= 50
+    euRc = {o for o, r in orders.items() if r["TaxRegimeCode"] == "EU_RC"}
+    assert rc <= euRc and len(euRc) == data.edge["EU_REVERSE_CHARGE"]["keyCount"] and len(rc) >= 50
     for orderId in rc:
         order = orders[orderId]
         assert territories[order["SalesTerritoryID"]]["RegionCode"] == "EU" and territories[order["SalesTerritoryID"]]["CountryISO3"] != "NLD"

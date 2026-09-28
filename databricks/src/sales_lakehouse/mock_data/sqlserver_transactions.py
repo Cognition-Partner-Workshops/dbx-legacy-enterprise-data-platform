@@ -63,6 +63,7 @@ class InvoiceInfo:
     order: Row
 
 
+MALFORMED_FLAG_VARIANTS = ("P||B", "P|B|", "|P", "P|B|H|")
 CREDIT_NOTE_TAX_REGIME = {"USSALESTAX": "SALESTAX", "CAGSTHST": "GST", "UKVAT": "VAT", "EUVAT": "VAT", "EU_RC": "VAT",
                           "AUGST": "GST", "SGGST": "GST", "JPCT": "CONSUMPTION"}
 
@@ -133,7 +134,7 @@ class TransactionBuilder:
         plan.sort()
 
         deletedSlots = set(rng.sample(range(50, len(plan)), 6))
-        malformedFlagSlots = set(rng.sample(range(len(plan)), 6))
+        malformedFlagSlots = {slot: MALFORMED_FLAG_VARIANTS[i % len(MALFORMED_FLAG_VARIANTS)] for i, slot in enumerate(sorted(rng.sample(range(len(plan)), 6)))}
         emptyFlagSlots = set(rng.sample([i for i in range(len(plan)) if i not in malformedFlagSlots], 5))
         duplicateLineSlots = set(rng.sample(range(len(plan)), 8))
         gstResidualSlots = set()
@@ -251,7 +252,7 @@ class TransactionBuilder:
                 flagParts.append("H")
             flags = "|".join(flagParts)
             if slot in malformedFlagSlots:
-                flags = rng.choice(["P||B", "P|B|", "|P", "P|B|H|"])
+                flags = malformedFlagSlots[slot]
                 ctx.tag("FULFILMENT_FLAGS_MALFORMED", "FulfilmentFlags with empty segments or a trailing pipe.", f"{SALES}.Orders", OrderID=orderId, FulfilmentFlags=flags)
             elif slot in emptyFlagSlots:
                 flags = ""
@@ -269,7 +270,7 @@ class TransactionBuilder:
                 "SourceQuoteID": sourceQuoteId, "OrderStatusCode": status, "FulfilmentFlags": flags, "CurrencyCode": currency, "ExchangeRateToUsd": self.fxRate(currency, orderDate),
                 "TaxRegimeCode": taxRegime, "IsTaxInclusivePricing": inclusive, "OrderValueExTax": money(netTotal), "TotalDiscountAmount": money(discountTotal),
                 "AmendmentCount": amendmentCount, "CreditHoldAppliedWhen": _ts(orderDate, 10, 5) if status == "HOLD" else None,
-                "WebCartID": f"CART-{rng.randint(10**7, 10**8 - 1)}" if channel.channelClass in ("WEB", "MARKETPLACE") else None, "ExtractedRowVersion": f"0x{rowVersion:016X}",
+                "WebCartID": rng.randint(10**7, 10**8 - 1) if channel.channelClass in ("WEB", "MARKETPLACE") else None, "ExtractedRowVersion": f"0x{rowVersion:016X}",
             }
             self.tables["Orders"].append(order)
             self.orderInfo[orderId] = OrderInfo(lines, status, customer, territory, country, currency, taxRate, taxRegime, inclusive, reverseCharge,
@@ -536,7 +537,7 @@ class TransactionBuilder:
             allocations.append({
                 "PaymentAllocationID": self.nextId("PaymentAllocations") + len(allocations), "CustomerPaymentID": paymentId, "AllocatedWhen": _ts(receivedDay, 15), "TargetTypeCode": "INVOICE",
                 "InvoiceID": invoiceId, "CreditNoteID": None, "AllocatedAmount": money(amount), "SettlementDiscount": ZERO, "ExchangeDifference": ZERO,
-                "MatchMethodCode": "AUTOREF" if len(invoiceIds) == 1 else "MANUAL", "MatchConfidence": money("100.00") if len(invoiceIds) == 1 else money("85.00"), "ReversalOfAllocationID": None,
+                "MatchMethodCode": "AUTOREF" if len(invoiceIds) == 1 else "MANUAL", "MatchConfidence": 100 if len(invoiceIds) == 1 else 85, "ReversalOfAllocationID": None,
                 "AllocatedByPersonID": self.people.accounts[1],
             })
             self.settleInvoice(invoiceId, money(amount), receivedDay)

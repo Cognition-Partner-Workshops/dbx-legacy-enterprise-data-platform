@@ -391,10 +391,10 @@ def generateCustomers(ctx: GenContext) -> None:
         consent = None
         consentWhen = None
         if region == "EU":
-            consent = "N" if rng.random() < 0.3 else "Y"
+            consent = rng.random() >= 0.3
             consentWhen = validFrom + timedelta(days=rng.randint(0, 30))
         elif rng.random() < 0.5:
-            consent = "Y"
+            consent = True
         city = rng.choice(CITIES[country.iso2])
         postal = f"{rng.randint(10000, 99999)}"
         row = {
@@ -412,7 +412,7 @@ def generateCustomers(ctx: GenContext) -> None:
             "CreditHoldReasonCode": rng.choice(["OVERDUE", "LIMIT", "DISPUTE"]) if onHold else None,
             "CreditHoldSetWhen": ctx.randomTimestamp(rng, ctx.randomDate(rng)) if onHold else None,
             "CreditScoreValue": rng.randint(300, 850) if rng.random() < 0.8 else None, "CreditScoreAgency": rng.choice(["DNB", "EXPERIAN", "EQUIFAX"]),
-            "CreditScoreCheckedOn": ctx.randomDate(rng), "AverageDaysToPay": money(rng.uniform(15, 75)) if rng.random() < 0.9 else None,
+            "CreditScoreCheckedOn": ctx.randomDate(rng), "AverageDaysToPay": rng.randint(15, 75) if rng.random() < 0.9 else None,
             "MarketingConsentFlag": consent, "ConsentCapturedWhen": consentWhen,
             "DataRetentionExpiresOn": opened + timedelta(days=365 * 7) if region == "EU" else None,
         }
@@ -421,7 +421,7 @@ def generateCustomers(ctx: GenContext) -> None:
         rows.append(row)
         customerCountry[customerId] = country.iso2
         customerTerritory[customerId] = territory
-        if region == "EU" and consent == "N":
+        if region == "EU" and consent is False:
             ctx.tag("EU_CONSENT_N", "EU customer with MarketingConsentFlag = 'N' (partner feed must strip consent fields).", f"{SALES}.Customers", CustomerID=customerId)
         if customerId in lateArriving:
             ctx.tag("LATE_ARRIVING_CUSTOMER", "Customer whose row arrives in a later extract than its invoices (ValidFrom after the extract watermark).",
@@ -435,7 +435,7 @@ def generateCustomers(ctx: GenContext) -> None:
         duplicate["ValidFrom"] = watermark - timedelta(hours=rng.randint(1, 20))
         duplicate["LastEditedBy"] = people.accounts[0]
         duplicate["CreditLimit"] = money((original["CreditLimit"] or Decimal(5000)) * Decimal("1.2"))
-        duplicate["AverageDaysToPay"] = money(rng.uniform(15, 75))
+        duplicate["AverageDaysToPay"] = rng.randint(15, 75)
         rows.append(duplicate)
         ctx.tag("DUPLICATE_CUSTOMER_EXTRACT", "Same CustomerID appears twice in the Customers extract with different ValidFrom.", f"{SALES}.Customers",
                 CustomerID=customerId, ValidFrom=duplicate["ValidFrom"])
@@ -545,7 +545,7 @@ def generateCustomerSegments(ctx: GenContext) -> None:
         region = str(customer["RegionCode"])
         consent = customer["MarketingConsentFlag"]
         for segment in rng.sample(byRegion[region], rng.randint(1, 2)):
-            if segment["ConsentRequired"] and consent != "Y":
+            if segment["ConsentRequired"] and consent is not True:
                 continue
             validFrom = ctx.randomDate(rng, ctx.spanStart, ctx.spanEnd - timedelta(days=30))
             if rng.random() < 0.15:

@@ -476,7 +476,8 @@ def generateMdm(ctx: GenContext) -> None:
         region = customer["RegionCode"]
         territory = territories[customer["SalesTerritoryID"]]
         created = customer["AccountOpenedDate"]
-        consentFlag = customer["MarketingConsentFlag"] or ("N" if region == "EU" else "Y")
+        rawConsent = customer["MarketingConsentFlag"]
+        consentFlag = ("Y" if rawConsent else "N") if rawConsent is not None else ("N" if region == "EU" else "Y")
         master.append({
             "CUST_ID": partyId, "CUST_NBR": f"C{partyId:09d}", "LEGACY_CUST_CD": f"L{customer['CustomerID']:05d}"[:6],
             "CUST_NAME": (customer["CustomerName"] + nameSuffix)[:160], "CUST_NAME_ALT": None, "TRADING_NAME": customer["CustomerName"].split(" (")[0],
