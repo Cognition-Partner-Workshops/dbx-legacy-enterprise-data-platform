@@ -1,0 +1,527 @@
+# Job wwi_01_oracle_extract: one task per legacy EXT_ORA_* package (task_key = package name).
+# Task edges: no package-to-package edges exist in docs/inventories/package-dependencies.csv
+# (Master_Daily_ETL ran the 22 packages as 4 parallel streams of phase 'Extract Oracle'); the
+# edges below are the data dependencies inside the phase: lookups against raw.OracleGeography /
+# raw.OracleCostCenter, and packages that DELETE/append RecordKind slices of a sibling's raw table.
+resources:
+  jobs:
+    wwi_01_oracle_extract:
+      name: wwi_01_oracle_extract
+      description: "WWI_Extract_Oracle: 22 EXT_ORA_* packages -> ${var.catalog}.bronze.raw_oracle_* (phase 'Extract Oracle' of Master_Daily_ETL)"
+      tags:
+        legacy_project: WWI_Extract_Oracle
+        migration_session: "01"
+      max_concurrent_runs: 1
+      timeout_seconds: 21600
+      parameters:
+        - name: BatchId
+          default: "0"
+        - name: BusinessDate
+          default: ${var.businessDate}
+        - name: ReloadFullHistory
+          default: "False"
+        - name: EnvironmentCode
+          default: ${var.environment_code}
+        - name: RestartFromStep
+          default: ""
+        - name: catalog
+          default: ${var.catalog}
+      job_clusters:
+        - job_cluster_key: oracle_extract_cluster
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: ${var.node_type_id}
+            num_workers: ${var.extract_workers}
+            data_security_mode: SINGLE_USER
+      tasks:
+      - task_key: EXT_ORA_CustomerMaster
+        description: "raw.OracleCustomerMaster <- WWI_MDM.CUST_MASTER (append)"
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_CustomerMaster.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_CustomerAddress
+        description: "raw.OracleCustomerAddress <- WWI_MDM.CUST_ADDRESS (append)"
+        depends_on:
+          - task_key: EXT_ORA_Geography
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_CustomerAddress.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_SupplierMaster
+        description: "raw.OracleSupplierMaster <- WWI_MDM.SUPP_MASTER (append)"
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_SupplierMaster.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_ProductMaster
+        description: "raw.OracleProductMaster <- WWI_MDM.PRODUCT_MASTER (append)"
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_ProductMaster.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_ProductHierarchy
+        description: "raw.OracleProductMaster <- full load (delete_scope)"
+        depends_on:
+          - task_key: EXT_ORA_ProductMaster
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_ProductHierarchy.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_PurchaseOrderHdr
+        description: "raw.OraclePurchaseOrderHdr <- WWI_PROC.PURCHASE_ORDER_HDR (append)"
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_PurchaseOrderHdr.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_PurchaseOrderLine
+        description: "raw.OraclePurchaseOrderLine <- WWI_PROC.PURCHASE_ORDER_LINE (append)"
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_PurchaseOrderLine.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_ReceiptLine
+        description: "raw.OracleReceiptLine <- WWI_PROC.PO_RECEIPT_LINE (append)"
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_ReceiptLine.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_VendorContract
+        description: "raw.OracleVendorContract <- full load (truncate)"
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_VendorContract.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_ApInvoiceHdr
+        description: "raw.OracleApInvoiceHdr <- WWI_FIN.AP_INVOICE_HDR (append)"
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_ApInvoiceHdr.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_ApInvoiceLine
+        description: "raw.OracleApInvoiceLine <- WWI_FIN.AP_INVOICE_LINE (append)"
+        depends_on:
+          - task_key: EXT_ORA_CostCenter
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_ApInvoiceLine.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_ApPayment
+        description: "raw.OracleApPayment <- WWI_FIN.AP_PAYMENT (append)"
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_ApPayment.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_ApPaymentApply
+        description: "raw.OracleApPayment <- WWI_FIN.AP_PAYMENT_APPLY (append)"
+        depends_on:
+          - task_key: EXT_ORA_ApPayment
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_ApPaymentApply.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_ApAging
+        description: "raw.OracleApInvoiceHdr <- full load (delete_snapshot)"
+        depends_on:
+          - task_key: EXT_ORA_ApInvoiceHdr
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_ApAging.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_GlJournalLine
+        description: "raw.OracleGlJournalLine <- WWI_FIN.GL_JOURNAL_LINE (delete_window)"
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_GlJournalLine.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_CostCenter
+        description: "raw.OracleCostCenter <- full load (truncate)"
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_CostCenter.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_TaxRate
+        description: "raw.OracleTaxRate <- full load (truncate)"
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_TaxRate.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_PaymentTerms
+        description: "raw.OraclePaymentTerms <- full load (truncate)"
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_PaymentTerms.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_Currency
+        description: "raw.OracleCurrency <- full load (truncate)"
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_Currency.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_FxRateDaily
+        description: "raw.OracleFxRate <- WWI_REF.FX_RATE_DAILY (delete_window)"
+        depends_on:
+          - task_key: EXT_ORA_Currency
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_FxRateDaily.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_Geography
+        description: "raw.OracleGeography <- full load (truncate)"
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_Geography.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: EXT_ORA_CodeTranslation
+        description: "raw.OracleCustomerMaster <- full load (delete_scope)"
+        depends_on:
+          - task_key: EXT_ORA_CustomerMaster
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../notebooks/EXT_ORA_CodeTranslation.py
+          base_parameters:
+            source_mode: ${var.source_mode}
+            oracle_host: ${var.oracle_host}
+            oracle_port: ${var.oracle_port}
+            oracle_service: ${var.oracle_service}
+            oracle_user: ${var.oracle_user}
+            oracle_secret_scope: ${var.oracle_secret_scope}
+            oracle_password_key: ${var.oracle_password_key}
+            extract_volume_path: ${var.extract_volume_path}
+            jdbc_fetch_size: ${var.jdbc_fetch_size}
+            jdbc_num_partitions: ${var.jdbc_num_partitions}
+      - task_key: Reconcile_Raw_Layer
+        description: "validation/runtime/02_row_count_reconciliation.sql ported to Spark SQL for the bronze raw_oracle_* tables"
+        depends_on:
+          - task_key: EXT_ORA_CustomerMaster
+          - task_key: EXT_ORA_CustomerAddress
+          - task_key: EXT_ORA_SupplierMaster
+          - task_key: EXT_ORA_ProductMaster
+          - task_key: EXT_ORA_ProductHierarchy
+          - task_key: EXT_ORA_PurchaseOrderHdr
+          - task_key: EXT_ORA_PurchaseOrderLine
+          - task_key: EXT_ORA_ReceiptLine
+          - task_key: EXT_ORA_VendorContract
+          - task_key: EXT_ORA_ApInvoiceHdr
+          - task_key: EXT_ORA_ApInvoiceLine
+          - task_key: EXT_ORA_ApPayment
+          - task_key: EXT_ORA_ApPaymentApply
+          - task_key: EXT_ORA_ApAging
+          - task_key: EXT_ORA_GlJournalLine
+          - task_key: EXT_ORA_CostCenter
+          - task_key: EXT_ORA_TaxRate
+          - task_key: EXT_ORA_PaymentTerms
+          - task_key: EXT_ORA_Currency
+          - task_key: EXT_ORA_FxRateDaily
+          - task_key: EXT_ORA_Geography
+          - task_key: EXT_ORA_CodeTranslation
+        run_if: ALL_DONE
+        job_cluster_key: oracle_extract_cluster
+        libraries:
+          - whl: ${var.common_wheel_path}
+          - maven:
+              coordinates: ${var.oracle_jdbc_coordinates}
+        notebook_task:
+          notebook_path: ../validation/raw_layer_reconciliation.py
+          base_parameters:
+            baseline_table: ""
+            baseline_json: ""
+            log_results: "true"
