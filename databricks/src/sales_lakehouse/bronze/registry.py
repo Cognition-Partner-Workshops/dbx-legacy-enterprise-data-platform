@@ -1103,10 +1103,7 @@ SOURCE_TABLES: tuple[SourceTable, ...] = (
         loadMode='full',
         legacyPackage='EXT_SQL_StockItems',
         naturalKey=('StockItemID',),
-        ddlFiles=(
-            'wwi-ssdt/wwi-ssdt/Warehouse/Tables/StockItemHoldings.sql',
-            'sqlserver/oltp/02_extensions/2040_Warehouse.StockItemHoldings.Extensions.sql',
-        ),
+        ddlFiles=('wwi-ssdt/wwi-ssdt/Warehouse/Tables/StockItemHoldings.sql', 'sqlserver/oltp/02_extensions/2040_Warehouse.StockItemHoldings.Extensions.sql'),
         columns=(
             ('StockItemID', 'int'),
             ('QuantityOnHand', 'int'),
