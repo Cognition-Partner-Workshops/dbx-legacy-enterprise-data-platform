@@ -1,0 +1,39 @@
+resources:
+  jobs:
+    wwi_00_control_bootstrap:
+      name: wwi_00_control_bootstrap
+      description: >-
+        Creates the ${var.catalog}.etl control schema (Delta control tables with identity columns, defaults and
+        CHECK constraints), applies the idempotent seed data and the etl.v_* operational views.
+        Re-runnable; run once per target before any wwi_<NN_project> job.
+      tags:
+        migration: ssis-to-databricks
+        session: "00"
+      max_concurrent_runs: 1
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: createSchemas
+          default: "True"
+      environments:
+        - environment_key: default
+          spec:
+            client: "3"
+            dependencies:
+              - ../dbx_etl_common/dist/*.whl
+      tasks:
+        - task_key: create_control_tables
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/00_control_bootstrap.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              createSchemas: "{{job.parameters.createSchemas}}"
+        - task_key: verify_control_tables
+          depends_on:
+            - task_key: create_control_tables
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/01_control_verify.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"

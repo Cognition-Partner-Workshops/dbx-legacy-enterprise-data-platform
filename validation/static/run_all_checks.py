@@ -57,6 +57,12 @@ FORBIDDEN_CONTENT = [
     (re.compile(r"\bdbutils\b"), "Databricks utility reference"),
 ]
 
+# Converted ("after") artifacts for the migration live here, apart from the
+# legacy estate. They necessarily name the target platform, so only the
+# forbidden-content check skips them; credential and other checks still apply.
+MIGRATION_TARGET_DIRS = ("databricks",)
+MIGRATION_DOC_PREFIXES = ("docs/migration/",)
+
 # Credential shapes. Deliberately narrow: the estate is full of the *names* of
 # credentials, which are fine; assigned literal values are not.
 CREDENTIAL_PATTERNS = [
@@ -1122,6 +1128,10 @@ def check_no_forbidden_content(result, prefixes):
     for rel, full in walk_files(prefixes, (".sql", ".dtsx", ".py", ".md", ".yaml", ".yml",
                                            ".json", ".ps1", ".sh", ".csv", ".conmgr", ".params")):
         if rel in POLICY_DOCUMENTS:
+            continue
+        if rel.split("/")[0] in MIGRATION_TARGET_DIRS:
+            continue
+        if rel.startswith(MIGRATION_DOC_PREFIXES):
             continue
         with open(full, errors="replace") as handle:
             text = handle.read()

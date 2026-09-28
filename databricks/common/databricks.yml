@@ -1,0 +1,50 @@
+# Shared control layer bundle for the WWI SSIS -> Databricks migration (session 00).
+#   databricks bundle validate -t dev
+#   databricks bundle deploy   -t dev
+#   databricks bundle run wwi_00_control_bootstrap -t dev
+# Builds the dbx_etl_common wheel (artifacts) and uploads it with the bundle; the bootstrap job creates
+# ${var.catalog}.etl with all control tables, seeds and etl.v_* views.
+bundle:
+  name: wwi_00_common
+
+include:
+  - resources/*.yml
+
+artifacts:
+  dbx_etl_common:
+    type: whl
+    path: ./dbx_etl_common
+    build: python -m build --wheel
+
+variables:
+  catalog:
+    description: Unity Catalog catalog that owns the bronze/silver/gold/etl schemas.
+    default: wwi_${bundle.target}
+  warehouse_id:
+    description: SQL warehouse used by SQL-based validation tasks (not required by the bootstrap job).
+    default: ""
+  environmentCode:
+    description: Legacy EnvironmentCode (DEV/TEST/PROD) written to etl.batch.
+    default: DEV
+  serverless:
+    description: Run the bootstrap job on serverless compute (true) or the job cluster defined in the job (false).
+    default: "true"
+
+targets:
+  dev:
+    mode: development
+    default: true
+    variables:
+      catalog: wwi_dev
+      environmentCode: DEV
+  prod:
+    mode: production
+    workspace:
+      # one copy per deploying identity; run production deploys as a service principal (run_as)
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: wwi_prod
+      environmentCode: PROD
+    permissions:
+      - level: CAN_VIEW
+        group_name: users
