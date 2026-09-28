@@ -1,0 +1,120 @@
+# One job per SSIS project; task_key == legacy package name so session 00's master job can
+# reference them without seeing this code (phase 92 "Procurement Mart" of ssis/orchestration-plan.json).
+resources:
+  jobs:
+    wwi_13_procurement:
+      name: wwi_13_procurement
+      description: >
+        WWI_Procurement mart (phase 92, Procurement Mart): purchase spend, three-way receipt matching,
+        supplier scorecard, contract compliance and the monthly supplier statement export.
+      tags:
+        legacy_project: WWI_Procurement
+        ssis_directory: ssis/13_procurement
+        phase: "92"
+      max_concurrent_runs: 1
+      timeout_seconds: 10800
+
+      parameters:
+        - name: BatchId
+          default: "0"
+        - name: BusinessDate
+          default: ${var.businessDate}
+        - name: ReloadFullHistory
+          default: "False"
+        - name: EnvironmentCode
+          default: ${var.environmentCode}
+        - name: RestartFromStep
+          default: ""
+        - name: catalog
+          default: ${var.catalog}
+        # Package parameters from the .dtsx (legacy defaults).
+        - name: SpendCategoryScope
+          default: "ALL"
+        - name: PriceVarianceTolerancePercent
+          default: "5"
+        - name: AccrualCutoffDays
+          default: "45"
+        - name: ScoringWindowDays
+          default: "90"
+        - name: MinimumOrdersForScore
+          default: "5"
+        - name: ComplianceWindowDays
+          default: "30"
+        - name: PriceLeakageTolerance
+          default: "2"
+        - name: StatementPeriod
+          default: ""
+        - name: ExcludeSelfBilling
+          default: "True"
+        - name: OutboundVolumePath
+          default: ${var.outbound_volume_path}
+        - name: ArchiveVolumePath
+          default: ${var.archive_volume_path}
+
+      job_clusters:
+        - job_cluster_key: procurement_cluster
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: ${var.node_type_id}
+            num_workers: 2
+            data_security_mode: SINGLE_USER
+            spark_conf:
+              spark.databricks.delta.schema.autoMerge.enabled: "true"
+
+      # Streams (phase 92 has streams: 2): stream A = spend -> receipt matching,
+      # stream B = scorecard -> compliance; the statement export is independent of both.
+      tasks:
+        - task_key: PRC_Load_PurchaseSpend
+          job_cluster_key: procurement_cluster
+          libraries:
+            - whl: ${var.dbx_etl_common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/PRC_Load_PurchaseSpend.py
+
+        - task_key: PRC_Load_ReceiptMatching
+          job_cluster_key: procurement_cluster
+          libraries:
+            - whl: ${var.dbx_etl_common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/PRC_Load_ReceiptMatching.py
+
+        - task_key: PRC_Load_SupplierScorecard
+          job_cluster_key: procurement_cluster
+          libraries:
+            - whl: ${var.dbx_etl_common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/PRC_Load_SupplierScorecard.py
+
+        - task_key: PRC_Load_ContractCompliance
+          # Publishes onto the agg_supplier_performance rows the scorecard MERGEs for the same month.
+          depends_on:
+            - task_key: PRC_Load_SupplierScorecard
+          job_cluster_key: procurement_cluster
+          libraries:
+            - whl: ${var.dbx_etl_common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/PRC_Load_ContractCompliance.py
+
+        - task_key: PRC_Export_SupplierStatement
+          job_cluster_key: procurement_cluster
+          libraries:
+            - whl: ${var.dbx_etl_common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/PRC_Export_SupplierStatement.py
+
+        - task_key: PRC_Reconcile_Procurement
+          # Reconciliation runs after every load; failures here do not roll back the loads.
+          depends_on:
+            - task_key: PRC_Load_PurchaseSpend
+            - task_key: PRC_Load_ReceiptMatching
+            - task_key: PRC_Load_ContractCompliance
+            - task_key: PRC_Export_SupplierStatement
+          run_if: ALL_DONE
+          job_cluster_key: procurement_cluster
+          libraries:
+            - whl: ${var.dbx_etl_common_wheel}
+          notebook_task:
+            notebook_path: ../validation/PRC_Reconcile_Procurement.py
+            base_parameters:
+              BaselineJson: ""
+              BaselineTable: ""
