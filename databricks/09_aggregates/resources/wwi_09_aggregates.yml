@@ -1,0 +1,216 @@
+# Job wwi_09_aggregates = every WWI_Aggregates package (ssis/09_aggregates), task_key = legacy package name.
+# Phase order follows ssis/orchestration-plan.json:
+#   Master_Daily_ETL      : Aggregates (80: DailySales, DailyInventory) -> Publish Reporting Layer (95)
+#   Master_Month_End      : Sales Aggregates (20) -> Operations Aggregates (30) -> Finance Aggregates (40) -> Customer Aggregates (50)
+# Upstream edges (DIM_Rekey_LateArriving, REF_Load_UnknownMembers -> every AGG_Refresh_*) are owned by the
+# master job (session 00), which runs this job as a run_job_task after the fact loads.
+resources:
+  jobs:
+    wwi_09_aggregates:
+      name: wwi_09_aggregates
+      description: >-
+        Gold aggregate refresh (gold.agg_*) and Report layer publication (gold.rpt_* views) for WWI_Aggregates.
+        Daily aggregates always run; the month-end aggregates run when RunMonthEndAggregates = "True".
+      tags:
+        legacy_project: WWI_Aggregates
+        legacy_folder: 09_aggregates
+        legacy_masters: Master_Daily_ETL;Master_Month_End
+      max_concurrent_runs: 1
+      timeout_seconds: 14400
+
+      parameters:
+        - name: BatchId
+          default: "0"
+        - name: BusinessDate
+          default: ${var.businessDate}
+        - name: ReloadFullHistory
+          default: "False"
+        - name: EnvironmentCode
+          default: ${var.environmentCode}
+        - name: RestartFromStep
+          default: ""
+        - name: catalog
+          default: ${var.catalog}
+        - name: RunMonthEndAggregates
+          default: ${var.runMonthEndAggregates}
+        - name: RefreshFromDate
+          default: ""
+        - name: RefreshToDate
+          default: ""
+        - name: AccountingPeriodCode
+          default: ""
+        - name: RebuildPriorPeriods
+          default: "0"
+        - name: PublicationGroupCode
+          default: ${var.publicationGroupCode}
+        - name: ForcePublish
+          default: "False"
+
+      environments:
+        - environment_key: aggregates
+          spec:
+            client: "1"
+            dependencies:
+              - ${var.dbx_etl_common_wheel}
+
+      tasks:
+        # ---- Master_Daily_ETL / Aggregates (phase 80, 2 streams) ----
+        - task_key: AGG_Refresh_DailySalesSummary
+          environment_key: aggregates
+          notebook_task:
+            notebook_path: ../notebooks/AGG_Refresh_DailySalesSummary.py
+            base_parameters:
+              RefreshFromDate: "{{job.parameters.RefreshFromDate}}"
+              RefreshToDate: "{{job.parameters.RefreshToDate}}"
+
+        - task_key: AGG_Refresh_DailyInventoryHealth
+          environment_key: aggregates
+          notebook_task:
+            notebook_path: ../notebooks/AGG_Refresh_DailyInventoryHealth.py
+            base_parameters:
+              RefreshFromDate: "{{job.parameters.RefreshFromDate}}"
+              RefreshToDate: "{{job.parameters.RefreshToDate}}"
+              StockOutThreshold: "0"
+
+        # ---- Master_Month_End gate ----
+        - task_key: Should_Run_MonthEnd_Aggregates
+          condition_task:
+            op: EQUAL_TO
+            left: "{{job.parameters.RunMonthEndAggregates}}"
+            right: "True"
+
+        # ---- Master_Month_End / Sales Aggregates (phase 20, 2 streams) ----
+        - task_key: AGG_Refresh_MonthlySalesSummary
+          depends_on:
+            - task_key: Should_Run_MonthEnd_Aggregates
+              outcome: "true"
+          environment_key: aggregates
+          notebook_task:
+            notebook_path: ../notebooks/AGG_Refresh_MonthlySalesSummary.py
+            base_parameters:
+              AccountingPeriodCode: "{{job.parameters.AccountingPeriodCode}}"
+              RebuildPriorPeriods: "{{job.parameters.RebuildPriorPeriods}}"
+
+        - task_key: AGG_Refresh_RegionalSalesPerformance
+          depends_on:
+            - task_key: Should_Run_MonthEnd_Aggregates
+              outcome: "true"
+          environment_key: aggregates
+          notebook_task:
+            notebook_path: ../notebooks/AGG_Refresh_RegionalSalesPerformance.py
+            base_parameters:
+              AccountingPeriodCode: "{{job.parameters.AccountingPeriodCode}}"
+              RebuildPriorPeriods: "{{job.parameters.RebuildPriorPeriods}}"
+              ReportingCurrency: USD
+
+        - task_key: AGG_Refresh_MonthlyMarginAnalysis
+          depends_on:
+            - task_key: AGG_Refresh_MonthlySalesSummary
+          environment_key: aggregates
+          notebook_task:
+            notebook_path: ../notebooks/AGG_Refresh_MonthlyMarginAnalysis.py
+            base_parameters:
+              AccountingPeriodCode: "{{job.parameters.AccountingPeriodCode}}"
+              RebuildPriorPeriods: "{{job.parameters.RebuildPriorPeriods}}"
+              ApportionPurchaseVariance: "True"
+
+        - task_key: AGG_Refresh_PromotionEffectiveness
+          depends_on:
+            - task_key: AGG_Refresh_RegionalSalesPerformance
+          environment_key: aggregates
+          notebook_task:
+            notebook_path: ../notebooks/AGG_Refresh_PromotionEffectiveness.py
+            base_parameters:
+              AccountingPeriodCode: "{{job.parameters.AccountingPeriodCode}}"
+              RebuildPriorPeriods: "{{job.parameters.RebuildPriorPeriods}}"
+              BaselineWeeks: "8"
+
+        # ---- Master_Month_End / Operations Aggregates (phase 30, 3 streams) ----
+        - task_key: AGG_Refresh_ProductPerformance
+          depends_on:
+            - task_key: AGG_Refresh_MonthlyMarginAnalysis
+            - task_key: AGG_Refresh_PromotionEffectiveness
+          environment_key: aggregates
+          notebook_task:
+            notebook_path: ../notebooks/AGG_Refresh_ProductPerformance.py
+            base_parameters:
+              AccountingPeriodCode: "{{job.parameters.AccountingPeriodCode}}"
+              RebuildPriorPeriods: "{{job.parameters.RebuildPriorPeriods}}"
+              AbcThresholdA: "80"
+              AbcThresholdB: "95"
+
+        - task_key: AGG_Refresh_SupplierPerformance
+          depends_on:
+            - task_key: AGG_Refresh_MonthlyMarginAnalysis
+            - task_key: AGG_Refresh_PromotionEffectiveness
+          environment_key: aggregates
+          notebook_task:
+            notebook_path: ../notebooks/AGG_Refresh_SupplierPerformance.py
+            base_parameters:
+              AccountingPeriodCode: "{{job.parameters.AccountingPeriodCode}}"
+              RebuildPriorPeriods: "{{job.parameters.RebuildPriorPeriods}}"
+
+        - task_key: AGG_Refresh_DeliveryPerformanceSummary
+          depends_on:
+            - task_key: AGG_Refresh_MonthlyMarginAnalysis
+            - task_key: AGG_Refresh_PromotionEffectiveness
+          environment_key: aggregates
+          notebook_task:
+            notebook_path: ../notebooks/AGG_Refresh_DeliveryPerformanceSummary.py
+            base_parameters:
+              RefreshFromDate: "{{job.parameters.RefreshFromDate}}"
+              RefreshToDate: "{{job.parameters.RefreshToDate}}"
+              OnTimeGraceHours: "12"
+
+        # ---- Master_Month_End / Finance Aggregates (phase 40, 1 stream) ----
+        - task_key: AGG_Refresh_FinanceCloseSummary
+          depends_on:
+            - task_key: AGG_Refresh_ProductPerformance
+            - task_key: AGG_Refresh_SupplierPerformance
+            - task_key: AGG_Refresh_DeliveryPerformanceSummary
+          environment_key: aggregates
+          notebook_task:
+            notebook_path: ../notebooks/AGG_Refresh_FinanceCloseSummary.py
+            base_parameters:
+              AccountingPeriodCode: "{{job.parameters.AccountingPeriodCode}}"
+              RebuildPriorPeriods: "{{job.parameters.RebuildPriorPeriods}}"
+              MaterialityAmount: "100"
+
+        # ---- Master_Month_End / Customer Aggregates (phase 50, 1 stream: Rolling12 then Customer360) ----
+        - task_key: AGG_Refresh_CustomerRolling12Month
+          depends_on:
+            - task_key: AGG_Refresh_FinanceCloseSummary
+          environment_key: aggregates
+          notebook_task:
+            notebook_path: ../notebooks/AGG_Refresh_CustomerRolling12Month.py
+            base_parameters:
+              AccountingPeriodCode: "{{job.parameters.AccountingPeriodCode}}"
+              RollingMonths: "12"
+
+        - task_key: AGG_Refresh_Customer360
+          depends_on:
+            - task_key: AGG_Refresh_CustomerRolling12Month
+          environment_key: aggregates
+          notebook_task:
+            notebook_path: ../notebooks/AGG_Refresh_Customer360.py
+            base_parameters:
+              AsAtDate: ""
+              IncludeInactiveCustomers: "0"
+
+        # ---- Master_Daily_ETL / Publish Reporting Layer (phase 95) ----
+        # NONE_FAILED: runs after the daily aggregates even when the month-end branch was skipped by the gate.
+        - task_key: AGG_Publish_ReportingLayer
+          run_if: NONE_FAILED
+          depends_on:
+            - task_key: AGG_Refresh_DailySalesSummary
+            - task_key: AGG_Refresh_DailyInventoryHealth
+            - task_key: AGG_Refresh_Customer360
+          environment_key: aggregates
+          notebook_task:
+            notebook_path: ../notebooks/AGG_Publish_ReportingLayer.py
+            base_parameters:
+              PublicationGroupCode: "{{job.parameters.PublicationGroupCode}}"
+              MaxStalenessHours: "26"
+              FailOnStaleSource: "True"
+              ForcePublish: "{{job.parameters.ForcePublish}}"
+              OptimizeAggregates: "True"
