@@ -1,0 +1,111 @@
+# One job per SSIS project; task_key = legacy package name.
+# Dependency edges: docs/inventories/package-dependencies.csv rows
+#   C360_Build_CustomerProfile -> C360_Publish_Segments   (data: Aggregate.Customer 360)
+#   C360_Build_LoyaltyOverlay  -> C360_Publish_Segments   (data: Aggregate.Customer 360)
+#   C360_Build_RollingMetrics  -> C360_Build_ChurnFlags   (data: Aggregate.Customer Rolling 12 Month)
+# plus the dtsx sources that ChurnFlags reads work.LoyaltyOverlay (LoyaltyOverlay -> ChurnFlags),
+# ChurnFlags reads work.CustomerSalesSummary (CustomerProfile -> ChurnFlags) and Publish reads
+# Customer360.CustomerChurnFlag (ChurnFlags -> Publish). Matches orchestration-plan.json phases
+# "Customer 360 Build" (seq 93) -> "Customer 360 Publish" (seq 94).
+resources:
+  jobs:
+    wwi_14_customer_360:
+      name: wwi_14_customer_360
+      description: >-
+        WWI Customer 360 mart: profile build, rolling metrics, loyalty overlay, churn flags and
+        segment publish (migrated from SSIS project WWI_Customer360).
+      tags:
+        legacy_project: WWI_Customer360
+        legacy_folder: 14_customer_360
+        phase: customer_360
+      max_concurrent_runs: 1
+      timeout_seconds: 14400
+
+      parameters:
+        - name: BatchId
+          default: "0"
+        - name: BusinessDate
+          default: ${var.businessDate}
+        - name: ReloadFullHistory
+          default: "False"
+        - name: EnvironmentCode
+          default: ${var.environmentCode}
+        - name: RestartFromStep
+          default: ""
+        - name: catalog
+          default: ${var.catalog}
+
+      job_clusters:
+        - job_cluster_key: c360_cluster
+          new_cluster:
+            spark_version: ${var.sparkVersion}
+            node_type_id: ${var.nodeType}
+            num_workers: 2
+            data_security_mode: SINGLE_USER
+            spark_conf:
+              spark.sql.session.timeZone: UTC
+
+      tasks:
+        - task_key: C360_Build_CustomerProfile
+          description: Address standardisation, identity graph, consent, survivorship, households -> gold.c360_customer_profile
+          job_cluster_key: c360_cluster
+          libraries:
+            - whl: ${var.dbxEtlCommonWheel}
+          notebook_task:
+            notebook_path: ../notebooks/C360_Build_CustomerProfile.py
+            base_parameters:
+              MatchThresholdScore: "85"
+              RebuildIdentityGraph: "False"
+
+        - task_key: C360_Build_RollingMetrics
+          description: Rolling window aggregate, APAC 4-4-5 realignment, ratios, activity status, RFM deciles -> gold.c360_customer_rolling_metric
+          job_cluster_key: c360_cluster
+          libraries:
+            - whl: ${var.dbxEtlCommonWheel}
+          notebook_task:
+            notebook_path: ../notebooks/C360_Build_RollingMetrics.py
+            base_parameters:
+              WindowMonths: "12"
+              InactiveThresholdDays: "270"
+
+        - task_key: C360_Build_LoyaltyOverlay
+          description: Point expiry, accrual, tier ladders, tier movement -> gold.c360_loyalty_overlay
+          job_cluster_key: c360_cluster
+          libraries:
+            - whl: ${var.dbxEtlCommonWheel}
+          notebook_task:
+            notebook_path: ../notebooks/C360_Build_LoyaltyOverlay.py
+            base_parameters:
+              PointsExpiryMonthsNa: "24"
+              PointsExpiryMonthsEu: "36"
+              PointsExpiryMonthsApac: "18"
+
+        - task_key: C360_Build_ChurnFlags
+          description: Churn rules 2019.3, risk banding, high-risk outreach queue -> gold.c360_customer_churn_flag
+          depends_on:
+            - task_key: C360_Build_RollingMetrics
+            - task_key: C360_Build_LoyaltyOverlay
+            - task_key: C360_Build_CustomerProfile
+          job_cluster_key: c360_cluster
+          libraries:
+            - whl: ${var.dbxEtlCommonWheel}
+          notebook_task:
+            notebook_path: ../notebooks/C360_Build_ChurnFlags.py
+            base_parameters:
+              HighRiskScoreThreshold: "60"
+              OrderGapMultiplier: "2"
+
+        - task_key: C360_Publish_Segments
+          description: Segment assignment SEG-2021A, suppression, migration, publish (view/table swap) -> gold.c360_customer_segment / gold.rpt_customer_segment
+          depends_on:
+            - task_key: C360_Build_CustomerProfile
+            - task_key: C360_Build_LoyaltyOverlay
+            - task_key: C360_Build_ChurnFlags
+          job_cluster_key: c360_cluster
+          libraries:
+            - whl: ${var.dbxEtlCommonWheel}
+          notebook_task:
+            notebook_path: ../notebooks/C360_Publish_Segments.py
+            base_parameters:
+              SegmentModelVersion: SEG-2021A
+              PublishSuppressedRows: "True"
