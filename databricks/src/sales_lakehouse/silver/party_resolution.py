@@ -39,9 +39,10 @@ STATUS_DUPLICATE_XREF = "DUPLICATE_XREF"
 
 # SOURCE_SYS_CD values that denote the WideWorldImporters OLTP in PARTY_XREF.
 # The Oracle seed (oracle/seed/01_source_system_ref.sql) never lists the OLTP;
-# stg.usp_DeduplicateCustomer ranks the code 'WWI_OLTP' and the generator
-# contract uses 'WWIOLTP', so both are accepted.
-WWI_OLTP_SOURCE_SYSTEM_CODES: tuple[str, ...] = ("WWI_OLTP", "WWIOLTP")
+# stg.usp_DeduplicateCustomer ranks the code 'WWI_OLTP', the generator
+# contract uses 'WWIOLTP' and the mock SOURCE_SYSTEM_REF / PARTY_XREF rows
+# carry 'WWI_SQL', so all three are accepted.
+WWI_OLTP_SOURCE_SYSTEM_CODES: tuple[str, ...] = ("WWI_OLTP", "WWIOLTP", "WWI_SQL")
 MERGED_STATUS_CODES: tuple[str, ...] = ("MG", "M")
 
 BRONZE_CUSTOMERS = "sqlserver_sales_customers"

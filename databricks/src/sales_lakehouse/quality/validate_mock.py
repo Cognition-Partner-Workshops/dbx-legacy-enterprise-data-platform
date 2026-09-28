@@ -37,7 +37,7 @@ from sales_lakehouse.common.quality import REJECTED_ROWS_TABLE
 from sales_lakehouse.common.tables import tableExists
 from sales_lakehouse.silver.business_keys import DEFAULT_SOURCE_SYSTEM
 from sales_lakehouse.silver.rules.fx import APAC_FALLBACK_DAYS, NA_FALLBACK_DAYS, SOURCE_DEFAULT_1
-from sales_lakehouse.silver.rules.tax import TREATMENT_REVERSE_CHARGE_NO_VATREG
+from sales_lakehouse.silver.rules.tax import TREATMENT_REVERSE_CHARGE, TREATMENT_REVERSE_CHARGE_NO_VATREG
 
 STATUS_PASS = "PASS"
 STATUS_FAIL = "FAIL"
@@ -418,8 +418,20 @@ def checkReverseChargeNullVat(spark: SparkSession, cfg: PipelineConfig, manifest
     report.add(
         _compare("EU_REVERSE_CHARGE_NULL_VAT_LOADED", loadedInvoices, len(keys), "reverse-charge invoices without a VAT number are loaded")
     )
-    flagged = rows.filter(F.col("tax_treatment_code") == TREATMENT_REVERSE_CHARGE_NO_VATREG).count()
-    report.add(_compare("EU_REVERSE_CHARGE_NULL_VAT_TREATMENT", flagged, rows.count(), f"lines carry {TREATMENT_REVERSE_CHARGE_NO_VATREG}"))
+    # The invoice-level CustomerTaxNumber is NULL, but silver backfills the registration from the
+    # customer master (legacy FACT_EU_Load_Sale looks it up in stg.Customer), so the line is a plain
+    # REVERSE_CHARGE unless the customer has no VAT number either (REVERSE_CHARGE_NO_VATREG, WARN).
+    reverseCharged = rows.filter(F.col("tax_treatment_code").isin(TREATMENT_REVERSE_CHARGE, TREATMENT_REVERSE_CHARGE_NO_VATREG))
+    zeroTax = reverseCharged.filter(F.coalesce(F.col("tax_amount"), F.lit(0)) == 0).count()
+    noVatReg = reverseCharged.filter(F.col("tax_treatment_code") == TREATMENT_REVERSE_CHARGE_NO_VATREG).count()
+    report.add(
+        _compare(
+            "EU_REVERSE_CHARGE_NULL_VAT_TREATMENT",
+            zeroTax,
+            rows.count(),
+            f"lines reverse-charged with zero tax ({noVatReg} {TREATMENT_REVERSE_CHARGE_NO_VATREG}, rest backfilled from customer master)",
+        )
+    )
 
 
 def checkXrefResolution(spark: SparkSession, cfg: PipelineConfig, manifest: dict, report: ValidationReport) -> None:
@@ -445,14 +457,25 @@ def checkXrefResolution(spark: SparkSession, cfg: PipelineConfig, manifest: dict
         )
         report.add(_compare(code, resolved, len(keys), "retired PARTY_XREF resolves to the merge survivor"))
     keys = edgeCaseKeys(manifest, "XREF_RETIRED_NO_MERGE")
-    if keys and "party_resolution_status_code" in customer.columns:
-        ids = [str(k["CustomerID"]) for k in keys]
-        flagged = (
-            customer.filter(F.col("wwi_customer_id").cast("string").isin(*ids))
-            .filter(F.col("party_resolution_status_code") == "RETIRED_NO_SURVIVOR")
-            .count()
-        )
-        report.add(_compare("XREF_RETIRED_NO_MERGE", flagged, len(keys), "retired party without merge history is flagged, not dropped"))
+    if not keys:
+        return
+    # silver.party_resolution is the record of the walk; the customer row itself may be quarantined by an
+    # unrelated screen (e.g. CUSTOMER_NO_CONSENT), so the status is read there when the table exists.
+    resolution = _table(spark, cfg, "silver", "party_resolution")
+    if resolution is not None:
+        source, statusCol = resolution, "resolution_status_code"
+    elif "party_resolution_status_code" in customer.columns:
+        source, statusCol = customer, "party_resolution_status_code"
+    else:
+        report.add(_skip("XREF_RETIRED_NO_MERGE", "no party resolution status available"))
+        return
+    ids = [str(k["CustomerID"]) for k in keys]
+    flagged = (
+        source.filter(F.col("wwi_customer_id").cast("string").isin(*ids))
+        .filter(F.col(statusCol) == "RETIRED_NO_SURVIVOR")
+        .count()
+    )
+    report.add(_compare("XREF_RETIRED_NO_MERGE", flagged, len(keys), "retired party without merge history is flagged (WARN), not dropped"))
 
 
 def checkUntranslatedCodes(spark: SparkSession, cfg: PipelineConfig, manifest: dict, report: ValidationReport) -> None:
