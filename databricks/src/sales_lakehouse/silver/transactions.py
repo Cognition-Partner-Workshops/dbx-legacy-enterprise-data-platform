@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from pyspark.sql import Column, DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import DecimalType
+from pyspark.sql.window import Window
 
 from sales_lakehouse.common.config import PipelineConfig
 from sales_lakehouse.common.quality import quarantine
@@ -40,7 +41,7 @@ from sales_lakehouse.silver.dedup import (
     flagRekeyDuplicates,
     rankExactCopies,
 )
-from sales_lakehouse.silver.fulfilment_flags import FLAG_COLUMNS, parseFulfilmentFlags
+from sales_lakehouse.silver.fulfilment_flags import parseFulfilmentFlags
 from sales_lakehouse.silver.payment_matching import (
     ALLOCATION_COLUMNS,
     matchPaymentsToInvoices,
@@ -221,9 +222,21 @@ def loadDimensionKeys(bronze: BronzeReader) -> DimensionKeys:
     )
 
 
+def latestExtractPerKey(df: DataFrame, keyCol: str) -> DataFrame:
+    """One row per ``keyCol``: the latest ``LastEditedWhen`` / ``_load_ts`` extract wins (a bronze
+    dimension source may carry the same row twice, e.g. a re-extracted customer)."""
+    order = [
+        optCol(df, "LastEditedWhen", "timestamp").desc_nulls_last(),
+        optCol(df, "_load_ts", "timestamp").desc_nulls_last(),
+        optCol(df, "ExtractedRowVersion").desc_nulls_last(),
+    ]
+    ranked = df.withColumn("_ctx_rn", F.row_number().over(Window.partitionBy(keyCol).orderBy(*order)))
+    return ranked.filter(F.col("_ctx_rn") == 1).drop("_ctx_rn")
+
+
 def customerContext(customers: DataFrame, territories: DataFrame) -> DataFrame:
     """Per-customer region / currency / tax attributes for fallbacks
-    (Sales.Customers.Extensions + Sales.SalesTerritories)."""
+    (Sales.Customers.Extensions + Sales.SalesTerritories); one row per customer key."""
     terr = territoryContext(territories)
     cust = customers.select(
         sourceSystemKey(sourceSystemCol(customers), optCol(customers, "CustomerID")).alias("_cust_key"),
@@ -231,7 +244,11 @@ def customerContext(customers: DataFrame, territories: DataFrame) -> DataFrame:
         sourceSystemKey(sourceSystemCol(customers), optCol(customers, "SalesTerritoryID")).alias("_cust_terr_key"),
         cleanText(optCol(customers, "TaxRegistrationNumber"), 30).alias("_cust_vat_number"),
         optCol(customers, "DefaultPriceListID", "int").alias("_cust_price_list_id"),
+        optCol(customers, "LastEditedWhen", "timestamp").alias("LastEditedWhen"),
+        optCol(customers, "_load_ts", "timestamp").alias("_load_ts"),
+        optCol(customers, "ExtractedRowVersion").alias("ExtractedRowVersion"),
     )
+    cust = latestExtractPerKey(cust, "_cust_key").drop("LastEditedWhen", "_load_ts", "ExtractedRowVersion")
     return cust.join(
         terr.select(
             F.col("_terr_key").alias("_cust_terr_key"),
@@ -360,7 +377,9 @@ def conformOrders(
         .otherwise(F.lit("DEFAULT_USD"))
     )
     currency = F.coalesce(F.col("_order_currency"), F.col("_terr_currency"), F.col("_cust_terr_currency"), F.lit(DEFAULT_CURRENCY))
-    taxRegime = F.coalesce(F.col("_order_tax_regime"), F.col("_terr_tax_regime"), F.col("_cust_terr_tax_regime"), taxRegimeForRegion(region))
+    taxRegime = F.coalesce(
+        F.col("_order_tax_regime"), F.col("_terr_tax_regime"), F.col("_cust_terr_tax_regime"), taxRegimeForRegion(region)
+    )
     vatNumber = vatRegistrationForRegion(region, F.col("_cust_vat_number"))
 
     withRegion = (
@@ -374,7 +393,7 @@ def conformOrders(
         .withColumn("sales_territory_code", F.coalesce(F.col("_terr_code"), F.col("_cust_terr_code")))
         .withColumn("sales_channel_code", F.col("_chan_code"))
         .withColumn("price_list_id", F.coalesce(F.col("price_list_id"), F.col("_cust_price_list_id")))
-        .drop(*[c for c in joined.columns if c.startswith("_terr_") or c.startswith("_cust_") or c.startswith("_chan_") or c.startswith("_order_")])
+        .drop(*[c for c in joined.columns if c.startswith(("_terr_", "_cust_", "_chan_", "_order_"))])
     )
 
     # Sales.vw_OrderLineExtract: HasOpenHold = open Sales.OrderHolds (ReleasedWhen IS NULL)
@@ -701,12 +720,19 @@ def conformSales(
         "is_reverse_charge",
         # stg.usp_AppendIncremental_SaleLine lines 21-22: a reverse-charge line carries zero VAT
         reverseChargeFlag(F.col("region_code"), F.col("vat_registration_number"), F.col("tax_regime_code"))
-        | ((F.col("region_code") == "EU") & F.col("vat_registration_number").isNotNull() & (F.coalesce(F.col("sale_tax_amount_local"), F.lit(0)) == 0) & (F.col("sale_net_amount_local") > 0)),
+        | (
+            (F.col("region_code") == "EU")
+            & F.col("vat_registration_number").isNotNull()
+            & (F.coalesce(F.col("sale_tax_amount_local"), F.lit(0)) == 0)
+            & (F.col("sale_net_amount_local") > 0)
+        ),
     ).drop(*[c for c in enriched.columns if c.startswith(("_terr_", "_cust_", "_inv_", "_lt_"))])
 
     enriched = late_arriving.flagMissingReferences(enriched, "customer_business_key", dims.customer, "is_late_arriving_customer")
     if dims.salesperson is not None:
-        enriched = late_arriving.flagMissingReferences(enriched, "salesperson_business_key", dims.salesperson, "is_late_arriving_salesperson")
+        enriched = late_arriving.flagMissingReferences(
+            enriched, "salesperson_business_key", dims.salesperson, "is_late_arriving_salesperson"
+        )
     else:
         enriched = enriched.withColumn("is_late_arriving_salesperson", F.lit(False))
 
@@ -788,7 +814,10 @@ def conformSaleLines(
     enriched = (
         joined.withColumn(
             "net_line_amount_local",
-            (F.coalesce(F.col("gross_line_amount_local"), F.col("quantity") * F.col("unit_price_amount_local")) - F.coalesce(F.col("tax_amount_local"), F.lit(0))).cast(MONEY),
+            (
+                F.coalesce(F.col("gross_line_amount_local"), F.col("quantity") * F.col("unit_price_amount_local"))
+                - F.coalesce(F.col("tax_amount_local"), F.lit(0))
+            ).cast(MONEY),
         )
         .withColumn("line_description", F.coalesce(F.col("line_description"), F.col("_stock_name")))
         .withColumn("invoice_date", F.col("_hdr_invoice_date"))
@@ -821,7 +850,10 @@ def normalisePaymentMethod(regionCol: Column, methodCol: Column) -> Column:
         F.when(method.isin("CHK", "CHEQUE", "CHECK"), F.lit("CHECK"))
         .when(method.isin("CASH"), F.lit("CASH"))
         .when(method.isin("CARD", "CREDIT_CARD", "DEBIT_CARD"), F.lit("CARD"))
-        .when((regionCol == "EU") & method.isin("SEPA", "BACS", "DIRECT_DEBIT", "DIRECTDEBIT", "EFT", "BANKXFER", "BANK_TRANSFER"), F.lit("SEPA"))
+        .when(
+            (regionCol == "EU") & method.isin("SEPA", "BACS", "DIRECT_DEBIT", "DIRECTDEBIT", "EFT", "BANKXFER", "BANK_TRANSFER"),
+            F.lit("SEPA"),
+        )
         .when((regionCol == "APAC") & (method == "BPAY"), F.lit("BPAY"))
         .when(regionCol == "APAC", F.lit("WIRE"))
         .when(method.isin("ACH"), F.lit("ACH"))
@@ -860,7 +892,9 @@ def conformPayments(
             upperCode(optCol(customerPayments, "CurrencyCode")).alias("_pay_currency"),
             optCol(customerPayments, "ExchangeRateToUsd", "decimal(19,8)").alias("exchange_rate_to_usd"),
             optCol(customerPayments, "ReceivedAmount", "decimal(19,4)").alias("payment_amount_local"),
-            F.coalesce(optCol(customerPayments, "BankChargeAmount", "decimal(19,4)"), F.lit(0)).cast(MONEY).alias("bank_charge_amount_local"),
+            F.coalesce(optCol(customerPayments, "BankChargeAmount", "decimal(19,4)"), F.lit(0))
+            .cast(MONEY)
+            .alias("bank_charge_amount_local"),
             optCol(customerPayments, "AllocatedAmount", "decimal(19,4)").alias("source_allocated_amount_local"),
             optCol(customerPayments, "UnallocatedAmount", "decimal(19,4)").alias("source_unallocated_amount_local"),
             upperCode(optCol(customerPayments, "PaymentStatus")).alias("payment_status_code"),
@@ -871,7 +905,8 @@ def conformPayments(
             F.coalesce(optCol(customerPayments, "_load_ts", "timestamp"), F.current_timestamp()).alias("_load_ts"),
         ).withColumn(
             "is_void",
-            F.col("reversed_when_utc").isNotNull() | F.coalesce(F.col("payment_status_code"), F.lit("")).isin("REVERSED", "VOID", "CANCELLED"),
+            F.col("reversed_when_utc").isNotNull()
+            | F.coalesce(F.col("payment_status_code"), F.lit("")).isin("REVERSED", "VOID", "CANCELLED"),
         )
     else:
         src = sourceSystemCol(customerTransactions)
@@ -903,7 +938,9 @@ def conformPayments(
             F.lit(None).cast(MONEY).alias("source_allocated_amount_local"),
             F.abs(optCol(receipts, "OutstandingBalance", "decimal(19,4)")).cast(MONEY).alias("source_unallocated_amount_local"),
             # ssis "Conform Payment": FinalizationDate present -> PAID else PEND
-            F.when(optCol(receipts, "FinalizationDate", "date").isNotNull(), F.lit("PAID")).otherwise(F.lit("PEND")).alias("payment_status_code"),
+            F.when(optCol(receipts, "FinalizationDate", "date").isNotNull(), F.lit("PAID"))
+            .otherwise(F.lit("PEND"))
+            .alias("payment_status_code"),
             F.lit(None).cast("string").alias("reversal_reason_code"),
             F.lit(None).cast("timestamp").alias("reversed_when_utc"),
             F.lit("AR_LEDGER").alias("source_interface_code"),
@@ -1002,7 +1039,9 @@ def allocatePayments(
     allocations = matchPaymentsToInvoices(matchInput, invoices, explicit).select(*ALLOCATION_COLUMNS)
     allocations = allocations.withColumn(
         "payment_allocation_business_key",
-        F.concat_ws("|", F.col("payment_business_key"), F.coalesce(F.col("sale_business_key"), F.lit("UNAPPLIED")), F.col("allocation_method_code")),
+        F.concat_ws(
+            "|", F.col("payment_business_key"), F.coalesce(F.col("sale_business_key"), F.lit("UNAPPLIED")), F.col("allocation_method_code")
+        ),
     )
     summary = summarisePayments(payments, allocations)
     out = summary.withColumn(
@@ -1132,7 +1171,9 @@ def conformQuotes(cfg: PipelineConfig, quotes: DataFrame, customers: DataFrame, 
         F.trim(optCol(quotes, "QuoteID")).alias("source_quote_id"),
         cleanText(optCol(quotes, "QuoteReference"), 24).alias("quote_reference"),
         sourceSystemKey(src, optCol(quotes, "CustomerID")).alias("customer_business_key"),
-        sourceSystemKey(src, F.coalesce(optCol(quotes, "SalespersonPersonID", "int"), F.lit(UNKNOWN_SALESPERSON_ID))).alias("salesperson_business_key"),
+        sourceSystemKey(src, F.coalesce(optCol(quotes, "SalespersonPersonID", "int"), F.lit(UNKNOWN_SALESPERSON_ID))).alias(
+            "salesperson_business_key"
+        ),
         sourceSystemKey(src, optCol(quotes, "SalesChannelID")).alias("sales_channel_business_key"),
         optCol(quotes, "PriceListID", "int").alias("price_list_id"),
         optCol(quotes, "QuoteDate", "date").alias("quote_date"),

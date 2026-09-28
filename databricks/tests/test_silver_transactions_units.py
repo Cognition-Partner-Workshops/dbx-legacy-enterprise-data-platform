@@ -236,3 +236,30 @@ def test_unapplied_remainder_and_regional_tolerance(spark):
     assert summary["P-VOID"].match_status_code == "UNMATCHED"
     assert summary["P-NONE"].match_status_code == "PARTIAL" and summary["P-NONE"].unallocated_amount_local == Decimal("40.0000")
     assert summary["P-NA"].match_status_code == "PARTIAL" and summary["P-NA"].is_overpayment is True
+
+
+# --------------------------------------------------------------------------- #
+# customer context (Sales.Customers re-extracted twice must not fan out orders)
+# --------------------------------------------------------------------------- #
+def test_customer_context_keeps_one_row_per_customer(spark):
+    from sales_lakehouse.silver.transactions import customerContext
+
+    customers = spark.createDataFrame(
+        [
+            (96, "NA", 1, "OLD-VAT", datetime(2025, 1, 1, 8), datetime(2025, 1, 1, 9)),
+            (96, "NA", 2, "NEW-VAT", datetime(2025, 2, 1, 8), datetime(2025, 2, 1, 9)),
+            (97, "EU", 3, None, datetime(2025, 1, 1, 8), datetime(2025, 1, 1, 9)),
+        ],
+        "CustomerID int, RegionCode string, SalesTerritoryID int, TaxRegistrationNumber string, "
+        "LastEditedWhen timestamp, _load_ts timestamp",
+    )
+    territories = spark.createDataFrame(
+        [(1, "NA-W", "NA", "USD", "NA_SALES"), (2, "NA-E", "NA", "USD", "NA_SALES"), (3, "EU-C", "EU", "EUR", "EU_VAT")],
+        "SalesTerritoryID int, TerritoryCode string, RegionCode string, ReportingCurrencyCode string, TaxRegimeCode string",
+    )
+    out = customerContext(customers, territories)
+    rows = {r["_cust_key"]: r for r in out.collect()}
+    assert out.count() == 2
+    assert rows["WWI_OLTP|96"]["_cust_vat_number"] == "NEW-VAT"
+    assert rows["WWI_OLTP|96"]["_cust_terr_code"] == "NA-E"
+    assert rows["WWI_OLTP|97"]["_cust_terr_currency"] == "EUR"
