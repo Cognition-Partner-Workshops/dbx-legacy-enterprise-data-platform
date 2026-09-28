@@ -5,6 +5,9 @@ import tempfile
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+# one JVM serves the whole suite (thousands of Delta stages); the 1g default heap
+# runs out of broadcast memory part-way through
+os.environ.setdefault("PYSPARK_SUBMIT_ARGS", "--driver-memory 4g pyspark-shell")
 
 from sales_lakehouse.common.config import PipelineConfig  # noqa: E402
 from sales_lakehouse.common.spark import ensureSchemas, getSpark  # noqa: E402
