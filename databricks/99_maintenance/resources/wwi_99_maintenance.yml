@@ -1,0 +1,152 @@
+# Job wwi_99_maintenance = the WWI_Maintenance leg of Master_Weekly_Maintenance
+# (ssis/00_orchestration/build_orchestration_packages.py::build_master_weekly_maintenance).
+# Phases (all serialised in the legacy master): Pre Flight -> Purge -> Index Maintenance -> Statistics -> Archive.
+# Task keys are the legacy package names; the master job owned by session 00 runs this job as a run_job_task.
+resources:
+  jobs:
+    wwi_99_maintenance:
+      name: wwi_99_maintenance
+      description: >-
+        Weekend maintenance window (WWI_Maintenance). Pre-flight checks first, then purge, then
+        OPTIMIZE / ANALYZE maintenance, then archive of processed landing files.
+      tags:
+        legacy_project: WWI_Maintenance
+        legacy_folder: 99_maintenance
+        legacy_master: Master_Weekly_Maintenance
+      max_concurrent_runs: 1
+      timeout_seconds: 21600
+
+      # Reference schedule: Master_Weekly_Maintenance runs Saturday 22:00. Kept PAUSED here because
+      # session 00's master job triggers this job; flip var.schedule_pause_status to UNPAUSED to run standalone.
+      schedule:
+        quartz_cron_expression: "0 0 22 ? * SAT"
+        timezone_id: UTC
+        pause_status: ${var.schedule_pause_status}
+
+      parameters:
+        - name: BatchId
+          default: "0"
+        - name: BusinessDate
+          default: ${var.businessDate}
+        - name: ReloadFullHistory
+          default: "False"
+        - name: EnvironmentCode
+          default: ${var.environmentCode}
+        - name: RestartFromStep
+          default: ""
+        - name: catalog
+          default: ${var.catalog}
+        - name: SkipIndexRebuild
+          default: "False"
+        - name: MaintenanceWindowMinutes
+          default: "240"
+        - name: DryRun
+          default: "False"
+        - name: landingVolumePath
+          default: ${var.landingVolumePath}
+
+      environments:
+        - environment_key: maintenance
+          spec:
+            client: "1"
+            dependencies:
+              - ${var.dbx_etl_common_wheel}
+
+      tasks:
+        # ---- Pre Flight (phase 10, serialised) ----
+        - task_key: MNT_Check_DiskSpace
+          environment_key: maintenance
+          notebook_task:
+            notebook_path: ../notebooks/MNT_Check_DiskSpace.py
+            base_parameters:
+              MinimumFreePercent: "15"
+              MinimumFreeGbTempdb: "50"
+              HoldBatchOnShortfall: "True"
+              StorageBudgetGb: "1024"
+
+        - task_key: MNT_Validate_Configuration
+          depends_on:
+            - task_key: MNT_Check_DiskSpace
+          environment_key: maintenance
+          notebook_task:
+            notebook_path: ../notebooks/MNT_Validate_Configuration.py
+            base_parameters:
+              FailOnMissingKey: "True"
+              RequiredSecretScope: wwi
+              RequiredSecretKeys: oracle_user,oracle_password,sqlserver_user,sqlserver_password
+
+        # ---- Purge (phase 20, serialised) ----
+        - task_key: MNT_Purge_StagingHistory
+          depends_on:
+            - task_key: MNT_Validate_Configuration
+          environment_key: maintenance
+          notebook_task:
+            notebook_path: ../notebooks/MNT_Purge_StagingHistory.py
+            base_parameters:
+              DefaultRetentionDays: "90"
+              DeleteChunkRows: "50000"
+              RunVacuum: "True"
+              VacuumRetentionHours: "0"
+
+        - task_key: MNT_Purge_ControlHistory
+          depends_on:
+            - task_key: MNT_Purge_StagingHistory
+          environment_key: maintenance
+          notebook_task:
+            notebook_path: ../notebooks/MNT_Purge_ControlHistory.py
+            base_parameters:
+              BatchRetentionDays: "400"
+              ErrorRetentionDays: "180"
+              RejectRetentionDays: "90"
+
+        # ---- Index Maintenance (phase 30) ----
+        # Legacy expression edge: !SkipIndexRebuild && MaintenanceWindowMinutes >= 120.
+        # The first half is this condition task; the window check lives in the notebook (exits "Skipped").
+        - task_key: Should_Rebuild_Indexes
+          depends_on:
+            - task_key: MNT_Purge_ControlHistory
+          condition_task:
+            op: EQUAL_TO
+            left: "{{job.parameters.SkipIndexRebuild}}"
+            right: "False"
+
+        - task_key: MNT_Rebuild_Indexes
+          depends_on:
+            - task_key: Should_Rebuild_Indexes
+              outcome: "true"
+          environment_key: maintenance
+          notebook_task:
+            notebook_path: ../notebooks/MNT_Rebuild_Indexes.py
+            base_parameters:
+              ReorganiseThresholdPercent: "10"
+              RebuildThresholdPercent: "30"
+              MaxDurationMinutes: "180"
+              OnlineRebuild: "False"
+              Schemas: bronze,silver,gold
+
+        # ---- Statistics (phase 40): Completion edge from the rebuild, or directly when rebuild is skipped ----
+        - task_key: MNT_Update_Statistics
+          depends_on:
+            - task_key: MNT_Rebuild_Indexes
+            - task_key: Should_Rebuild_Indexes
+          run_if: ALL_DONE
+          environment_key: maintenance
+          notebook_task:
+            notebook_path: ../notebooks/MNT_Update_Statistics.py
+            base_parameters:
+              ModificationThresholdRows: "5000"
+              SamplePercent: "20"
+              Schemas: bronze,silver,gold
+
+        # ---- Archive (phase 50): Completion edge ----
+        - task_key: MNT_Archive_ProcessedFiles
+          depends_on:
+            - task_key: MNT_Update_Statistics
+          run_if: ALL_DONE
+          environment_key: maintenance
+          notebook_task:
+            notebook_path: ../notebooks/MNT_Archive_ProcessedFiles.py
+            base_parameters:
+              ArchiveRetentionDays: "730"
+              MinimumFileAgeHours: "6"
+              DeleteExpiredArchives: "False"
