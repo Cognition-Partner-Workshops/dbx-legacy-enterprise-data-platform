@@ -3,6 +3,7 @@ price lists, customers, commission plans, quotas). Transactional tables live in
 ``sqlserver_transactions.py``; both share the ``ctx.scratch`` lookups built here."""
 from __future__ import annotations
 
+import random
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -18,6 +19,7 @@ from .domain import (
     COMPANY_SUFFIXES,
     COUNTRIES,
     CUSTOMER_CATEGORIES,
+    CUSTOMER_SEGMENTS,
     DELIVERY_METHODS,
     FIRST_NAMES,
     ITEM_ADJECTIVES,
@@ -501,11 +503,80 @@ def generateSpecialDeals(ctx: GenContext) -> None:
     ctx.put(SQLSERVER, SALES, "SpecialDeals", rows)
 
 
+def generateCities(ctx: GenContext) -> None:
+    rng = ctx.rng("sqlserver.cities")
+    countryIso = sorted(COUNTRIES)
+    rows: list[Row] = []
+    seen: set[int] = set()
+    for customer in ctx.sql(SALES, "Customers"):
+        cityId = customer["DeliveryCityID"]
+        customerId = customer["CustomerID"]
+        if not isinstance(cityId, int) or not isinstance(customerId, int) or cityId in seen:
+            continue
+        seen.add(cityId)
+        rows.append({
+            "CityID": cityId, "CityName": customer["PostalAddressLine2"],
+            "StateProvinceID": 100 * (countryIso.index(ctx.scratch.customerCountry[customerId]) + 1) + rng.randint(1, 5),
+            "Location": None, "LatestRecordedPopulation": rng.choice([None, rng.randint(20_000, 8_000_000)]), **_temporal(),
+        })
+    ctx.put(SQLSERVER, APP, "Cities", rows)
+
+
+def generateCustomerSegments(ctx: GenContext) -> None:
+    rng = ctx.rng("sqlserver.segments")
+    segments: list[Row] = []
+    for segmentId, (code, name, family, region, consentRequired, retention) in enumerate(CUSTOMER_SEGMENTS, start=1):
+        segments.append({
+            "CustomerSegmentID": segmentId, "SegmentCode": code, "SegmentName": name, "SegmentFamily": family, "RegionCode": region,
+            "SegmentRuleText": f"Customers in {region} matching the {name.lower()} rule (maintained by marketing ops).",
+            "ConsentRequired": consentRequired, "ConsentBasisCode": ("CONSENT" if region == "EU" else "OPTIN") if consentRequired else None,
+            "RetentionMonths": retention, "PriorityOrder": segmentId, "IsExclusive": family == "VALUE", "IsActive": True, **_edited(),
+        })
+    ctx.put(SQLSERVER, SALES, "CustomerSegments", segments)
+
+    byRegion = {r: [s for s in segments if s["RegionCode"] == r] for r in ("NA", "EU", "APAC")}
+    assignments: list[Row] = []
+    seenCustomers: set[int] = set()
+    for customer in ctx.sql(SALES, "Customers"):
+        customerId = customer["CustomerID"]
+        if not isinstance(customerId, int) or customerId in seenCustomers:
+            continue
+        seenCustomers.add(customerId)
+        region = str(customer["RegionCode"])
+        consent = customer["MarketingConsentFlag"]
+        for segment in rng.sample(byRegion[region], rng.randint(1, 2)):
+            if segment["ConsentRequired"] and consent != "Y":
+                continue
+            validFrom = ctx.randomDate(rng, ctx.spanStart, ctx.spanEnd - timedelta(days=30))
+            if rng.random() < 0.15:
+                # LEGACY QUIRK: usp_AssignCustomerSegments closes the prior row by stamping ValidToDate / IsCurrentRow = 0,
+                # but the pair is unenforced, so some closed rows still carry IsCurrentRow = 1.
+                closedOn = validFrom + timedelta(days=rng.randint(30, 200))
+                assignments.append(_segmentAssignment(len(assignments) + 1, customerId, segment, validFrom, closedOn, rng.random() < 0.3, customer, rng))
+                validFrom = closedOn + timedelta(days=1)
+            assignments.append(_segmentAssignment(len(assignments) + 1, customerId, segment, validFrom, None, True, customer, rng))
+    ctx.put(SQLSERVER, SALES, "CustomerSegmentAssignments", assignments)
+
+
+def _segmentAssignment(assignmentId: int, customerId: int, segment: Row, validFrom: date, validTo: date | None, current: bool, customer: Row, rng: random.Random) -> Row:
+    retention = int(str(segment["RetentionMonths"]))
+    return {
+        "CustomerSegmentAssignmentID": assignmentId, "CustomerID": customerId, "CustomerSegmentID": segment["CustomerSegmentID"],
+        "ValidFromDate": validFrom, "ValidToDate": validTo, "IsCurrentRow": current,
+        "AssignmentReason": f"Rule {segment['SegmentCode']} matched", "ScoreValue": qty(rng.uniform(0, 100)) if segment["SegmentFamily"] in ("VALUE", "RISK") else None,
+        "ConsentCapturedWhen": customer["ConsentCapturedWhen"] if segment["ConsentRequired"] else None,
+        "ConsentSourceCode": ("WEBFORM" if rng.random() < 0.7 else "REP") if segment["ConsentRequired"] else None,
+        "RetentionExpiryDate": validFrom + timedelta(days=30 * retention), "AssignedByProcess": "usp_AssignCustomerSegments", **_edited(),
+    }
+
+
 def generateMasterData(ctx: GenContext) -> None:
     generateStaticReference(ctx)
     generatePeopleAndTerritories(ctx)
     generateStockItems(ctx)
     generatePriceLists(ctx)
     generateCustomers(ctx)
+    generateCities(ctx)
+    generateCustomerSegments(ctx)
     generateSalesQuotas(ctx)
     generateSpecialDeals(ctx)

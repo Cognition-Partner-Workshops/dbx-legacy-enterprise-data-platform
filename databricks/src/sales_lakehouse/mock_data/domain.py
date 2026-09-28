@@ -189,3 +189,17 @@ ITEM_ADJECTIVES = ["USB", "Novelty", "Animal", "Dinosaur", "Superhero", "Alien",
                    "Shipping", "Office", "Air cushion", "Developer joke", "IT joke", "Black and orange", "Small", "Large"]
 ITEM_NOUNS = ["mug", "t-shirt", "hoodie", "slippers", "toy", "cube", "keyring", "bubble wrap", "carton", "tape", "stickers",
               "lanyard", "hat", "gloves", "socks", "pen", "notebook", "backpack", "umbrella", "puzzle"]
+
+# (SegmentCode, SegmentName, SegmentFamily, RegionCode, ConsentRequired, RetentionMonths) - Sales.CustomerSegments header:
+# NA opt-out / 84 months, EU opt-in / 24 months on behavioural attributes, APAC per country.
+CUSTOMER_SEGMENTS = [
+    ("HIVAL", "High value", "VALUE", "NA", False, 84),
+    ("FREQ", "Frequent buyer", "BEHAVIOUR", "NA", False, 84),
+    ("CHURN", "Churn risk", "RISK", "NA", False, 84),
+    ("HIVAL", "High value", "VALUE", "EU", False, 24),
+    ("FREQ", "Frequent buyer", "BEHAVIOUR", "EU", True, 24),
+    ("NEWCUST", "New customer", "LIFECYCLE", "EU", True, 24),
+    ("HIVAL", "High value", "VALUE", "APAC", False, 60),
+    ("WEBFIRST", "Web-first buyer", "CHANNEL", "APAC", True, 36),
+    ("CHURN", "Churn risk", "RISK", "APAC", False, 60),
+]

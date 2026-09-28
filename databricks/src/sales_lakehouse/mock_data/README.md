@@ -56,7 +56,7 @@ Programmatic use: `from sales_lakehouse.mock_data.generate import generate, buil
 
 | Module | Produces |
 |---|---|
-| `schema.py` | `TABLE_COLUMNS` — DDL column lists for all 66 tables; `columnsFor`, `tableKeys`. |
+| `schema.py` | `TABLE_COLUMNS` — DDL column lists for all 70 tables; `columnsFor`, `tableKeys`. |
 | `common.py` | `GenContext` (seeded RNG streams, span, scratch state, `edgeCase()` registry), CSV/Parquet writers, `manifest.json`. |
 | `calendars.py` | NA445 / EUCAL / APACJUN fiscal-period arithmetic. |
 | `domain.py` | Static legacy reference data (countries, territories, channels, plans, tax rates, names, products). |
@@ -67,8 +67,9 @@ Programmatic use: `from sales_lakehouse.mock_data.generate import generate, buil
 
 ## Tables (small-scale row counts)
 
-**SQL Server** — `Application`: DeliveryMethods, PaymentMethods, People (366), SalesTeamMembers,
-SalesTeams, TransactionTypes · `Sales`: Customers (205), CustomerCategories, BuyingGroups,
+**SQL Server** — `Application`: Cities (200), DeliveryMethods, PaymentMethods, People (366), SalesTeamMembers,
+SalesTeams, TransactionTypes · `Sales`: Customers (205), CustomerCategories, CustomerSegments (9),
+CustomerSegmentAssignments (310), BuyingGroups,
 SalesChannels (11), SalesTerritories (13), CommissionPlans (8), SalesQuotas (456), PriceLists (11),
 PriceListLines (1 650), Promotions, SpecialDeals, QuoteHeaders (521), QuoteLines (1 473),
 Orders (4 994), OrderLines (14 940), OrderAmendments, OrderHolds, Backorders, Invoices (4 511),
@@ -80,7 +81,8 @@ StockItemHoldings, StockGroups, StockItemStockGroups, PackageTypes ·
 `Integration`: ChangeTrackingWatermark, DeletedRowLog.
 
 **Oracle** — `WWI_MDM`: CUST_MASTER (207), CUST_ADDRESS, CUST_CONTACT, PARTY_XREF (199),
-MDM_MERGE_HISTORY, PRODUCT_CATEGORY, PRODUCT_MASTER (150, carries `UNIT_COST_STD` for margin) ·
+MDM_MERGE_HISTORY, PRODUCT_CATEGORY, PRODUCT_MASTER (150, carries `UNIT_COST_STD` for margin),
+PRODUCT_HIERARCHY (395) ·
 `WWI_REF`: REGION_REF, COUNTRY_REF, CURRENCY_CODE, SOURCE_SYSTEM_REF, FX_RATE_DAILY (3 249),
 CALENDAR_FISCAL (2 555), CODE_TRANSLATION, PAYMENT_METHOD_REF, REASON_CODE_REF, STATUS_CODE_REF ·
 `WWI_FIN`: TAX_JURISDICTION, TAX_RATE, GL_PERIOD_STATUS.

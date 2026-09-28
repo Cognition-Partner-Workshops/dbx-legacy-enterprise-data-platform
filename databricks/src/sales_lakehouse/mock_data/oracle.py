@@ -649,3 +649,22 @@ def generateProductMaster(ctx: GenContext) -> None:
             **_audit("PIMLOAD", seeded, "PIMLOAD", item["ValidFrom"].date()),
         })
     ctx.put(ORACLE, MDM, "PRODUCT_MASTER", products)
+
+    categoryById = {c["PRODUCT_CATEGORY_ID"]: c for c in categories}
+    hierarchy: list[Row] = []
+    for product in products:
+        category = categoryById[product["PRODUCT_CATEGORY_ID"]]
+        brand = str(product["BRAND_CD"])
+        for hierType in ("FIN", "PLAN", "WEB"):
+            if hierType == "PLAN" and rng.random() < 0.4:
+                continue
+            hierarchy.append({
+                "PRODUCT_HIER_ID": 20_000 + len(hierarchy) + 1, "HIER_TYPE_CD": hierType, "PRODUCT_ID": product["PRODUCT_ID"],
+                "LEVEL_1_CD": {"FIN": "MERCH", "PLAN": "STK", "WEB": "SHOP"}[hierType], "LEVEL_1_NAME": {"FIN": "Merchandise", "PLAN": "Stocked goods", "WEB": "Online shop"}[hierType],
+                "LEVEL_2_CD": category["CATEGORY_CD"], "LEVEL_2_NAME": category["CATEGORY_NAME"],
+                "LEVEL_3_CD": brand if hierType != "PLAN" else None, "LEVEL_3_NAME": brand.title() if hierType != "PLAN" else None,
+                "LEVEL_4_CD": None, "LEVEL_4_NAME": None,
+                "PLANNER_CD": f"PL{rng.randint(1, 6):02d}" if hierType == "PLAN" else None, "BUYER_CD": f"BY{rng.randint(1, 9):02d}" if hierType == "PLAN" else None,
+                "EFFECTIVE_DT": seeded, "END_DT": None, "SOURCE_SYS": "ORA_ERP", **_audit("PIMLOAD", seeded),
+            })
+    ctx.put(ORACLE, MDM, "PRODUCT_HIERARCHY", hierarchy)
