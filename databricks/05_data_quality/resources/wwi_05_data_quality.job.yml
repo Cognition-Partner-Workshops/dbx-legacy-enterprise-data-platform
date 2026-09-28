@@ -1,0 +1,132 @@
+# Job wwi_05_data_quality: one task per legacy WWI_DataQuality package (task_key = package name).
+#
+# Dependency edges (docs/inventories/package-dependencies.csv + ssis/orchestration-plan.json):
+#   DQ_File_Screen          -> "File Screen" phase; feeds the file quarantine / partner load
+#   DQ_Rule_Engine          -> first task of the "Data Quality" phase (populates etl.data_quality_result)
+#   DQ_*_Screen             -> run in parallel after the rule engine
+#   DQ_Threshold_Gate       -> after every screen; publishes gatePassed / rejectedRowCount task values
+#   DQ_Gate_Check           -> condition_task on gatePassed (RejectedRowCount semantics of the plan)
+#   DQ_Referential_Screen   -> "Referential Screen" phase, only when the gate passed
+#   DQ_Reject_Reprocess     -> "Reject Routing" phase; runs the "Referential Rescreen" internally
+resources:
+  jobs:
+    wwi_05_data_quality:
+      name: wwi_05_data_quality
+      description: >-
+        SSIS WWI_DataQuality (ssis/05_data_quality) migrated to Databricks: rule engine, quality screens
+        with quarantine tables, referential screen, threshold gate and reject reprocessing.
+      tags:
+        ssis_project: WWI_DataQuality
+        migration_session: "05"
+      max_concurrent_runs: 1
+      timeout_seconds: 14400
+
+      parameters:
+        - name: BatchId
+          default: "0"
+        - name: BusinessDate
+          default: ${var.businessDate}
+        - name: ReloadFullHistory
+          default: "False"
+        - name: EnvironmentCode
+          default: ${var.environmentCode}
+        - name: RestartFromStep
+          default: ""
+        - name: catalog
+          default: ${var.catalog}
+
+      environments:
+        - environment_key: dq_serverless
+          spec:
+            client: "2"
+            dependencies:
+              - ${var.dbx_etl_common_wheel}
+
+      tasks:
+        - task_key: DQ_File_Screen
+          environment_key: dq_serverless
+          notebook_task:
+            notebook_path: ../notebooks/DQ_File_Screen.py
+
+        - task_key: DQ_Rule_Engine
+          environment_key: dq_serverless
+          depends_on:
+            - task_key: DQ_File_Screen
+          notebook_task:
+            notebook_path: ../notebooks/DQ_Rule_Engine.py
+
+        - task_key: DQ_Customer_Screen
+          environment_key: dq_serverless
+          depends_on:
+            - task_key: DQ_Rule_Engine
+          notebook_task:
+            notebook_path: ../notebooks/DQ_Customer_Screen.py
+
+        - task_key: DQ_Supplier_Screen
+          environment_key: dq_serverless
+          depends_on:
+            - task_key: DQ_Rule_Engine
+          notebook_task:
+            notebook_path: ../notebooks/DQ_Supplier_Screen.py
+
+        - task_key: DQ_OrderLine_Screen
+          environment_key: dq_serverless
+          depends_on:
+            - task_key: DQ_Rule_Engine
+            - task_key: DQ_Customer_Screen
+          notebook_task:
+            notebook_path: ../notebooks/DQ_OrderLine_Screen.py
+
+        - task_key: DQ_InvoiceLine_Screen
+          environment_key: dq_serverless
+          depends_on:
+            - task_key: DQ_Rule_Engine
+          notebook_task:
+            notebook_path: ../notebooks/DQ_InvoiceLine_Screen.py
+
+        - task_key: DQ_Payment_Screen
+          environment_key: dq_serverless
+          depends_on:
+            - task_key: DQ_Rule_Engine
+            - task_key: DQ_Supplier_Screen
+          notebook_task:
+            notebook_path: ../notebooks/DQ_Payment_Screen.py
+
+        - task_key: DQ_Threshold_Gate
+          environment_key: dq_serverless
+          depends_on:
+            - task_key: DQ_Customer_Screen
+            - task_key: DQ_Supplier_Screen
+            - task_key: DQ_OrderLine_Screen
+            - task_key: DQ_InvoiceLine_Screen
+            - task_key: DQ_Payment_Screen
+          run_if: ALL_DONE
+          notebook_task:
+            notebook_path: ../notebooks/DQ_Threshold_Gate.py
+
+        # RejectedRowCount gate of the orchestration plan: downstream phases only run when the
+        # threshold gate published gatePassed = true.
+        - task_key: DQ_Gate_Check
+          depends_on:
+            - task_key: DQ_Threshold_Gate
+          condition_task:
+            op: EQUAL_TO
+            left: "{{tasks.DQ_Threshold_Gate.values.gatePassed}}"
+            right: "true"
+
+        - task_key: DQ_Referential_Screen
+          environment_key: dq_serverless
+          depends_on:
+            - task_key: DQ_Gate_Check
+              outcome: "true"
+          notebook_task:
+            notebook_path: ../notebooks/DQ_Referential_Screen.py
+            base_parameters:
+              ScreenScope: Referential Screen
+
+        - task_key: DQ_Reject_Reprocess
+          environment_key: dq_serverless
+          depends_on:
+            - task_key: DQ_Referential_Screen
+          notebook_task:
+            notebook_path: ../notebooks/DQ_Reject_Reprocess.py
