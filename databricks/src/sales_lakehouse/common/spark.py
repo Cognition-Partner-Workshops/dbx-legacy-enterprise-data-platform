@@ -1,0 +1,41 @@
+"""Spark session factory that works locally (Delta via pip) and on Databricks."""
+from __future__ import annotations
+
+import os
+
+from pyspark.sql import SparkSession
+
+from sales_lakehouse.common.config import LAYER_SCHEMAS, PipelineConfig
+
+MAVEN_MIRROR = "https://maven-central.storage-download.googleapis.com/maven2/"
+
+
+def isDatabricks() -> bool:
+    return "DATABRICKS_RUNTIME_VERSION" in os.environ
+
+
+def getSpark(appName: str = "sales_lakehouse", warehouseDir: str | None = None) -> SparkSession:
+    if isDatabricks():
+        return SparkSession.builder.getOrCreate()
+    from delta import configure_spark_with_delta_pip
+
+    builder = (
+        SparkSession.builder.appName(appName)
+        .master(os.environ.get("SPARK_MASTER", "local[2]"))
+        .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+        .config("spark.sql.shuffle.partitions", "4")
+        .config("spark.ui.enabled", "false")
+        .config("spark.sql.session.timeZone", "UTC")
+        # Maven Central rate-limits shared egress IPs (HTTP 429); resolve the
+        # Delta jars through the Google-hosted mirror first.
+        .config("spark.jars.repositories", os.environ.get("SPARK_JARS_REPOSITORIES", MAVEN_MIRROR))
+    )
+    if warehouseDir:
+        builder = builder.config("spark.sql.warehouse.dir", warehouseDir)
+    return configure_spark_with_delta_pip(builder).getOrCreate()
+
+
+def ensureSchemas(spark: SparkSession, cfg: PipelineConfig) -> None:
+    for layer in LAYER_SCHEMAS:
+        spark.sql(f"CREATE SCHEMA IF NOT EXISTS {cfg.schema(layer)}")
