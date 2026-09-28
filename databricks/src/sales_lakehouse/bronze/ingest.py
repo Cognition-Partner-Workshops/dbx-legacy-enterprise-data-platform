@@ -361,12 +361,25 @@ def updateWatermark(spark: SparkSession, cfg: PipelineConfig, source: SourceTabl
         previous = existing["previous_watermark_value"]
     else:
         previous = existing["last_watermark_value"]
-    candidates = [v for v in (formatWatermark(newValue), existing["last_watermark_value"] if existing and not sameBatch else None) if v is not None]
+    carried = existing["last_watermark_value"] if existing and not sameBatch else None
+    candidates = [v for v in (formatWatermark(newValue), carried) if v is not None]
     kind = source.sparkType(source.watermarkColumn)
     lastValue = maxWatermark(candidates, kind)
     now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
     update = spark.createDataFrame(
-        [(source.sourceObject, source.watermarkColumn, lastValue, previous, int(source.overlapMinutes), int(cfg.batchId), int(rowCount), now, PROCESS_NAME)],
+        [
+            (
+                source.sourceObject,
+                source.watermarkColumn,
+                lastValue,
+                previous,
+                int(source.overlapMinutes),
+                int(cfg.batchId),
+                int(rowCount),
+                now,
+                PROCESS_NAME,
+            )
+        ],
         WATERMARK_SCHEMA,
     )
     (

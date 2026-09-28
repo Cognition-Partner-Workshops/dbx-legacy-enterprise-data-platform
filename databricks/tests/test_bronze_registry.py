@@ -67,7 +67,7 @@ def test_registry_columns_match_ddl(source):
     assert list(source.columns) == parsed.columns
     assert list(source.naturalKey) == parsed.primaryKey
     assert tuple(source.ddlFiles) == tuple(parsed.ddlFiles)
-    for name, kind in source.columns:
+    for _name, kind in source.columns:
         parseSparkType(kind)
     if source.loadMode == "incremental":
         assert source.watermarkColumn in source.columnNames

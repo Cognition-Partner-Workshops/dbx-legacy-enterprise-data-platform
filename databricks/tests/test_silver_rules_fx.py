@@ -3,7 +3,6 @@ import datetime as dt
 from decimal import Decimal
 
 import pytest
-
 from pyspark.sql.types import DateType, DecimalType, StringType, StructField, StructType
 
 from sales_lakehouse.silver.rules.fx import applyFx

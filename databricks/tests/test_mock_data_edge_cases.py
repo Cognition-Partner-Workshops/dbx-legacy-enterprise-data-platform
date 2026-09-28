@@ -408,7 +408,7 @@ def test_eu_reverse_charge(data: Data) -> None:
     lines = defaultdict(list)
     for line in data.sql("Sales", "OrderLines"):
         lines[line["OrderID"]].append(line)
-    assert all(Decimal(l["TaxRate"]) == 0 for o in rc for l in lines[o])
+    assert all(Decimal(line["TaxRate"]) == 0 for o in rc for line in lines[o])
     invoices = byId(data.sql("Sales", "Invoices"), "InvoiceID")
     rcInvoices = [i for i in invoices.values() if i["TaxRegimeCode"] == "EU_RC"]
     assert rcInvoices and all(Decimal(i["InvoiceTaxAmount"]) == 0 for i in rcInvoices)
@@ -418,7 +418,7 @@ def test_eu_reverse_charge(data: Data) -> None:
     for invoiceId in nullVat:  # the customer *does* have a VAT number, the invoice extract lost it
         assert customers[invoices[invoiceId]["CustomerID"]]["TaxRegistrationNumber"] != ""
     domestic = [o for o in orders.values() if o["TaxRegimeCode"] in ("EUVAT", "UKVAT")]
-    assert domestic and any(Decimal(l["TaxRate"]) > 0 for o in domestic for l in lines[o["OrderID"]])
+    assert domestic and any(Decimal(line["TaxRate"]) > 0 for o in domestic for line in lines[o["OrderID"]])
 
 
 def test_apac_gst_inclusive_residual(data: Data) -> None:

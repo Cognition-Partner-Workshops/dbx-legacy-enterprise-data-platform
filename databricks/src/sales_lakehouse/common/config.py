@@ -41,7 +41,7 @@ class PipelineConfig:
         return os.path.join(self.mockDataRoot, system, schema, f"{table}.csv")
 
     @staticmethod
-    def fromEnv() -> "PipelineConfig":
+    def fromEnv() -> PipelineConfig:
         """Build from env vars / Databricks widgets-friendly settings."""
         catalog = os.environ.get("SALES_LAKEHOUSE_CATALOG") or None
         root = os.environ.get("SALES_LAKEHOUSE_MOCK_ROOT", "mock_data/output")

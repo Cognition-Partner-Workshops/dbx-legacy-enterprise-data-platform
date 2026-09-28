@@ -243,7 +243,7 @@ class TransactionBuilder:
                         OrderID=orderId, StockItemID=lines[0]["StockItemID"], OrderLineIDs=f"{lines[0]['OrderLineID']},{duplicate['OrderLineID']}")
 
             flagParts = []
-            if any(l["PickedQuantity"] for l in lines):
+            if any(line["PickedQuantity"] for line in lines):
                 flagParts.append("P")
             if hasBackorder:
                 flagParts.append("B")
@@ -261,11 +261,11 @@ class TransactionBuilder:
             sourceQuoteId = self.addConvertedQuote(orderId, customer, salesperson, channel, priceListId, currency, orderDate, lines, taxRate) if rng.random() < 0.08 else None
             order = {
                 "OrderID": orderId, "CustomerID": customerId, "SalespersonPersonID": salesperson,
-                "PickedByPersonID": rng.choice(self.people.pickers) if any(l["PickedQuantity"] for l in lines) else None,
+                "PickedByPersonID": rng.choice(self.people.pickers) if any(line["PickedQuantity"] for line in lines) else None,
                 "ContactPersonID": customer["PrimaryContactPersonID"], "BackorderOrderID": None, "OrderDate": orderDate,
                 "ExpectedDeliveryDate": orderDate + timedelta(days=rng.randint(2, 10)), "CustomerPurchaseOrderNumber": f"PO{rng.randint(10000, 99999)}" if rng.random() < 0.7 else None,
                 "IsUndersupplyBackordered": hasBackorder, "Comments": None, "DeliveryInstructions": None, "InternalComments": None,
-                "PickingCompletedWhen": _ts(orderDate + timedelta(days=1), 15) if any(l["PickedQuantity"] for l in lines) else None,
+                "PickingCompletedWhen": _ts(orderDate + timedelta(days=1), 15) if any(line["PickedQuantity"] for line in lines) else None,
                 **_edited(salesperson, _ts(orderDate, 10)), "SalesChannelID": channel.channelId, "SalesTerritoryID": territory.territoryId, "PriceListID": priceListId,
                 "SourceQuoteID": sourceQuoteId, "OrderStatusCode": status, "FulfilmentFlags": flags, "CurrencyCode": currency, "ExchangeRateToUsd": self.fxRate(currency, orderDate),
                 "TaxRegimeCode": taxRegime, "IsTaxInclusivePricing": inclusive, "OrderValueExTax": money(netTotal), "TotalDiscountAmount": money(discountTotal),
@@ -449,7 +449,7 @@ class TransactionBuilder:
     def addShipment(self, order: Row, info: OrderInfo) -> None:
         rng = self.rng
         orderDate = info.orderDate
-        shippedLines = [l for l in info.lines if l["PickedQuantity"]]
+        shippedLines = [line for line in info.lines if line["PickedQuantity"]]
         if not shippedLines:
             return
         splits = [shippedLines] if len(shippedLines) < 3 or rng.random() > 0.15 else [shippedLines[:1], shippedLines[1:]]
@@ -458,7 +458,7 @@ class TransactionBuilder:
             shipmentId = self.nextId("ShipmentHeaders")
             despatched = _ts(orderDate + timedelta(days=1 + splitIndex), 16)
             delivered = despatched + timedelta(days=rng.randint(1, 6)) if info.status == "INVOICED" else None
-            weight = sum((Decimal(self.items[l["StockItemID"]]["TypicalWeightPerUnit"]) * l["PickedQuantity"] for l in lines), Decimal(0))
+            weight = sum((Decimal(self.items[line["StockItemID"]]["TypicalWeightPerUnit"]) * line["PickedQuantity"] for line in lines), Decimal(0))
             self.tables["ShipmentHeaders"].append({
                 "ShipmentID": shipmentId, "ShipmentReference": f"SHP{shipmentId:08d}", "OrderID": order["OrderID"], "InvoiceID": None, "CustomerID": order["CustomerID"],
                 "WarehouseSiteID": {"NA": 1, "EU": 2, "APAC": 3}[region], "CarrierID": rng.randint(1, 5), "ServiceLevelCode": rng.choice(["STD", "EXP", "ECO"]), "DeliveryRouteID": None,
@@ -632,7 +632,7 @@ class TransactionBuilder:
         candidates = [i for i, info in self.invoiceInfo.items() if info.invoiceDate <= ctx.asOf - timedelta(days=10) and info.customer["CustomerID"] not in self.lateArriving]
         chosen = rng.sample(candidates, max(12, len(candidates) * 3 // 100))
         forced = {UNTRANSLATED_RETURN_REASON: 2, STALE_RETURN_REASON: 2}
-        for index, invoiceId in enumerate(chosen):
+        for _index, invoiceId in enumerate(chosen):
             info = self.invoiceInfo[invoiceId]
             customer = info.customer
             region = customer["RegionCode"]
