@@ -18,7 +18,7 @@ CSV is RFC 4180, UTF-8, header row, `NULL` = empty field, SQL Server `BIT` = `0`
 ## Running
 
 ```bash
-cd databricks && . .venv/bin/activate
+cd databricks && . .venv/bin/activate && export PYTHONPATH=src   # pytest.ini sets pythonpath=src for tests
 python -m sales_lakehouse.mock_data.generate --scale small --out mock_data/output
 python -m sales_lakehouse.mock_data.generate --scale medium --seed 7 --parquet --out /tmp/mock
 ```
