@@ -110,9 +110,8 @@ or in the `targets.<name>.variables` block.
 
 ### `dbx_etl_common` consumption
 
-The job environment installs the wheel from `${var.dbx_etl_common_wheel}` (default `/Workspace/Shared/wwi/dbx_etl_common/dbx_etl_common-0.1.0-py3-none-any.whl`,
-the path where session 00's `databricks/common` bundle is expected to publish its artifact; override it if that bundle
-publishes elsewhere, or point it at `../common/dist/dbx_etl_common-*.whl` once the wheel is built in this checkout).
+The job environment installs the wheel from `../../common/dbx_etl_common/dist/*.whl` (session 00's build output in this checkout, uploaded by
+`bundle deploy`; build it first with `cd databricks/common/dbx_etl_common && python -m build --wheel`).
 Notebooks import exactly `from dbx_etl_common import control, naming, params` and add `../src` to `sys.path` for
 `wwi_sqlserver_extract`. Nothing from `databricks/common` is copied; the fake under `tests/fakes/dbx_etl_common/` is
 test-only and implements just the functions the runner calls.

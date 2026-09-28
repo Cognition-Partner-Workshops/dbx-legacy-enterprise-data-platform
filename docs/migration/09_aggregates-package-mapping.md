@@ -111,7 +111,7 @@ Report views migrated (16 = every `sqlserver/views/Report.vw_*.sql`):
 `params.getJobParams`, `naming.table`, `control.packageRun`, `control.logRowCount`, `control.logRejectedRecord`,
 `control.logRejectedRecordSet`, `control.getWatermark`, `control.setWatermark`, `control.getConfiguration`,
 `control.assertRowCountTolerance`. The wheel is attached to the job as a serverless environment dependency
-(`${var.dbx_etl_common_wheel}`, default `../common/dist/dbx_etl_common-0.1.0-py3-none-any.whl` from session 00); the
+(`../../common/dbx_etl_common/dist/*.whl` from session 00); the
 notebooks add `../src` to `sys.path` for the project helpers. `tests/fakes/dbx_etl_common/` is a call-recording fake
 used only by pytest.
 

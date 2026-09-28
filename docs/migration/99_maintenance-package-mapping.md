@@ -111,10 +111,9 @@ session 00 lays them down; if session 00 ships them with the same columns the st
 `BatchId = "0"` (standalone run) is passed as `None` so `etl.package_execution.BatchId` stays NULL, as in the legacy
 default `BatchId = 0` runs without a master batch.
 
-Library reference: the job declares a serverless environment whose dependency is `${var.dbx_etl_common_wheel}`
-(default `../common/dist/dbx_etl_common-0.1.0-py3-none-any.whl`, i.e. session 00's build output). Notebooks
+Library reference: the job declares a serverless environment whose dependency is
+`../../common/dbx_etl_common/dist/*.whl` (session 00's build output). Notebooks
 import `from dbx_etl_common import control, naming, params` and add `../src` to `sys.path` for `maintenance_lib`.
-If session 00 ships a different wheel file name, override the variable (`-var="dbx_etl_common_wheel=..."`).
 
 ## 5. Parameters
 

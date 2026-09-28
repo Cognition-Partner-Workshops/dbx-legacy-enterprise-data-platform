@@ -38,25 +38,17 @@ resources:
         - name: OnHandVarianceTolerance
           default: "25"
 
-      job_clusters:
-        - job_cluster_key: inventory_cluster
-          new_cluster:
-            spark_version: ${var.spark_version}
-            node_type_id: ${var.node_type_id}
-            data_security_mode: SINGLE_USER
-            autoscale:
-              min_workers: 1
-              max_workers: ${var.max_workers}
-            spark_conf:
-              spark.sql.session.timeZone: UTC
-
+      environments:
+        - environment_key: default
+          spec:
+            client: "3"
+            dependencies:
+              - "../../common/dbx_etl_common/dist/*.whl"
       tasks:
         # ---- Daily Inventory Mart phase (Master_Daily_ETL seq 91, group Mart, 2 streams)
         - task_key: INV_Load_DailySnapshot
           description: work.InventoryPositionDaily -> Fact.Daily Inventory Snapshot (partition overwrite by SnapshotDate). NOT intraday-safe.
-          job_cluster_key: inventory_cluster
-          libraries:
-            - whl: ${var.common_wheel}
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/INV_Load_DailySnapshot.py
             base_parameters:
@@ -65,9 +57,7 @@ resources:
 
         - task_key: INV_Load_StockTransfer
           description: stg.StockMovement (TRANSFER) -> Fact.Movement issue/receipt legs; aged in-transit escalation.
-          job_cluster_key: inventory_cluster
-          libraries:
-            - whl: ${var.common_wheel}
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/INV_Load_StockTransfer.py
             base_parameters:
@@ -75,9 +65,7 @@ resources:
 
         - task_key: INV_Load_CycleCountVariance
           description: stg.CycleCount vs position -> Fact.Movement adjustments (AUTO) / recount queue (HOLD).
-          job_cluster_key: inventory_cluster
-          libraries:
-            - whl: ${var.common_wheel}
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/INV_Load_CycleCountVariance.py
             base_parameters:
@@ -86,9 +74,7 @@ resources:
 
         - task_key: INV_Reconcile_OnHand
           description: Fact.Stock Holding vs operational position -> etl.ReconciliationResult + ONHAND_VARIANCE rejects.
-          job_cluster_key: inventory_cluster
-          libraries:
-            - whl: ${var.common_wheel}
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/INV_Reconcile_OnHand.py
             base_parameters:
@@ -105,9 +91,7 @@ resources:
             - task_key: INV_Load_StockTransfer
             - task_key: INV_Load_CycleCountVariance
           run_if: ALL_DONE
-          job_cluster_key: inventory_cluster
-          libraries:
-            - whl: ${var.common_wheel}
+          environment_key: default
           notebook_task:
             notebook_path: ../validation/Read_On_Hand_Variance.py
 
@@ -125,9 +109,7 @@ resources:
           depends_on:
             - task_key: Replenishment_Gate
               outcome: "true"
-          job_cluster_key: inventory_cluster
-          libraries:
-            - whl: ${var.common_wheel}
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/INV_Load_Replenishment.py
             base_parameters:
@@ -141,9 +123,7 @@ resources:
             - task_key: INV_Load_Replenishment
             - task_key: Read_On_Hand_Variance
           run_if: ALL_DONE
-          job_cluster_key: inventory_cluster
-          libraries:
-            - whl: ${var.common_wheel}
+          environment_key: default
           notebook_task:
             notebook_path: ../validation/INV_Reconcile_Targets.py
             base_parameters:

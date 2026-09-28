@@ -155,9 +155,8 @@ Every notebook does `from dbx_etl_common import control, params, naming` via `c3
 Batch/step lifecycle (`startBatch`/`endBatch`/`startBatchStep`) is *not* called here: in the legacy
 estate the master packages own the batch and pass `BatchId` down; session 00's master job does the same.
 
-**Wheel**: each task lists `libraries: - whl: ${var.dbxEtlCommonWheel}` (default
-`/Workspace/Shared/wwi/libs/dbx_etl_common-latest-py3-none-any.whl`). Override the variable once session 00
-publishes the real path. Notebooks add `../src` to `sys.path` for `c360_lib` only — the shared package is
+**Wheel**: each task lists `libraries: - whl: `../../common/dbx_etl_common/dist/*.whl`` (session 00's build
+output, uploaded by `bundle deploy`). Notebooks add `../src` to `sys.path` for `c360_lib` only — the shared package is
 never copied.
 
 Session 00's PR (`[dbx-migration 00]`) did not exist when this PR was opened, so the boilerplate follows the
@@ -189,7 +188,7 @@ Package parameters carried over as task `base_parameters` (same defaults as the 
 the `Invoke-EstateOrchestration.ps1` restart semantics.
 
 Bundle variables: `catalog` (default `wwi_${bundle.target}`; dev=`wwi_dev`, prod=`wwi_prod`),
-`warehouse_id`, `businessDate`, `environmentCode`, `dbxEtlCommonWheel`, `sparkVersion`, `nodeType`.
+`warehouse_id`, `businessDate`, `environmentCode`, `sparkVersion`, `nodeType`.
 Targets: `dev` (mode development, default) and `prod` (mode production).
 
 ## 6. Not migrated / needs decision
@@ -207,7 +206,7 @@ Targets: `dev` (mode development, default) and `prod` (mode production).
 | Transactions | `BEGIN TRAN … COMMIT` around DELETE+INSERT+ALTER VIEW has no multi-statement equivalent; a single Delta overwrite commit + view replace gives the same reader-visible guarantee. |
 | Work-table DDL | The repo has no `CREATE TABLE` for the C360 work/mart tables; schemas are inferred from the generator SQL. Delta tables are created on first write (`overwriteSchema`). |
 | `Fact.Return` | Mapped but unused: the T-SQL derives returns from `Fact.Sale` rows with negative quantity. |
-| Job cluster | `Standard_DS3_v2` / DBR 15.4 LTS placeholders; adjust per workspace (or switch to serverless once the wheel install path is agreed). |
+| Compute | Serverless job compute (`environments` block, `client: "3"`) with the `dbx_etl_common` wheel as an environment dependency; the workspace is serverless-only. |
 
 ## 7. `Master_Customer_Sync` cadence notes (for session 00)
 
@@ -233,7 +232,6 @@ From `ssis/orchestration-plan.json` / `docs/dependency-maps/etl-dependency-map.m
 ## 8. Open questions
 
 1. Schema for `Customer360.*` (see §6) — `gold.c360_*` assumed.
-2. Wheel location / install method for `dbx_etl_common` (`libraries: whl:` assumed; variable `dbxEtlCommonWheel`).
 3. Does anything downstream read `Report.vw_CustomerSegment` with a specific column list? The legacy view DDL is not in the repo.
 4. Should the SQL Server baseline for reconciliation be captured per `BatchId` or per `BusinessDate`? The notebook supports both.
 

@@ -138,16 +138,14 @@ Package parameters (strings, defaults are the legacy defaults): `FailedPackage` 
 `RejectEscalationDays` `"5"`, `ObjectScope` `ALL`, `QuarantineFolder` `quarantine`, `DeleteZeroLengthFiles` `"False"`,
 `DefaultTolerancePercent` `"0"`, `RaiseOnFailure` `"True"`, `NotifyOnWarnings` `"False"`, `PostToWebhook` `"True"`.
 
-Bundle variables: `catalog`, `warehouse_id`, `businessDate`, `environmentCode`, `dbx_etl_common_wheel`, `quarantine_volume_path`,
+Bundle variables: `catalog`, `warehouse_id`, `businessDate`, `environmentCode`, `quarantine_volume_path`,
 `inbound_volume_path`, `reject_volume_path`, `webhook_secret_scope` (`wwi`), `webhook_secret_key` (`ops-webhook-url`), `ops_email`,
 `ops_webhook_destination_ids` (list of notification-destination IDs). The webhook URL itself is only ever read from the secret scope.
 
 ### Shared wheel
 Tasks run on serverless with a job `environments` entry (`environment_key: dbx_etl_common`) whose dependency is
-`${var.dbx_etl_common_wheel}` (default `/Workspace/Shared/wwi/dbx_etl_common/dbx_etl_common-0.1.0-py3-none-any.whl`).
-This was chosen over `libraries: - whl: ../common/dist/...` because that path is outside this bundle's root (bundles cannot
-upload files above `databricks.yml`) and session 00's PR had not shipped a wheel path when this bundle was written. Once the
-session 00 bundle publishes the wheel, point the variable at its workspace/Volumes path (or at a PyPI-style index). No `%pip install` cells are used.
+`../../common/dbx_etl_common/dist/*.whl` (session 00's build output; wheel libraries are uploaded by `bundle deploy`, so the path
+may sit outside this bundle's root). No `%pip install` cells are used.
 
 ## 5. How session 00 references each task
 
@@ -189,8 +187,8 @@ Offline (done in this PR): `python -m py_compile databricks/15_error_handling/no
 `cd databricks/15_error_handling/tests && python -m pytest`, `cd databricks/15_error_handling && databricks bundle validate -t dev` (and `-t prod`).
 The bundle validation was run with the demo workspace credentials (schema + workspace resolution); nothing was deployed or executed.
 
-Deploy: `cd databricks/15_error_handling && databricks bundle deploy -t dev` after the `dbx_etl_common` wheel exists at
-`${var.dbx_etl_common_wheel}`, the `wwi` secret scope contains `ops-webhook-url`, and the volumes referenced by the three
+Deploy: `cd databricks/15_error_handling && databricks bundle deploy -t dev` after the `dbx_etl_common` wheel has been built
+(`cd databricks/common/dbx_etl_common && python -m build --wheel`), the `wwi` secret scope contains `ops-webhook-url`, and the volumes referenced by the three
 `*_volume_path` variables exist. Run: `databricks bundle run wwi_15_error_handling -t dev --params BatchId=<id>`.
 
 Reconciliation notebook `validation/ERR_ReconcileTargets.py`: for every table written by this project it computes the per-`BatchId`
@@ -220,6 +218,5 @@ call the contracted `dbx_etl_common` names and never hard-code a catalog.
 
 ## 8. Open questions
 1. Should `IsRetryable` / `FailureClass` live on `etl.batch_step` (session 00 schema change) rather than `silver.work_step_failure`?
-2. Confirm the workspace path (or Volumes path) where session 00 publishes the `dbx_etl_common` wheel, so `dbx_etl_common_wheel` can be defaulted correctly.
 3. Confirm the volume names for inbound / quarantine / rejects (`/Volumes/<catalog>/bronze/inbound`, `/Volumes/<catalog>/bronze/quarantine`, `/Volumes/<catalog>/silver/rejects` are placeholders).
 4. Confirm the operations e-mail list and the webhook notification destination IDs per target.

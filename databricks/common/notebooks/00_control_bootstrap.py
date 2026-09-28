@@ -22,15 +22,14 @@ createSchemas = params.parseBool(dbutils.widgets.get("createSchemas"), default=T
 
 # COMMAND ----------
 
-spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog}")
+if spark.sql(f"SHOW CATALOGS LIKE '{catalog}'").count() == 0:
+    spark.sql(f"CREATE CATALOG {catalog}")
 if createSchemas:
     for schema in (naming.BRONZE, naming.SILVER, naming.GOLD):
         spark.sql(f"CREATE SCHEMA IF NOT EXISTS {naming.table(catalog, schema, '').rstrip('.')}")
 
-summary = bootstrap.bootstrap(spark, catalog)
-print(f"created tables: {summary['createdTables']}")
-print(f"seeded tables:  {summary['seededTables']}")
-print(f"views:          {summary['views']}")
+createdTables = bootstrap.bootstrap(spark, catalog)
+print(f"created tables ({len(createdTables)}): {createdTables}")
 
 # COMMAND ----------
 

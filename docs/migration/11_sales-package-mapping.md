@@ -112,7 +112,7 @@ a mandatory column is absent, so the notebooks work against either naming.
 `legacyPackageRun` is a thin wrapper over `logPackageStart` / `logPackageEnd` / `logError` (not a reimplementation of
 `control.packageRun`) so the OnError semantics of the legacy packages (log error with the failing task name, mark the
 execution failed, fail the standalone batch) are preserved. The wheel is attached through a serverless job environment
-(`environments[0].spec.dependencies = ${var.dbx_etl_common_whl}`, default `/Workspace/Shared/wwi/common/dist/dbx_etl_common-0.1.0-py3-none-any.whl`).
+(`environments[0].spec.dependencies = `../../common/dbx_etl_common/dist/*.whl``, session 00's build output).
 No `[dbx-migration 00]` PR existed when this bundle was written, so imports follow the interface contract verbatim;
 `tests/fakes/dbx_etl_common` is a test-only fake.
 

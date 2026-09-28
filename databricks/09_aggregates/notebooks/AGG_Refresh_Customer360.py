@@ -11,7 +11,7 @@
 # MAGIC Legacy control flow: Init As At Date -> Log Package Start -> Truncate Customer 360 -> Rebuild Customer 360 (data flow) -> Derive Profile Measures -> Assert Reconciliation -> Log Rejected Records -> Log Row Counts -> Log Package Success.
 # MAGIC
 # MAGIC `dbx_etl_common` is attached to the job task as a wheel library (see
-# MAGIC `resources/wwi_09_aggregates.yml`, variable `dbx_etl_common_wheel`).
+# MAGIC `resources/wwi_09_aggregates.yml`, `../../common/dbx_etl_common/dist/*.whl`).
 
 # COMMAND ----------
 
