@@ -1,0 +1,52 @@
+# Databricks Asset Bundle for the legacy SSIS project WWI_Ingest_Files (ssis/03_file_ingestion).
+# Validate: databricks bundle validate -t dev   (never deploy from a migration session)
+bundle:
+  name: wwi_03_file_ingestion
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog catalog holding the bronze/silver/gold/etl schemas and the bronze inbound/archive/quarantine volumes.
+    default: wwi_${bundle.target}
+  warehouse_id:
+    description: SQL warehouse for ad-hoc validation queries (the job tasks run on serverless compute).
+    default: ""
+  businessDate:
+    description: BusinessDate job parameter (yyyy-MM-dd); empty = today, like the master's 1900-01-01 sentinel.
+    default: ""
+  environmentCode:
+    description: Legacy EnvironmentCode (etl.configuration scope, etl.batch.EnvironmentCode).
+    default: DEV
+  controlTotalMode:
+    description: >-
+      legacy = route files exactly as the shipped packages did (only SupplierCatalog's checksum can quarantine a file,
+      other mismatches are logged as warnings); strict = quarantine every file whose footer / sidecar total does not
+      reconcile.
+    default: legacy
+  useAutoLoader:
+    description: "True = discover files with Auto Loader (cloudFiles/binaryFile); False = batch binaryFile fallback."
+    default: "True"
+  dbx_etl_common_wheel:
+    description: Session 00's shared control-framework wheel (built from databricks/common with `python -m build`).
+    default: ../common/dist/dbx_etl_common-0.1.0-py3-none-any.whl
+  file_arrival_pause_status:
+    description: >-
+      The file-arrival trigger replaces the master's 15-minute Master_File_Ingestion cadence. Session 00's master job
+      owns the schedule, so it ships PAUSED; set UNPAUSED to let the inbound volume drive the job directly.
+    default: PAUSED
+
+targets:
+  dev:
+    mode: development
+    default: true
+    variables:
+      environmentCode: DEV
+  prod:
+    mode: production
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      environmentCode: PROD
+      file_arrival_pause_status: PAUSED
