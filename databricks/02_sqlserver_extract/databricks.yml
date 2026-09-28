@@ -1,0 +1,67 @@
+# Asset bundle for the SSIS project WWI_Extract_SqlServer (ssis/02_sqlserver_extract).
+# Validate: databricks bundle validate -t dev   (never deploy from a migration session)
+bundle:
+  name: wwi_02_sqlserver_extract
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog catalog holding the bronze/silver/gold/etl schemas
+    default: wwi_${bundle.target}
+  warehouse_id:
+    description: SQL warehouse used by ad-hoc reconciliation queries (not needed by the extract job)
+    default: ""
+  business_date:
+    description: Default BusinessDate job parameter (yyyy-MM-dd); the master job overrides it
+    default: "{{job.start_time.[iso_date]}}"
+  environment_code:
+    description: Default EnvironmentCode job parameter
+    default: DEV
+  dbx_etl_common_wheel:
+    description: >-
+      Workspace path of the shared dbx_etl_common wheel built and deployed by databricks/common
+      (session 00). Override per target once that bundle publishes its artifact.
+    default: /Workspace/Shared/wwi/dbx_etl_common/dbx_etl_common-0.1.0-py3-none-any.whl
+  sqlserver_host:
+    description: SQL Server host (Project.params SqlServerHost)
+    default: sqlserver.internal.example
+  sqlserver_port:
+    description: SQL Server port (Project.params SqlServerPort)
+    default: "1433"
+  sqlserver_oltp_db:
+    description: WideWorldImporters OLTP database (Project.params SqlServerOltpDb)
+    default: WideWorldImporters
+  sqlserver_trust_server_certificate:
+    description: JDBC trustServerCertificate flag
+    default: "false"
+  sqlserver_secret_scope:
+    description: Secret scope holding the JDBC credentials ({{secrets/<scope>/<key>}})
+    default: wwi
+  sqlserver_user_secret_key:
+    description: Secret key for the SQL Server login name (WWI_Source_DB.conmgr UserName)
+    default: sqlserver-oltp-user
+  sqlserver_password_secret_key:
+    description: Secret key for the SQL Server login password (WWI_Source_DB.conmgr PasswordSecretName)
+    default: sqlserver-oltp-password
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      root_path: ~/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      environment_code: DEV
+
+  prod:
+    mode: production
+    workspace:
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      environment_code: PROD
+      sqlserver_trust_server_certificate: "false"
+    permissions:
+      - level: CAN_MANAGE
+        group_name: data-platform-admins
