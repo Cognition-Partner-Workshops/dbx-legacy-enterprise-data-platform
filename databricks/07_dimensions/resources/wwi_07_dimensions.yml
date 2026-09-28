@@ -1,0 +1,166 @@
+# One job per SSIS project; task_key = legacy package name (15 DIM_* packages).
+# depends_on edges come from docs/inventories/package-dependencies.csv (upstream STG_* packages live in other bundles
+# and are sequenced by session 00's master job) plus the lookups each DIM_* data flow performs against sibling
+# dimensions (the legacy "Dimensions" phase ran the packages in 3 parallel streams behind those lookups).
+resources:
+  jobs:
+    wwi_07_dimensions:
+      name: wwi_07_dimensions
+      description: >-
+        SCD1 / SCD2 / hybrid dimension loads for the WWI warehouse (Dimension.* -> gold.dim_*), regional
+        customer conditioning (NA / EU / APAC) and late-arriving member rekeying. Ported from ssis/07_dimensions.
+      tags:
+        ssis_project: WWI_Dimensions
+        migration_session: "07"
+      max_concurrent_runs: 1
+      timeout_seconds: 14400
+      parameters:
+        - name: BatchId
+          default: ${var.batchId}
+        - name: BusinessDate
+          default: ${var.businessDate}
+        - name: ReloadFullHistory
+          default: ${var.reloadFullHistory}
+        - name: EnvironmentCode
+          default: ${var.environmentCode}
+        - name: RestartFromStep
+          default: ${var.restartFromStep}
+        - name: catalog
+          default: ${var.catalog}
+      job_clusters:
+        - job_cluster_key: dimensions_cluster
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: ${var.node_type_id}
+            num_workers: 2
+            data_security_mode: SINGLE_USER
+            spark_conf:
+              spark.databricks.delta.schema.autoMerge.enabled: "false"
+              spark.sql.shuffle.partitions: "64"
+      tasks:
+        # ---- stream 1: reference-style dimensions (SCD1) that everything else looks up -----------------------
+        - task_key: DIM_Load_CustomerCategory
+          job_cluster_key: dimensions_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/DIM_Load_CustomerCategory.py
+        - task_key: DIM_Load_ProductCategory
+          job_cluster_key: dimensions_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/DIM_Load_ProductCategory.py
+        - task_key: DIM_Load_SalesTerritory
+          job_cluster_key: dimensions_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/DIM_Load_SalesTerritory.py
+        - task_key: DIM_Load_Supplier
+          job_cluster_key: dimensions_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/DIM_Load_Supplier.py
+        - task_key: DIM_Load_Employee
+          job_cluster_key: dimensions_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/DIM_Load_Employee.py
+        - task_key: DIM_Load_Promotion
+          job_cluster_key: dimensions_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/DIM_Load_Promotion.py
+
+        # ---- stream 2: regional customer loads (lookup Dimension.Customer Category) ------------------------
+        - task_key: DIM_NA_Load_Customer
+          depends_on:
+            - task_key: DIM_Load_CustomerCategory
+          job_cluster_key: dimensions_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/DIM_NA_Load_Customer.py
+        - task_key: DIM_EU_Load_Customer
+          depends_on:
+            - task_key: DIM_Load_CustomerCategory
+          job_cluster_key: dimensions_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/DIM_EU_Load_Customer.py
+        - task_key: DIM_APAC_Load_Customer
+          depends_on:
+            - task_key: DIM_Load_CustomerCategory
+          job_cluster_key: dimensions_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/DIM_APAC_Load_Customer.py
+        - task_key: DIM_Load_CustomerSegment
+          # segment assignment writes Dimension.Customer.CustomerSegmentKey on the current customer rows
+          depends_on:
+            - task_key: DIM_NA_Load_Customer
+            - task_key: DIM_EU_Load_Customer
+            - task_key: DIM_APAC_Load_Customer
+          job_cluster_key: dimensions_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/DIM_Load_CustomerSegment.py
+
+        # ---- stream 3: dimensions that look up Supplier / Product Category / Sales Territory / Employee ------
+        - task_key: DIM_Load_City
+          depends_on:
+            - task_key: DIM_Load_SalesTerritory
+          job_cluster_key: dimensions_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/DIM_Load_City.py
+        - task_key: DIM_Load_StockItem
+          depends_on:
+            - task_key: DIM_Load_Supplier
+            - task_key: DIM_Load_ProductCategory
+          job_cluster_key: dimensions_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/DIM_Load_StockItem.py
+        - task_key: DIM_Load_VendorContract
+          depends_on:
+            - task_key: DIM_Load_Supplier
+          job_cluster_key: dimensions_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/DIM_Load_VendorContract.py
+        - task_key: DIM_Load_Salesperson
+          depends_on:
+            - task_key: DIM_Load_Employee
+            - task_key: DIM_Load_SalesTerritory
+          job_cluster_key: dimensions_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/DIM_Load_Salesperson.py
+
+        # ---- late-arriving rekey runs once every dimension has been loaded ---------------------------------
+        - task_key: DIM_Rekey_LateArriving
+          depends_on:
+            - task_key: DIM_Load_City
+            - task_key: DIM_Load_CustomerSegment
+            - task_key: DIM_Load_StockItem
+            - task_key: DIM_Load_VendorContract
+            - task_key: DIM_Load_Salesperson
+            - task_key: DIM_Load_Promotion
+          run_if: ALL_DONE
+          job_cluster_key: dimensions_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/DIM_Rekey_LateArriving.py
