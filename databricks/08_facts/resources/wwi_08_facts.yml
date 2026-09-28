@@ -1,0 +1,226 @@
+# One job per SSIS project; task_key = legacy package name (24 FACT_* packages of WWI_Facts).
+# depends_on edges come from docs/inventories/package-dependencies.csv (FACT_* -> FACT_* rows), the Fact phase of
+# ssis/orchestration-plan.json (4 parallel streams) and the gold tables each notebook reads/writes: Apply_Corrections
+# restates Fact.Sale / Fact.Payment / Fact.Order, Dedup_Sale runs after corrections (Master_Month_End order), Return
+# and CreditNote write reversal / restatement rows into Fact.Sale so they follow the dedup, snapshots follow the facts
+# they summarise. Upstream STG_* / DIM_* packages live in other bundles and are sequenced by session 00's master job.
+resources:
+  jobs:
+    wwi_08_facts:
+      name: wwi_08_facts
+      description: >-
+        Incremental fact merges for the WWI warehouse (Fact.* -> gold.fact_*): regional NA / EU / APAC sale loads,
+        generic incremental loaders with SCD2 lookups, inferred members and late-arriving holds, sale deduplication,
+        correction / reversal processing and date-partitioned snapshots. Ported from ssis/08_facts.
+      tags:
+        ssis_project: WWI_Facts
+        migration_session: "08"
+      max_concurrent_runs: 1
+      timeout_seconds: 21600
+      parameters:
+        - name: BatchId
+          default: ${var.batchId}
+        - name: BusinessDate
+          default: ${var.businessDate}
+        - name: ReloadFullHistory
+          default: ${var.reloadFullHistory}
+        - name: EnvironmentCode
+          default: ${var.environmentCode}
+        - name: RestartFromStep
+          default: ${var.restartFromStep}
+        - name: catalog
+          default: ${var.catalog}
+      job_clusters:
+        - job_cluster_key: facts_cluster
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: ${var.node_type_id}
+            num_workers: 4
+            data_security_mode: SINGLE_USER
+            spark_conf:
+              spark.databricks.delta.schema.autoMerge.enabled: "false"
+              spark.sql.shuffle.partitions: "200"
+      tasks:
+        # ---- stream 1: order / fulfilment chain ------------------------------------------------------------------
+        - task_key: FACT_Load_Order
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_Order.py
+        - task_key: FACT_Load_Shipment
+          depends_on:
+            - task_key: FACT_Load_Order
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_Shipment.py
+        - task_key: FACT_Load_OrderFulfilment
+          depends_on:
+            - task_key: FACT_Load_Order
+            - task_key: FACT_Load_Shipment
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_OrderFulfilment.py
+        # ---- stream 2: regional sales -> corrections -> dedup -> sale-linked facts -------------------------------
+        - task_key: FACT_NA_Load_Sale
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_NA_Load_Sale.py
+        - task_key: FACT_EU_Load_Sale
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_EU_Load_Sale.py
+        - task_key: FACT_APAC_Load_Sale
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_APAC_Load_Sale.py
+        - task_key: FACT_Load_Payment
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_Payment.py
+        - task_key: FACT_Apply_Corrections
+          depends_on:
+            - task_key: FACT_NA_Load_Sale
+            - task_key: FACT_EU_Load_Sale
+            - task_key: FACT_APAC_Load_Sale
+            - task_key: FACT_Load_Payment
+            - task_key: FACT_Load_Order
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Apply_Corrections.py
+        - task_key: FACT_Dedup_Sale
+          depends_on:
+            - task_key: FACT_Apply_Corrections
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Dedup_Sale.py
+        - task_key: FACT_Load_Return
+          depends_on:
+            - task_key: FACT_Dedup_Sale
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_Return.py
+        - task_key: FACT_Load_CreditNote
+          depends_on:
+            - task_key: FACT_Dedup_Sale
+            - task_key: FACT_Load_Return
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_CreditNote.py
+        - task_key: FACT_Load_DailySalesSnapshot
+          depends_on:
+            - task_key: FACT_Dedup_Sale
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_DailySalesSnapshot.py
+        # ---- stream 3: purchasing / ledger -----------------------------------------------------------------------
+        - task_key: FACT_Load_SupplierPayment
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_SupplierPayment.py
+        - task_key: FACT_Load_CustomerTransaction
+          depends_on:
+            - task_key: FACT_Load_Payment
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_CustomerTransaction.py
+        - task_key: FACT_Load_SupplierTransaction
+          depends_on:
+            - task_key: FACT_Load_SupplierPayment
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_SupplierTransaction.py
+        - task_key: FACT_Load_Transaction
+          depends_on:
+            - task_key: FACT_Load_CustomerTransaction
+            - task_key: FACT_Load_SupplierTransaction
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_Transaction.py
+        - task_key: FACT_Load_Purchase
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_Purchase.py
+        - task_key: FACT_Load_PurchaseReceipt
+          depends_on:
+            - task_key: FACT_Load_Purchase
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_PurchaseReceipt.py
+        - task_key: FACT_Load_GLPosting
+          depends_on:
+            - task_key: FACT_Load_Transaction
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_GLPosting.py
+        # ---- stream 4: inventory / snapshots / behavioural -------------------------------------------------------
+        - task_key: FACT_Load_Movement
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_Movement.py
+        - task_key: FACT_Load_StockHolding
+          depends_on:
+            - task_key: FACT_Load_Movement
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_StockHolding.py
+        - task_key: FACT_Load_DailyInventorySnapshot
+          depends_on:
+            - task_key: FACT_Load_StockHolding
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_DailyInventorySnapshot.py
+        - task_key: FACT_Load_LoyaltyPoints
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_LoyaltyPoints.py
+        - task_key: FACT_Load_WebSession
+          job_cluster_key: facts_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/FACT_Load_WebSession.py

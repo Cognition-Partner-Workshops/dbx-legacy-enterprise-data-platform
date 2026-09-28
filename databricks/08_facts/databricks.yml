@@ -1,0 +1,55 @@
+# Databricks Asset Bundle for SSIS project 08_facts (WWI_Facts): 24 FACT_* packages -> gold.fact_* incremental merges.
+# Validate offline: databricks bundle validate --strict --target dev
+# Deployment / execution is coordinated by session 00's master bundle - nothing is deployed from this session.
+bundle:
+  name: wwi_08_facts
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog catalog holding the bronze/silver/gold/etl schemas.
+    default: wwi_${bundle.target}
+  warehouse_id:
+    description: SQL warehouse for the reconciliation notebook when run interactively (not required by the job).
+    default: ""
+  businessDate:
+    description: Business date (yyyy-MM-dd) the fact loads process; empty means "today" (params.getJobParams).
+    default: ""
+  batchId:
+    description: Batch id opened by the master orchestration; "0" lets each package adopt the running batch.
+    default: "0"
+  reloadFullHistory:
+    description: When "True", replays every staging row from the epoch watermark (usp_GetWatermark full-reload semantics).
+    default: "False"
+  environmentCode:
+    description: etl.configuration environment (DEV / TEST / PROD).
+    default: DEV
+  restartFromStep:
+    description: Master orchestration restart step name (forwarded for parity; the fact job has one step group).
+    default: ""
+  spark_version:
+    description: Databricks Runtime for the job cluster (Delta MERGE + liquid clustering need DBR 13.3+).
+    default: 15.4.x-scala2.12
+  node_type_id:
+    description: Job cluster node type.
+    default: Standard_DS3_v2
+  common_wheel:
+    description: >-
+      Path (relative to this bundle) of the shared dbx_etl_common wheel built by session 00
+      (databricks/common/dbx_etl_common, `python -m build --wheel`). Every task installs it as a task library.
+    default: ../common/dbx_etl_common/dist/dbx_etl_common-0.1.0-py3-none-any.whl
+
+targets:
+  dev:
+    mode: development
+    default: true
+    variables:
+      environmentCode: DEV
+  prod:
+    mode: production
+    variables:
+      environmentCode: PROD
+    run_as:
+      user_name: ${workspace.current_user.userName}
