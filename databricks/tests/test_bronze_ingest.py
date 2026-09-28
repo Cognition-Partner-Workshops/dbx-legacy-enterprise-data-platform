@@ -115,16 +115,16 @@ def test_sqlserver_load_log(spark, sqlServerLoad):
     assert row["started_at_utc"] <= row["finished_at_utc"]
 
 
-def test_same_batch_rerun_is_idempotent_and_new_batch_appends(spark, sqlServerLoad):
+def test_same_batch_rerun_is_idempotent_and_new_batch_replaces_full_extract(spark, sqlServerLoad):
     cfg, _, _ = sqlServerLoad
     ingest.run(spark, cfg, tables=["Sales.OrderHolds"])
     df = bronze(spark, cfg, ORDER_HOLDS)
     assert df.filter(F.col("_batch_id") == 101).count() == 2
     ingest.run(spark, withBatch(cfg, 102), tables=["Sales.OrderHolds"])
     df = bronze(spark, cfg, ORDER_HOLDS)
-    assert df.filter(F.col("_batch_id") == 101).count() == 2
+    assert df.filter(F.col("_batch_id") == 101).count() == 0
     assert df.filter(F.col("_batch_id") == 102).count() == 2
-    assert df.count() == 4
+    assert df.count() == 2
 
 
 def test_bad_bit_value_is_quarantined_not_coerced(spark, cfg):

@@ -30,7 +30,7 @@ from sales_lakehouse.bronze.source_table import SourceTable
 from sales_lakehouse.common.config import PipelineConfig
 from sales_lakehouse.common.quality import quarantine
 from sales_lakehouse.common.spark import cacheIfSupported, unpersistQuietly
-from sales_lakehouse.common.tables import appendBatch
+from sales_lakehouse.common.tables import appendBatch, overwriteTable
 
 log = logging.getLogger(__name__)
 
@@ -181,7 +181,12 @@ def loadTable(spark: SparkSession, cfg: PipelineConfig, source: SourceTable, loa
         newWatermark = shaped.agg(F.max(F.col(source.watermarkColumn))).first()[0]
 
     final = addMetadata(shaped, source, path, loadTs, cfg.batchId)
-    appendBatch(final, bronzeFqn, "_batch_id", cfg.batchId)
+    if source.loadMode == "incremental":
+        appendBatch(final, bronzeFqn, "_batch_id", cfg.batchId)
+    else:
+        # full extracts are snapshots: the latest batch replaces the previous
+        # copy (legacy truncate-and-load staging), so silver reads bronze as-is
+        overwriteTable(final, bronzeFqn)
 
     if source.loadMode == "incremental":
         updateWatermark(spark, cfg, source, newWatermark, result.rowsLoaded)

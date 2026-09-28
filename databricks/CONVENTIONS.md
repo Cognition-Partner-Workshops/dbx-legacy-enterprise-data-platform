@@ -86,8 +86,11 @@ NVARCHAR -> string), plus metadata columns:
 | `_load_ts`        | timestamp | ingestion time (UTC)                          |
 | `_batch_id`       | bigint    | run id (`cfg.batchId`)                        |
 
-Bronze is append-only per batch; a re-run of the same batch id replaces that
-batch (`replaceWhere _batch_id = ...`).
+Incremental sources (`loadMode == "incremental"`, watermarked) append per
+batch; a re-run of the same batch id replaces that batch (`replaceWhere
+_batch_id = ...`). Full extracts (`loadMode == "full"`) are snapshots: each
+batch overwrites the bronze table, so silver reads bronze without a batch
+filter and re-runs never double the source.
 
 ## Silver tables (workstreams 3/4/5 output, gold input)
 
