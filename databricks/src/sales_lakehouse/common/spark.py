@@ -15,6 +15,9 @@ def isDatabricks() -> bool:
     return "DATABRICKS_RUNTIME_VERSION" in os.environ
 
 
+WAREHOUSE_DIR_ENV = "SALES_LAKEHOUSE_WAREHOUSE_DIR"
+
+
 def getSpark(appName: str = "sales_lakehouse", warehouseDir: str | None = None) -> SparkSession:
     if isDatabricks():
         return SparkSession.builder.getOrCreate()
@@ -32,7 +35,18 @@ def getSpark(appName: str = "sales_lakehouse", warehouseDir: str | None = None) 
         # Delta jars through the Google-hosted mirror first.
         .config("spark.jars.repositories", os.environ.get("SPARK_JARS_REPOSITORIES", MAVEN_MIRROR))
     )
-    if warehouseDir:
+    persistentDir = os.environ.get(WAREHOUSE_DIR_ENV) if warehouseDir is None else None
+    if persistentDir:
+        # Persistent local warehouse + Derby metastore so several processes (CLI runs,
+        # validation) see the same tables; without it every process starts empty.
+        root = os.path.abspath(persistentDir)
+        metastore = os.path.join(root, "metastore_db")
+        builder = (
+            builder.config("spark.sql.warehouse.dir", os.path.join(root, "warehouse"))
+            .config("javax.jdo.option.ConnectionURL", f"jdbc:derby:;databaseName={metastore};create=true")
+            .enableHiveSupport()
+        )
+    elif warehouseDir:
         builder = builder.config("spark.sql.warehouse.dir", warehouseDir)
     return configure_spark_with_delta_pip(builder).getOrCreate()
 

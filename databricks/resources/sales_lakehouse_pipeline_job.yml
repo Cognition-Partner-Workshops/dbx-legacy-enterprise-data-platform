@@ -1,0 +1,256 @@
+# End-to-end sales lakehouse workflow (integration, workstream 8).
+#
+# One serverless job that replaces the SSIS master packages:
+#   Master_Daily_ETL / Master_Hourly_Incremental -> `sales_lakehouse_pipeline` (below). The incremental
+#   package only differed from the daily one by watermark scope, which bronze.ingest now owns per table,
+#   so both collapse into this single job (schedule it as often as needed; every run is a new batch_id).
+#   Master_Month_End                              -> `sales_lakehouse_month_end` (bottom of this file):
+#   runs gold aggregates + reporting, then aggregates.closeMonthlyPeriod for every region through the
+#   orchestration notebook's `month_end` stage.
+#
+# Task order mirrors sales_lakehouse.orchestration.pipeline.STAGES; every task receives the numeric
+# {{job.run_id}} as batch_id so bronze, silver, gold and quality rows share one lineage key.
+# The per-layer jobs added by the workstreams (bronze_job.yml, silver_*_job.yml, gold_*_job.yml) are
+# kept as-is for re-running a single layer during development; this job is the one to deploy and schedule.
+# Serverless notebook tasks only - no cluster blocks.
+resources:
+  jobs:
+    sales_lakehouse_pipeline:
+      name: "[${bundle.target}] wwi_sales lakehouse - end to end"
+      description: >-
+        Bronze -> silver (reference, party resolution, customers, dimensions, transactions) -> gold facts ->
+        aggregates -> reporting views -> sales ops (quota, commission, partner feed) -> quality checks ->
+        validation against the mock manifest. Replaces SSIS Master_Daily_ETL / Master_Hourly_Incremental.
+      max_concurrent_runs: 1
+      timeout_seconds: 14400
+      schedule:
+        quartz_cron_expression: "0 0 2 * * ?"
+        timezone_id: UTC
+        pause_status: PAUSED
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: mock_data_root
+          default: ${var.mock_data_root}
+        - name: batch_id
+          default: "{{job.run_id}}"
+        - name: partner_feed_dir
+          default: ""
+      tasks:
+        # ---- bronze ------------------------------------------------------------------------------
+        - task_key: ingest_bronze
+          notebook_task:
+            notebook_path: ../notebooks/10_bronze/ingest_bronze.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+        # ---- silver ------------------------------------------------------------------------------
+        - task_key: silver_reference
+          depends_on:
+            - task_key: ingest_bronze
+          notebook_task:
+            notebook_path: ../notebooks/20_silver/build_reference.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+        - task_key: silver_party_resolution
+          depends_on:
+            - task_key: ingest_bronze
+          notebook_task:
+            notebook_path: ../notebooks/20_silver/party_resolution.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+        - task_key: silver_customers
+          depends_on:
+            - task_key: silver_party_resolution
+          notebook_task:
+            notebook_path: ../notebooks/20_silver/customers.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+        - task_key: silver_dimensions
+          depends_on:
+            - task_key: silver_customers
+          notebook_task:
+            notebook_path: ../notebooks/20_silver/dimensions.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+        - task_key: silver_transactions
+          depends_on:
+            - task_key: silver_reference
+            - task_key: silver_dimensions
+          notebook_task:
+            notebook_path: ../notebooks/20_silver/silver_transactions.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+        # ---- gold facts (same chain as gold_facts_job.yml) ---------------------------------------
+        - task_key: fact_sale
+          depends_on:
+            - task_key: silver_transactions
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/fact_sale.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+        - task_key: fact_order
+          depends_on:
+            - task_key: silver_transactions
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/fact_order.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+        - task_key: fact_payment
+          depends_on:
+            - task_key: fact_sale
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/fact_payment.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+        - task_key: fact_return
+          depends_on:
+            - task_key: fact_sale
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/fact_return.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+        - task_key: fact_credit_note
+          depends_on:
+            - task_key: fact_sale
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/fact_credit_note.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+        - task_key: fact_sales_margin
+          depends_on:
+            - task_key: fact_return
+            - task_key: fact_credit_note
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/fact_sales_margin.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+        - task_key: fact_daily_snapshots
+          depends_on:
+            - task_key: fact_order
+            - task_key: fact_return
+            - task_key: fact_credit_note
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/fact_daily_snapshots.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+        - task_key: fact_order_fulfilment
+          depends_on:
+            - task_key: fact_order
+            - task_key: fact_payment
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/fact_order_fulfilment.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+        # ---- gold aggregates / reporting / sales ops ---------------------------------------------
+        - task_key: gold_aggregates
+          depends_on:
+            - task_key: fact_payment
+            - task_key: fact_sales_margin
+            - task_key: fact_daily_snapshots
+            - task_key: fact_order_fulfilment
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/gold_aggregates.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+        - task_key: gold_reporting_views
+          depends_on:
+            - task_key: gold_aggregates
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/gold_reporting_views.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+        - task_key: gold_sales_ops
+          depends_on:
+            - task_key: gold_aggregates
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/gold_sales_ops.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+        # ---- quality + validation ----------------------------------------------------------------
+        - task_key: quality_checks
+          depends_on:
+            - task_key: gold_reporting_views
+            - task_key: gold_sales_ops
+          notebook_task:
+            notebook_path: ../notebooks/90_orchestration/run_pipeline.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+              stages: quality
+              partner_feed_dir: "{{job.parameters.partner_feed_dir}}"
+        - task_key: validate_against_mock
+          depends_on:
+            - task_key: quality_checks
+          notebook_task:
+            notebook_path: ../notebooks/95_validation/validate_against_mock.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+              partner_feed_dir: "{{job.parameters.partner_feed_dir}}"
+
+    sales_lakehouse_month_end:
+      name: "[${bundle.target}] wwi_sales lakehouse - month end close"
+      description: >-
+        Replaces SSIS Master_Month_End: rebuild gold aggregates + reporting views, then set
+        agg_monthly_sales.period_closed_flag (aggregates.closeMonthlyPeriod) for the month in close_month
+        (blank = previous calendar month) in every region.
+      max_concurrent_runs: 1
+      schedule:
+        quartz_cron_expression: "0 0 4 1 * ?"
+        timezone_id: UTC
+        pause_status: PAUSED
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: mock_data_root
+          default: ${var.mock_data_root}
+        - name: batch_id
+          default: "{{job.run_id}}"
+        - name: close_month
+          default: ""
+      tasks:
+        - task_key: month_end_close
+          notebook_task:
+            notebook_path: ../notebooks/90_orchestration/run_pipeline.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              mock_data_root: "{{job.parameters.mock_data_root}}"
+              batch_id: "{{job.parameters.batch_id}}"
+              stages: "gold_aggregates,gold_reporting,month_end"
+              close_month: "{{job.parameters.close_month}}"
