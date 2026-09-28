@@ -30,6 +30,7 @@ from pyspark.sql.types import DecimalType
 
 from sales_lakehouse.common.config import PipelineConfig
 from sales_lakehouse.common.quality import quarantine
+from sales_lakehouse.common.spark import cacheIfSupported, unpersistQuietly
 from sales_lakehouse.common.tables import appendBatch, mergeByKey, softDeleteByKey, tableExists
 from sales_lakehouse.silver import late_arriving
 from sales_lakehouse.silver.business_keys import DEFAULT_SOURCE_SYSTEM, lineBusinessKey, sourceSystemKey
@@ -1266,14 +1267,14 @@ def run(spark: SparkSession, cfg: PipelineConfig) -> None:
     cached: list[DataFrame] = []
 
     def keep(df: DataFrame) -> DataFrame:
-        cached.append(df.cache())
+        cached.append(cacheIfSupported(df))
         return cached[-1]
 
     try:
         _run(spark, cfg, keep)
     finally:
         for df in cached:
-            df.unpersist()
+            unpersistQuietly(df)
 
 
 def _run(spark: SparkSession, cfg: PipelineConfig, keep: Callable[[DataFrame], DataFrame]) -> None:

@@ -29,6 +29,7 @@ from sales_lakehouse.bronze.registry import BY_SOURCE_OBJECT, REGISTRY, SOURCE_T
 from sales_lakehouse.bronze.source_table import SourceTable
 from sales_lakehouse.common.config import PipelineConfig
 from sales_lakehouse.common.quality import quarantine
+from sales_lakehouse.common.spark import cacheIfSupported, unpersistQuietly
 from sales_lakehouse.common.tables import appendBatch
 
 log = logging.getLogger(__name__)
@@ -152,7 +153,7 @@ def loadTable(spark: SparkSession, cfg: PipelineConfig, source: SourceTable, loa
 
     notes: list[str] = []
     raw = readSourceCsv(spark, source, path, notes)
-    raw = raw.cache()
+    raw = cacheIfSupported(raw)
     result.rowsRead = raw.count()
 
     failCondition = parseFailureCondition(source, raw)
@@ -173,7 +174,7 @@ def loadTable(spark: SparkSession, cfg: PipelineConfig, source: SourceTable, loa
         shaped, watermarkNote = applyWatermark(spark, cfg, source, shaped)
         notes.append(watermarkNote)
 
-    shaped = shaped.cache()
+    shaped = cacheIfSupported(shaped)
     result.rowsLoaded = shaped.count()
     newWatermark = None
     if source.loadMode == "incremental":
@@ -190,8 +191,8 @@ def loadTable(spark: SparkSession, cfg: PipelineConfig, source: SourceTable, loa
         "bronze %s -> %s: read=%d loaded=%d rejected=%d %s",
         source.sourceObject, bronzeFqn, result.rowsRead, result.rowsLoaded, result.rowsRejected, result.message,
     )
-    raw.unpersist()
-    shaped.unpersist()
+    unpersistQuietly(raw)
+    unpersistQuietly(shaped)
     return result
 
 

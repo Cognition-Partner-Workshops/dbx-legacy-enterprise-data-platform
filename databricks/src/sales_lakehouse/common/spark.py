@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import os
 
-from pyspark.sql import SparkSession
+from pyspark.errors import AnalysisException
+from pyspark.sql import DataFrame, SparkSession
 
 from sales_lakehouse.common.config import LAYER_SCHEMAS, PipelineConfig
 
@@ -34,6 +35,24 @@ def getSpark(appName: str = "sales_lakehouse", warehouseDir: str | None = None) 
     if warehouseDir:
         builder = builder.config("spark.sql.warehouse.dir", warehouseDir)
     return configure_spark_with_delta_pip(builder).getOrCreate()
+
+
+def cacheIfSupported(df: DataFrame) -> DataFrame:
+    """``df.cache()`` where the engine allows it; serverless compute rejects PERSIST, so fall back to a plain re-evaluated plan."""
+    try:
+        return df.cache()
+    except AnalysisException as exc:
+        if "NOT_SUPPORTED_WITH_SERVERLESS" in str(exc):
+            return df
+        raise
+
+
+def unpersistQuietly(df: DataFrame) -> None:
+    try:
+        df.unpersist()
+    except AnalysisException as exc:
+        if "NOT_SUPPORTED_WITH_SERVERLESS" not in str(exc):
+            raise
 
 
 def ensureSchemas(spark: SparkSession, cfg: PipelineConfig) -> None:
