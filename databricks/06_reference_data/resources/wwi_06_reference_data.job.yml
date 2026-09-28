@@ -1,0 +1,180 @@
+# Legacy project WWI_ReferenceData (ssis/06_reference_data): one task per REF_Load_* package.
+# Task keys are the legacy package names. depends_on edges replicate the phases of
+# Master_Weekly_Reference_Load in ssis/orchestration-plan.json / docs/inventories/package-dependencies.csv:
+#   phase 10 Geography, WarehouseSite
+#   phase 20 Currency, PaymentTerms, PaymentMethod      (after phase 10)
+#   phase 30 SalesChannel, TransactionType, ReturnReason, LoyaltyTier, Carrier, CostCenter (after phase 10)
+#   phase 40 DateDimension                                (after phases 20 and 30)
+#   phase 50 CodeTranslation, UnknownMembers              (after phase 40)
+# DIM_Rekey_LateArriving / ERR_Notify_Operations from the master belong to other projects and are not here.
+resources:
+  jobs:
+    wwi_06_reference_data:
+      name: wwi_06_reference_data
+      description: >-
+        WWI_ReferenceData weekly reference refresh: silver.ref_* conformed reference tables and the
+        small gold dimensions they maintain directly (legacy ssis/06_reference_data, 14 packages).
+      tags:
+        legacy_project: WWI_ReferenceData
+        ssis_folder: 06_reference_data
+      # the 00 masters run this job per package (run-now with only=[<task>]) from up to 4 parallel lanes
+      max_concurrent_runs: 4
+      timeout_seconds: 14400
+
+      parameters:
+        - name: BatchId
+          default: "0"
+        - name: BusinessDate
+          default: ${var.businessDate}
+        - name: ReloadFullHistory
+          default: "False"
+        - name: EnvironmentCode
+          default: ${var.environmentCode}
+        - name: RestartFromStep
+          default: ""
+        - name: catalog
+          default: ${var.catalog}
+        # REF_Load_DateDimension date spine bounds (legacy hard-coded 2005-01-01 .. 2035-12-31)
+        - name: DateRangeStart
+          default: ${var.dateRangeStart}
+        - name: DateRangeEnd
+          default: ${var.dateRangeEnd}
+
+      environments:
+        - environment_key: dbx_etl_common
+          spec:
+            client: "3"
+            dependencies:
+              # shared control layer built by session 00 (databricks/common/dbx_etl_common, `python -m build --wheel`)
+              - "../../common/dbx_etl_common/dist/*.whl"
+
+      email_notifications:
+        on_failure:
+          - ${var.ops_email}
+
+      tasks:
+        - task_key: REF_Load_Geography
+          description: "Phase 10: ref.Region/Country/TaxJurisdiction/PostalFormatRule refresh and Dimension.Geography (SCD1)."
+          environment_key: dbx_etl_common
+          notebook_task:
+            notebook_path: ../notebooks/REF_Load_Geography.py
+            source: WORKSPACE
+        - task_key: REF_Load_WarehouseSite
+          description: "Phase 10: Warehouse sites derived from stg.StockMovement with postal-code standardisation (SCD1)."
+          environment_key: dbx_etl_common
+          notebook_task:
+            notebook_path: ../notebooks/REF_Load_WarehouseSite.py
+            source: WORKSPACE
+        - task_key: REF_Load_Currency
+          description: "Phase 20: ref.Currency + ref.FxRateDaily refresh and Dimension.Currency with latest corporate USD rate (SCD1)."
+          environment_key: dbx_etl_common
+          notebook_task:
+            notebook_path: ../notebooks/REF_Load_Currency.py
+            source: WORKSPACE
+          depends_on:
+            - task_key: REF_Load_Geography
+            - task_key: REF_Load_WarehouseSite
+        - task_key: REF_Load_PaymentTerms
+          description: "Phase 20: PAYMENT_TERMS crosswalk -> Dimension.Payment Terms with regional caps (SCD1)."
+          environment_key: dbx_etl_common
+          notebook_task:
+            notebook_path: ../notebooks/REF_Load_PaymentTerms.py
+            source: WORKSPACE
+          depends_on:
+            - task_key: REF_Load_Geography
+            - task_key: REF_Load_WarehouseSite
+        - task_key: REF_Load_PaymentMethod
+          description: "Phase 20: PAYMENT_METHOD crosswalk -> Dimension.Payment Method with regional clearing (SCD1)."
+          environment_key: dbx_etl_common
+          notebook_task:
+            notebook_path: ../notebooks/REF_Load_PaymentMethod.py
+            source: WORKSPACE
+          depends_on:
+            - task_key: REF_Load_Geography
+            - task_key: REF_Load_WarehouseSite
+        - task_key: REF_Load_SalesChannel
+          description: "Phase 30: SALES_CHANNEL crosswalk -> Dimension.Sales Channel (SCD1)."
+          environment_key: dbx_etl_common
+          notebook_task:
+            notebook_path: ../notebooks/REF_Load_SalesChannel.py
+            source: WORKSPACE
+          depends_on:
+            - task_key: REF_Load_Geography
+            - task_key: REF_Load_WarehouseSite
+        - task_key: REF_Load_TransactionType
+          description: "Phase 30: TRANSACTION_TYPE crosswalk, ref.UnitOfMeasure/UomConversion refresh -> Dimension.Transaction Type (SCD1)."
+          environment_key: dbx_etl_common
+          notebook_task:
+            notebook_path: ../notebooks/REF_Load_TransactionType.py
+            source: WORKSPACE
+          depends_on:
+            - task_key: REF_Load_Geography
+            - task_key: REF_Load_WarehouseSite
+        - task_key: REF_Load_ReturnReason
+          description: "Phase 30: ref.ReasonCode RETURN/CREDIT sets + crosswalk -> Dimension.Return Reason (SCD1)."
+          environment_key: dbx_etl_common
+          notebook_task:
+            notebook_path: ../notebooks/REF_Load_ReturnReason.py
+            source: WORKSPACE
+          depends_on:
+            - task_key: REF_Load_Geography
+            - task_key: REF_Load_WarehouseSite
+        - task_key: REF_Load_LoyaltyTier
+          description: "Phase 30: LOYALTY_TIER crosswalk -> Dimension.Loyalty Tier (SCD1)."
+          environment_key: dbx_etl_common
+          notebook_task:
+            notebook_path: ../notebooks/REF_Load_LoyaltyTier.py
+            source: WORKSPACE
+          depends_on:
+            - task_key: REF_Load_Geography
+            - task_key: REF_Load_WarehouseSite
+        - task_key: REF_Load_Carrier
+          description: "Phase 30: CARRIER crosswalk -> Dimension.Carrier with regional on-time targets (SCD1)."
+          environment_key: dbx_etl_common
+          notebook_task:
+            notebook_path: ../notebooks/REF_Load_Carrier.py
+            source: WORKSPACE
+          depends_on:
+            - task_key: REF_Load_Geography
+            - task_key: REF_Load_WarehouseSite
+        - task_key: REF_Load_CostCenter
+          description: "Phase 30: COST_CENTER crosswalk -> Dimension.Cost Center (SCD2)."
+          environment_key: dbx_etl_common
+          notebook_task:
+            notebook_path: ../notebooks/REF_Load_CostCenter.py
+            source: WORKSPACE
+          depends_on:
+            - task_key: REF_Load_Geography
+            - task_key: REF_Load_WarehouseSite
+        - task_key: REF_Load_DateDimension
+          description: "Phase 40: Dimension.Date + Dimension.Fiscal Calendar generated from the parameterised date range (static)."
+          environment_key: dbx_etl_common
+          notebook_task:
+            notebook_path: ../notebooks/REF_Load_DateDimension.py
+            source: WORKSPACE
+          depends_on:
+            - task_key: REF_Load_Currency
+            - task_key: REF_Load_PaymentTerms
+            - task_key: REF_Load_PaymentMethod
+            - task_key: REF_Load_SalesChannel
+            - task_key: REF_Load_TransactionType
+            - task_key: REF_Load_ReturnReason
+            - task_key: REF_Load_LoyaltyTier
+            - task_key: REF_Load_Carrier
+            - task_key: REF_Load_CostCenter
+        - task_key: REF_Load_CodeTranslation
+          description: "Phase 50: ref.CodeCrosswalk all domains, etl.Configuration CodeSetVersion.* and the unmapped-code sweep."
+          environment_key: dbx_etl_common
+          notebook_task:
+            notebook_path: ../notebooks/REF_Load_CodeTranslation.py
+            source: WORKSPACE
+          depends_on:
+            - task_key: REF_Load_DateDimension
+        - task_key: REF_Load_UnknownMembers
+          description: "Phase 50: ref.SourceKeyCrosswalk refresh, Dimension.Unknown Member and the reserved -1/-2/-3/-9 members."
+          environment_key: dbx_etl_common
+          notebook_task:
+            notebook_path: ../notebooks/REF_Load_UnknownMembers.py
+            source: WORKSPACE
+          depends_on:
+            - task_key: REF_Load_DateDimension
