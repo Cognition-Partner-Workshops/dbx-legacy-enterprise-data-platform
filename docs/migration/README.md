@@ -72,9 +72,9 @@ appear here as they merge.
 (`control.startBatch` ... `control.purgeControlHistory`, `params.getJobParams`, `naming.table`).
 The public signatures are listed in `databricks/common/README.md`; consumers import them, never copy
 them. Reference the wheel from a consumer bundle as a library
-(`libraries: - whl: ../common/dbx_etl_common/dist/dbx_etl_common-0.1.0-py3-none-any.whl`, or an
-`environments` dependency for serverless) or `%pip install` it from the common bundle's workspace
-path; both are shown in `databricks/common/README.md`. Build with `cd databricks/common/dbx_etl_common
+(`libraries: - whl: "../../common/dbx_etl_common/dist/*.whl"` from `resources/*.yml`, or the same path as an
+`environments` dependency for serverless). Every project bundle uses this one literal path — no per-bundle wheel
+variable — so `bundle deploy` uploads the wheel built in this checkout. Build with `cd databricks/common/dbx_etl_common
 && python -m build --wheel`.
 
 ## Validation that must stay green

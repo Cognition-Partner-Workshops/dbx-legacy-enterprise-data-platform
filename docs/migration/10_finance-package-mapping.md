@@ -142,8 +142,8 @@ Column contract: the package SQL uses the WWI_Finance column names (`InvoiceAmou
 | `$Package::*` / `$Project::*` parameters | `params.getJobParams(dbutils)` + `finance_common.getFinanceParams(dbutils, businessDate)` |
 | three-part table names | `naming.table(catalog, schema, table)` |
 
-`dbx_etl_common` is consumed as a wheel: every task has `libraries: - whl: ${var.common_wheel}` (default
-`../common/dist/dbx_etl_common-*.whl`, built by session 00). No code from `databricks/common` is copied; the
+`dbx_etl_common` is consumed as a wheel: every task has `libraries: - whl: `../../common/dbx_etl_common/dist/*.whl``
+(built by session 00). No code from `databricks/common` is copied; the
 test-only fake lives in `databricks/10_finance/tests/fakes/dbx_etl_common/`. No `[dbx-migration 00]` PR was open
 when this was written, so the imports follow the shared interface contract verbatim.
 
@@ -170,7 +170,7 @@ WWI_Finance package parameters (job parameters with the legacy defaults; each no
 
 Bundle variables: `catalog`, `warehouse_id`, `businessDate`, `environmentCode`, `accountingPeriod`,
 `allowCloseWithVariance`, `varianceTolerance`, `ledgerScope`, `allocationRuleSet`, `failOnMissingRate`,
-`jurisdictionScope`, `common_wheel`, `job_cluster_spark_version`, `job_cluster_node_type`. Targets `dev` (default,
+`jurisdictionScope`, `job_cluster_spark_version`, `job_cluster_node_type`. Targets `dev` (default,
 `mode: development`) and `prod`.
 
 ## 7. Idempotency and quarantine

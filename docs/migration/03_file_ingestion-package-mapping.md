@@ -175,8 +175,7 @@ bare `Z` suffix, a supplier `EffectiveFrom` that is not `yyyyMMdd`).
 | `$Package::BatchId` etc. | `params.getJobParams(dbutils)` | every notebook |
 
 The wheel is referenced through the job `environments` block
-(`dependencies: - ${var.dbx_etl_common_wheel}`, default `../common/dist/dbx_etl_common-0.1.0-py3-none-any.whl`,
-i.e. session 00's build output). For local pytest a minimal fake of the functions above lives in
+(`dependencies: - `../../common/dbx_etl_common/dist/*.whl``, i.e. session 00's build output). For local pytest a minimal fake of the functions above lives in
 `databricks/03_file_ingestion/tests/fakes/dbx_etl_common/` — it is test-only and never deployed.
 
 ## 8. Parameters
@@ -193,7 +192,7 @@ i.e. session 00's build output). For local pytest a minimal fake of the function
 | `UseAutoLoader` | `"True"` | – (`False` = plain `binaryFile` batch read, used by the tests) |
 
 Bundle variables: `catalog`, `warehouse_id`, `businessDate`, `environmentCode`, `controlTotalMode`,
-`useAutoLoader`, `dbx_etl_common_wheel`, `file_arrival_pause_status`. Targets `dev`
+`useAutoLoader`, `file_arrival_pause_status`. Targets `dev`
 (`mode: development`, default) and `prod` (`mode: production`). No secrets are needed by this project.
 
 ## 9. Generator docstring vs emitted configuration

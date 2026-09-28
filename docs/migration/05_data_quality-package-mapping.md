@@ -158,9 +158,8 @@ entity is also evaluated for the batch.
 
 Import boilerplate in every notebook: `from dbx_etl_common import control, params, naming` and
 `p = params.getJobParams(dbutils)`. The wheel is installed through the serverless environment
-`dq_serverless` (`dependencies: - ${var.dbx_etl_common_wheel}`, default
-`/Workspace/Shared/wwi/libs/dbx_etl_common-0.1.0-py3-none-any.whl`) – override the variable with the
-path session 00 publishes.
+`dq_serverless` (`dependencies: - `../../common/dbx_etl_common/dist/*.whl``, session 00's build output uploaded by
+`bundle deploy`).
 
 ## 5. Parameters
 

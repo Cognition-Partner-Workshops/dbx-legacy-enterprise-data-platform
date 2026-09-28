@@ -167,9 +167,8 @@ tables owned by other sessions are never created here.
 | `$Package::BatchId`, `$Project::*` parameters | `params.getJobParams(dbutils)` | every notebook |
 | three-part legacy names | `naming.table(catalog, schema, table)` via `inv_common.contracts.table` | everywhere |
 
-Wheel strategy: each task lists `libraries: - whl: ${var.common_wheel}` (default
-`../../common/dist/dbx_etl_common-0.1.0-py3-none-any.whl`, i.e. session 00's build under `databricks/common/dist`).
-Override `common_wheel` per target if session 00 publishes to a Volume/workspace path instead.
+Wheel strategy: each task lists `libraries: - whl: `../../common/dbx_etl_common/dist/*.whl``
+(session 00's build under `databricks/common/dbx_etl_common/dist`).
 
 ## 5. Parameters
 

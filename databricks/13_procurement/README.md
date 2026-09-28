@@ -9,8 +9,8 @@ databricks.yml                      bundle (targets dev / prod, variables catalo
 resources/wwi_13_procurement.job.yml  job wwi_13_procurement, task_key == legacy package name
 notebooks/PRC_*.py                  one source-format notebook per package
 src/procurement_lib/                pure DataFrame transforms shared by notebooks and tests
-validation/PRC_Reconcile_Procurement.py  row-count / hash reconciliation -> etl.row_count_log
-validation/baseline_example.json    shape of the SQL Server baseline input
+validation/                         PRC_Reconcile_Procurement.py (row-count / hash reconciliation -> etl.row_count_log)
+                                    and baseline_example.json (shape of the SQL Server baseline input)
 tests/                              pytest (local PySpark) + test-only fake of dbx_etl_common
 ```
 
@@ -28,5 +28,5 @@ databricks bundle deploy -t dev
 databricks bundle run -t dev wwi_13_procurement \
   --params BatchId=123,BusinessDate=2024-03-31,StatementPeriod=2024-03
 ```
-`dbx_etl_common` (session 00) is attached to every task as a wheel library from the workspace
-path in variable `dbx_etl_common_wheel`; override it per target once the artifact is published.
+`dbx_etl_common` (session 00) is attached to every task as a wheel library from
+`../../common/dbx_etl_common/dist/*.whl` (built in this checkout, uploaded by `bundle deploy`).

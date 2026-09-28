@@ -166,7 +166,7 @@ Every notebook: `# Databricks notebook source` header, `p = params.getJobParams(
 Inside the run: `control.getWatermark` / `setWatermark`, `control.getConfiguration`, `control.logRowCount`,
 `control.logRejectedRecordSet` / `logRejectedRecord`, `control.logError` (through `packageRun`). The reconciliation notebook
 additionally calls `control.assertRowCountReconciliation(spark, catalog, batchId, raiseOnFailure=False)`.
-`dbx_etl_common` is consumed as the wheel `../common/dbx_etl_common/dist/dbx_etl_common-*.whl` (bundle variable `common_wheel`,
+`dbx_etl_common` is consumed as the wheel `../../common/dbx_etl_common/dist/*.whl` (a literal path in `resources/wwi_08_facts.yml`,
 installed as a task library on every task); nothing from `databricks/common/` is copied. `tests/fakes/dbx_etl_common/`
 is a test-only stand-in for local pytest.
 

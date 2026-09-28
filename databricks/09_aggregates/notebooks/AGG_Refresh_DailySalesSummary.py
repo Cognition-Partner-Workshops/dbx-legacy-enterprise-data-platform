@@ -11,7 +11,7 @@
 # MAGIC Legacy control flow: Init Refresh Window -> Log Package Start -> Delete Refresh Window -> Rebuild Aggregate (data flow with derived columns + conditional split) -> Assert Reconciliation -> Log Rejected Records -> Log Row Counts -> Log Package Success; OnError -> Log Error -> Mark Execution Failed.
 # MAGIC
 # MAGIC `dbx_etl_common` is attached to the job task as a wheel library (see
-# MAGIC `resources/wwi_09_aggregates.yml`, variable `dbx_etl_common_wheel`).
+# MAGIC `resources/wwi_09_aggregates.yml`, `../../common/dbx_etl_common/dist/*.whl`).
 
 # COMMAND ----------
 

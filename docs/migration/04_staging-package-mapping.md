@@ -30,8 +30,7 @@ Job parameters (all strings, names exactly as the naming contract) are resolved 
 | `RestartFromStep` | `""` | `p["restartFromStep"]: str` — a phase name (`Stage Load`, `Stage Work Tables`) or a package name; tasks ordered before it are skipped without a package-execution row (legacy `Master_Daily_ETL` restart semantics) |
 | `catalog` | `${var.catalog}` = `wwi_${bundle.target}` | `p["catalog"]: str` — every table is `naming.table(catalog, schema, name)` |
 
-Bundle variables: `catalog`, `warehouse_id`, `businessDate`, `environmentCode`, `etl_common_whl`
-(default `../common/dbx_etl_common/dist/dbx_etl_common-*.whl`, the wheel session 00 builds), plus
+Bundle variables: `catalog`, `warehouse_id`, `businessDate`, `environmentCode`, plus
 job-cluster sizing. Legacy per-package parameters `SourceSystemCode`, `ObjectName`, `LookbackDays`
 and the connection managers are constants inside each notebook (they were constants per package in
 the generator too). Secrets are not needed: staging reads bronze Delta, not JDBC.
@@ -217,6 +216,6 @@ or `MISSING_TABLE` and written to `etl.row_count_log` through `control.logRowCou
 | Bronze column vocabulary | Extract sessions (01/02/03) own `bronze.raw_*` schemas. `sources.RAW_COLUMN_MAP` aliases the columns the staging generator expected (`CC_CODE`, `CUST_CODE`, `SessionGuid`, ...); if an extract session ships different names the map is the single place to adjust. Columns the raw DDL never had (`REGION_CD` on currency, `COUNTRY_CD` on customer master, `NET_WEIGHT`/`WEIGHT_UOM_CD` on product master) are nulled and hit the package defaults. |
 | `stg.usp_ConvertCurrencyAmounts` batching (`@BatchSize`, scratch table) | Set-based join in `refs.convertCurrencyAmounts`; the `RateResolutionCode` / `*Rate` audit columns are preserved, the T-SQL loop is not. |
 | Fuzzy customer blocking (`NAME_FUZZY` rule) | Implemented as the procedure's blocking key `LEFT(normalised name, n) + country` (`fuzzyPrefixLength`), not SSIS Fuzzy Grouping (the package did not use that component), so no fidelity loss. |
-| Wheel path | `libraries: - whl: ${var.etl_common_whl}` (default `../common/dbx_etl_common/dist/dbx_etl_common-*.whl`). Session 00 must build the wheel before `bundle deploy`; alternative `%pip install` from the workspace path was not chosen. |
+| Wheel path | `libraries: - whl: `../../common/dbx_etl_common/dist/*.whl`` (session 00's build output). Session 00 must build the wheel before `bundle deploy`; alternative `%pip install` from the workspace path was not chosen. |
 | Job cluster | A classic job cluster (`SINGLE_USER`, `15.4.x-scala2.12`) is declared so the wheel can be attached; switching to serverless with environments is a one-line change once the wheel is published to a volume. |
 | Runtime reconciliation against SQL Server | Not executed (no workspace / SQL Server run allowed in this session); the notebook is ready once baseline figures are captured. |

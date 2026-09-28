@@ -140,8 +140,8 @@ notebooks only wire tables, parameters and the control framework.
 | `$Package::BatchId` | `params.getJobParams(dbutils)["batchId"]` |
 | table names | `naming.table(catalog, schema, table)` everywhere; nothing hard-coded |
 
-The wheel is attached to every task as `libraries: - whl: ${var.dbx_etl_common_wheel}` (a workspace path
-variable, default `/Workspace/Shared/wwi/libs/dbx_etl_common-latest-py3-none-any.whl`) so the notebooks
+The wheel is attached to every task as `libraries: - whl: `../../common/dbx_etl_common/dist/*.whl``
+(session 00's build output) so the notebooks
 `from dbx_etl_common import control, naming, params` exactly as the contract says. Local pytest uses the
 fake in `tests/fakes/dbx_etl_common/` (same signatures, records calls). No session 00 PR was open when
 this was written, so the imports follow the published interface contract verbatim.

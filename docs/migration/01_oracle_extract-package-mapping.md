@@ -145,8 +145,8 @@ with the SQL Server baseline supplied as a Delta table (`baseline_table`) or JSO
 | `RejectThresholdPercent` | not enforced in bronze (see §7) | – |
 | `RestartFromStep` | accepted and logged; a single-notebook package has no restartable inner steps | – |
 
-Shared wheel: each task lists `libraries: - whl: ${var.common_wheel_path}` (default
-`/Workspace/Shared/wwi/dbx_etl_common/dbx_etl_common-0.1.0-py3-none-any.whl`) so `dbx_etl_common` resolves at cluster start;
+Shared wheel: each task lists `libraries: - whl: `../../common/dbx_etl_common/dist/*.whl`` (the wheel built by
+`databricks/common/dbx_etl_common`, uploaded by `bundle deploy`) so `dbx_etl_common` resolves at cluster start;
 the notebooks add `../src` to `sys.path` for `oracle_extract`. The Oracle thin driver is a Maven library
 (`${var.oracle_jdbc_coordinates}`, default `com.oracle.database.jdbc:ojdbc11:23.5.0.24.07`).
 
@@ -168,7 +168,7 @@ databricks bundle deploy -t dev              # not run by the migration session
 databricks bundle run -t dev wwi_01_oracle_extract --params BatchId=0,ReloadFullHistory=False,source_mode=files
 ```
 
-Prerequisites at deploy time: session-00 wheel at `${var.common_wheel_path}`, secret `wwi/oracle-erp-password`,
+Prerequisites at deploy time: session-00 wheel built into `databricks/common/dbx_etl_common/dist/`, secret `wwi/oracle-erp-password`,
 `etl.*` seeded (`etl.watermark` rows for the 12 incremental objects, `etl.source_system` `ORA_ERP`), and for
 `source_mode=files` the `generators/` output landed under `${var.extract_volume_path}`.
 

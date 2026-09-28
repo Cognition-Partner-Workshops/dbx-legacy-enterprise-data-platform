@@ -109,9 +109,8 @@ cannot host the negative reserved members, cannot be rewound for a replayed batc
 | `RestartFromStep` | `""` | forwarded for parity (not used inside the dimension phase) |
 | `catalog` | `wwi_${bundle.target}` | every `naming.table(catalog, schema, table)` |
 
-`dbx_etl_common` is attached as a wheel library on every task (`${var.common_wheel}`, default
-`../common/dist/dbx_etl_common-0.1.0-py3-none-any.whl`); override the variable if session 00 publishes a
-different file name. The `wwi_dimensions` helpers are imported from the bundle's own `src/` via `sys.path`.
+`dbx_etl_common` is attached as a wheel library on every task (`../../common/dbx_etl_common/dist/*.whl`,
+session 00's build output). The `wwi_dimensions` helpers are imported from the bundle's own `src/` via `sys.path`.
 
 ## 6. Reconciliation
 
