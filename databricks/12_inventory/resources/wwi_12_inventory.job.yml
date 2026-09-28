@@ -1,0 +1,151 @@
+# One job per SSIS project; task keys = legacy package names so session 00's master
+# jobs (Master_Daily_ETL / Master_Intraday_Inventory) can run_job / reference them.
+#
+# depends_on edges come from docs/inventories/package-dependencies.csv: all five INV_*
+# packages are children of Master_Daily_ETL phase "Daily Inventory Mart" (sequence 91,
+# group Mart) and only depend on STG_*/FACT_* packages owned by other projects, so
+# inside this job they are siblings. The one intra-project ordering that the
+# Master_Intraday_Inventory plan imposes (Replenishment runs after the marts and only
+# when PickingWindowOpen && OnHandVariance <= OnHandVarianceTolerance) is modelled
+# with the condition task + depends_on below.
+resources:
+  jobs:
+    wwi_12_inventory:
+      name: wwi_12_inventory
+      description: WWI_Inventory gold mart pipeline (INV_* packages) migrated from SSIS.
+      tags:
+        ssis_project: WWI_Inventory
+        legacy_folder: 12_inventory
+      max_concurrent_runs: 1
+      timeout_seconds: 10800
+
+      parameters:
+        - name: BatchId
+          default: "0"
+        - name: BusinessDate
+          default: ${var.businessDate}
+        - name: ReloadFullHistory
+          default: "False"
+        - name: EnvironmentCode
+          default: ${var.environmentCode}
+        - name: RestartFromStep
+          default: ""
+        - name: catalog
+          default: ${var.catalog}
+        # Master_Intraday_Inventory gate parameters (ssis/orchestration-plan.json)
+        - name: PickingWindowOpen
+          default: "True"
+        - name: OnHandVarianceTolerance
+          default: "25"
+
+      job_clusters:
+        - job_cluster_key: inventory_cluster
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: ${var.node_type_id}
+            data_security_mode: SINGLE_USER
+            autoscale:
+              min_workers: 1
+              max_workers: ${var.max_workers}
+            spark_conf:
+              spark.sql.session.timeZone: UTC
+
+      tasks:
+        # ---- Daily Inventory Mart phase (Master_Daily_ETL seq 91, group Mart, 2 streams)
+        - task_key: INV_Load_DailySnapshot
+          description: work.InventoryPositionDaily -> Fact.Daily Inventory Snapshot (partition overwrite by SnapshotDate). NOT intraday-safe.
+          job_cluster_key: inventory_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/INV_Load_DailySnapshot.py
+            base_parameters:
+              SnapshotBusinessDate: "{{job.parameters.BusinessDate}}"
+              DeleteExistingSnapshot: "True"
+
+        - task_key: INV_Load_StockTransfer
+          description: stg.StockMovement (TRANSFER) -> Fact.Movement issue/receipt legs; aged in-transit escalation.
+          job_cluster_key: inventory_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/INV_Load_StockTransfer.py
+            base_parameters:
+              InTransitAgeAlertDays: "10"
+
+        - task_key: INV_Load_CycleCountVariance
+          description: stg.CycleCount vs position -> Fact.Movement adjustments (AUTO) / recount queue (HOLD).
+          job_cluster_key: inventory_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/INV_Load_CycleCountVariance.py
+            base_parameters:
+              CountToleranceUnits: "2"
+              CountToleranceValue: "50"
+
+        - task_key: INV_Reconcile_OnHand
+          description: Fact.Stock Holding vs operational position -> etl.ReconciliationResult + ONHAND_VARIANCE rejects.
+          job_cluster_key: inventory_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/INV_Reconcile_OnHand.py
+            base_parameters:
+              SiteScope: ALL
+              TimingWindowMinutes: "30"
+              OnHandVarianceTolerance: "{{job.parameters.OnHandVarianceTolerance}}"
+
+        # ---- Master_Intraday_Inventory gate: Read On Hand Variance -> Replenishment
+        #      (PickingWindowOpen && OnHandVariance <= OnHandVarianceTolerance)
+        - task_key: Read_On_Hand_Variance
+          description: Reads MAX(ABS(SourceRowCount - TargetRowCount)) for Fact.Stock Holding from etl.row_count_log (orchestration-plan node "Read On Hand Variance").
+          depends_on:
+            - task_key: INV_Reconcile_OnHand
+            - task_key: INV_Load_StockTransfer
+            - task_key: INV_Load_CycleCountVariance
+          run_if: ALL_DONE
+          job_cluster_key: inventory_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../validation/Read_On_Hand_Variance.py
+
+        - task_key: Replenishment_Gate
+          description: PickingWindowOpen && OnHandVariance <= OnHandVarianceTolerance
+          depends_on:
+            - task_key: Read_On_Hand_Variance
+          condition_task:
+            op: EQUAL_TO
+            left: "{{tasks.Read_On_Hand_Variance.values.replenishmentAllowed}}"
+            right: "true"
+
+        - task_key: INV_Load_Replenishment
+          description: stg.StockItem + position + demand -> work.ReplenishmentSuggestion -> Aggregate.Daily Inventory Health (MERGE).
+          depends_on:
+            - task_key: Replenishment_Gate
+              outcome: "true"
+          job_cluster_key: inventory_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../notebooks/INV_Load_Replenishment.py
+            base_parameters:
+              CoverDays: "21"
+              SuppressChillerSuggestions: "False"
+
+        # ---- Reconciliation of every target loaded by this job against the SQL Server baseline
+        - task_key: Validate_Inventory_Reconciliation
+          depends_on:
+            - task_key: INV_Load_DailySnapshot
+            - task_key: INV_Load_Replenishment
+            - task_key: Read_On_Hand_Variance
+          run_if: ALL_DONE
+          job_cluster_key: inventory_cluster
+          libraries:
+            - whl: ${var.common_wheel}
+          notebook_task:
+            notebook_path: ../validation/INV_Reconcile_Targets.py
+            base_parameters:
+              BaselineTable: ""
+              BaselineJson: ""
