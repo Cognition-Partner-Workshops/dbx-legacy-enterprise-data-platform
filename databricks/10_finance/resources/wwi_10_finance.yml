@@ -53,77 +53,55 @@ resources:
         - name: JurisdictionScope
           default: ${var.jurisdictionScope}
 
-      job_clusters:
-        - job_cluster_key: finance_cluster
-          new_cluster:
-            spark_version: ${var.job_cluster_spark_version}
-            node_type_id: ${var.job_cluster_node_type}
-            num_workers: 2
-            data_security_mode: SINGLE_USER
-            spark_conf:
-              spark.databricks.delta.schema.autoMerge.enabled: "true"
-
+      environments:
+        - environment_key: default
+          spec:
+            client: "3"
+            dependencies:
+              - "../../common/dbx_etl_common/dist/*.whl"
       tasks:
         # ---- Phase 10: Subledger Loads (2 parallel streams in the legacy master) ----
         - task_key: FIN_Load_ApAging
-          job_cluster_key: finance_cluster
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/FIN_Load_ApAging.py
-          libraries:
-            - whl: "../../common/dbx_etl_common/dist/*.whl"
         - task_key: FIN_Load_WithholdingTax
-          job_cluster_key: finance_cluster
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/FIN_Load_WithholdingTax.py
-          libraries:
-            - whl: "../../common/dbx_etl_common/dist/*.whl"
         - task_key: FIN_Load_CostAllocation
-          job_cluster_key: finance_cluster
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/FIN_Load_CostAllocation.py
-          libraries:
-            - whl: "../../common/dbx_etl_common/dist/*.whl"
-
         # ---- Phase 20: FX Revaluation ----
         - task_key: FIN_Currency_Revaluation
           depends_on:
             - task_key: FIN_Load_ApAging
             - task_key: FIN_Load_WithholdingTax
             - task_key: FIN_Load_CostAllocation
-          job_cluster_key: finance_cluster
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/FIN_Currency_Revaluation.py
-          libraries:
-            - whl: "../../common/dbx_etl_common/dist/*.whl"
-
         # ---- Phase 30: General Ledger ----
         - task_key: FIN_Load_GlPostings
           depends_on:
             - task_key: FIN_Currency_Revaluation
-          job_cluster_key: finance_cluster
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/FIN_Load_GlPostings.py
-          libraries:
-            - whl: "../../common/dbx_etl_common/dist/*.whl"
-
         # ---- Phase 40: Subledger Tie Out ----
         - task_key: FIN_Reconcile_SubledgerToGl
           depends_on:
             - task_key: FIN_Load_GlPostings
-          job_cluster_key: finance_cluster
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/FIN_Reconcile_SubledgerToGl.py
-          libraries:
-            - whl: "../../common/dbx_etl_common/dist/*.whl"
-
         # ---- Phase 60: Period Lock (phase 50 Close Aggregates runs in wwi_08/09 between these
         #      when the master job orchestrates; standalone the lock follows the tie-out) ----
         - task_key: FIN_Close_PeriodLock
           depends_on:
             - task_key: FIN_Reconcile_SubledgerToGl
           run_if: ALL_SUCCESS
-          job_cluster_key: finance_cluster
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/FIN_Close_PeriodLock.py
-          libraries:
-            - whl: "../../common/dbx_etl_common/dist/*.whl"

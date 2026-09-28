@@ -170,7 +170,7 @@ WWI_Finance package parameters (job parameters with the legacy defaults; each no
 
 Bundle variables: `catalog`, `warehouse_id`, `businessDate`, `environmentCode`, `accountingPeriod`,
 `allowCloseWithVariance`, `varianceTolerance`, `ledgerScope`, `allocationRuleSet`, `failOnMissingRate`,
-`jurisdictionScope`, `job_cluster_spark_version`, `job_cluster_node_type`. Targets `dev` (default,
+`jurisdictionScope`. Tasks run on serverless job compute (`environments` block). Targets `dev` (default,
 `mode: development`) and `prod`.
 
 ## 7. Idempotency and quarantine
@@ -205,8 +205,8 @@ Bundle variables: `catalog`, `warehouse_id`, `businessDate`, `environmentCode`, 
 4. **Gold targets created with a minimum schema** (`gold.fact_payment`, `gold.fact_gl_posting`,
    `gold.agg_finance_close_summary`) when the FACT/AGG sessions have not created them yet; column names follow
    `sqlserver/warehouse/facts/*.sql` but surrogate keys the finance packages do not resolve (`SupplierKey` aside)
-   are NULL. Delta schema evolution (`autoMerge`) is enabled on the job cluster so the finance columns are added to
-   the FACT session's tables.
+   are NULL. The finance notebooks enable Delta schema evolution (`autoMerge`) per session so the finance columns are
+   added to the FACT session's tables.
 5. **Phase 50 Close Aggregates and phase 90 Close Escalation** run between/after this bundle's tasks in the master
    job and are owned by sessions 08/09 and 15. Standalone, `FIN_Close_PeriodLock` runs straight after the tie-out.
 6. **`Aggregate.ApAgingSummary`** has no DDL in `sqlserver/warehouse/aggregates`; migrated as `gold.agg_ap_aging_summary`

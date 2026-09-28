@@ -38,8 +38,8 @@ the generator too). Secrets are not needed: staging reads bronze Delta, not JDBC
 ## 2. Package -> notebook / task, load semantics, dependencies
 
 Load type is `docs/inventories/source-target-map.csv` / `ssis-packages.csv`; the "Delta write" column
-is the `StagingRun` method that realises it. Every task runs on the shared job cluster with the
-`dbx_etl_common` wheel attached. `depends_on` = the `stg.*` Lookup components inside the `.dtsx` plus
+is the `StagingRun` method that realises it. Every task runs on serverless job compute with the
+`dbx_etl_common` wheel as an `environments` dependency. `depends_on` = the `stg.*` Lookup components inside the `.dtsx` plus
 `docs/inventories/package-dependencies.csv`; the legacy orchestration plan ran the 24 loads as four
 timing-ordered streams in phase "Stage Load" (seq 30) and the 4 work packages in "Stage Work Tables"
 (seq 35) — the explicit edges make that ordering deterministic.
@@ -217,5 +217,5 @@ or `MISSING_TABLE` and written to `etl.row_count_log` through `control.logRowCou
 | `stg.usp_ConvertCurrencyAmounts` batching (`@BatchSize`, scratch table) | Set-based join in `refs.convertCurrencyAmounts`; the `RateResolutionCode` / `*Rate` audit columns are preserved, the T-SQL loop is not. |
 | Fuzzy customer blocking (`NAME_FUZZY` rule) | Implemented as the procedure's blocking key `LEFT(normalised name, n) + country` (`fuzzyPrefixLength`), not SSIS Fuzzy Grouping (the package did not use that component), so no fidelity loss. |
 | Wheel path | `libraries: - whl: `../../common/dbx_etl_common/dist/*.whl`` (session 00's build output). Session 00 must build the wheel before `bundle deploy`; alternative `%pip install` from the workspace path was not chosen. |
-| Job cluster | A classic job cluster (`SINGLE_USER`, `15.4.x-scala2.12`) is declared so the wheel can be attached; switching to serverless with environments is a one-line change once the wheel is published to a volume. |
+| Compute | Serverless job compute (`environments` block, `client: "3"`); the wheel is uploaded with the bundle and referenced as an environment dependency. The workspace is serverless-only. |
 | Runtime reconciliation against SQL Server | Not executed (no workspace / SQL Server run allowed in this session); the notebook is ready once baseline figures are captured. |

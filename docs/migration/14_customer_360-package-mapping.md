@@ -206,7 +206,7 @@ Targets: `dev` (mode development, default) and `prod` (mode production).
 | Transactions | `BEGIN TRAN … COMMIT` around DELETE+INSERT+ALTER VIEW has no multi-statement equivalent; a single Delta overwrite commit + view replace gives the same reader-visible guarantee. |
 | Work-table DDL | The repo has no `CREATE TABLE` for the C360 work/mart tables; schemas are inferred from the generator SQL. Delta tables are created on first write (`overwriteSchema`). |
 | `Fact.Return` | Mapped but unused: the T-SQL derives returns from `Fact.Sale` rows with negative quantity. |
-| Job cluster | `Standard_DS3_v2` / DBR 15.4 LTS placeholders; adjust per workspace (or switch to serverless once the wheel install path is agreed). |
+| Compute | Serverless job compute (`environments` block, `client: "3"`) with the `dbx_etl_common` wheel as an environment dependency; the workspace is serverless-only. |
 
 ## 7. `Master_Customer_Sync` cadence notes (for session 00)
 

@@ -35,7 +35,7 @@ derived from the lookups each data flow performs (Customer Category → Customer
 assignment; Supplier / Product Category → Stock Item, Vendor Contract; Employee / Sales Territory →
 Salesperson; Sales Territory → City) and every load → `DIM_Rekey_LateArriving` (`run_if: ALL_DONE`, as the
 legacy phase ran the rekey on completion). The legacy phase used 3 parallel streams; the DAG lets the
-independent tasks run in parallel on one job cluster.
+independent tasks run in parallel on serverless job compute.
 
 ## 2. Source / target objects (legacy → Delta)
 

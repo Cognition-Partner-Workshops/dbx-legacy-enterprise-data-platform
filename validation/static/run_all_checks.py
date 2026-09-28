@@ -116,7 +116,7 @@ def load_catalog():
 def walk_files(prefixes, extensions=None):
     for dirpath, dirnames, filenames in os.walk(REPO_ROOT):
         dirnames[:] = [d for d in dirnames
-                       if d not in (".git", "__pycache__", ".venv", "node_modules", "obj", "bin")]
+                       if d not in (".git", "__pycache__", ".venv", "node_modules", "obj", "bin", ".databricks")]
         rel_dir = os.path.relpath(dirpath, REPO_ROOT)
         rel_dir = "" if rel_dir == "." else rel_dir.replace(os.sep, "/")
         if rel_dir.split("/")[0] in LEGACY_SAMPLE_DIRS:
