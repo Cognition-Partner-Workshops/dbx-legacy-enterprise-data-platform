@@ -1,0 +1,64 @@
+# Databricks Asset Bundle for the legacy SSIS project WWI_ErrorHandling (ssis/15_error_handling).
+# One job, wwi_15_error_handling, with one task per legacy ERR_* package.
+bundle:
+  name: wwi_15_error_handling
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog catalog holding the bronze/silver/gold/etl schemas.
+    default: wwi_${bundle.target}
+  warehouse_id:
+    description: SQL warehouse used for ad-hoc validation queries (not used by the job tasks).
+    default: ""
+  businessDate:
+    description: Business date (yyyy-MM-dd) stamped into the job's BusinessDate parameter.
+    default: "1900-01-01"
+  environmentCode:
+    description: Environment code (DEV/TEST/PROD) written into notification subjects.
+    default: DEV
+  dbx_etl_common_wheel:
+    description: >-
+      Workspace or Volumes path of the shared dbx_etl_common wheel built by session 00
+      (databricks/common). Installed into the serverless environment of every task.
+    default: /Workspace/Shared/wwi/dbx_etl_common/dbx_etl_common-0.1.0-py3-none-any.whl
+  quarantine_volume_path:
+    description: Unity Catalog volume that receives quarantined inbound files (legacy WWI_Quarantine_Files share).
+    default: /Volumes/${var.catalog}/bronze/quarantine
+  inbound_volume_path:
+    description: Unity Catalog volume holding the inbound landing folders (legacy WWI_Inbound_Files share, sub-folder failed/).
+    default: /Volumes/${var.catalog}/bronze/inbound
+  reject_volume_path:
+    description: Unity Catalog volume that receives the rejects_<BatchId>_<yyyyMMdd>.csv routing file (legacy error file share).
+    default: /Volumes/${var.catalog}/silver/rejects
+  webhook_secret_scope:
+    description: Secret scope that holds the operations webhook URL.
+    default: wwi
+  webhook_secret_key:
+    description: Secret key (inside webhook_secret_scope) that holds the operations webhook URL.
+    default: ops-webhook-url
+  ops_email:
+    description: Operations distribution list for job-level email notifications.
+    default: wwi-etl-operations@example.invalid
+  ops_webhook_destination_ids:
+    description: Notification destination IDs (Workspace settings > Notification destinations) for job-level webhook notifications.
+    type: complex
+    default: []
+
+targets:
+  dev:
+    mode: development
+    default: true
+    variables:
+      environmentCode: DEV
+  prod:
+    mode: production
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      environmentCode: PROD
+    permissions:
+      - level: CAN_MANAGE
+        group_name: wwi-etl-operators

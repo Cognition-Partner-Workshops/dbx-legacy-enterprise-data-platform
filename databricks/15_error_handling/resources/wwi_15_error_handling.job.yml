@@ -1,0 +1,163 @@
+# Reusable error-handling job. Task keys are the legacy package names; session 00's master jobs
+# reference them either through run_job_task (whole job) or by pointing a notebook_task at the
+# notebook paths under ${workspace.file_path}/notebooks/. See docs/migration/15_error_handling-package-mapping.md.
+resources:
+  jobs:
+    wwi_15_error_handling:
+      name: wwi_15_error_handling
+      description: >-
+        WWI_ErrorHandling utilities: retry driver, package-failure handler, bad-file quarantine,
+        reject routing, row-count reconciliation and operator notification (legacy ssis/15_error_handling).
+      tags:
+        legacy_project: WWI_ErrorHandling
+        ssis_folder: 15_error_handling
+      max_concurrent_runs: 4
+      timeout_seconds: 7200
+
+      parameters:
+        - name: BatchId
+          default: "0"
+        - name: BusinessDate
+          default: ${var.businessDate}
+        - name: ReloadFullHistory
+          default: "False"
+        - name: EnvironmentCode
+          default: ${var.environmentCode}
+        - name: RestartFromStep
+          default: ""
+        - name: catalog
+          default: ${var.catalog}
+        # ERR_Handle_PackageFailure
+        - name: FailedPackage
+          default: ""
+        - name: FailureErrorCode
+          default: "0"
+        - name: FailureMessage
+          default: ""
+        - name: FailBatchOnPermanent
+          default: "True"
+        # ERR_Retry_FailedSteps (bind MaxRetryAttempts to the master's MaxExtractAttempts)
+        - name: MaxRetryAttempts
+          default: "3"
+        - name: BackoffBaseSeconds
+          default: "30"
+        - name: StepGroupScope
+          default: ""
+        - name: RerunMode
+          default: request
+        # ERR_Route_RejectedRows
+        - name: RejectEscalationDays
+          default: "5"
+        - name: ObjectScope
+          default: ALL
+        # ERR_Quarantine_BadFiles
+        - name: QuarantineFolder
+          default: quarantine
+        - name: DeleteZeroLengthFiles
+          default: "False"
+        # ERR_Reconcile_RowCounts
+        - name: DefaultTolerancePercent
+          default: "0"
+        - name: RaiseOnFailure
+          default: "True"
+        # ERR_Notify_Operations
+        - name: NotifyOnWarnings
+          default: "False"
+        - name: PostToWebhook
+          default: "True"
+
+      environments:
+        - environment_key: dbx_etl_common
+          spec:
+            client: "2"
+            dependencies:
+              - ${var.dbx_etl_common_wheel}
+
+      email_notifications:
+        on_failure:
+          - ${var.ops_email}
+        on_duration_warning_threshold_exceeded:
+          - ${var.ops_email}
+        no_alert_for_skipped_runs: true
+      webhook_notifications:
+        on_failure: ${var.ops_webhook_destination_ids}
+      notification_settings:
+        no_alert_for_skipped_runs: true
+        no_alert_for_canceled_runs: false
+      health:
+        rules:
+          - metric: RUN_DURATION_SECONDS
+            op: GREATER_THAN
+            value: 5400
+
+      tasks:
+        # Extract Retry Driver / Restart Recovery phases (orchestration-plan sequences 12 and 5).
+        - task_key: ERR_Retry_FailedSteps
+          environment_key: dbx_etl_common
+          notebook_task:
+            notebook_path: ../notebooks/ERR_Retry_FailedSteps.py
+            source: WORKSPACE
+          max_retries: 0
+
+        # File Quarantine phase (sequence 26): failure path of the nightly File Screen container.
+        - task_key: ERR_Quarantine_BadFiles
+          environment_key: dbx_etl_common
+          notebook_task:
+            notebook_path: ../notebooks/ERR_Quarantine_BadFiles.py
+            source: WORKSPACE
+            base_parameters:
+              quarantineVolumePath: ${var.quarantine_volume_path}
+              inboundVolumePath: ${var.inbound_volume_path}
+          max_retries: 1
+          min_retry_interval_millis: 60000
+
+        # Reject Routing phase (sequence 45), alongside DQ_Reject_Reprocess (session 06).
+        - task_key: ERR_Route_RejectedRows
+          environment_key: dbx_etl_common
+          notebook_task:
+            notebook_path: ../notebooks/ERR_Route_RejectedRows.py
+            source: WORKSPACE
+            base_parameters:
+              rejectVolumePath: ${var.reject_volume_path}
+          max_retries: 1
+          min_retry_interval_millis: 60000
+
+        # Failure Handling phase (sequence 98), child 1 of 3: reconciliation gate.
+        - task_key: ERR_Reconcile_RowCounts
+          environment_key: dbx_etl_common
+          depends_on:
+            - task_key: ERR_Quarantine_BadFiles
+            - task_key: ERR_Route_RejectedRows
+          run_if: ALL_DONE
+          notebook_task:
+            notebook_path: ../notebooks/ERR_Reconcile_RowCounts.py
+            source: WORKSPACE
+
+        # Failure Handling phase, child 2 of 3: runs only when something upstream failed.
+        - task_key: ERR_Handle_PackageFailure
+          environment_key: dbx_etl_common
+          depends_on:
+            - task_key: ERR_Retry_FailedSteps
+            - task_key: ERR_Quarantine_BadFiles
+            - task_key: ERR_Route_RejectedRows
+            - task_key: ERR_Reconcile_RowCounts
+          run_if: AT_LEAST_ONE_FAILED
+          notebook_task:
+            notebook_path: ../notebooks/ERR_Handle_PackageFailure.py
+            source: WORKSPACE
+            base_parameters:
+              jobRunId: "{{job.run_id}}"
+
+        # Failure Handling phase, child 3 of 3: always closes with an operator notification.
+        - task_key: ERR_Notify_Operations
+          environment_key: dbx_etl_common
+          depends_on:
+            - task_key: ERR_Reconcile_RowCounts
+            - task_key: ERR_Handle_PackageFailure
+          run_if: ALL_DONE
+          notebook_task:
+            notebook_path: ../notebooks/ERR_Notify_Operations.py
+            source: WORKSPACE
+            base_parameters:
+              webhookSecretScope: ${var.webhook_secret_scope}
+              webhookSecretKey: ${var.webhook_secret_key}
