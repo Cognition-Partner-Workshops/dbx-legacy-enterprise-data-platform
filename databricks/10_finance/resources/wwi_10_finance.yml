@@ -1,0 +1,129 @@
+# One job per SSIS project; task_key = legacy package name. Task edges reproduce the
+# Master_Finance_Close phases (ssis/orchestration-plan.json) that WWI_Finance packages
+# take part in: 10 Subledger Loads -> 20 FX Revaluation -> 30 General Ledger ->
+# 40 Subledger Tie Out -> (50 Close Aggregates, WWI_Aggregates, outside this bundle)
+# -> 60 Period Lock. The docs/inventories/package-dependencies.csv edges
+# (FIN_Load_* -> FIN_Reconcile_SubledgerToGl) are satisfied transitively.
+resources:
+  jobs:
+    wwi_10_finance:
+      name: wwi_10_finance
+      description: WWI_Finance month-end close (ssis/10_finance) - AP aging, withholding tax, cost allocation, FX revaluation, GL postings, subledger tie-out and period lock.
+      tags:
+        ssis_project: WWI_Finance
+        legacy_root: Master_Finance_Close
+        cadence: monthly
+      max_concurrent_runs: 1
+      timeout_seconds: 14400
+
+      parameters:
+        - name: BatchId
+          default: "0"
+        - name: BusinessDate
+          default: ${var.businessDate}
+        - name: ReloadFullHistory
+          default: "False"
+        - name: EnvironmentCode
+          default: ${var.environmentCode}
+        - name: RestartFromStep
+          default: ""
+        - name: catalog
+          default: ${var.catalog}
+        # WWI_Finance package parameters ($Package::*), see docs/migration/10_finance-package-mapping.md
+        - name: AccountingPeriod
+          default: ${var.accountingPeriod}
+        - name: AgingAsOfDate
+          default: ""
+        - name: RevaluationDate
+          default: ""
+        - name: IncludeDisputedInvoices
+          default: "False"
+        - name: AllowUnbalancedJournals
+          default: "False"
+        - name: VarianceTolerance
+          default: ${var.varianceTolerance}
+        - name: AllowCloseWithVariance
+          default: ${var.allowCloseWithVariance}
+        - name: LedgerScope
+          default: ${var.ledgerScope}
+        - name: AllocationRuleSet
+          default: ${var.allocationRuleSet}
+        - name: FailOnMissingRate
+          default: ${var.failOnMissingRate}
+        - name: JurisdictionScope
+          default: ${var.jurisdictionScope}
+
+      job_clusters:
+        - job_cluster_key: finance_cluster
+          new_cluster:
+            spark_version: ${var.job_cluster_spark_version}
+            node_type_id: ${var.job_cluster_node_type}
+            num_workers: 2
+            data_security_mode: SINGLE_USER
+            spark_conf:
+              spark.databricks.delta.schema.autoMerge.enabled: "true"
+
+      tasks:
+        # ---- Phase 10: Subledger Loads (2 parallel streams in the legacy master) ----
+        - task_key: FIN_Load_ApAging
+          job_cluster_key: finance_cluster
+          notebook_task:
+            notebook_path: ../notebooks/FIN_Load_ApAging.py
+          libraries:
+            - whl: ${var.common_wheel}
+        - task_key: FIN_Load_WithholdingTax
+          job_cluster_key: finance_cluster
+          notebook_task:
+            notebook_path: ../notebooks/FIN_Load_WithholdingTax.py
+          libraries:
+            - whl: ${var.common_wheel}
+        - task_key: FIN_Load_CostAllocation
+          job_cluster_key: finance_cluster
+          notebook_task:
+            notebook_path: ../notebooks/FIN_Load_CostAllocation.py
+          libraries:
+            - whl: ${var.common_wheel}
+
+        # ---- Phase 20: FX Revaluation ----
+        - task_key: FIN_Currency_Revaluation
+          depends_on:
+            - task_key: FIN_Load_ApAging
+            - task_key: FIN_Load_WithholdingTax
+            - task_key: FIN_Load_CostAllocation
+          job_cluster_key: finance_cluster
+          notebook_task:
+            notebook_path: ../notebooks/FIN_Currency_Revaluation.py
+          libraries:
+            - whl: ${var.common_wheel}
+
+        # ---- Phase 30: General Ledger ----
+        - task_key: FIN_Load_GlPostings
+          depends_on:
+            - task_key: FIN_Currency_Revaluation
+          job_cluster_key: finance_cluster
+          notebook_task:
+            notebook_path: ../notebooks/FIN_Load_GlPostings.py
+          libraries:
+            - whl: ${var.common_wheel}
+
+        # ---- Phase 40: Subledger Tie Out ----
+        - task_key: FIN_Reconcile_SubledgerToGl
+          depends_on:
+            - task_key: FIN_Load_GlPostings
+          job_cluster_key: finance_cluster
+          notebook_task:
+            notebook_path: ../notebooks/FIN_Reconcile_SubledgerToGl.py
+          libraries:
+            - whl: ${var.common_wheel}
+
+        # ---- Phase 60: Period Lock (phase 50 Close Aggregates runs in wwi_08/09 between these
+        #      when the master job orchestrates; standalone the lock follows the tie-out) ----
+        - task_key: FIN_Close_PeriodLock
+          depends_on:
+            - task_key: FIN_Reconcile_SubledgerToGl
+          run_if: ALL_SUCCESS
+          job_cluster_key: finance_cluster
+          notebook_task:
+            notebook_path: ../notebooks/FIN_Close_PeriodLock.py
+          libraries:
+            - whl: ${var.common_wheel}
