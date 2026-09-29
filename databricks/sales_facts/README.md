@@ -141,8 +141,12 @@ databricks bundle deploy   -t dev
 databricks bundle run sales_facts_pipeline -t dev
 ```
 
-`bundle validate` has been run; nothing has been deployed. Deployment needs the
-engagement's `.migration/` metadata (target catalog allowlist) to exist first.
+The target catalog allowlist is `.migration/allowed_targets.json` (`wwi_sales`).
+The dev target reads extracts from the `wwi_sales.landing.legacy_extracts`
+volume and dimensions from `wwi_sales.dimensions_<user>`; for a fixture run,
+copy `fixtures/sqlserver` and `fixtures/reference` into the volume and load
+`fixtures/dimensions` into that schema (keys as `BIGINT`, `valid_from`/`valid_to`
+as `DATE`).
 Land the extracts as CSV with headers under
 `${var.landing_root}/sqlserver/Sales.Invoices/`, `.../Sales.InvoiceLines/` and
 `.../reference/ExchangeRateDaily/`, one file per extract batch, with the
