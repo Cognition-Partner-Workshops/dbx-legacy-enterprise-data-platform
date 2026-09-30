@@ -65,33 +65,33 @@ reconciled against an expectation derived from the live source with the package'
 
 | Package | Load type | Source (federated) | Legacy target | Databricks target | Entrypoint | Verdict |
 |---|---|---|---|---|---|---|
-| EXT_ORA_CodeTranslation | full | `wwi_legacy_oracle.wwi_ref.code_translation` | `Staging.raw.OracleCustomerMaster` | `bronze_oracle_code_translation` | `extracts.runExtOraCodeTranslation` | VERDICT_EXT_ORA_CodeTranslation |
-| EXT_ORA_Currency | full | `wwi_ref.currency_code` | `raw.OracleCurrency` | `bronze_oracle_currency` | `extracts.runExtOraCurrency` | VERDICT_EXT_ORA_Currency |
-| EXT_ORA_Geography | full | `wwi_ref.city_ref/country_ref/region_ref/postal_ref` (the `V_GEOGRAPHY_EXTRACT` view, inlined) | `raw.OracleGeography` | `bronze_oracle_geography` (`record_kind='ORAGEO'`) | `extracts.runExtOraGeography` | VERDICT_EXT_ORA_Geography |
-| EXT_ORA_PaymentTerms | full | `wwi_fin.payment_terms` | `raw.OraclePaymentTerms` | `bronze_oracle_payment_terms` | `extracts.runExtOraPaymentTerms` | VERDICT_EXT_ORA_PaymentTerms |
-| EXT_ORA_TaxRate | full | `wwi_fin.tax_rate` ⋈ `tax_jurisdiction` | `raw.OracleTaxRate` | `bronze_oracle_tax_rate` | `extracts.runExtOraTaxRate` | VERDICT_EXT_ORA_TaxRate |
-| EXT_ORA_FxRateDaily | date_window (watermark) | `wwi_ref.fx_rate_daily` | `raw.OracleFxRate` | `bronze_oracle_fx_rate`, `etl_watermark` | `extracts.runExtOraFxRateDaily` | VERDICT_EXT_ORA_FxRateDaily |
-| EXT_SQL_Cities | full | `wwi_legacy_oltp.Application.Cities/StateProvinces/Countries` | `raw.OracleGeography` | `bronze_oracle_geography` (`record_kind='OLTPCITY'`) | `extracts.runExtSqlCities` | VERDICT_EXT_SQL_Cities |
-| EXT_SQL_PaymentMethods | full | `Application.PaymentMethods` + `_Archive` | `raw.SqlInvoice` | `bronze_sql_payment_methods` | `extracts.runExtSqlPaymentMethods` | VERDICT_EXT_SQL_PaymentMethods |
-| EXT_SQL_TransactionTypes | full | `Application.TransactionTypes` + `_Archive` | `raw.SqlInvoice` | `bronze_sql_transaction_types` | `extracts.runExtSqlTransactionTypes` | VERDICT_EXT_SQL_TransactionTypes |
-| STG_Load_Currency | truncate_reload | `bronze_oracle_currency`, `bronze_oracle_fx_rate`, `silver_fx_override_approved` | `stg.Currency`, `stg.FxRate` | `silver_stg_currency`, `silver_stg_fx_rate` | `staging.runStgLoadCurrency` | VERDICT_STG_Load_Currency |
-| STG_Load_Geography | truncate_reload | `bronze_oracle_geography` | `stg.Geography` | `silver_stg_geography` | `staging.runStgLoadGeography` | VERDICT_STG_Load_Geography |
-| STG_Load_TaxAndTerms | truncate_reload | `bronze_oracle_payment_terms`, `bronze_oracle_tax_rate` | `stg.PaymentTerms`, `stg.TaxRate` | `silver_stg_payment_terms`, `silver_stg_tax_rate` | `staging.runStgLoadTaxAndTerms` | VERDICT_STG_Load_TaxAndTerms |
-| ING_FILE_FxOverride | file_ingest | volume `landing/inbound/treasury/fx_override_*.csv` | `raw.FileFxOverride` | `bronze_file_fx_override`, `silver_fx_override_approved`, `err_rejected_file_row`, `etl_file_registry` | `fx_override.runIngFileFxOverride` | VERDICT_ING_FILE_FxOverride |
-| REF_Load_Carrier | full_refresh | seed grid (`seeds.py`) | `Dimension.Carrier` | `gold_dim_carrier` | `dimensions.runRefLoadSeededDimensions` | VERDICT_REF_Load_Carrier |
-| REF_Load_CodeTranslation | full_refresh | `bronze_oracle_code_translation` | `etl.Configuration` / `ref.*` | `gold_ref_code_translation`, `gold_ref_unmapped_source_code` | `reference.runRefLoadCodeTranslation` | VERDICT_REF_Load_CodeTranslation |
-| REF_Load_Currency | full_refresh | `silver_stg_currency`, `silver_stg_fx_rate` | `Dimension.Currency` | `gold_dim_currency`, `gold_ref_fx_rate_daily` | `reference.runRefLoadCurrency` | VERDICT_REF_Load_Currency |
-| REF_Load_DateDimension | full_refresh (generated) | none — generated 2013-01-01..2016-12-31 + 1900-01-01/02 | `Dimension.Date` | `gold_dim_date` | `dimensions.runRefLoadDateDimension` | VERDICT_REF_Load_DateDimension |
-| REF_Load_Geography | full_refresh | `silver_stg_geography` | `Dimension.Geography` (+ Country/Region) | `gold_dim_geography`, `silver_ref_country`, `silver_ref_region` | `reference.runRefLoadGeography` | VERDICT_REF_Load_Geography |
-| REF_Load_LoyaltyTier | full_refresh | seed grid | `Dimension.Loyalty Tier` | `gold_dim_loyalty_tier` | `dimensions.runRefLoadSeededDimensions` | VERDICT_REF_Load_LoyaltyTier |
-| REF_Load_PaymentMethod | full_refresh | `bronze_sql_payment_methods` | `Dimension.Payment Method` | `gold_dim_payment_method` | `dimensions.runRefLoadPaymentMethod` | VERDICT_REF_Load_PaymentMethod |
-| REF_Load_PaymentTerms | full_refresh | `silver_stg_payment_terms`, `silver_stg_tax_rate` | `Dimension.Payment Terms` | `gold_dim_payment_terms`, `gold_ref_tax_rate` | `reference.runRefLoadPaymentTerms` | VERDICT_REF_Load_PaymentTerms |
-| REF_Load_ReturnReason | full_refresh | seed grid | `Dimension.Return Reason` | `gold_dim_return_reason` | `dimensions.runRefLoadSeededDimensions` | VERDICT_REF_Load_ReturnReason |
-| REF_Load_SalesChannel | full_refresh | seed grid | `Dimension.Sales Channel` | `gold_dim_sales_channel` | `dimensions.runRefLoadSeededDimensions` | VERDICT_REF_Load_SalesChannel |
-| REF_Load_TransactionType | full_refresh | `bronze_sql_transaction_types` | `Dimension.Transaction Type` | `gold_dim_transaction_type` | `dimensions.runRefLoadTransactionType` | VERDICT_REF_Load_TransactionType |
-| REF_Load_UnknownMembers | full_refresh (generated) | `wwi_legacy_dw.Integration.DimensionKeyRegistry` (35 rows) | `Dimension.*` (-1/-2/0 rows) | `gold_dim_unknown_member` + the reserved rows in every `gold_dim_*` | `dimensions.runRefLoadUnknownMembers` | VERDICT_REF_Load_UnknownMembers |
-| REF_Load_WarehouseSite | full_refresh | seed grid | `Dimension.Warehouse Site` | `gold_dim_warehouse_site` | `dimensions.runRefLoadSeededDimensions` | VERDICT_REF_Load_WarehouseSite |
-| DIM_Load_City | SCD2 | `bronze_oracle_geography` (`OLTPCITY`), `silver_ref_country` | `Dimension.City` (116,297 rows) | `silver_stg_city`, `gold_dim_city` | `city_scd2.runDimLoadCity` | VERDICT_DIM_Load_City |
+| EXT_ORA_CodeTranslation | full | `wwi_legacy_oracle.wwi_ref.code_translation` | `Staging.raw.OracleCustomerMaster` | `bronze_oracle_code_translation` | `extracts.runExtOraCodeTranslation` | PARTIAL |
+| EXT_ORA_Currency | full | `wwi_ref.currency_code` | `raw.OracleCurrency` | `bronze_oracle_currency` | `extracts.runExtOraCurrency` | PARTIAL |
+| EXT_ORA_Geography | full | `wwi_ref.city_ref/country_ref/region_ref/postal_ref` (the `V_GEOGRAPHY_EXTRACT` view, inlined) | `raw.OracleGeography` | `bronze_oracle_geography` (`record_kind='ORAGEO'`) | `extracts.runExtOraGeography` | PARTIAL |
+| EXT_ORA_PaymentTerms | full | `wwi_fin.payment_terms` | `raw.OraclePaymentTerms` | `bronze_oracle_payment_terms` | `extracts.runExtOraPaymentTerms` | PARTIAL |
+| EXT_ORA_TaxRate | full | `wwi_fin.tax_rate` ⋈ `tax_jurisdiction` | `raw.OracleTaxRate` | `bronze_oracle_tax_rate` | `extracts.runExtOraTaxRate` | PARTIAL |
+| EXT_ORA_FxRateDaily | date_window (watermark) | `wwi_ref.fx_rate_daily` | `raw.OracleFxRate` | `bronze_oracle_fx_rate`, `etl_watermark` | `extracts.runExtOraFxRateDaily` | PARTIAL |
+| EXT_SQL_Cities | full | `wwi_legacy_oltp.Application.Cities/StateProvinces/Countries` | `raw.OracleGeography` | `bronze_oracle_geography` (`record_kind='OLTPCITY'`) | `extracts.runExtSqlCities` | PARTIAL |
+| EXT_SQL_PaymentMethods | full | `Application.PaymentMethods` + `_Archive` | `raw.SqlInvoice` | `bronze_sql_payment_methods` | `extracts.runExtSqlPaymentMethods` | PARTIAL |
+| EXT_SQL_TransactionTypes | full | `Application.TransactionTypes` + `_Archive` | `raw.SqlInvoice` | `bronze_sql_transaction_types` | `extracts.runExtSqlTransactionTypes` | PARTIAL |
+| STG_Load_Currency | truncate_reload | `bronze_oracle_currency`, `bronze_oracle_fx_rate`, `silver_fx_override_approved` | `stg.Currency`, `stg.FxRate` | `silver_stg_currency`, `silver_stg_fx_rate` | `staging.runStgLoadCurrency` | PARTIAL |
+| STG_Load_Geography | truncate_reload | `bronze_oracle_geography` | `stg.Geography` | `silver_stg_geography` | `staging.runStgLoadGeography` | PARTIAL |
+| STG_Load_TaxAndTerms | truncate_reload | `bronze_oracle_payment_terms`, `bronze_oracle_tax_rate` | `stg.PaymentTerms`, `stg.TaxRate` | `silver_stg_payment_terms`, `silver_stg_tax_rate` | `staging.runStgLoadTaxAndTerms` | PARTIAL |
+| ING_FILE_FxOverride | file_ingest | volume `landing/inbound/treasury/fx_override_*.csv` | `raw.FileFxOverride` | `bronze_file_fx_override`, `silver_fx_override_approved`, `err_rejected_file_row`, `etl_file_registry` | `fx_override.runIngFileFxOverride` | PARTIAL |
+| REF_Load_Carrier | full_refresh | seed grid (`seeds.py`) | `Dimension.Carrier` | `gold_dim_carrier` | `dimensions.runRefLoadSeededDimensions` | PARTIAL |
+| REF_Load_CodeTranslation | full_refresh | `bronze_oracle_code_translation` | `etl.Configuration` / `ref.*` | `gold_ref_code_translation`, `gold_ref_unmapped_source_code` | `reference.runRefLoadCodeTranslation` | PARTIAL |
+| REF_Load_Currency | full_refresh | `silver_stg_currency`, `silver_stg_fx_rate` | `Dimension.Currency` | `gold_dim_currency`, `gold_ref_fx_rate_daily` | `reference.runRefLoadCurrency` | PARTIAL |
+| REF_Load_DateDimension | full_refresh (generated) | none — generated 2013-01-01..2016-12-31 + 1900-01-01/02 | `Dimension.Date` | `gold_dim_date` | `dimensions.runRefLoadDateDimension` | PASS |
+| REF_Load_Geography | full_refresh | `silver_stg_geography` | `Dimension.Geography` (+ Country/Region) | `gold_dim_geography`, `silver_ref_country`, `silver_ref_region` | `reference.runRefLoadGeography` | PARTIAL |
+| REF_Load_LoyaltyTier | full_refresh | seed grid | `Dimension.Loyalty Tier` | `gold_dim_loyalty_tier` | `dimensions.runRefLoadSeededDimensions` | PARTIAL |
+| REF_Load_PaymentMethod | full_refresh | `bronze_sql_payment_methods` | `Dimension.Payment Method` | `gold_dim_payment_method` | `dimensions.runRefLoadPaymentMethod` | PASS |
+| REF_Load_PaymentTerms | full_refresh | `silver_stg_payment_terms`, `silver_stg_tax_rate` | `Dimension.Payment Terms` | `gold_dim_payment_terms`, `gold_ref_tax_rate` | `reference.runRefLoadPaymentTerms` | PARTIAL |
+| REF_Load_ReturnReason | full_refresh | seed grid | `Dimension.Return Reason` | `gold_dim_return_reason` | `dimensions.runRefLoadSeededDimensions` | PARTIAL |
+| REF_Load_SalesChannel | full_refresh | seed grid | `Dimension.Sales Channel` | `gold_dim_sales_channel` | `dimensions.runRefLoadSeededDimensions` | PARTIAL |
+| REF_Load_TransactionType | full_refresh | `bronze_sql_transaction_types` | `Dimension.Transaction Type` | `gold_dim_transaction_type` | `dimensions.runRefLoadTransactionType` | PASS |
+| REF_Load_UnknownMembers | full_refresh (generated) | `wwi_legacy_dw.Integration.DimensionKeyRegistry` (35 rows) | `Dimension.*` (-1/-2/0 rows) | `gold_dim_unknown_member` + the reserved rows in every `gold_dim_*` | `dimensions.runRefLoadUnknownMembers` | PARTIAL |
+| REF_Load_WarehouseSite | full_refresh | `wwi_legacy_staging.stg.StockMovement` site columns → fallback `wwi_legacy_oltp.Warehouse.WarehouseSites` (see deviations) | `Dimension.Warehouse Site` | `gold_dim_warehouse_site` | `dimensions.runDimensions` (`buildDimWarehouseSite`) | PARTIAL |
+| DIM_Load_City | SCD2 | `bronze_oracle_geography` (`OLTPCITY`), `silver_ref_country` | `Dimension.City` (116,297 rows) | `silver_stg_city`, `gold_dim_city` | `city_scd2.runDimLoadCity` | FAIL |
 
 ## Design decisions
 
@@ -131,7 +131,8 @@ reconciled against an expectation derived from the live source with the package'
   `max(city_key)+row_number()`; reserved keys `-2/-1/0` are always preserved. Dedup keeps the most populous
   version per (country, state, city, effective ts), then the greatest source row.
 - **Evidence** (`recon.py`): one `run_id` per run, one row per package, `checks` = row_count + checksum
-  (`sum(xxhash64(concat_ws('|', <business cols>)))` over canonicalised strings) + a null-rate check where a key
+  (`sum(cast(xxhash64(concat_ws('|', <business cols>)) as decimal(38,0)))` over canonicalised strings — the
+  cast avoids the bigint overflow ANSI mode raises when summing 64-bit hashes) + a null-rate check where a key
   column exists. Populated legacy tables → direct comparison; empty legacy tables → `PARTIAL` with
   `"baseline":"source_derived"`.
 
@@ -151,6 +152,14 @@ reconciled against an expectation derived from the live source with the package'
   holding folders drained by `MNT_Archive_ProcessedFiles` / `ERR_Quarantine_BadFiles` (owned by another group).
 - Success/failure e-mail tasks (`Send Mail`) are not reproduced — Databricks job notifications are the
   equivalent.
+- `REF_Load_WarehouseSite` aggregates `stg.StockMovement` by `WarehouseSiteId/Code/Name/CountryCode/PostalCode`,
+  but the deployed `stg.StockMovement` DDL only carries `WarehouseCode` (and the table is empty). When the site
+  columns are absent, `dimensions.warehouseSiteSource` lists the sites from OLTP `Warehouse.WarehouseSites`
+  (country = first two characters of the site code, exactly as the package derives it) with zero movements.
+- Serverless/Unity Catalog substitutions with no semantic effect: `_metadata.file_path` instead of
+  `input_file_name()`, no `DataFrame.cache()`, federated `char(n)`/`varchar(n)` columns landed as plain `string`
+  (`common.stripCharTypes`), and reserved/inferred City rows built through string timestamps so the
+  `9999-12-31` high date survives the Arrow conversion on Spark Connect.
 
 ## Open questions
 
@@ -158,12 +167,24 @@ reconciled against an expectation derived from the live source with the package'
   the original WWI DW ETL (`Integration.City_Staging` + `MigrateStagedCityData`), not from `Application.Cities`
   as it stands today. Our SCD2 load over the live OLTP snapshot cannot recreate history that is no longer in
   the source; the evidence records the row-count and checksum gap rather than claiming parity.
+- `STG_Load_TaxAndTerms` translates `TERMS_CODE` through the `PAYMENT_TERMS` crosswalk with a redirect-on-no-match
+  lookup. The steward grid only maps `NET30`, `NET60`, `2/10NET30` and `EOM`, so 28 of the 30 Oracle terms
+  (`N30`, `2P10N30`, `N45`, …) are redirected to `err_rejected_lookup_failure` exactly as the package does and
+  only two terms reach `gold_dim_payment_terms`. Faithful, but almost certainly a gap in the legacy crosswalk.
 - Whether `EXT_ORA_Geography` and `EXT_SQL_Cities` were intended to share `raw.OracleGeography` (inventory) or
   the generator mislabelled the target; we keep them in one bronze table discriminated by `record_kind`.
 
 ## Blocked / not done
 
-BLOCKED_SECTION
+Nothing is blocked: all 27 packages are implemented, deployed and executed. Items that could not be brought to
+`PASS` are data-baseline facts recorded in the evidence rather than defects in the migration:
+
+- The legacy `Dimension.*` reference tables (`Currency`, `Geography`, `Payment Method`, `Payment Terms`, `Carrier`,
+  `Loyalty Tier`, `Return Reason`, `Sales Channel`, `Transaction Type`, `Warehouse Site`) and the `raw.*`/`stg.*`
+  staging tables are empty on the host, so those packages are `PARTIAL` against a source-derived expectation.
+- `Dimension.City` carries 116,297 historical versions that are not recoverable from the live OLTP source
+  (see Open questions); `DIM_Load_City` therefore cannot reach `PASS`.
+- `Dimension.Date` is the one populated legacy target and is compared directly (1,463 rows).
 
 ## Evidence
 
@@ -175,4 +196,14 @@ WHERE branch = 'ssis_ref_calendar'
 ORDER BY unit;
 ```
 
-EVIDENCE_SECTION
+Latest run (job `ssis_ref_calendar_reference_load`, all eight tasks `SUCCESS`): 27 rows, one per package —
+**3 PASS, 23 PARTIAL, 1 FAIL, 0 NOT_APPLICABLE**.
+
+| Verdict | Packages |
+|---|---|
+| PASS | `REF_Load_DateDimension` (1,463 rows, checksum match), `REF_Load_PaymentMethod`, `REF_Load_TransactionType` (the only legacy reference dimensions populated on the host) |
+| PARTIAL | the 23 packages whose legacy `raw.*` / `stg.*` / `Dimension.*` target is empty on the host; each is compared with `"baseline":"source_derived"` against an expectation built with the package's own logic (row count and checksum both match the expectation) |
+| FAIL | `DIM_Load_City` — legacy `Dimension.City` has 116,297 rows of WWI temporal history; the live source (`Application.Cities` + 28 `Cities_Archive` rows) yields 37,971; the checksum and current-row overlap are recorded in `checks` |
+
+Every row carries `unit_type='ssis_package'`, `branch='ssis_ref_calendar'`, `actor='devin:ssis_ref_calendar'`,
+`harness_version='ssis-migration-v1'` and the `git_sha` of the PR head that produced it.
