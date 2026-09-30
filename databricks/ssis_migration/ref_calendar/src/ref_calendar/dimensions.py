@@ -260,8 +260,9 @@ def buildDimWarehouseSite(stockMovement: DataFrame, refCountry: DataFrame, posta
     without a resolvable country are rejected by the generator (they are simply excluded here)."""
     cols = {c.lower(): c for c in stockMovement.columns}
     site = F.col(cols.get("warehousesitecode", "warehouse_site_code"))
+    movementKey = cols.get("stockmovementbusinesskey", cols.get("movement_key"))
     agg = stockMovement.groupBy(site.alias("warehouse_site_code")).agg(
-        F.count("*").alias("movement_count"),
+        (F.count(F.col(movementKey)) if movementKey else F.count("*")).alias("movement_count"),
         F.max(F.col(cols.get("countrycode", "country_code"))).alias("country_code"),
         F.max(F.col(cols.get("postalcode", "postal_code"))).alias("postal_code"),
         F.max(F.col(cols.get("sitename", "site_name"))).alias("warehouse_site_name"),
@@ -278,6 +279,26 @@ def buildDimWarehouseSite(stockMovement: DataFrame, refCountry: DataFrame, posta
         F.when(F.col("movement_count") >= 10000, "HUB").when(F.col("movement_count") >= 1000, "REGIONAL").otherwise("SATELLITE").alias("site_type_code"),
         F.lit(True).alias("is_active"),
     ).withColumn("row_hash_type_1", rowHash("warehouse_site_name", "country_code", "site_type_code"))
+
+
+def warehouseSiteSource(spark: SparkSession) -> DataFrame:
+    """The package aggregates stg.StockMovement by WarehouseSiteId/Code/Name/CountryCode/PostalCode, but the
+    deployed stg.StockMovement DDL only carries WarehouseCode (and is empty on the host). When the site
+    columns are absent the site list comes from OLTP Warehouse.WarehouseSites instead (country = first two
+    characters of the site code, exactly as the package derives it), with zero movements per site."""
+    stockTable = f"{config.LEGACY_STAGING}.stg.StockMovement"
+    if spark.catalog.tableExists(stockTable):
+        stock = spark.table(stockTable)
+        if "WarehouseSiteCode" in stock.columns and "CountryCode" in stock.columns:
+            return stock
+    sites = spark.table(f"{config.LEGACY_OLTP}.Warehouse.WarehouseSites")
+    return sites.select(
+        F.upper(F.trim("SiteCode")).alias("warehouse_site_code"),
+        F.substring(F.upper(F.trim("SiteCode")), 1, 2).alias("country_code"),
+        F.lit(None).cast("string").alias("postal_code"),
+        F.col("SiteName").alias("site_name"),
+        F.lit(None).cast("string").alias("movement_key"),
+    )
 
 
 # ----------------------------------------------------------------------------- code translation
@@ -443,9 +464,7 @@ def runRefLoadDimensions(spark: SparkSession, batchId: int) -> dict:
     publish("gold_dim_currency", buildDimCurrency(spark.table(config.tbl("silver_ref_currency")), spark.table(config.tbl("silver_ref_fx_rate_daily"))), "currency_key", ["currency_code"], ["currency_code", "currency_name"])
     publish("gold_dim_geography", buildDimGeography(spark.table(config.tbl("silver_ref_region")), spark.table(config.tbl("silver_ref_country")), spark.table(config.tbl("silver_ref_tax_jurisdiction"))),
             "geography_key", ["geography_code"], ["geography_code", "country_name"])
-    stockTable = f"{config.LEGACY_STAGING}.stg.StockMovement"
-    stock = spark.table(stockTable) if spark.catalog.tableExists(stockTable) else spark.createDataFrame([], "warehouse_site_code string, country_code string, postal_code string, site_name string")
-    publish("gold_dim_warehouse_site", buildDimWarehouseSite(stock, spark.table(config.tbl("silver_ref_country")), spark.table(config.tbl("silver_ref_postal_format_rule"))),
+    publish("gold_dim_warehouse_site", buildDimWarehouseSite(warehouseSiteSource(spark), spark.table(config.tbl("silver_ref_country")), spark.table(config.tbl("silver_ref_postal_format_rule"))),
             "warehouse_site_key", ["warehouse_site_code"], ["warehouse_site_code", "warehouse_site_name"])
     mapped, unmapped = buildCodeTranslation(spark.table(config.tbl("bronze_oracle_code_translation")), crosswalk)
     writeTable(mapped.withColumn("batch_id", F.lit(batchId).cast("bigint")), config.tbl("gold_ref_code_translation"))

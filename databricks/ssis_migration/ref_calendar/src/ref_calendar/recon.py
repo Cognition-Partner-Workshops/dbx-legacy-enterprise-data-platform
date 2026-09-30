@@ -271,9 +271,7 @@ def expectedDimGeography(spark):
 
 
 def expectedDimWarehouseSite(spark):
-    stockTable = f"{config.LEGACY_STAGING}.stg.StockMovement"
-    stock = spark.table(stockTable) if tableExists(spark, stockTable) else spark.createDataFrame([], "warehouse_site_code string, country_code string, postal_code string, site_name string")
-    return dimensions.buildDimWarehouseSite(stock, spark.table(config.tbl("silver_ref_country")), spark.table(config.tbl("silver_ref_postal_format_rule")))
+    return dimensions.buildDimWarehouseSite(dimensions.warehouseSiteSource(spark), spark.table(config.tbl("silver_ref_country")), spark.table(config.tbl("silver_ref_postal_format_rule")))
 
 
 def expectedCodeTranslationDim(spark):
@@ -363,7 +361,7 @@ def buildSpecs() -> list[ReconSpec]:
                   None, expectedUnknownMembers, "Generated from Integration.DimensionKeyRegistry with the legacy -1 Unknown / -2 Not Applicable convention; legacy dimensions carry the members inline so no single legacy table exists to count.",
                   extraChecks=unknownMemberLegacyPresence),
         ReconSpec("REF_Load_WarehouseSite", f"{DW}.Dimension.Warehouse Site", t("gold_dim_warehouse_site"), ["warehouse_site_code", "country_code", "site_type_code", "movement_count"],
-                  dwQuery("SELECT * FROM Dimension.[Warehouse Site]"), expectedDimWarehouseSite, "Aggregated from stg.StockMovement (empty on the host, so only the unknown member is produced).", targetFilter="warehouse_site_key > 0"),
+                  dwQuery("SELECT * FROM Dimension.[Warehouse Site]"), expectedDimWarehouseSite, "stg.StockMovement lacks the site columns the package selects and is empty on the host; sites come from OLTP Warehouse.WarehouseSites with movement_count 0.", targetFilter="warehouse_site_key > 0"),
         ReconSpec("DIM_Load_City", f"{DW}.Dimension.City", t("gold_dim_city"), CITY_COLUMNS, legacyCity, expectedCity,
                   "SCD2 over Application.Cities. The legacy dimension holds 116,297 rows built from the full WWI temporal history, which the current OLTP host no longer carries (Cities_Archive has 28 rows), so the row set cannot be reproduced from the live source.",
                   extraChecks=cityCurrentOverlap),
