@@ -72,9 +72,14 @@ def mergeTable(spark: SparkSession, df: DataFrame, fqName: str, keys: list[str])
     view = "src_" + fqName.replace(".", "_")
     df.createOrReplaceTempView(view)
     cond = " AND ".join(f"t.`{k}` <=> s.`{k}`" for k in keys)
+    cols = df.columns
+    setClause = ", ".join(f"t.`{c}` = s.`{c}`" for c in cols if c not in keys)
+    insertCols = ", ".join(f"`{c}`" for c in cols)
+    insertVals = ", ".join(f"s.`{c}`" for c in cols)
     spark.sql(
         f"MERGE INTO {fqName} AS t USING {view} AS s ON {cond} "
-        "WHEN MATCHED THEN UPDATE SET * WHEN NOT MATCHED THEN INSERT *"
+        f"WHEN MATCHED THEN UPDATE SET {setClause} "
+        f"WHEN NOT MATCHED THEN INSERT ({insertCols}) VALUES ({insertVals})"
     )
     return df.count()
 
