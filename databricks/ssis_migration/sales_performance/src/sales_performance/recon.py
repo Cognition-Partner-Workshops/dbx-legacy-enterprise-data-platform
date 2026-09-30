@@ -235,7 +235,7 @@ def reconCommission(spark: SparkSession, regionCode: str):
     currencyFilter = "AND l.currency_code = 'USD'" if regionCode == "NA" else ""
     expected = spark.sql(
         f"""
-        SELECT count(*) AS n, cast(round(sum({basis}), 2) AS decimal(19,2)) AS amt
+        SELECT count(*) AS n, cast(round(sum(cast(round({basis}, 4) AS decimal(19,4))), 2) AS decimal(19,2)) AS amt
         FROM _recon_lines l
         JOIN _recon_plans p ON p.region_code = l.region_code AND p.is_default_plan
              AND l.invoice_date BETWEEN p.effective_from_date AND coalesce(p.effective_to_date, DATE '9999-12-31')
