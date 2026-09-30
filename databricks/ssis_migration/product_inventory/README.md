@@ -50,10 +50,10 @@ Load types are the SSIS ones from `docs/inventories/ssis-packages.csv`.
 | 8 | `STG_Load_StockMovement` | incremental_append | `bronze_sql_stock_movement`, `silver_stock_item` | `silver_stock_movement` | `silver.runStgLoadStockMovement` | PARTIAL |
 | 9 | `STG_Work_ProductCrosswalk` | work_rebuild | `silver_stock_item`, `silver_product` | `work_product_crosswalk` | `silver.runStgWorkProductCrosswalk` | PARTIAL |
 | 10 | `STG_Work_InventoryPosition` | work_rebuild (90 days) | `silver_stock_movement`, `silver_stock_item` | `work_inventory_position_daily` | `silver.runStgWorkInventoryPosition` | PARTIAL |
-| 11 | `DIM_Load_StockItem` | SCD2 (hybrid) | `silver_stock_item`, `work_product_crosswalk`, `silver_product` | `gold_dim_stock_item` | `gold_dimensions.runDimLoadStockItem` | PARTIAL |
+| 11 | `DIM_Load_StockItem` | SCD2 (hybrid) | `silver_stock_item`, `work_product_crosswalk`, `silver_product` | `gold_dim_stock_item` | `gold_dimensions.runDimLoadStockItem` | FAIL* |
 | 12 | `DIM_Load_ProductCategory` | SCD1 | `bronze_ora_product_category` | `gold_dim_product_category` | `gold_dimensions.runDimLoadProductCategory` | PARTIAL |
 | 13 | `FACT_Load_Movement` | incremental_fact | `silver_stock_movement`, `gold_dim_stock_item`, legacy `Dimension.Customer/Supplier/Transaction Type/Date` | `gold_fact_movement` (+ `work_late_arriving_dimension_queue`) | `gold_facts.runFactLoadMovement` | FAIL* |
-| 14 | `FACT_Load_StockHolding` | snapshot_fact | `silver_stock_item`, `gold_dim_stock_item` | `gold_fact_stock_holding` | `gold_facts.runFactLoadStockHolding` | see Evidence |
+| 14 | `FACT_Load_StockHolding` | snapshot_fact | `silver_stock_item`, `gold_dim_stock_item` | `gold_fact_stock_holding` | `gold_facts.runFactLoadStockHolding` | FAIL* |
 | 15 | `FACT_Load_DailyInventorySnapshot` | snapshot_fact | `silver_stock_item`, `silver_stock_movement`, `work_inventory_position_daily` | `gold_fact_daily_inventory_snapshot` | `gold_facts.runFactLoadDailyInventorySnapshot` | PARTIAL |
 | 16 | `INV_Load_CycleCountVariance` | business_rule | `wwi_legacy_oltp.Warehouse.CycleCounts/CycleCountLines/Bins`, `work_inventory_position_daily` | `gold_inv_cycle_count_variance`, `gold_inv_adjustment_movement` | `gold_inventory.runInvLoadCycleCountVariance` | PARTIAL |
 | 17 | `INV_Load_DailySnapshot` | business_rule | `silver_stock_item`, `bronze_sql_warehouse_site`, `work_inventory_position_daily` | `gold_inv_daily_snapshot` | `gold_inventory.runInvLoadDailySnapshot` | PARTIAL |
@@ -63,7 +63,7 @@ Load types are the SSIS ones from `docs/inventories/ssis-packages.csv`.
 | 21 | `AGG_Refresh_DailyInventoryHealth` | aggregate_rebuild | `gold_fact_daily_inventory_snapshot`, `gold_inv_replenishment_suggestion` | `gold_agg_daily_inventory_health` | `gold_aggregates.runAggRefreshDailyInventoryHealth` | PARTIAL |
 
 Control tables (group-local equivalents of `etl.*` / `err.*` / `work.*`): `etl_watermark`,
-`etl_package_execution`, `err_rejected_record`, `work_late_arriving_dimension_queue`, `recon_evidence`
+`etl_package_execution`, `err_rejected_record`, `work_late_arriving_dimension_queue` (created on the first late-arriving key), `recon_evidence`
 (local copy of the evidence rows).
 
 \* see "Evidence" for the one-line causes.
@@ -189,7 +189,42 @@ One row per package is appended to `otterorders_migration.evidence.recon_results
 
 ### Latest run
 
-EVIDENCE_PLACEHOLDER
+Job `ssis_product_inventory_end_to_end`, run 294668996525741 (all seven tasks SUCCESS, second full
+re-run of the deployed bundle – the re-run proved the loads idempotent: 236,663 fact movements,
+230 stock-item dimension rows, no duplicate batches). Evidence `run_id`
+`bf2f2256-07cd-467b-a445-cb489e864a42`, `git_sha` `493ca7cf72c3ede146aac414b399e23083fc5334`, 21
+rows – one per package:
+
+| Verdict | Count | Packages |
+|---|---|---|
+| PASS | 0 | – |
+| PARTIAL | 15 | every package whose legacy target is empty (source-derived baseline; row count + checksum of the re-derived expectation match) |
+| FAIL | 6 | `EXT_SQL_StockItems`, `EXT_SQL_StockMovements`, `EXT_SQL_StockTransfers`, `DIM_Load_StockItem`, `FACT_Load_Movement`, `FACT_Load_StockHolding` |
+| NOT_APPLICABLE | 0 | – |
+
+FAIL causes (the informational checks in the `checks` JSON isolate each one):
+
+| Package | Cause |
+|---|---|
+| `EXT_SQL_StockItems` | legacy `raw.SqlStockItem` is a synthetic 800-row seed (StockItemID 500–1299), not an extract of the 227 live `Warehouse.StockItems` |
+| `EXT_SQL_StockMovements` | legacy `raw.SqlStockMovement` is a 4,000-row seed; the live `Warehouse.StockItemTransactions` has 236,667 rows |
+| `EXT_SQL_StockTransfers` | legacy seed holds 370 XFER rows; live `Warehouse.StockTransferLines` is empty, so the extract lands 0 rows |
+| `DIM_Load_StockItem` | current rows: 227 = 227 and every business column matches except `tax_rate` (legacy 14 %/7 %, live OLTP `StockItems` + `StockItems_Archive` carry 15 % for all items) – `checksum_excluding_tax_rate` passes; history rows 671 vs 227 by design (see deviations) |
+| `FACT_Load_Movement` | 236,667 vs 236,663: the 4 zero-quantity transactions are rejected by `STG_Load_StockMovement` as specified; `checksum_excluding_zero_quantity` passes on the remaining 236,663 rows |
+| `FACT_Load_StockHolding` | 227 = 227 and every column matches except `last_cost_price` on 114 items (legacy 9.00 vs live `Warehouse.StockItemHoldings` 9.50 …) – `checksum_excluding_last_cost_price` passes |
+
+All six are baseline-drift or specification differences, not extraction defects: the legacy DW / staging
+seeds were not produced from the current OLTP state, so a `PASS` (row count **and** checksum) is not
+reachable against them without changing the live source.
+
+Verify with:
+
+```sql
+SELECT unit, verdict FROM otterorders_migration.evidence.recon_results
+WHERE branch = 'ssis_product_inventory'
+  AND run_id = (SELECT run_id FROM otterorders_migration.evidence.recon_results
+                WHERE branch = 'ssis_product_inventory' ORDER BY run_at DESC LIMIT 1);
+```
 
 ## Open questions
 
@@ -203,5 +238,14 @@ EVIDENCE_PLACEHOLDER
 * `Warehouse.StockTransfers`, `CycleCounts`, `ReplenishmentRules`, `Bins` and `product_uom_conv`
   are empty on the host, so the transfer / cycle-count / replenishment-rule paths are only
   exercised by unit tests and by their defaults.
+* `wwi_mdm.product_master` has no GTIN and synthetic item names, so `STG_Work_ProductCrosswalk`
+  matches nothing and every stock item lands in `err_rejected_record` (`NO_CROSSWALK_MATCH`); the
+  stock-item dimension therefore falls back to the `UNCLASS` category for all items. Confirm whether a
+  crosswalk seed / GTIN backfill is expected on the Oracle side.
+* `Dimension.Stock Item` (current rows) carries `Tax Rate` 14 %/7 % and `Fact.Stock Holding` carries
+  `Last Cost Price` values (e.g. 9.00) that do not exist in the live OLTP (`StockItems` /
+  `StockItems_Archive` hold 15 % for every item; `StockItemHoldings.LastCostPrice` is 9.50). The legacy
+  DW therefore predates the OLTP baseline; confirm whether the OLTP is expected to be re-aligned, or
+  the DW re-populated, before a PASS can be demanded for those two packages.
 * `Dimension.Product Category` / `Product Hierarchy` are empty in the legacy DW, so the category
   dimension can only be source-derived.
