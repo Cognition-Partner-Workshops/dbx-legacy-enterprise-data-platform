@@ -64,11 +64,9 @@ def appendInsertOnly(spark: SparkSession, df: DataFrame, fqn: str, keyCols: Sequ
         return spark.table(fqn).count()
     newRows = df.join(existing.select(*keyCols).distinct(), on=list(keyCols), how="left_anti")
     newRows = newRows.select(*[F.col(c) for c in df.columns])
-    newRows.cache()
     inserted = newRows.count()
     if inserted:
         appendTable(newRows, fqn)
-    newRows.unpersist()
     return inserted
 
 

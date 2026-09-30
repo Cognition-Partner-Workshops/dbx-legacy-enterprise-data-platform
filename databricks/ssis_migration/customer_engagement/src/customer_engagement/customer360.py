@@ -330,17 +330,13 @@ def runBuildLoyaltyOverlay(spark: SparkSession, cfg: CeConfig, asOf: date) -> Tu
     newRows = accrueNewPoints(ledger, qualifying, now)
     combined = newRows if ledger is None else ledger.select(*newRows.columns).unionByName(newRows)
     updated = expireAgedPoints(combined, asOf, now)
-    updated.cache()
     ledgerCount = updated.count()
     tables.overwriteTable(updated, ledgerFqn)
-    updated.unpersist()
     overlayFqn = cfg.table(tables.GOLD_C360_LOYALTY_OVERLAY)
     previous = tables.readTableOrNone(spark, overlayFqn)
     overlay = buildLoyaltyOverlay(spark.table(ledgerFqn), previous, asOf).withColumn("LoadedAtUtc", F.lit(now).cast("timestamp"))
-    overlay.cache()
     count = overlay.count()
     tables.overwriteTable(overlay, overlayFqn)
-    overlay.unpersist()
     tables.logPackageRun(
         spark,
         cfg.table(tables.ETL_PACKAGE_RUN),
@@ -623,10 +619,8 @@ def runPublishSegments(spark: SparkSession, cfg: CeConfig, asOf: date, publishSu
         .withColumn("AssignedAtUtc", F.lit(now).cast("timestamp"))
         .withColumn("SegmentAsOfDate", F.lit(asOf))
     )
-    segments.cache()
     count = segments.count()
     tables.overwriteTable(segments, segFqn)
-    segments.unpersist()
     tables.logPackageRun(
         spark,
         cfg.table(tables.ETL_PACKAGE_RUN),

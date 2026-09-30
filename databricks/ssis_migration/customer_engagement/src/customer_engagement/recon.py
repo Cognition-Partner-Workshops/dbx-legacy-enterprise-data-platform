@@ -433,7 +433,6 @@ def runRecon(spark: SparkSession, cfg: CeConfig, asOf: date) -> Tuple[str, DataF
     if missing:
         raise RuntimeError(f"recon specs missing for packages: {missing}")
     evidence = buildEvidenceRows(spark, cfg, asOf, runId)
-    evidence.cache()
     evidence.count()
     evidence.write.format("delta").mode("append").saveAsTable(cfg.evidenceTable("recon_results"))
     return runId, evidence

@@ -298,7 +298,6 @@ def runAggRefreshCustomerRolling12Month(spark: SparkSession, cfg: CeConfig, asAt
     previous = tables.readTableOrNone(spark, target)
     rows = buildCustomerRolling12Month(sales, customers, accountingPeriodCode, rollingMonths, previous, cfg.batchId)
     rows = rows.withColumn("RefreshedDatetime", F.lit(now).cast("timestamp"))
-    rows.cache()
     rows.count()
     if previous is None:
         tables.overwriteTable(rows, target)
@@ -307,7 +306,6 @@ def runAggRefreshCustomerRolling12Month(spark: SparkSession, cfg: CeConfig, asAt
         low = spark.range(1).select(lowPeriod.alias("p")).first()["p"]
         tables.deleteWhere(spark, target, f"AccountingPeriodCode >= '{low}' AND AccountingPeriodCode <= '{accountingPeriodCode}'")
         tables.appendTable(rows, target)
-    rows.unpersist()
     count = spark.table(target).where(F.col("RefreshedDatetime") == F.lit(now).cast("timestamp")).count()
     tables.logPackageRun(
         spark,

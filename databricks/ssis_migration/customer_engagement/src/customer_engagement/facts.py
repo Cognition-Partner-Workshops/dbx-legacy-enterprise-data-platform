@@ -133,10 +133,8 @@ def runFactLoyaltyPoints(spark: SparkSession, cfg: CeConfig, expiryMonthsNa: int
     expiries = generateExpiryRows(full, date.today(), lineageKey).withColumn("LoadDatetime", F.lit(tables.utcNow()).cast("timestamp"))
     expired = tables.appendInsertOnly(spark, expiries, target, keyCols)
     rebalanced = recomputeRunningBalance(spark.table(target))
-    rebalanced.cache()
     rebalanced.count()
     tables.overwriteTable(rebalanced, target)
-    rebalanced.unpersist()
     heldCount = held.count()
     if heldCount:
         tables.appendTable(held.withColumn("LoadDatetime", F.lit(tables.utcNow()).cast("timestamp")), cfg.table(tables.GOLD_FACT_LOYALTY_POINTS_REJECTS))
