@@ -53,7 +53,7 @@ def withFiscalPeriod(
         F.col("region_cd").alias("_r_region"), F.col("fiscal_calendar_cd").alias("_calendar_cd")
     )
     c = calendar.select(
-        F.col("calendar_cd").alias("_calendar_cd"),
+        F.col("calendar_cd").alias("_c_calendar_cd"),
         F.col("calendar_dt").alias("_cal_dt"),
         "calendar_period_cd",
     )
@@ -61,14 +61,15 @@ def withFiscalPeriod(
         df.join(r, F.upper(F.col(regionCol)) == F.col("_r_region"), "left")
         .join(
             c,
-            (F.col("_calendar_cd") == c._calendar_cd) & (F.to_date(F.col(dateCol)) == F.col("_cal_dt")),
+            (F.col("_calendar_cd") == F.col("_c_calendar_cd"))
+            & (F.to_date(F.col(dateCol)) == F.col("_cal_dt")),
             "left",
         )
         .withColumn(
             outCol, fiscalPeriod(F.to_date(F.col(dateCol)), F.col(regionCol), F.col("calendar_period_cd"))
         )
     )
-    return joined.drop("_r_region", "_calendar_cd", "_cal_dt", "calendar_period_cd")
+    return joined.drop("_r_region", "_calendar_cd", "_c_calendar_cd", "_cal_dt", "calendar_period_cd")
 
 
 # --------------------------------------------------------------------------- EXT_ORA_ApInvoiceHdr
