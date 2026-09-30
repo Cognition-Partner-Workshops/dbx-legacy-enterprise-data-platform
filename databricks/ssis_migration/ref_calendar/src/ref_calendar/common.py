@@ -84,11 +84,11 @@ def nullIfBlank(col):
 def safeDate(col):
     """stg.ufn_SafeDate: tolerant parse of the landed NVARCHAR dates (ISO date, ISO timestamp, Oracle DD-MON-YY)."""
     s = F.trim(col.cast("string"))
-    return F.coalesce(
-        F.to_date(s, "yyyy-MM-dd"),
-        F.to_date(F.substring(s, 1, 10), "yyyy-MM-dd"),
-        F.to_date(s, "dd-MMM-yy"),
-        F.to_date(s, "MM/dd/yyyy"),
+    return (
+        F.when(s.rlike(r"^\d{4}-\d{2}-\d{2}$"), F.to_date(s, "yyyy-MM-dd"))
+        .when(s.rlike(r"^\d{4}-\d{2}-\d{2}[ T]"), F.to_date(F.substring(s, 1, 10), "yyyy-MM-dd"))
+        .when(s.rlike(r"^\d{2}-[A-Za-z]{3}-\d{2}$"), F.to_date(s, "dd-MMM-yy"))
+        .when(s.rlike(r"^\d{2}/\d{2}/\d{4}$"), F.to_date(s, "MM/dd/yyyy"))
     )
 
 
