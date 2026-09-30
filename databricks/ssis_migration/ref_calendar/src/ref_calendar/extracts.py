@@ -78,7 +78,7 @@ def shapeGeographyExtract(country: DataFrame, region: DataFrame, city: DataFrame
         F.col("ct.state_prov_required_flg").alias("state_prov_required_flg"),
         F.coalesce(F.col("ct.region_cd"), F.col("rg.region_cd")).alias("region_cd"),
         F.col("rg.region_name").alias("region_name"),
-        F.col("ci.city_id").alias("geography_id"),
+        F.col("ci.city_id").cast("long").alias("geography_id"),
         F.col("ci.city_name").alias("city_name"),
         F.col("ci.state_prov_cd").alias("state_province_cd"),
         F.col("ci.state_prov_name").alias("state_province_name"),
@@ -98,7 +98,7 @@ def shapeGeographyExtract(country: DataFrame, region: DataFrame, city: DataFrame
         .when(F.col("rg.region_cd") == "EU", "ZIP_CITY")
         .when(F.col("rg.region_cd") == "APAC", "ZIP_PREFECTURE_CITY")
         .otherwise("FREEFORM").alias("address_format_cd"),
-        F.col("rg.retention_months").alias("data_retention_months"),
+        F.col("rg.retention_months").cast("int").alias("data_retention_months"),
         F.when(F.col("rg.consent_regime_cd").isNull(), "N").otherwise("Y").alias("consent_required_flag"),
         F.coalesce(F.col("ct.updated_dt"), F.col("ct.created_dt")).cast("string").alias("last_update_dt"),
         F.lit("ORAGEO").alias("record_kind"),
