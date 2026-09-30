@@ -228,7 +228,7 @@ def runInvoiceHeaders(spark: SparkSession, cfg: FinanceConfig, batchId: int) -> 
         sources.calendarFiscal(spark, cfg),
         cfg.businessDate,
     )
-    out = _meta(out, batchId).cache()
+    out = _meta(out, batchId)
     rowsRead = hdr.count()
     written = mergeTable(spark, out, cfg.table(BRONZE_INVOICE_HDR), ["invoice_id"])
     newWm = out.agg(F.max("last_upd_dt")).collect()[0][0]
@@ -338,7 +338,7 @@ def runInvoiceLines(spark: SparkSession, cfg: FinanceConfig, batchId: int) -> Pa
     accepted, rejected = transformInvoiceLines(
         lines, sources.oracleTable(spark, cfg, "wwi_fin", "ap_invoice_hdr"), sources.costCenters(spark, cfg)
     )
-    accepted = _meta(accepted, batchId).cache()
+    accepted = _meta(accepted, batchId)
     rowsRead = lines.count()
     written = mergeTable(spark, accepted, cfg.table(BRONZE_INVOICE_LINE), ["invoice_line_id"])
     rej = writeRejects(
@@ -497,7 +497,7 @@ def runPayments(spark: SparkSession, cfg: FinanceConfig, batchId: int) -> Packag
         sources.calendarFiscal(spark, cfg),
         cfg.businessDate,
     )
-    accepted = _meta(accepted, batchId).cache()
+    accepted = _meta(accepted, batchId)
     rowsRead = pay.count()
     written = mergeTable(spark, accepted, cfg.table(BRONZE_PAYMENT), ["payment_id"])
     rej = writeRejects(
@@ -616,7 +616,7 @@ def runPaymentApplies(spark: SparkSession, cfg: FinanceConfig, batchId: int) -> 
         sources.oracleTable(spark, cfg, "wwi_fin", "ap_payment"),
         sources.oracleTable(spark, cfg, "wwi_fin", "ap_invoice_hdr"),
     )
-    out = _meta(out, batchId).cache()
+    out = _meta(out, batchId)
     rowsRead = applies.count()
     written = mergeTable(spark, out, cfg.table(BRONZE_PAYMENT_APPLY), ["apply_id"])
     newWm = out.agg(F.max("apply_id")).collect()[0][0]

@@ -236,10 +236,8 @@ def runCurrencyRevaluation(spark: SparkSession, cfg: FinanceConfig, batchId: int
     )
     deleteInsert(spark, snapshot, cfg.table(FIN_FX_RATE_SNAPSHOT), f"revaluation_date = '{revalDate}'")
     invoices = readTable(spark, cfg.table(SILVER_INVOICE))
-    reval = (
-        revalueOpenItems(invoices, snapshot, sources.regionRef(spark, cfg), revalDate)
-        .withColumn("batch_id", F.lit(batchId).cast("bigint"))
-        .cache()
+    reval = revalueOpenItems(invoices, snapshot, sources.regionRef(spark, cfg), revalDate).withColumn(
+        "batch_id", F.lit(batchId).cast("bigint")
     )
     missing = reval.where(F.col("rate_missing"))
     missingCount = missing.count()
@@ -436,7 +434,7 @@ def runFinApAging(spark: SparkSession, cfg: FinanceConfig, batchId: int) -> Pack
     detail, rejected = buildApAging(
         invoices, readTable(spark, cfg.table(SILVER_INVOICE_LINE)), cfg.businessDate, cfg.includeDisputed
     )
-    detail = detail.withColumn("batch_id", F.lit(batchId).cast("bigint")).cache()
+    detail = detail.withColumn("batch_id", F.lit(batchId).cast("bigint"))
     written = deleteInsert(
         spark, detail, cfg.table(FIN_AP_AGING_DETAIL), f"as_of_date = '{cfg.businessDate}'"
     )
@@ -759,7 +757,7 @@ def runFinWithholdingTax(spark: SparkSession, cfg: FinanceConfig, batchId: int) 
         readTable(spark, cfg.table(WORK_PAYMENT_MATCHED)),
         period,
     )
-    out = out.withColumn("batch_id", F.lit(batchId).cast("bigint")).cache()
+    out = out.withColumn("batch_id", F.lit(batchId).cast("bigint"))
     written = deleteInsert(spark, out, cfg.table(FIN_WITHHOLDING_TAX), f"accounting_period = '{period}'")
     queue = (
         out.where(F.col("withholding_certificate_required"))
@@ -921,10 +919,8 @@ def runFinReconcile(spark: SparkSession, cfg: FinanceConfig, batchId: int) -> Pa
         period,
         tol,
     )
-    out = (
-        out.withColumn("batch_id", F.lit(batchId).cast("bigint"))
-        .withColumn("reconciled_at", F.current_timestamp())
-        .cache()
+    out = out.withColumn("batch_id", F.lit(batchId).cast("bigint")).withColumn(
+        "reconciled_at", F.current_timestamp()
     )
     written = deleteInsert(spark, out, cfg.table(FIN_RECON_RESULT), f"accounting_period = '{period}'")
     variances = out.where(F.col("recon_status") == "VARIANCE").withColumn(

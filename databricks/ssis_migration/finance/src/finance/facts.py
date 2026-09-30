@@ -123,7 +123,7 @@ def runRefCostCenter(spark: SparkSession, cfg: FinanceConfig, batchId: int) -> P
     existing = readTable(spark, fq) if tableExists(spark, fq) else unknownCostCenterRow(spark)
     if not existing.where(F.col("cost_center_key") == UNKNOWN_MEMBER_KEY).limit(1).count():
         existing = existing.unionByName(unknownCostCenterRow(spark))
-    newDim = applyScd2(existing, incoming, datetime.now(timezone.utc), batchId).cache()
+    newDim = applyScd2(existing, incoming, datetime.now(timezone.utc), batchId)
     inserted = newDim.where(F.col("batch_id") == batchId).count()
     written = overwriteTable(newDim, fq)
     return PackageResult(

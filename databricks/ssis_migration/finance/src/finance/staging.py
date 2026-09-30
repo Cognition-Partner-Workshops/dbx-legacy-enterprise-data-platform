@@ -249,7 +249,7 @@ def runStgApInvoice(spark: SparkSession, cfg: FinanceConfig, batchId: int) -> Pa
     pkg = "STG_Load_ApInvoice"
     hdr = readTable(spark, cfg.table(BRONZE_INVOICE_HDR))
     accepted, rejected = transformStgInvoices(hdr, sources.legacySupplierDimension(spark, cfg))
-    accepted = accepted.cache()
+    accepted = accepted
     w1 = mergeTable(spark, accepted, cfg.table(SILVER_INVOICE), ["invoice_id"])
     lines = transformStgInvoiceLines(
         readTable(spark, cfg.table(BRONZE_INVOICE_LINE)), readTable(spark, cfg.table(SILVER_INVOICE))
@@ -638,7 +638,7 @@ def runDqPaymentScreen(spark: SparkSession, cfg: FinanceConfig, batchId: int) ->
     pkg = "DQ_Payment_Screen"
     payments = readTable(spark, cfg.table(SILVER_PAYMENT))
     matches = readTable(spark, cfg.table(WORK_PAYMENT_MATCHED))
-    screened = screenPayments(payments, matches, cfg.businessDate).cache()
+    screened = screenPayments(payments, matches, cfg.businessDate)
     total = screened.count()
     rejects = screened.where(F.col("reject_reason_code").isNotNull()).withColumn(
         "_reject_reason", F.col("reject_reason_code")
