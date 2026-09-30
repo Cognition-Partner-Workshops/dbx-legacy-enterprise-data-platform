@@ -1,0 +1,154 @@
+# Job graph mirrors the Master_Daily_ETL ordering for this group's 22 packages:
+# extracts -> staging -> dedup -> DQ screen -> dimensions -> rekey -> recon evidence.
+resources:
+  jobs:
+    ssis_customer_party_daily:
+      name: ssis_customer_party_daily
+      description: "SSIS group customer_party (22 packages) reimplemented on Databricks. Extract -> stage -> dedup/DQ -> SCD dims -> rekey -> recon evidence."
+      max_concurrent_runs: 1
+      tags:
+        ssis_group: customer_party
+        harness: ssis-migration-v1
+      # SSIS project parameters (BatchId, ReloadFullHistory) and the target catalog/schema are job
+      # parameters, so `databricks bundle run ... --params reload_full_history=true` behaves like
+      # overriding the SSIS environment. BatchId defaults to the job run id (etl.Batch analogue).
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: evidence_schema
+          default: ${var.evidence_schema}
+        - name: batch_id
+          default: ${var.batch_id}
+        - name: reload_full_history
+          default: ${var.reload_full_history}
+        - name: git_sha
+          default: ${bundle.git.commit}
+      # Every task runs the same thin notebook on serverless compute with the SSIS package list.
+      tasks:
+        - task_key: ext_ora_customer_master
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: EXT_ORA_CustomerMaster
+        - task_key: ext_ora_customer_address
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: EXT_ORA_CustomerAddress
+        - task_key: ext_sql_customer_segments
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: EXT_SQL_CustomerSegments
+        - task_key: ext_sql_people
+          depends_on:
+            - task_key: ext_sql_customer_segments
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: EXT_SQL_People
+        - task_key: ext_sql_sales_territories
+          depends_on:
+            - task_key: ext_sql_people
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: EXT_SQL_SalesTerritories
+        - task_key: ext_sql_promotions
+          depends_on:
+            - task_key: ext_sql_sales_territories
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: EXT_SQL_Promotions
+        - task_key: stg_load_customer
+          depends_on:
+            - task_key: ext_ora_customer_master
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: STG_Load_Customer
+        - task_key: stg_load_customer_address
+          depends_on:
+            - task_key: ext_ora_customer_address
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: STG_Load_CustomerAddress
+        - task_key: stg_load_employee
+          depends_on:
+            - task_key: ext_sql_promotions
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: STG_Load_Employee
+        - task_key: stg_load_promotion_and_territory
+          depends_on:
+            - task_key: ext_sql_promotions
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: STG_Load_PromotionAndTerritory
+        - task_key: stg_work_customer_dedup
+          depends_on:
+            - task_key: stg_load_customer
+            - task_key: stg_load_customer_address
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: STG_Work_CustomerDedup
+        - task_key: dq_customer_screen
+          depends_on:
+            - task_key: stg_work_customer_dedup
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: DQ_Customer_Screen
+        - task_key: dim_load_customer_regions
+          depends_on:
+            - task_key: dq_customer_screen
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: DIM_NA_Load_Customer,DIM_EU_Load_Customer,DIM_APAC_Load_Customer
+        - task_key: dim_load_customer_category_and_segment
+          depends_on:
+            - task_key: ext_sql_promotions
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: DIM_Load_CustomerCategory,DIM_Load_CustomerSegment
+        - task_key: dim_load_employee
+          depends_on:
+            - task_key: stg_load_employee
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: DIM_Load_Employee
+        - task_key: dim_load_territory_salesperson_promotion
+          depends_on:
+            - task_key: stg_load_employee
+            - task_key: stg_load_promotion_and_territory
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: DIM_Load_SalesTerritory,DIM_Load_Salesperson,DIM_Load_Promotion
+        - task_key: dim_rekey_late_arriving
+          depends_on:
+            - task_key: dim_load_customer_regions
+            - task_key: dim_load_customer_category_and_segment
+            - task_key: dim_load_employee
+            - task_key: dim_load_territory_salesperson_promotion
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: DIM_Rekey_LateArriving
+        - task_key: recon
+          depends_on:
+            - task_key: dim_rekey_late_arriving
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: RECON
