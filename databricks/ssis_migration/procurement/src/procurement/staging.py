@@ -52,7 +52,7 @@ def transformSupplier(bronzeSupplier: DataFrame, paymentTerms: DataFrame, batchI
         F.upper(F.trim(F.col("supp_name"))).alias("supplier_name"),
         F.coalesce(statusMap[F.upper(F.trim(F.col("supp_status_cd")))], F.lit("PEND")).alias("supplier_status_code"),
         F.upper(F.trim(F.col("approval_status_cd"))).alias("approval_status_code"),
-        normalizeTaxId(F.col("tax_id_nbr")).alias("tax_identifier"),
+        normalizeTaxId(F.coalesce(F.col("vat_reg_nbr"), F.col("tax_id_nbr"))).alias("tax_identifier"),
         F.upper(F.trim(F.col("vat_reg_nbr"))).alias("vat_registration_number"),
         F.upper(F.trim(F.coalesce(F.col("payment_terms_cd"), F.lit("NET30")))).alias("payment_terms_code"),
         F.upper(F.trim(F.col("payment_method_cd"))).alias("payment_method_code"),

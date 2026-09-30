@@ -69,9 +69,9 @@ def test_three_way_match_statuses(spark):
             region_code="NA", receipt_date_key=d("2025-01-01"), quantity_received_base_uom=dec(100), unit_cost=dec(10), receipt_value=dec(1000), receipt_value_reporting=dec(1000)),
     ])
     invLines = spark.createDataFrame([
-        Row(INVOICE_LINE_ID=1, INVOICE_ID=1, RECEIPT_LINE_ID=1, PO_LINE_ID=None, QUANTITY=dec(101), UNIT_PRICE=dec(10), LINE_AMOUNT=dec(1010)),      # within 2% qty -> MATCHED
-        Row(INVOICE_LINE_ID=2, INVOICE_ID=1, RECEIPT_LINE_ID=None, PO_LINE_ID=12, QUANTITY=dec(110), UNIT_PRICE=dec(10), LINE_AMOUNT=dec(1100)),     # PO-line fallback, qty +10% -> QTY_EXCEPTION
-        Row(INVOICE_LINE_ID=3, INVOICE_ID=1, RECEIPT_LINE_ID=3, PO_LINE_ID=None, QUANTITY=dec(100), UNIT_PRICE=dec("10.5"), LINE_AMOUNT=dec(1050)),  # price +5% -> PRICE_EXCEPTION
+        Row(INVOICE_LINE_ID=1, INVOICE_ID=1, RECEIPT_LINE_ID=1, PO_LINE_ID=None, QUANTITY=dec(101), UNIT_PRICE=dec(10), LINE_AMT=dec(1010)),      # within 2% qty -> MATCHED
+        Row(INVOICE_LINE_ID=2, INVOICE_ID=1, RECEIPT_LINE_ID=None, PO_LINE_ID=12, QUANTITY=dec(110), UNIT_PRICE=dec(10), LINE_AMT=dec(1100)),     # PO-line fallback, qty +10% -> QTY_EXCEPTION
+        Row(INVOICE_LINE_ID=3, INVOICE_ID=1, RECEIPT_LINE_ID=3, PO_LINE_ID=None, QUANTITY=dec(100), UNIT_PRICE=dec("10.5"), LINE_AMT=dec(1050)),  # price +5% -> PRICE_EXCEPTION
     ])
     invHdr = spark.createDataFrame([Row(INVOICE_ID=1, INVOICE_NBR="INV-1", INVOICE_DT=ts("2026-01-05 00:00:00"))])
     out = {r.receipt_line_id: r for r in matchReceipts(receipts, invLines, invHdr, asOf="2026-03-01", batchId=1).collect()}

@@ -179,14 +179,21 @@ def catalogFilesExpected(spark):
         "value", F.element_at(F.split(F.col("_metadata.file_path"), "/"), -1).alias("source_file_name")
     )
     parts = F.split(F.col("value"), "\\|")
-    dtl = raw.where(parts[0] == "DTL").select("source_file_name", parts[1].alias("supplier_code"), parts[2].alias("supplier_item_code"), parts[8].alias("net_price"))
+    lineKey = ["source_file_name", "supplier_code", "supplier_item_code", "list_price", "net_price"]
+    dtl = raw.where(parts[0] == "DTL").select(
+        "source_file_name", parts[1].alias("supplier_code"), F.nullif(parts[2], F.lit("")).alias("supplier_item_code"),
+        parts[7].cast("decimal(19,4)").alias("list_price"), parts[8].cast("decimal(19,4)").alias("net_price"),
+    )
     processed = spark.table(qualified("ctl_landing_file")).where("file_status = 'Processed'").select("source_file_name").distinct()
     rejectTable = qualified(REJECTED_FILE_ROW)
     rejected = (
-        spark.table(rejectTable).select("source_file_name", F.col("SupplierCode").alias("supplier_code"), F.col("SupplierItemCode").alias("supplier_item_code"))
-        if io.tableExists(spark, rejectTable) else spark.createDataFrame([], "source_file_name string, supplier_code string, supplier_item_code string")
+        spark.table(rejectTable).select(
+            "source_file_name", F.col("SupplierCode").alias("supplier_code"), F.nullif(F.col("SupplierItemCode"), F.lit("")).alias("supplier_item_code"),
+            F.col("ListPriceText").cast("decimal(19,4)").alias("list_price"), F.col("NetPriceText").cast("decimal(19,4)").alias("net_price"))
+        if io.tableExists(spark, rejectTable)
+        else spark.createDataFrame([], "source_file_name string, supplier_code string, supplier_item_code string, list_price decimal(19,4), net_price decimal(19,4)")
     )
-    return dtl.join(processed, "source_file_name", "inner").join(rejected, ["source_file_name", "supplier_code", "supplier_item_code"], "left_anti")
+    return dtl.join(processed, "source_file_name", "inner").join(rejected, lineKey, "left_anti").drop("list_price")
 
 
 def statementFileCheck(spark):
@@ -211,7 +218,7 @@ def buildSpecs() -> List[ReconSpec]:
                 "coalesce(deleted_flg,'N') = 'N' AND (supp_status_cd IN ('AC','ACTV') OR last_po_dt >= add_months(current_timestamp(), -%d))" % PARAMS["dormantSupplierMonths"]),
             tbl(BRONZE_SUPPLIER), False,
             src + "wwi_mdm.supp_master rows passing the package's dormant/deleted filter; legacy raw.OracleSupplierMaster is empty on the host.",
-            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) FROM raw.OracleSupplierMaster"),
+            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) AS n FROM raw.OracleSupplierMaster"),
         ),
         ReconSpec(
             "EXT_ORA_PurchaseOrderHdr", "WideWorldImporters_Staging.raw.OraclePurchaseOrderHdr", BRONZE_PO_HDR,
@@ -219,14 +226,14 @@ def buildSpecs() -> List[ReconSpec]:
             lambda spark: oracle(spark, "wwi_proc.purchase_order_hdr").where("po_status_cd IN ('OPEN','PART','CLSD','CANC') AND coalesce(approval_status_cd,'') <> 'DRFT'"),
             tbl(BRONZE_PO_HDR), False,
             src + "wwi_proc.purchase_order_hdr rows in the package's status/approval filter; legacy raw target empty.",
-            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) FROM raw.OraclePurchaseOrderHdr"),
+            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) AS n FROM raw.OraclePurchaseOrderHdr"),
         ),
         ReconSpec(
             "EXT_ORA_PurchaseOrderLine", "WideWorldImporters_Staging.raw.OraclePurchaseOrderLine", BRONZE_PO_LINE,
             {"po_line_id": "long", "po_id": "long", "order_qty": "decimal(18,4)", "unit_price": "decimal(19,4)"},
             lambda spark: oracle(spark, "wwi_proc.purchase_order_line"), tbl(BRONZE_PO_LINE), False,
             src + "all wwi_proc.purchase_order_line rows (numeric watermark starts at 0 on first run); legacy raw target empty.",
-            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) FROM raw.OraclePurchaseOrderLine"),
+            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) AS n FROM raw.OraclePurchaseOrderLine"),
         ),
         ReconSpec(
             "EXT_ORA_ReceiptLine", "WideWorldImporters_Staging.raw.OracleReceiptLine", BRONZE_RECEIPT_LINE,
@@ -236,14 +243,14 @@ def buildSpecs() -> List[ReconSpec]:
             .join(oracle(spark, "wwi_proc.purchase_order_line").select("po_line_id"), "po_line_id", "inner"),
             tbl(BRONZE_RECEIPT_LINE), False,
             src + "po_receipt_line rows whose header is not VOID and whose PO line exists; legacy raw target empty.",
-            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) FROM raw.OracleReceiptLine"),
+            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) AS n FROM raw.OracleReceiptLine"),
         ),
         ReconSpec(
             "EXT_ORA_VendorContract", "WideWorldImporters_Staging.raw.OracleVendorContract", BRONZE_VENDOR_CONTRACT,
             {"contract_id": "long", "contract_nbr": "string", "supp_id": "long", "committed_amt": "decimal(19,4)"},
             lambda spark: oracle(spark, "wwi_proc.vendor_contract").where("contract_status_cd <> 'DELT'"), tbl(BRONZE_VENDOR_CONTRACT), False,
             src + "full reload of wwi_proc.vendor_contract excluding DELT; legacy raw target empty.",
-            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) FROM raw.OracleVendorContract"),
+            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) AS n FROM raw.OracleVendorContract"),
         ),
         ReconSpec(
             "EXT_SQL_SupplierTransactions", "WideWorldImporters_Staging.raw.SqlInvoice", BRONZE_SUPPLIER_TRANSACTION,
@@ -252,14 +259,14 @@ def buildSpecs() -> List[ReconSpec]:
                 F.col("SupplierTransactionID").alias("supplier_transaction_id"), F.col("SupplierID").alias("supplier_id"), F.col("TransactionAmount").alias("transaction_amount")),
             tbl(BRONZE_SUPPLIER_TRANSACTION), False,
             src + "all Purchasing.SupplierTransactions rows. The inventoried legacy target raw.SqlInvoice holds 2,820 Sales.Invoices rows written by a sibling package, so no legacy supplier-transaction output exists to compare against.",
-            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) FROM raw.SqlInvoice"),
+            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) AS n FROM raw.SqlInvoice"),
         ),
         ReconSpec(
             "ING_FILE_SupplierCatalog", "WideWorldImporters_Staging.raw.FileSupplierCatalog", BRONZE_CATALOG,
             {"source_file_name": "string", "supplier_code": "string", "supplier_item_code": "string", "net_price": "decimal(19,4)"},
             catalogFilesExpected, tbl(BRONZE_CATALOG), False,
             src + "independent re-parse of the DTL records of Processed sample files minus rejected rows; no supplier_catalog files exist on the host and raw.FileSupplierCatalog is empty.",
-            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) FROM raw.FileSupplierCatalog"),
+            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) AS n FROM raw.FileSupplierCatalog"),
         ),
         ReconSpec(
             "STG_Load_Supplier", "WideWorldImporters_Staging.stg.Supplier", SILVER_SUPPLIER,
@@ -267,7 +274,7 @@ def buildSpecs() -> List[ReconSpec]:
             lambda spark: spark.table(qualified(BRONZE_SUPPLIER)).select(F.upper(F.trim(F.col("supp_nbr"))).alias("supplier_business_key")).distinct(),
             lambda spark: spark.table(qualified(SILVER_SUPPLIER)).where("is_survivor_row"), False,
             src + "one survivor row per distinct supplier number in bronze; legacy stg.Supplier empty.",
-            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) FROM stg.Supplier"),
+            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) AS n FROM stg.Supplier"),
         ),
         ReconSpec(
             "STG_Load_PurchaseOrder", "WideWorldImporters_Staging.stg.PurchaseOrder; WideWorldImporters_Staging.stg.PurchaseOrderLine", SILVER_PURCHASE_ORDER_LINE,
@@ -276,7 +283,7 @@ def buildSpecs() -> List[ReconSpec]:
                 F.col("po_line_id").alias("purchase_order_line_business_key"), F.col("po_id").alias("purchase_order_business_key"), F.col("order_qty").alias("order_quantity")),
             lambda spark: spark.table(qualified(SILVER_PURCHASE_ORDER_LINE)).where("dq_status_code <> 'FAIL'"), False,
             src + "bronze PO lines passing the positive-quantity / non-negative-price rule; legacy stg.PurchaseOrder(Line) empty.",
-            legacyCountSql(LEGACY_STG_DB, "SELECT (SELECT COUNT(*) FROM stg.PurchaseOrder) + (SELECT COUNT(*) FROM stg.PurchaseOrderLine)"),
+            legacyCountSql(LEGACY_STG_DB, "SELECT (SELECT COUNT(*) AS n FROM stg.PurchaseOrder) + (SELECT COUNT(*) AS n FROM stg.PurchaseOrderLine)"),
         ),
         ReconSpec(
             "STG_Load_VendorContract", "WideWorldImporters_Staging.stg.VendorContract", SILVER_VENDOR_CONTRACT,
@@ -285,7 +292,7 @@ def buildSpecs() -> List[ReconSpec]:
             .join(spark.table(qualified("err_rejected_row")).where("package_name = 'STG_Load_VendorContract'").select(F.col("business_key").alias("contract_number")), "contract_number", "left_anti"),
             tbl(SILVER_VENDOR_CONTRACT), False,
             src + "bronze contracts minus the rows rejected to err_rejected_row (err.RejectedLookup: inverted dates / unknown supplier / missing FX); legacy stg.VendorContract empty.",
-            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) FROM stg.VendorContract"),
+            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) AS n FROM stg.VendorContract"),
         ),
         ReconSpec(
             "DQ_Supplier_Screen", "WideWorldImporters_Staging.err.RejectedSupplier", DQ_RESULT_TABLE,
@@ -294,17 +301,17 @@ def buildSpecs() -> List[ReconSpec]:
             .join(spark.table(qualified("err_rejected_row")).where("package_name = 'DQ_Supplier_Screen'").select(F.col("business_key").alias("supplier_business_key")), "supplier_business_key", "left_anti"),
             lambda spark: spark.table(qualified(DQ_RESULT_TABLE)).select("supplier_business_key").distinct(), False,
             src + "screened suppliers = survivors minus rows rejected to err_rejected_row(err.RejectedSupplier); legacy err.RejectedSupplier empty.",
-            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) FROM err.RejectedSupplier"),
+            legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) AS n FROM err.RejectedSupplier"),
         ),
         ReconSpec(
             "DIM_Load_Supplier", "WideWorldImportersDW.Dimension.Supplier", GOLD_DIM_SUPPLIER,
             {"supplier_business_key": "string", "supplier_name": "string"},
-            lambda spark: spark.table(f"{LEGACY_DW}.Dimension.Supplier").select(
+            lambda spark: spark.table(f"{LEGACY_DW}.Dimension.Supplier").where(F.col("`Valid To`") >= F.lit("9999-12-31")).select(
                 F.concat(F.lit("WWI:"), F.col("`WWI Supplier ID`").cast("string")).alias("supplier_business_key"), F.col("Supplier").alias("supplier_name"))
             .unionByName(spark.table(qualified(SILVER_SUPPLIER)).where("is_survivor_row AND coalesce(dq_status_code,'PASS') <> 'FAIL'").select("supplier_business_key", "supplier_name")),
             lambda spark: spark.table(qualified(GOLD_DIM_SUPPLIER)).where("is_current_row"), False,
-            "current dimension rows = 30 legacy Dimension.Supplier rows (seeded, keys preserved) + one current version per DQ-passing Oracle supplier. Legacy stg.Supplier is empty so the SSIS run never versioned the dimension; PARTIAL by contract.",
-            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) FROM Dimension.Supplier"),
+            "current dimension rows = current legacy Dimension.Supplier rows (all 30 legacy versions seeded, keys preserved) + one current version per DQ-passing Oracle supplier. Legacy stg.Supplier is empty so the SSIS run never versioned the dimension; PARTIAL by contract.",
+            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) AS n FROM Dimension.Supplier"),
         ),
         ReconSpec(
             "DIM_Load_VendorContract", "WideWorldImportersDW.Dimension.Vendor Contract", GOLD_DIM_VENDOR_CONTRACT,
@@ -312,7 +319,7 @@ def buildSpecs() -> List[ReconSpec]:
             lambda spark: spark.table(qualified(SILVER_VENDOR_CONTRACT)).select("contract_number", "supplier_business_key", "committed_amount").dropDuplicates(["contract_number"]),
             lambda spark: spark.table(qualified(GOLD_DIM_VENDOR_CONTRACT)).where("is_current_row"), False,
             src + "one current version per staged contract; legacy Dimension.[Vendor Contract] is empty (0 rows).",
-            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) FROM Dimension.[Vendor Contract]"),
+            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) AS n FROM Dimension.[Vendor Contract]"),
         ),
         ReconSpec(
             "FACT_Load_Purchase", "WideWorldImportersDW.Fact.Purchase", GOLD_FACT_PURCHASE,
@@ -331,7 +338,7 @@ def buildSpecs() -> List[ReconSpec]:
             lambda spark: spark.table(qualified(BRONZE_RECEIPT_LINE)).select("receipt_line_id", F.col("received_qty").alias("quantity_source_uom"), "unit_cost"),
             tbl(GOLD_FACT_PURCHASE_RECEIPT), False,
             src + "one fact row per bronze receipt line (unknown-supplier rows kept with inferred_member_flag); legacy Fact.[Purchase Receipt] empty.",
-            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) FROM Fact.[Purchase Receipt]"),
+            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) AS n FROM Fact.[Purchase Receipt]"),
         ),
         ReconSpec(
             "FACT_Load_SupplierTransaction", "WideWorldImportersDW.Fact.Supplier Transaction", GOLD_FACT_SUPPLIER_TRANSACTION,
@@ -342,7 +349,7 @@ def buildSpecs() -> List[ReconSpec]:
                 F.when(F.col("TransactionTypeName") == "Supplier Payment Issued", -F.abs(F.col("TransactionAmount"))).otherwise(F.col("TransactionAmount")).alias("transaction_amount")),
             lambda spark: spark.table(qualified(GOLD_FACT_SUPPLIER_TRANSACTION)).where("NOT is_reversal"), False,
             src + "signed amount per Purchasing.SupplierTransactions row (payments negative); legacy Fact.[Supplier Transaction] empty.",
-            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) FROM Fact.[Supplier Transaction]"),
+            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) AS n FROM Fact.[Supplier Transaction]"),
         ),
         ReconSpec(
             "PRC_Load_PurchaseSpend", "WideWorldImportersDW.Fact.Purchase (spend extension)", GOLD_FACT_PURCHASE_SPEND,
@@ -352,14 +359,14 @@ def buildSpecs() -> List[ReconSpec]:
             .select("purchase_order_line_business_key", F.col("extended_amount").alias("spend_amount")),
             tbl(GOLD_FACT_PURCHASE_SPEND), False,
             src + "one spend row per staged PO line on a non-cancelled/non-draft order; the legacy host carries no spend-classified rows.",
-            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) FROM Fact.Purchase WHERE [Lineage Key] <> 10"),
+            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) AS n FROM Fact.Purchase WHERE [Lineage Key] <> 10"),
         ),
         ReconSpec(
             "PRC_Load_ReceiptMatching", "WideWorldImportersDW.Fact.Purchase Receipt (match extension)", GOLD_FACT_RECEIPT_MATCHING,
             {"receipt_line_id": "long", "receipt_value": "decimal(19,4)"},
             lambda spark: spark.table(qualified(GOLD_FACT_PURCHASE_RECEIPT)).select("receipt_line_id", "receipt_value"), tbl(GOLD_FACT_RECEIPT_MATCHING), False,
             src + "one match row per receipt fact row; Oracle ap_invoice_line has no po_line_id/receipt_line_id populated so every receipt evaluates to GRNI. Legacy Fact.[Purchase Receipt] empty.",
-            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) FROM Fact.[Purchase Receipt]"),
+            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) AS n FROM Fact.[Purchase Receipt]"),
         ),
         ReconSpec(
             "PRC_Load_ContractCompliance", "WideWorldImportersDW.Aggregate.Supplier Performance", GOLD_AGG_CONTRACT_COMPLIANCE,
@@ -368,7 +375,7 @@ def buildSpecs() -> List[ReconSpec]:
             .select("source_supplier_id", "calendar_month", "region_code").distinct(),
             tbl(GOLD_AGG_CONTRACT_COMPLIANCE), False,
             src + "one compliance row per (supplier, month, region) with spend inside the compliance window; legacy Aggregate.[Supplier Performance] empty.",
-            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) FROM Aggregate.[Supplier Performance]"),
+            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) AS n FROM Aggregate.[Supplier Performance]"),
         ),
         ReconSpec(
             "PRC_Load_SupplierScorecard", "WideWorldImportersDW.Aggregate.Supplier Performance", GOLD_AGG_SUPPLIER_SCORECARD,
@@ -376,7 +383,7 @@ def buildSpecs() -> List[ReconSpec]:
             lambda spark: spark.table(qualified(SILVER_SUPPLIER)).where("is_survivor_row").select("source_supplier_id", "supplier_business_key"),
             tbl(GOLD_AGG_SUPPLIER_SCORECARD), False,
             src + "one scorecard row per staged supplier (INSUFFICIENT_DATA below the minimum order count); etl.SupplierScoringWeight is empty on the host so package default weights apply. Legacy aggregate empty.",
-            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) FROM Aggregate.[Supplier Performance]"),
+            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) AS n FROM Aggregate.[Supplier Performance]"),
         ),
         ReconSpec(
             "PRC_Export_SupplierStatement", "WideWorldImportersDW.Fact.Supplier Transaction -> file:supplier_statement.csv", GOLD_SUPPLIER_STATEMENT,
@@ -387,7 +394,7 @@ def buildSpecs() -> List[ReconSpec]:
             .select(F.col("supplier_transaction_business_key").alias("transaction_reference"), "transaction_amount"),
             tbl(GOLD_SUPPLIER_STATEMENT), False,
             src + "one statement line per non-reversal supplier transaction in the statement period, exported to /Volumes/.../exports/supplier_statement; legacy Fact.[Supplier Transaction] is empty and the host has no statement file.",
-            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) FROM Fact.[Supplier Transaction]"),
+            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) AS n FROM Fact.[Supplier Transaction]"),
             extraChecks=statementFileCheck,
         ),
         ReconSpec(
@@ -399,7 +406,7 @@ def buildSpecs() -> List[ReconSpec]:
                    .select("calendar_month", F.coalesce(F.col("supplier_key"), F.lit(0)).alias("supplier_key"), "region_code")).distinct(),
             tbl(GOLD_AGG_SUPPLIER_PERFORMANCE), False,
             src + "one aggregate row per (month, supplier_key, region) present in the purchase, receipt or spend facts; legacy Aggregate.[Supplier Performance] empty.",
-            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) FROM Aggregate.[Supplier Performance]"),
+            legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) AS n FROM Aggregate.[Supplier Performance]"),
         ),
     ]
 
