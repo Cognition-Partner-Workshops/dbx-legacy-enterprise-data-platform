@@ -1,8 +1,11 @@
 """Reconciliation evidence for the 12 logistics_returns packages -> otterorders_migration.evidence.recon_results.
 
-One evidence run = one ``run_id`` (UUID) and exactly one row per package.  For packages whose legacy SSIS output is
-populated on the baseline host (the four ``raw.*`` extract tables) the Delta table is compared with the legacy table
-directly (row count + order-independent SUM(xxhash64) checksum over the business columns) and can reach ``PASS``.
+One evidence run = one ``run_id`` (UUID) and exactly one row per package.  For the four ``EXT_SQL_*`` extracts the
+legacy SSIS output (``raw.*``) is populated on the baseline host but its live OLTP source is empty, so bronze is a
+*baseline seed* of ``raw.*`` rather than an extract output: the seed is compared with ``raw.*`` (row count +
+order-independent SUM(xxhash64) checksum over the business columns) and the ``source_vs_legacy_baseline`` check
+records live-OLTP vs legacy-raw row counts.  Because the migrated extract has no live source to reproduce the
+SSIS output from, those packages are graded ``FAIL`` (baseline inconsistency on the shared host), never ``PASS``.
 For packages whose legacy target is empty on the host (``stg.*``, ``Fact.Shipment``, ``Fact.Order Fulfilment``,
 ``Fact.Return``, ``Fact.Credit Note``, ``Aggregate.Delivery Performance Summary``, ``raw.FileCarrierScan``) an expected
 result is derived from the *inputs* with the package's own (pure, unit-tested) transformation functions and the
@@ -37,6 +40,7 @@ from logistics_returns.config import (
     EVIDENCE_SCHEMA,
     HARNESS_VERSION,
     LEGACY_DW_DATABASE,
+    LEGACY_OLTP_DATABASE,
     LEGACY_STAGING_DATABASE,
     RunContext,
     Tables,
@@ -169,32 +173,54 @@ def legacyName(database: str, schema: str, table: str) -> str:
 # ---------------------------------------------------------------------------------------------
 
 
+def extractVerdict(checks: list[dict]) -> str:
+    """EXT_SQL_* verdict: FAIL whenever the live OLTP source does not carry the rows the legacy raw.* seed came from."""
+    baseline = next((c for c in checks if c["check"] == "source_vs_legacy_baseline"), None)
+    if baseline is None or not baseline["pass"]:
+        return "FAIL"
+    return verdictFor(checks, sourceDerived=False)
+
+
 def extractEvidence(ctx: RunContext, packageName: str) -> PackageEvidence:
     spec = SPECS[packageName]
     spark = ctx.spark
     targetName = ctx.table(spec.targetTable)
     target = spark.table(targetName)
     legacy = ensureColumns(snakeCaseColumns(readLegacy(spark, ctx.legacyStaging, "raw", spec.legacyRawTable)), spec.columnTypes)
-    baseline = target.where(F.col("seeded_from_legacy_raw")) if "seeded_from_legacy_raw" in target.columns else target
-    incremental = target.count() - baseline.count()
-    legacyCount = legacy.count()
+    seededFlag = F.col("seeded_from_legacy_raw") if "seeded_from_legacy_raw" in target.columns else F.lit(False)
+    seeded = target.where(seededFlag)
+    extracted = target.where(~seededFlag)
+    seededCount, extractedCount, legacyCount = seeded.count(), extracted.count(), legacy.count()
+    oltpSchema, oltpTable = spec.watermarkObject.split(".", 1)
+    liveOltpRows = legacyCountOrNone(ctx, ctx.legacyOltp, oltpSchema, oltpTable)
+    baselineConsistent = liveOltpRows is not None and liveOltpRows >= legacyCount and legacyCount > 0
     checks = [
-        rowCountCheck(legacyCount, baseline.count()),
-        checksumCheck(legacy, baseline, spec.businessColumns),
-        nullRateCheck(legacy, baseline, spec.keyColumn),
-        {"check": "incremental_rows_beyond_legacy_watermark", "source": None, "target": incremental, "pass": True},
+        rowCountCheck(legacyCount, seededCount),
+        checksumCheck(legacy, seeded, spec.businessColumns),
+        nullRateCheck(legacy, seeded, spec.keyColumn),
+        {
+            "check": "source_vs_legacy_baseline",
+            "live_oltp_object": f"{LEGACY_OLTP_DATABASE}.{spec.watermarkObject}",
+            "live_oltp_rows": liveOltpRows,
+            "legacy_raw_rows": legacyCount,
+            "pass": baselineConsistent,
+        },
+        {"check": "rows_extracted_from_live_oltp", "source": liveOltpRows, "target": extractedCount, "pass": True},
+        {"check": "rows_seeded_from_legacy_raw", "source": legacyCount, "target": seededCount, "pass": True},
     ]
     ev = PackageEvidence(
         packageName,
-        verdictFor(checks, sourceDerived=False),
+        extractVerdict(checks),
         legacyName(LEGACY_STAGING_DATABASE, "raw", spec.legacyRawTable),
         targetName.replace("`", ""),
         checks,
     )
     ev.summary = (
-        f"Bronze baseline seeded from legacy raw.{spec.legacyRawTable} ({legacyCount} rows) compared on count + checksum over "
-        f"{len(spec.businessColumns)} business columns; {incremental} additional rows extracted from OLTP beyond the legacy "
-        f"NumericKey watermark (not in the legacy table by construction)."
+        f"FAIL: legacy raw.{spec.legacyRawTable} holds {legacyCount} SSIS-produced rows but its live OLTP source "
+        f"{spec.watermarkObject} holds {liveOltpRows} rows on the shared baseline host, so the migrated extract has no live "
+        f"source to reproduce the SSIS output from (baseline inconsistency, not a migration defect). Bronze carries a "
+        f"baseline seed of raw.* ({seededCount} rows, seeded_from_legacy_raw=true, matched on count + checksum over "
+        f"{len(spec.businessColumns)} business columns) for downstream packages; {extractedCount} rows were extracted from OLTP."
     )
     return ev
 

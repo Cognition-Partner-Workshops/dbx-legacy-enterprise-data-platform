@@ -25,6 +25,7 @@ LEGACY_OLTP = "wwi_legacy_oltp"
 LEGACY_STAGING = "wwi_legacy_staging"
 LEGACY_DW = "wwi_legacy_dw"
 LEGACY_SQLSERVER_CONNECTION = "wwi_legacy_sqlserver"
+LEGACY_OLTP_DATABASE = "WideWorldImporters"
 LEGACY_DW_DATABASE = "WideWorldImportersDW"
 LEGACY_STAGING_DATABASE = "WideWorldImporters_Staging"
 

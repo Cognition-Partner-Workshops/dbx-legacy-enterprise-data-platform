@@ -448,7 +448,8 @@ SPECS: dict[str, ExtractSpec] = {
 
 
 def seedFromLegacyRaw(ctx: RunContext, spec: ExtractSpec) -> int:
-    """First-run baseline: copy the SSIS-produced raw.* rows (snake_cased) into bronze and set the watermark."""
+    """Baseline seed (NOT extract output): copy the SSIS-produced raw.* rows into bronze, flagged seeded_from_legacy_raw=true,
+    and set the NumericKey watermark so the real OLTP extract only picks up rows above it."""
     legacy = snakeCaseColumns(ctx.spark.table(ctx.legacy(ctx.legacyStaging, "raw", spec.legacyRawTable)))
     legacy = ensureColumns(ensureColumns(legacy, spec.columnTypes), LEGACY_META_TYPES)
     if spec.seedEnrich is not None:

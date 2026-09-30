@@ -22,10 +22,10 @@ back to `remote_query` on the same read-only connection (`common.readLegacy`).
 
 | Package | Load type | Source (legacy) | Target (Delta) | Module / function | Verdict |
 |---|---|---|---|---|---|
-| `EXT_SQL_Shipments` | incremental_key (NumericKey watermark) | `Shipping.ShipmentHeaders` → `raw.SqlShipment` | `bronze_sql_shipment` | `extracts.runExtract` | PASS |
-| `EXT_SQL_ShipmentLines` | incremental_key | `Shipping.ShipmentLines` → `raw.SqlShipmentLine` | `bronze_sql_shipment_line` | `extracts.runExtract` | PASS |
-| `EXT_SQL_Returns` | incremental_key | `Returns.ReturnLines` → `raw.SqlReturnLine` | `bronze_sql_return_line` | `extracts.runExtract` | PASS |
-| `EXT_SQL_CreditNotes` | incremental_key | `Returns.CreditNoteLines` → `raw.SqlCreditNote` | `bronze_sql_credit_note` | `extracts.runExtract` | PASS |
+| `EXT_SQL_Shipments` | incremental_key (NumericKey watermark) | `Shipping.ShipmentHeaders` → `raw.SqlShipment` | `bronze_sql_shipment` | `extracts.runExtract` | FAIL (baseline) |
+| `EXT_SQL_ShipmentLines` | incremental_key | `Shipping.ShipmentLines` → `raw.SqlShipmentLine` | `bronze_sql_shipment_line` | `extracts.runExtract` | FAIL (baseline) |
+| `EXT_SQL_Returns` | incremental_key | `Returns.ReturnLines` → `raw.SqlReturnLine` | `bronze_sql_return_line` | `extracts.runExtract` | FAIL (baseline) |
+| `EXT_SQL_CreditNotes` | incremental_key | `Returns.CreditNoteLines` → `raw.SqlCreditNote` | `bronze_sql_credit_note` | `extracts.runExtract` | FAIL (baseline) |
 | `ING_FILE_CarrierScan` | file_ingest (`read_files` over UC volume, `.ctl` sidecar) | `carrier_scan_*.csv` → `raw.FileCarrierScan` | `bronze_file_carrier_scan`, `err_rejected_file_row`, `ctl_file_ingestion_log` | `carrier_scan.runCarrierScanIngestion` | PARTIAL |
 | `STG_Load_Shipment` | incremental_append (LastEditedWhen watermark, dedup on business key) | `raw.SqlShipment`, `raw.SqlShipmentLine` → `stg.Shipment`, `stg.ShipmentLine` | `silver_shipment`, `silver_shipment_line` | `staging.runStgLoadShipment` | PARTIAL |
 | `STG_Load_ReturnAndCredit` | incremental_append | `raw.SqlReturnLine`, `raw.SqlCreditNote` → `stg.Return`, `stg.CreditNote` | `silver_return`, `silver_credit_note` | `staging.runStgLoadReturnAndCredit` | PARTIAL |
@@ -46,9 +46,9 @@ fallback, `Fact.Sale` original-sale view), `recon.py` (evidence), `runner.py` (p
 
 | Verdict | Count | Packages |
 |---|---|---|
-| PASS | 4 | the four `EXT_SQL_*` extracts — bronze equals legacy `raw.*` on row count and business-column checksum |
+| PASS | 0 | |
 | PARTIAL | 8 | `ING_FILE_CarrierScan`, both `STG_Load_*`, all four `FACT_Load_*`, `AGG_Refresh_DeliveryPerformanceSummary` — the legacy target is **empty on the baseline host**, so the expected result is source-derived (`"baseline":"source_derived"` in `checks`) and the contract caps the verdict at PARTIAL |
-| FAIL | 0 | |
+| FAIL | 4 | the four `EXT_SQL_*` extracts — legacy `raw.*` holds the SSIS output (2200 / 6051 / 260 / 190 rows) but the live OLTP sources `Shipping.ShipmentHeaders`, `Shipping.ShipmentLines`, `Returns.ReturnLines`, `Returns.CreditNotes` hold **0 rows** on the shared host, so the migrated extract cannot reproduce the SSIS output from a live source. Bronze is a *baseline seed* of `raw.*` (matches on count + checksum, `seeded_from_legacy_raw=true`), not extract output; the `source_vs_legacy_baseline` check (`live_oltp_rows=0`, `legacy_raw_rows=N`, `pass=false`) isolates the cause: baseline inconsistency, not a migration defect. |
 | NOT_APPLICABLE | 0 | |
 
 Every row has `row_count` and `checksum` checks (`sum(xxhash64(<business columns cast to string>))`,
@@ -69,11 +69,12 @@ fulfilment rows, 176 return facts (+176 sale reversals), 34 credit-note facts (+
   aggregate → recon). Chosen over DLT because the packages are dominated by watermark control tables,
   delete/insert windows, MERGE-style accumulating snapshots and reject side outputs, which map directly
   onto imperative Delta operations and are unit-testable on local Spark.
-* **Baseline seeding of bronze.** The legacy `raw.*` tables were produced by the SSIS extracts; the live
-  OLTP `Shipping.*` / `Returns.*` tables are empty, so the first run seeds bronze from `raw.*`
-  (`seeded_from_legacy_raw = true`), sets the NumericKey watermark to the max key and then runs the
-  package's own OLTP query for keys above the watermark (0 rows on this baseline). Later runs are pure
-  incremental extracts.
+* **Baseline seed of bronze (not extract output).** The legacy `raw.*` tables were produced by the SSIS extracts;
+  the live OLTP `Shipping.*` / `Returns.*` tables are empty, so the first run seeds bronze from `raw.*`
+  (`seeded_from_legacy_raw = true`, reported separately as `rows_seeded_from_legacy_raw`), sets the NumericKey
+  watermark to the max key and then runs the package's own OLTP query for keys above the watermark (0 rows on
+  this baseline, reported as `rows_inserted`). Seeded rows are never counted as extracted; the seed exists only so
+  the downstream staging/fact/aggregate packages have input. Later runs are pure incremental extracts.
 * **Watermarks** live in `ctl_watermark` (`etl.Watermark` equivalent), one row per source object and
   watermark type; the `stg.*` loads use `LastEditedWhen`, the extracts use the numeric key.
 * **Unknown members**: dimension lookups (`Dimension.Customer`, `Stock Item`, `Carrier`, `Return Reason`,
