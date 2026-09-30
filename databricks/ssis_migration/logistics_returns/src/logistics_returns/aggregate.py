@@ -244,6 +244,16 @@ def laneAttributesFromSilver(silver: DataFrame) -> DataFrame:
     )
 
 
+def refreshAnchorDate(ctx: RunContext, fact: DataFrame) -> date:
+    """Anchor of the trailing refresh window: the latest despatch date in the fact, else the run date.
+
+    The proc anchors on GETDATE(); the baseline data ends in 2024, so anchoring on the run date would
+    always refresh an empty window (README deviation).
+    """
+    latest = fact.agg(F.max("despatch_date_key").cast("date")).collect()[0][0]
+    return latest or ctx.startedAtUtc.date()
+
+
 def refreshWindowStart(asOf: date, weeksToRefresh: int, reloadFullHistory: bool) -> date | None:
     if reloadFullHistory:
         return None
@@ -254,7 +264,7 @@ def runAggRefreshDeliveryPerformance(ctx: RunContext, weeksToRefresh: int = DEFA
     spark = ctx.spark
     target = ctx.table(Tables.goldAggDeliveryPerformanceSummary)
     fact = spark.table(ctx.table(Tables.goldFactShipment))
-    fromDate = refreshWindowStart(ctx.startedAtUtc.date(), weeksToRefresh, ctx.reloadFullHistory)
+    fromDate = refreshWindowStart(refreshAnchorDate(ctx, fact), weeksToRefresh, ctx.reloadFullHistory)
     rowsRead = fact.where(F.col("despatch_date_key") >= F.lit(fromDate).cast("date")).count() if fromDate else fact.count()
 
     incoming = buildWeeklyDeliveryPerformance(fact, fromDate, ctx.batchId)

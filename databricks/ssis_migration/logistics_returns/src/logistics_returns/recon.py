@@ -103,11 +103,12 @@ class PackageEvidence:
 
 
 def checksumOf(df: DataFrame, columns: list[str]) -> str | None:
-    """Order-independent SUM(xxhash64(business columns cast to string)) so both sides hash identical bytes."""
+    """Order-independent SUM(xxhash64(business columns cast to string)); summed as decimal(38,0) so ANSI mode cannot overflow."""
     present = [c for c in columns if c in df.columns]
     if not present:
         return None
-    row = df.select(F.sum(rowHash(*[F.col(c).cast("string") for c in present])).alias("cs")).collect()[0]
+    perRow = rowHash(*[F.col(c).cast("string") for c in present]).cast("decimal(38,0)")
+    row = df.select(F.sum(perRow).alias("cs")).collect()[0]
     return None if row[0] is None else str(row[0])
 
 

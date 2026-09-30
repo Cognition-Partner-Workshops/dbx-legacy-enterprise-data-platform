@@ -60,6 +60,7 @@ class ExtractSpec:
     derive: Callable[[DataFrame], DataFrame]
     columnTypes: dict[str, str] = field(default_factory=dict)
     businessColumns: list[str] = field(default_factory=list)
+    seedEnrich: Callable[[RunContext, DataFrame], DataFrame] | None = None
 
 
 def ensureColumns(df: DataFrame, columnTypes: dict[str, str]) -> DataFrame:
@@ -158,6 +159,19 @@ def warehouseCountry(siteCode: Column) -> Column:
 def deriveShipmentLine(df: DataFrame) -> DataFrame:
     """Derive Scan State: has_scan_flag = ISNULL(LastScanWhen) ? "Y" : "N" (SSIS labels are inverted; kept)."""
     return df.withColumn("has_scan_flag", F.when(F.col("last_scan_when").isNull(), F.lit("Y")).otherwise(F.lit("N")))
+
+
+def enrichReturnSeed(ctx: RunContext, df: DataFrame) -> DataFrame:
+    """Legacy raw.SqlReturnLine carries only InvoiceLineID; resolve OriginalInvoiceID through Sales.InvoiceLines."""
+    invoiceLines = ctx.spark.table(ctx.legacy(ctx.legacyOltp, "Sales", "InvoiceLines")).select(
+        F.col("InvoiceLineID").cast("bigint").alias("invoice_line_id"),
+        F.col("InvoiceID").cast("bigint").alias("_resolved_invoice_id"),
+    )
+    return (
+        df.join(invoiceLines, "invoice_line_id", "left")
+        .withColumn("original_invoice_id", F.coalesce(F.col("original_invoice_id"), F.col("_resolved_invoice_id")))
+        .drop("_resolved_invoice_id")
+    )
 
 
 def deriveReturn(df: DataFrame) -> DataFrame:
@@ -389,6 +403,7 @@ SPECS: dict[str, ExtractSpec] = {
         sourceMaxSql=maxKeySql("Returns", "ReturnLines", "ReturnLineID"),
         sourceQuerySql=returnSourceSql,
         derive=deriveReturn,
+        seedEnrich=enrichReturnSeed,
         columnTypes=RETURN_TYPES,
         businessColumns=[
             "return_line_id",
@@ -435,7 +450,10 @@ SPECS: dict[str, ExtractSpec] = {
 def seedFromLegacyRaw(ctx: RunContext, spec: ExtractSpec) -> int:
     """First-run baseline: copy the SSIS-produced raw.* rows (snake_cased) into bronze and set the watermark."""
     legacy = snakeCaseColumns(ctx.spark.table(ctx.legacy(ctx.legacyStaging, "raw", spec.legacyRawTable)))
-    legacy = spec.derive(ensureColumns(ensureColumns(legacy, spec.columnTypes), LEGACY_META_TYPES))
+    legacy = ensureColumns(ensureColumns(legacy, spec.columnTypes), LEGACY_META_TYPES)
+    if spec.seedEnrich is not None:
+        legacy = spec.seedEnrich(ctx, legacy)
+    legacy = spec.derive(legacy)
     legacy = legacy.withColumn("seeded_from_legacy_raw", F.lit(True))
     overwriteTable(legacy, ctx.table(spec.targetTable))
     maxKey = ctx.spark.table(ctx.table(spec.targetTable)).agg(F.max(spec.keyColumn)).collect()[0][0]
