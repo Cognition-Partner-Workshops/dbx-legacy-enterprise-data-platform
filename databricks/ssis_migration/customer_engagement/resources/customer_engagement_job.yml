@@ -1,0 +1,93 @@
+# One job mirrors the two legacy masters: the Master_Daily_ETL chain (EXT -> STG -> FACT -> C360)
+# followed by the Master_Month_End aggregate refreshes and the reconciliation task.
+resources:
+  jobs:
+    ssis_customer_engagement_etl:
+      name: ssis_customer_engagement_etl
+      description: WWI SSIS customer_engagement group (13 packages) reimplemented on Databricks, plus recon evidence.
+      max_concurrent_runs: 1
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: as_of_date
+          default: ${var.as_of_date}
+        - name: staging_source_mode
+          default: ${var.staging_source_mode}
+        - name: default_region
+          default: ${var.default_region}
+        - name: git_sha
+          default: ${var.git_sha}
+        - name: run_id
+          default: "{{job.id}}-{{job.run_id}}"
+        - name: batch_id
+          default: "{{job.run_id}}"
+      tasks:
+        - task_key: EXT_SQL_LoyaltyLedger
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: EXT_SQL_LoyaltyLedger}
+        - task_key: EXT_SQL_WebSessions
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: EXT_SQL_WebSessions}
+        - task_key: STG_Load_LoyaltyLedger
+          depends_on: [{task_key: EXT_SQL_LoyaltyLedger}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: STG_Load_LoyaltyLedger}
+        - task_key: STG_Load_WebSession
+          depends_on: [{task_key: EXT_SQL_WebSessions}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: STG_Load_WebSession}
+        - task_key: FACT_Load_LoyaltyPoints
+          depends_on: [{task_key: STG_Load_LoyaltyLedger}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: FACT_Load_LoyaltyPoints}
+        - task_key: FACT_Load_WebSession
+          depends_on: [{task_key: STG_Load_WebSession}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: FACT_Load_WebSession}
+        - task_key: C360_Build_CustomerProfile
+          depends_on: [{task_key: FACT_Load_LoyaltyPoints}, {task_key: FACT_Load_WebSession}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: C360_Build_CustomerProfile}
+        - task_key: C360_Build_LoyaltyOverlay
+          depends_on: [{task_key: C360_Build_CustomerProfile}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: C360_Build_LoyaltyOverlay}
+        - task_key: C360_Build_RollingMetrics
+          depends_on: [{task_key: C360_Build_LoyaltyOverlay}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: C360_Build_RollingMetrics}
+        - task_key: C360_Build_ChurnFlags
+          depends_on: [{task_key: C360_Build_RollingMetrics}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: C360_Build_ChurnFlags}
+        - task_key: C360_Publish_Segments
+          depends_on: [{task_key: C360_Build_ChurnFlags}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: C360_Publish_Segments}
+        - task_key: AGG_Refresh_Customer360
+          depends_on: [{task_key: C360_Publish_Segments}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: AGG_Refresh_Customer360}
+        - task_key: AGG_Refresh_CustomerRolling12Month
+          depends_on: [{task_key: C360_Publish_Segments}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: AGG_Refresh_CustomerRolling12Month}
+        - task_key: recon
+          depends_on: [{task_key: AGG_Refresh_Customer360}, {task_key: AGG_Refresh_CustomerRolling12Month}]
+          notebook_task:
+            notebook_path: ../notebooks/run_recon.py
