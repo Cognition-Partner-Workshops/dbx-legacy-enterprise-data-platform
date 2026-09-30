@@ -51,7 +51,7 @@ Verdicts are from the latest `ssis_finance_run_all` evidence run (see "Evidence"
 |---|---|---|---|---|---|---|---|
 | 1 | EXT_ORA_ApInvoiceHdr | incremental_timestamp (watermark `last_upd_dt`) | `wwi_legacy_oracle.wwi_fin.ap_invoice_hdr` | `bronze_ora_ap_invoice_hdr` | `raw.OracleApInvoiceHdr` (empty) | `extracts.runInvoiceHeaders` | PARTIAL |
 | 2 | EXT_ORA_ApInvoiceLine | incremental_key (`invoice_line_id`) | `wwi_fin.ap_invoice_line` (+hdr, cost_center lookups) | `bronze_ora_ap_invoice_line` | `raw.OracleApInvoiceLine` (empty) | `extracts.runInvoiceLines` | PARTIAL |
-| 3 | EXT_ORA_ApPayment | incremental_timestamp | `wwi_fin.ap_payment` (+`wwi_ref.supp_master`) | `bronze_ora_ap_payment` | `raw.OracleApPayment` (empty) | `extracts.runPayments` | PARTIAL |
+| 3 | EXT_ORA_ApPayment | incremental_timestamp | `wwi_fin.ap_payment` (+`wwi_mdm.supp_master`) | `bronze_ora_ap_payment` | `raw.OracleApPayment` (empty) | `extracts.runPayments` | PARTIAL |
 | 4 | EXT_ORA_ApPaymentApply | incremental_key (`apply_id`) | `wwi_fin.ap_payment_apply` | `bronze_ora_ap_payment_apply` | `raw.OracleApPayment` (empty) | `extracts.runPaymentApplies` | PARTIAL |
 | 5 | EXT_ORA_ApAging | full snapshot | `wwi_fin.ap_aging_snapshot` | `bronze_ora_ap_aging` | `raw.OracleApInvoiceHdr` (empty) | `extracts.runApAging` | PARTIAL |
 | 6 | EXT_ORA_GlJournalLine | date_window (gl_date window, posted, non-STAT) | `wwi_fin.gl_journal_line/hdr`, `gl_account` | `bronze_ora_gl_journal_line` | `raw.OracleGlJournalLine` (empty) | `extracts.runGlJournalLines` | PARTIAL |
