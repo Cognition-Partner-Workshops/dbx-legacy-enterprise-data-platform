@@ -160,6 +160,13 @@ All 25 legacy targets of this group are unpopulated on the host (`raw.*`, `stg.*
 members), so every package is compared to a source-derived baseline and reported as `PARTIAL`.
 No package is `NOT_APPLICABLE`; every finance package produces data.
 
+Baseline notes: the bronze extracts are compared to the Oracle source rows filtered by the package's own
+predicates (`invoice_status_cd <> 'ENTR'`, non-void payments of known suppliers, posted non-statistical
+journal lines in the window whose fiscal period is not `FUTR`), excluding `period_cd` because the extract
+re-derives it via `FN_FISCAL_PERIOD`; `STG_Work_PaymentMatch` is checked for cash conservation
+(matched + unapplied cash per eligible payment == payment amount) because the legacy `work.PaymentMatched`
+is empty and the matcher's own output is the only three-pass result available.
+
 Query the latest run:
 
 ```sql

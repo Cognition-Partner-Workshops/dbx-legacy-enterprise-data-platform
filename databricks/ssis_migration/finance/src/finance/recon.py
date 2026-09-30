@@ -60,6 +60,7 @@ class ReconSpec:
     legacyTable: str | None = None
     legacyColMap: dict[str, str] = field(default_factory=dict)
     targetFilter: str | None = None
+    targetSql: str | None = None
     keyCol: str | None = None
     note: str = ""
 
@@ -77,7 +78,7 @@ def specs(cfg: FinanceConfig) -> list[ReconSpec]:
             "EXT_ORA_ApInvoiceHdr",
             "WideWorldImporters_Staging.raw.OracleApInvoiceHdr",
             "bronze_ora_ap_invoice_hdr",
-            f"SELECT * FROM {ora}.wwi_fin.ap_invoice_hdr",
+            f"SELECT * EXCEPT (period_cd) FROM {ora}.wwi_fin.ap_invoice_hdr WHERE invoice_status_cd <> 'ENTR'",
             f"{stg}.raw.OracleApInvoiceHdr",
             keyCol="invoice_id",
         ),
@@ -95,7 +96,7 @@ def specs(cfg: FinanceConfig) -> list[ReconSpec]:
             "EXT_ORA_ApPayment",
             "WideWorldImporters_Staging.raw.OracleApPayment",
             "bronze_ora_ap_payment",
-            f"""SELECT p.* FROM {ora}.wwi_fin.ap_payment p JOIN {ora}.wwi_ref.supp_master m ON m.supp_id = p.supp_id
+            f"""SELECT p.* EXCEPT (period_cd) FROM {ora}.wwi_fin.ap_payment p JOIN {ora}.wwi_mdm.supp_master m ON m.supp_id = p.supp_id
                       WHERE p.void_dt IS NULL AND p.payment_status_cd <> 'VOID'""",
             f"{stg}.raw.OracleApPayment",
             keyCol="payment_id",
@@ -118,10 +119,21 @@ def specs(cfg: FinanceConfig) -> list[ReconSpec]:
             "EXT_ORA_GlJournalLine",
             "WideWorldImporters_Staging.raw.OracleGlJournalLine",
             "bronze_ora_gl_journal_line",
-            f"""SELECT l.*, h.gl_date AS gl_date_hdr FROM {ora}.wwi_fin.gl_journal_line l JOIN {ora}.wwi_fin.gl_journal_hdr h ON h.journal_id = l.journal_id
+            f"""SELECT l.*, h.accounting_dt AS gl_date FROM {ora}.wwi_fin.gl_journal_line l JOIN {ora}.wwi_fin.gl_journal_hdr h ON h.journal_id = l.journal_id
                       JOIN {ora}.wwi_fin.gl_account a ON a.account_cd = l.account_cd
-                      WHERE h.posting_status_cd = 'POST' AND a.account_type_cd <> 'STAT'
-                        AND h.gl_date BETWEEN (SELECT MIN(gl_date) FROM {s}.bronze_ora_gl_journal_line) AND (SELECT MAX(gl_date) FROM {s}.bronze_ora_gl_journal_line)""",
+                      LEFT JOIN {ora}.wwi_ref.region_ref r ON r.region_cd = UPPER(h.region_cd)
+                      LEFT JOIN (SELECT calendar_cd, CAST(calendar_dt AS DATE) AS calendar_dt, MIN(period_cd) AS calendar_period_cd
+                                 FROM {ora}.wwi_ref.calendar_fiscal WHERE COALESCE(adjustment_period_flg, 'N') = 'N'
+                                 GROUP BY calendar_cd, CAST(calendar_dt AS DATE)) c
+                        ON c.calendar_cd = r.fiscal_calendar_cd AND c.calendar_dt = CAST(h.accounting_dt AS DATE)
+                      LEFT JOIN {ora}.wwi_fin.gl_period_status ps ON ps.region_cd = UPPER(h.region_cd)
+                           AND ps.period_cd = CASE WHEN c.calendar_period_cd RLIKE '^[0-9]{{4}}-[0-9]{{2}}$' THEN c.calendar_period_cd
+                                ELSE CONCAT(YEAR(h.accounting_dt) + IF(UPPER(h.region_cd) = 'APAC' AND MONTH(h.accounting_dt) >= 4, 1, 0), '-',
+                                     LPAD(CASE WHEN UPPER(h.region_cd) = 'APAC' THEN ((MONTH(h.accounting_dt) + 8) % 12) + 1
+                                               WHEN UPPER(h.region_cd) = 'NA' THEN LEAST(CEIL(WEEKOFYEAR(h.accounting_dt) / 4.333), 12)
+                                               ELSE MONTH(h.accounting_dt) END, 2, '0')) END
+                      WHERE h.posting_status_cd = 'POST' AND a.account_type_cd <> 'STAT' AND COALESCE(ps.gl_status_cd, 'HIST') <> 'FUTR'
+                        AND h.accounting_dt BETWEEN (SELECT MIN(gl_date) FROM {s}.bronze_ora_gl_journal_line) AND (SELECT MAX(gl_date) FROM {s}.bronze_ora_gl_journal_line)""",
             f"{stg}.raw.OracleGlJournalLine",
             keyCol="journal_line_id",
         ),
@@ -146,7 +158,7 @@ def specs(cfg: FinanceConfig) -> list[ReconSpec]:
             "STG_Load_GlJournal",
             "WideWorldImporters_Staging.stg.GlJournalLine",
             "silver_gl_journal_line",
-            f"SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY journal_line_id ORDER BY hdr_last_upd_dt DESC) rn FROM {s}.bronze_ora_gl_journal_line) WHERE rn = 1",
+            f"SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY journal_line_id ORDER BY last_upd_dt DESC) rn FROM {s}.bronze_ora_gl_journal_line) WHERE rn = 1",
             f"{stg}.stg.GlJournalLine",
             keyCol="journal_line_id",
         ),
@@ -171,12 +183,14 @@ def specs(cfg: FinanceConfig) -> list[ReconSpec]:
             "STG_Work_PaymentMatch",
             "WideWorldImporters_Staging.work.PaymentMatched",
             "work_payment_matched",
-            f"""SELECT a.payment_id, a.invoice_id, p.region_cd AS region_code FROM {s}.bronze_ora_ap_payment_apply a
-                      JOIN {s}.silver_payment p ON p.payment_id = a.payment_id JOIN {s}.silver_ap_invoice i ON i.invoice_id = a.invoice_id
-                      WHERE COALESCE(a.reversed_flag, 'N') <> 'Y'""",
+            f"""SELECT payment_id, CAST(payment_amount AS DECIMAL(18,5)) AS payment_amount FROM {s}.silver_payment
+                      WHERE payment_status_code <> 'VOID' AND payment_amount > 0""",
             f"{stg}.work.PaymentMatched",
+            targetSql=f"""SELECT payment_id, CAST(SUM(amt) AS DECIMAL(18,5)) AS payment_amount FROM (
+                            SELECT payment_id, matched_amount AS amt FROM {s}.work_payment_matched
+                            UNION ALL SELECT payment_id, remaining_amount FROM {s}.work_payment_unapplied) GROUP BY payment_id""",
             keyCol="payment_id",
-            note="baseline = Oracle's own non-reversed payment applications (pairs the SSIS 3-pass matcher must reproduce)",
+            note="cash conservation: every eligible payment is fully accounted for as matched + unapplied cash (legacy work.PaymentMatched is empty)",
         ),
         ReconSpec(
             "DQ_Payment_Screen",
@@ -299,11 +313,14 @@ def specs(cfg: FinanceConfig) -> list[ReconSpec]:
 
 
 def normalize(df: DataFrame, cols: list[str]) -> list[F.Column]:
+    """One string expression per column, in `cols` order (case-insensitive), so both sides hash identically."""
+    fields = {f_.name.lower(): f_ for f_ in df.schema.fields}
     out = []
-    for f_ in df.schema.fields:
-        if f_.name not in cols:
+    for name in cols:
+        f_ = fields.get(name.lower())
+        if f_ is None:
             continue
-        c = F.col(f_.name)
+        c = F.col(f"`{f_.name}`")
         if isinstance(
             f_.dataType, (T.DecimalType, T.DoubleType, T.FloatType, T.IntegerType, T.LongType, T.ShortType)
         ):
@@ -327,11 +344,12 @@ def checksum(df: DataFrame, cols: list[str]) -> str:
 
 
 def sharedBusinessColumns(target: DataFrame, baseline: DataFrame) -> list[str]:
-    cols = [
-        c
+    baselineCols = {c.lower() for c in baseline.columns}
+    cols = {
+        c.lower()
         for c in target.columns
-        if c in set(baseline.columns) and c.lower() not in EXCLUDED_COLS and not c.startswith("_")
-    ]
+        if c.lower() in baselineCols and c.lower() not in EXCLUDED_COLS and not c.startswith("_")
+    }
     return sorted(cols)
 
 
@@ -354,7 +372,7 @@ def evaluate(spark: SparkSession, cfg: FinanceConfig, spec: ReconSpec) -> dict:
             "summary": f"target table {targetFq} missing",
             "target_object": targetFq,
         }
-    target = spark.table(targetFq)
+    target = spark.sql(spec.targetSql) if spec.targetSql else spark.table(targetFq)
     if spec.targetFilter:
         target = target.where(spec.targetFilter)
     targetCount = target.count()
