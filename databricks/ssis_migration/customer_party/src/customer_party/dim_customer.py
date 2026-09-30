@@ -205,6 +205,52 @@ def buildApacCandidates(baseDf: DataFrame, asOf: datetime) -> tuple[DataFrame, D
     return derived.where(~rejectGst & ~rejectAddress), rejected
 
 
+# Explicit Delta types for every dimension column, so the three regional loaders (which each populate
+# only their own region-specific columns) produce identical schemas and stable row hashes/checksums.
+DIM_COLUMN_TYPES: dict[str, str] = {
+    "customer_business_key": "string",
+    "source_customer_id": "bigint",
+    "customer_code": "string",
+    "customer": "string",
+    "customer_name": "string",
+    "trading_name": "string",
+    "region": "string",
+    "country_code": "string",
+    "customer_class_code": "string",
+    "credit_status_code": "string",
+    "customer_status_code": "string",
+    "buying_group_code": "string",
+    "payment_terms_code": "string",
+    "account_manager_code": "string",
+    "tax_registration_number": "string",
+    "credit_limit": "decimal(18,2)",
+    "credit_currency_code": "string",
+    "is_on_credit_hold": "boolean",
+    "marketing_consent_flag": "string",
+    "consent_status_code": "string",
+    "billing_postal_code": "string",
+    "billing_city": "string",
+    "billing_state_province": "string",
+    "tax_nexus_code": "string",
+    "postal_code_plus_four": "string",
+    "consent_opt_out": "boolean",
+    "credit_limit_usd": "decimal(18,2)",
+    "vat_number_is_well_formed": "boolean",
+    "is_erasure_requested": "boolean",
+    "retention_expired": "boolean",
+    "is_pseudonymised": "boolean",
+    "postal_code_normalised": "string",
+    "credit_limit_eur": "decimal(18,2)",
+    "risk_band_code": "string",
+    "gst_registration_clean": "string",
+    "gst_registration_is_valid": "boolean",
+    "customer_name_roman": "string",
+    "fiscal_year_label": "string",
+    "consent_regime_code": "string",
+    "distributor_tier_code": "string",
+    "source_system_code": "string",
+}
+
 DIM_COLUMNS: tuple[str, ...] = (
     "customer_business_key",
     "source_customer_id",
@@ -252,10 +298,10 @@ DIM_COLUMNS: tuple[str, ...] = (
 
 
 def shapeCandidates(df: DataFrame, region: str) -> DataFrame:
-    shaped = df.withColumn("region", F.lit(region)).withColumn("credit_limit", F.col("credit_limit_amount").cast("decimal(18,2)"))
-    for c in DIM_COLUMNS:
-        if c not in shaped.columns and c != "source_row_hash":
-            shaped = shaped.withColumn(c, F.lit(None).cast("string"))
+    shaped = df.withColumn("region", F.lit(region)).withColumn("credit_limit", F.col("credit_limit_amount"))
+    for c, dataType in DIM_COLUMN_TYPES.items():
+        source = F.col(c) if c in shaped.columns else F.lit(None)
+        shaped = shaped.withColumn(c, source.cast(dataType))
     return shaped.withColumn("source_row_hash", rowHash(CUSTOMER_TRACKED_COLS)).select(*DIM_COLUMNS)
 
 

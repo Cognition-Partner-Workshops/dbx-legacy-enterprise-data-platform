@@ -84,9 +84,11 @@ def logExtractWindow(
     rowCount: int,
 ) -> None:
     """`etl.usp_LogPackageEnd` analogue: record the window an incremental extract actually covered."""
+    fqn = cfg.fqn(EXTRACT_LOG_TABLE)
+    spark.sql(f"CREATE TABLE IF NOT EXISTS {fqn} ({EXTRACT_LOG_SCHEMA}) USING DELTA")
     spark.createDataFrame(
         [(sourceSystemCode, objectName, cfg.batchId, windowFrom, windowTo, rowCount, utcNow())], EXTRACT_LOG_SCHEMA
-    ).write.format("delta").mode("append").saveAsTable(cfg.fqn(EXTRACT_LOG_TABLE))
+    ).write.format("delta").mode("append").saveAsTable(fqn)
 
 
 def getExtractWindow(
