@@ -15,7 +15,7 @@ from pyspark.sql import functions as F
 
 from customer_party.config import LEGACY_OLTP, LEGACY_ORACLE, PipelineConfig, utcNow
 from customer_party.tables import replacePartition, withLoadMetadata
-from customer_party.watermark import getWatermark, setWatermark
+from customer_party.watermark import getWatermark, logExtractWindow, setWatermark
 
 BRONZE_CUSTOMER_MASTER = "bronze_raw_oracle_customer_master"
 BRONZE_CUSTOMER_ADDRESS = "bronze_raw_oracle_customer_address"
@@ -167,8 +167,10 @@ def extractOracleCustomerMaster(spark: SparkSession, cfg: PipelineConfig) -> Dat
         cfg,
     )
     replacePartition(landed, cfg.fqn(BRONZE_CUSTOMER_MASTER), "batch_id", str(cfg.batchId), spark)
+    batch = spark.table(cfg.fqn(BRONZE_CUSTOMER_MASTER)).where(F.col("batch_id") == cfg.batchId)
+    logExtractWindow(spark, cfg, ORACLE_SOURCE_SYSTEM, "WWI_MDM.CUST_MASTER", windowFrom, windowTo, batch.count())
     setWatermark(spark, cfg, ORACLE_SOURCE_SYSTEM, "WWI_MDM.CUST_MASTER", windowTo)
-    return spark.table(cfg.fqn(BRONZE_CUSTOMER_MASTER)).where(F.col("batch_id") == cfg.batchId)
+    return batch
 
 
 def standardizePostalCode(regionCol: Column, postalCol: Column, zip4Col: Column) -> Column:
@@ -267,8 +269,10 @@ def extractOracleCustomerAddress(spark: SparkSession, cfg: PipelineConfig) -> Da
         cfg,
     )
     replacePartition(landed, cfg.fqn(BRONZE_CUSTOMER_ADDRESS), "batch_id", str(cfg.batchId), spark)
+    batch = spark.table(cfg.fqn(BRONZE_CUSTOMER_ADDRESS)).where(F.col("batch_id") == cfg.batchId)
+    logExtractWindow(spark, cfg, ORACLE_SOURCE_SYSTEM, "WWI_MDM.CUST_ADDRESS", windowFrom, windowTo, batch.count())
     setWatermark(spark, cfg, ORACLE_SOURCE_SYSTEM, "WWI_MDM.CUST_ADDRESS", windowTo)
-    return spark.table(cfg.fqn(BRONZE_CUSTOMER_ADDRESS)).where(F.col("batch_id") == cfg.batchId)
+    return batch
 
 
 def toRawSqlOrderRows(df: DataFrame, recordKind: str, sourceKeyCol: str) -> DataFrame:

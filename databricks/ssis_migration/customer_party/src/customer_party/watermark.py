@@ -14,6 +14,11 @@ WATERMARK_SCHEMA = (
     "source_system_code string, object_name string, watermark_value timestamp, "
     "batch_id bigint, updated_ts timestamp"
 )
+EXTRACT_LOG_TABLE = "etl_extract_log"
+EXTRACT_LOG_SCHEMA = (
+    "source_system_code string, object_name string, batch_id bigint, window_from timestamp, "
+    "window_to timestamp, row_count bigint, logged_ts timestamp"
+)
 
 
 def computeWatermarkWindow(
@@ -67,3 +72,41 @@ def setWatermark(
         WHEN NOT MATCHED THEN INSERT *
         """
     )
+
+
+def logExtractWindow(
+    spark: SparkSession,
+    cfg: PipelineConfig,
+    sourceSystemCode: str,
+    objectName: str,
+    windowFrom: datetime,
+    windowTo: datetime,
+    rowCount: int,
+) -> None:
+    """`etl.usp_LogPackageEnd` analogue: record the window an incremental extract actually covered."""
+    spark.createDataFrame(
+        [(sourceSystemCode, objectName, cfg.batchId, windowFrom, windowTo, rowCount, utcNow())], EXTRACT_LOG_SCHEMA
+    ).write.format("delta").mode("append").saveAsTable(cfg.fqn(EXTRACT_LOG_TABLE))
+
+
+def getExtractWindow(
+    spark: SparkSession, cfg: PipelineConfig, sourceSystemCode: str, objectName: str
+) -> tuple[datetime, datetime] | None:
+    """The window logged for this batch, or None when the extract has not run for it."""
+    fqn = cfg.fqn(EXTRACT_LOG_TABLE)
+    if not tableExists(spark, fqn):
+        return None
+    rows = (
+        spark.table(fqn)
+        .where(
+            (F.col("source_system_code") == sourceSystemCode)
+            & (F.col("object_name") == objectName)
+            & (F.col("batch_id") == cfg.batchId)
+        )
+        .orderBy(F.col("logged_ts").desc())
+        .limit(1)
+        .collect()
+    )
+    if not rows:
+        return None
+    return rows[0]["window_from"], rows[0]["window_to"]

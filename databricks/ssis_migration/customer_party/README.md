@@ -41,7 +41,10 @@ no JDBC fallback was needed. Verdicts are from the latest evidence run (see "Rec
 | `DIM_Load_Promotion` | SCD2 | `dim_supporting.loadPromotionDimension` | `stg.Promotion` → `Dimension.Promotion` | `dim_promotion` | PARTIAL |
 | `DIM_Rekey_LateArriving` | rekey | `rekey.runLateArrivingRekey` | `work.LateArrivingDimensionQueue` → `Fact.*` | `work_late_arriving_dimension_queue`, `work_fact_rekey_queue`, `rekey_result` | PARTIAL |
 
-Every Delta table carries `batch_id` and `load_ts` (the SSIS `BatchId` / `LoadDate` audit columns).
+Every Delta table carries `batch_id` and `load_ts` (the SSIS `BatchId` / `LoadDate` audit columns). `batch_id`
+defaults to the Databricks job run id (`{{job.run_id}}`, the `etl.Batch` analogue) so every run lands its own
+bronze batch; staging reads only the current batch, exactly as `STG_Load_*` read the freshly loaded `raw.*`
+tables. `etl_extract_log` records the `[window_from, window_to)` each incremental extract actually covered.
 
 ## Layout
 
@@ -153,6 +156,15 @@ As required by the contract, every check therefore compares the Delta table agai
 re-derived from the federated sources with the package's own transformation (`"baseline":"source_derived"`),
 the legacy row count is recorded as `legacy_row_count`, and the verdict is capped at `PARTIAL`. A mismatch
 against the source-derived expectation is `FAIL`.
+
+How the expectation is derived per layer:
+
+* Oracle extracts: the source transformation is re-run over the window logged in `etl_extract_log` for this batch.
+* SQL extracts / staging / dedup / DQ: the transformation is re-run over the upstream Delta table of the same batch.
+* Dimensions: candidates are rebuilt from staging and compared with the *current* dimension versions of those
+  business keys (`dim_current_rows` reports the full current member count). On an incremental run with no source
+  changes the batch is empty, so those rows report `row_count 0`; run with `reload_full_history=true` for a
+  full-history comparison (the evidence run referenced by this PR was such a run).
 
 ```sql
 SELECT unit, verdict, summary

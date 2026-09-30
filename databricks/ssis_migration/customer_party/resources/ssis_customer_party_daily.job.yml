@@ -9,42 +9,39 @@ resources:
       tags:
         ssis_group: customer_party
         harness: ssis-migration-v1
-      # Every task runs the same thin notebook on serverless compute; task parameters carry the
-      # SSIS package list plus the SSIS project parameters (BatchId, ReloadFullHistory) and targets.
+      # SSIS project parameters (BatchId, ReloadFullHistory) and the target catalog/schema are job
+      # parameters, so `databricks bundle run ... --params reload_full_history=true` behaves like
+      # overriding the SSIS environment. BatchId defaults to the job run id (etl.Batch analogue).
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: evidence_schema
+          default: ${var.evidence_schema}
+        - name: batch_id
+          default: ${var.batch_id}
+        - name: reload_full_history
+          default: ${var.reload_full_history}
+        - name: git_sha
+          default: ${bundle.git.commit}
+      # Every task runs the same thin notebook on serverless compute with the SSIS package list.
       tasks:
         - task_key: ext_ora_customer_master
           notebook_task:
             notebook_path: ../notebooks/run_packages.py
             base_parameters:
               packages: EXT_ORA_CustomerMaster
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              evidence_schema: ${var.evidence_schema}
-              batch_id: ${var.batch_id}
-              reload_full_history: ${var.reload_full_history}
-              git_sha: ${bundle.git.commit}
         - task_key: ext_ora_customer_address
           notebook_task:
             notebook_path: ../notebooks/run_packages.py
             base_parameters:
               packages: EXT_ORA_CustomerAddress
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              evidence_schema: ${var.evidence_schema}
-              batch_id: ${var.batch_id}
-              reload_full_history: ${var.reload_full_history}
-              git_sha: ${bundle.git.commit}
         - task_key: ext_sql_customer_segments
           notebook_task:
             notebook_path: ../notebooks/run_packages.py
             base_parameters:
               packages: EXT_SQL_CustomerSegments
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              evidence_schema: ${var.evidence_schema}
-              batch_id: ${var.batch_id}
-              reload_full_history: ${var.reload_full_history}
-              git_sha: ${bundle.git.commit}
         - task_key: ext_sql_people
           depends_on:
             - task_key: ext_sql_customer_segments
@@ -52,12 +49,6 @@ resources:
             notebook_path: ../notebooks/run_packages.py
             base_parameters:
               packages: EXT_SQL_People
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              evidence_schema: ${var.evidence_schema}
-              batch_id: ${var.batch_id}
-              reload_full_history: ${var.reload_full_history}
-              git_sha: ${bundle.git.commit}
         - task_key: ext_sql_sales_territories
           depends_on:
             - task_key: ext_sql_people
@@ -65,12 +56,6 @@ resources:
             notebook_path: ../notebooks/run_packages.py
             base_parameters:
               packages: EXT_SQL_SalesTerritories
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              evidence_schema: ${var.evidence_schema}
-              batch_id: ${var.batch_id}
-              reload_full_history: ${var.reload_full_history}
-              git_sha: ${bundle.git.commit}
         - task_key: ext_sql_promotions
           depends_on:
             - task_key: ext_sql_sales_territories
@@ -78,12 +63,6 @@ resources:
             notebook_path: ../notebooks/run_packages.py
             base_parameters:
               packages: EXT_SQL_Promotions
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              evidence_schema: ${var.evidence_schema}
-              batch_id: ${var.batch_id}
-              reload_full_history: ${var.reload_full_history}
-              git_sha: ${bundle.git.commit}
         - task_key: stg_load_customer
           depends_on:
             - task_key: ext_ora_customer_master
@@ -91,12 +70,6 @@ resources:
             notebook_path: ../notebooks/run_packages.py
             base_parameters:
               packages: STG_Load_Customer
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              evidence_schema: ${var.evidence_schema}
-              batch_id: ${var.batch_id}
-              reload_full_history: ${var.reload_full_history}
-              git_sha: ${bundle.git.commit}
         - task_key: stg_load_customer_address
           depends_on:
             - task_key: ext_ora_customer_address
@@ -104,12 +77,6 @@ resources:
             notebook_path: ../notebooks/run_packages.py
             base_parameters:
               packages: STG_Load_CustomerAddress
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              evidence_schema: ${var.evidence_schema}
-              batch_id: ${var.batch_id}
-              reload_full_history: ${var.reload_full_history}
-              git_sha: ${bundle.git.commit}
         - task_key: stg_load_employee
           depends_on:
             - task_key: ext_sql_promotions
@@ -117,12 +84,6 @@ resources:
             notebook_path: ../notebooks/run_packages.py
             base_parameters:
               packages: STG_Load_Employee
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              evidence_schema: ${var.evidence_schema}
-              batch_id: ${var.batch_id}
-              reload_full_history: ${var.reload_full_history}
-              git_sha: ${bundle.git.commit}
         - task_key: stg_load_promotion_and_territory
           depends_on:
             - task_key: ext_sql_promotions
@@ -130,12 +91,6 @@ resources:
             notebook_path: ../notebooks/run_packages.py
             base_parameters:
               packages: STG_Load_PromotionAndTerritory
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              evidence_schema: ${var.evidence_schema}
-              batch_id: ${var.batch_id}
-              reload_full_history: ${var.reload_full_history}
-              git_sha: ${bundle.git.commit}
         - task_key: stg_work_customer_dedup
           depends_on:
             - task_key: stg_load_customer
@@ -144,12 +99,6 @@ resources:
             notebook_path: ../notebooks/run_packages.py
             base_parameters:
               packages: STG_Work_CustomerDedup
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              evidence_schema: ${var.evidence_schema}
-              batch_id: ${var.batch_id}
-              reload_full_history: ${var.reload_full_history}
-              git_sha: ${bundle.git.commit}
         - task_key: dq_customer_screen
           depends_on:
             - task_key: stg_work_customer_dedup
@@ -157,12 +106,6 @@ resources:
             notebook_path: ../notebooks/run_packages.py
             base_parameters:
               packages: DQ_Customer_Screen
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              evidence_schema: ${var.evidence_schema}
-              batch_id: ${var.batch_id}
-              reload_full_history: ${var.reload_full_history}
-              git_sha: ${bundle.git.commit}
         - task_key: dim_load_customer_regions
           depends_on:
             - task_key: dq_customer_screen
@@ -170,12 +113,6 @@ resources:
             notebook_path: ../notebooks/run_packages.py
             base_parameters:
               packages: DIM_NA_Load_Customer,DIM_EU_Load_Customer,DIM_APAC_Load_Customer
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              evidence_schema: ${var.evidence_schema}
-              batch_id: ${var.batch_id}
-              reload_full_history: ${var.reload_full_history}
-              git_sha: ${bundle.git.commit}
         - task_key: dim_load_customer_category_and_segment
           depends_on:
             - task_key: ext_sql_promotions
@@ -183,12 +120,6 @@ resources:
             notebook_path: ../notebooks/run_packages.py
             base_parameters:
               packages: DIM_Load_CustomerCategory,DIM_Load_CustomerSegment
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              evidence_schema: ${var.evidence_schema}
-              batch_id: ${var.batch_id}
-              reload_full_history: ${var.reload_full_history}
-              git_sha: ${bundle.git.commit}
         - task_key: dim_load_employee
           depends_on:
             - task_key: stg_load_employee
@@ -196,12 +127,6 @@ resources:
             notebook_path: ../notebooks/run_packages.py
             base_parameters:
               packages: DIM_Load_Employee
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              evidence_schema: ${var.evidence_schema}
-              batch_id: ${var.batch_id}
-              reload_full_history: ${var.reload_full_history}
-              git_sha: ${bundle.git.commit}
         - task_key: dim_load_territory_salesperson_promotion
           depends_on:
             - task_key: stg_load_employee
@@ -210,12 +135,6 @@ resources:
             notebook_path: ../notebooks/run_packages.py
             base_parameters:
               packages: DIM_Load_SalesTerritory,DIM_Load_Salesperson,DIM_Load_Promotion
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              evidence_schema: ${var.evidence_schema}
-              batch_id: ${var.batch_id}
-              reload_full_history: ${var.reload_full_history}
-              git_sha: ${bundle.git.commit}
         - task_key: dim_rekey_late_arriving
           depends_on:
             - task_key: dim_load_customer_regions
@@ -226,12 +145,6 @@ resources:
             notebook_path: ../notebooks/run_packages.py
             base_parameters:
               packages: DIM_Rekey_LateArriving
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              evidence_schema: ${var.evidence_schema}
-              batch_id: ${var.batch_id}
-              reload_full_history: ${var.reload_full_history}
-              git_sha: ${bundle.git.commit}
         - task_key: recon
           depends_on:
             - task_key: dim_rekey_late_arriving
@@ -239,9 +152,3 @@ resources:
             notebook_path: ../notebooks/run_packages.py
             base_parameters:
               packages: RECON
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              evidence_schema: ${var.evidence_schema}
-              batch_id: ${var.batch_id}
-              reload_full_history: ${var.reload_full_history}
-              git_sha: ${bundle.git.commit}
