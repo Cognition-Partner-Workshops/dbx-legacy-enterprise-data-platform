@@ -39,7 +39,7 @@ class ReconSpec:
 
 def checksumExpr(cols: Sequence[str]) -> str:
     casted = ", ".join(f"cast(`{c}` as string)" for c in cols)
-    return f"sum(xxhash64(concat_ws('|', {casted})))"
+    return f"sum(cast(xxhash64(concat_ws('|', {casted})) as decimal(38,0)))"
 
 
 def countAndChecksum(spark: SparkSession, fqn: str, cols: Sequence[str], where: Optional[str] = None) -> Tuple[int, Optional[str]]:
@@ -328,7 +328,7 @@ def reconcilePackage(spark: SparkSession, cfg: CeConfig, spec: ReconSpec, asOf: 
         targetCount, targetChk = countAndChecksum(spark, targetFqn, spec.businessCols, spec.targetFilter)
     else:
         targetCount, targetChk = 0, None
-    method = f"sum(xxhash64({', '.join(spec.businessCols)}))"
+    method = f"sum(cast(xxhash64({', '.join(spec.businessCols)}) as decimal(38,0)))"
     checks: List[Dict] = []
     legacy = legacyBaseline(spark, cfg, spec)
     expectedCount, expectedChk = spec.expectation(spark, cfg, asOf)
