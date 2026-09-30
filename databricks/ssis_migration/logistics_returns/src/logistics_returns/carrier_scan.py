@@ -244,7 +244,6 @@ def ingestFile(ctx: RunContext, filePath: str, sidecarText: str | None) -> FileR
     sidecarRows = readSidecarCount(sidecarText)
     matched = controlTotalsMatch(detailRows, rejectRows, sidecarRows)
     status = "Processed" if matched else "Quarantined"
-    parsed.unpersist()
 
     logRow = spark.createDataFrame(
         [

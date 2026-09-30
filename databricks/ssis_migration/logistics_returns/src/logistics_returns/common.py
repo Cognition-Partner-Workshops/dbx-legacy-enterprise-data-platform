@@ -182,7 +182,9 @@ def readLegacy(spark: SparkSession, catalog: str, schema: str, table: str) -> Da
     same read-only SQL Server connection.
     """
     try:
-        return spark.table(f"`{catalog}`.`{schema}`.`{table}`")
+        direct = spark.table(f"`{catalog}`.`{schema}`.`{table}`")
+        direct.schema  # Spark Connect resolves lazily; force analysis so a missing binding surfaces here  # noqa: B018
+        return direct
     except Exception as exc:  # noqa: BLE001 - AnalysisException class differs between Spark versions
         if "TABLE_OR_VIEW_NOT_FOUND" not in str(exc):
             raise
