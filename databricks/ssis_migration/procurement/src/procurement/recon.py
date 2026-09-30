@@ -94,7 +94,7 @@ def normalize(df: DataFrame, columns: Dict[str, str]) -> DataFrame:
 
 def checksum(df: DataFrame, columns: Dict[str, str]):
     cols = [F.coalesce(F.col(c).cast("string"), F.lit("<null>")) for c in columns]
-    row = df.agg(F.count(F.lit(1)).alias("n"), F.sum(F.xxhash64(*cols)).alias("h")).collect()[0]
+    row = df.agg(F.count(F.lit(1)).alias("n"), F.sum(F.xxhash64(*cols).cast("decimal(38,0)")).alias("h")).collect()[0]
     return int(row["n"]), (None if row["h"] is None else str(row["h"]))
 
 
@@ -110,7 +110,7 @@ def evaluate(spark, spec: ReconSpec):
     aCount, aHash = checksum(actualDf, columns)
     checks = [
         {"check": "row_count", "source": eCount, "target": aCount, "pass": eCount == aCount},
-        {"check": "checksum", "method": f"sum(xxhash64({', '.join(columns)}))", "source": eHash, "target": aHash, "pass": eHash == aHash},
+        {"check": "checksum", "method": f"sum(cast(xxhash64({', '.join(columns)}) as decimal(38,0)))", "source": eHash, "target": aHash, "pass": eHash == aHash},
     ]
     if not spec.legacyBaseline:
         checks[0]["baseline"] = "source_derived"
@@ -281,9 +281,10 @@ def buildSpecs() -> List[ReconSpec]:
         ReconSpec(
             "STG_Load_VendorContract", "WideWorldImporters_Staging.stg.VendorContract", SILVER_VENDOR_CONTRACT,
             {"contract_business_key": "long", "contract_number": "string"},
-            lambda spark: spark.table(qualified(BRONZE_VENDOR_CONTRACT)).select(F.col("contract_id").alias("contract_business_key"), F.upper(F.trim(F.col("contract_nbr"))).alias("contract_number")),
+            lambda spark: spark.table(qualified(BRONZE_VENDOR_CONTRACT)).select(F.col("contract_id").alias("contract_business_key"), F.upper(F.trim(F.col("contract_nbr"))).alias("contract_number"))
+            .join(spark.table(qualified("err_rejected_row")).where("package_name = 'STG_Load_VendorContract'").select(F.col("business_key").alias("contract_number")), "contract_number", "left_anti"),
             tbl(SILVER_VENDOR_CONTRACT), False,
-            src + "every bronze contract lands in silver (rejected ones carry dq_status_code FAIL); legacy stg.VendorContract empty.",
+            src + "bronze contracts minus the rows rejected to err_rejected_row (err.RejectedLookup: inverted dates / unknown supplier / missing FX); legacy stg.VendorContract empty.",
             legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) FROM stg.VendorContract"),
         ),
         ReconSpec(
@@ -308,9 +309,9 @@ def buildSpecs() -> List[ReconSpec]:
         ReconSpec(
             "DIM_Load_VendorContract", "WideWorldImportersDW.Dimension.Vendor Contract", GOLD_DIM_VENDOR_CONTRACT,
             {"contract_number": "string", "supplier_business_key": "string", "committed_amount": "decimal(19,4)"},
-            lambda spark: spark.table(qualified(SILVER_VENDOR_CONTRACT)).where("dq_status_code <> 'FAIL'").select("contract_number", "supplier_business_key", "committed_amount").dropDuplicates(["contract_number"]),
+            lambda spark: spark.table(qualified(SILVER_VENDOR_CONTRACT)).select("contract_number", "supplier_business_key", "committed_amount").dropDuplicates(["contract_number"]),
             lambda spark: spark.table(qualified(GOLD_DIM_VENDOR_CONTRACT)).where("is_current_row"), False,
-            src + "one current version per DQ-passing staged contract; legacy Dimension.[Vendor Contract] is empty (0 rows).",
+            src + "one current version per staged contract; legacy Dimension.[Vendor Contract] is empty (0 rows).",
             legacyCountSql(LEGACY_DW_DB, "SELECT COUNT(*) FROM Dimension.[Vendor Contract]"),
         ),
         ReconSpec(
@@ -336,7 +337,7 @@ def buildSpecs() -> List[ReconSpec]:
             "FACT_Load_SupplierTransaction", "WideWorldImportersDW.Fact.Supplier Transaction", GOLD_FACT_SUPPLIER_TRANSACTION,
             {"supplier_transaction_business_key": "long", "transaction_amount": "decimal(19,4)"},
             lambda spark: spark.table(f"{LEGACY_OLTP}.Purchasing.SupplierTransactions").join(
-                spark.table(f"{LEGACY_OLTP}.Purchasing.TransactionTypes").select("TransactionTypeID", "TransactionTypeName"), "TransactionTypeID").select(
+                spark.table(f"{LEGACY_OLTP}.Application.TransactionTypes").select("TransactionTypeID", "TransactionTypeName"), "TransactionTypeID").select(
                 F.col("SupplierTransactionID").alias("supplier_transaction_business_key"),
                 F.when(F.col("TransactionTypeName") == "Supplier Payment Issued", -F.abs(F.col("TransactionAmount"))).otherwise(F.col("TransactionAmount")).alias("transaction_amount")),
             lambda spark: spark.table(qualified(GOLD_FACT_SUPPLIER_TRANSACTION)).where("NOT is_reversal"), False,

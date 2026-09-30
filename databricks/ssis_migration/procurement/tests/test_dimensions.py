@@ -63,7 +63,7 @@ def test_hybrid_scd_new_type2_type1_and_unchanged(spark):
 
 
 def contractRow(number, committed, supplierKey=1):
-    return dict(vendor_contract_key=None, contract_number=number, supplier_business_key="S1", source_supplier_id=1, contract_type_code="MSA", source_status_code="ACTV",
+    return dict(vendor_contract_key=None, contract_number=number, contract_business_key=int(number.split("-")[1]), supplier_business_key="S1", source_supplier_id=1, contract_type_code="MSA", source_status_code="ACTV",
                 region_code="NA", contract_currency_code="USD", contract_start_date=d("2026-01-01"), contract_end_date=d("2026-12-31"), auto_renew_flag="N",
                 notice_period_days=30, committed_amount=dec(committed), committed_amount_usd=dec(committed), rebate_percent=dec("1.5"), price_protection_flag="N",
                 payment_terms_code="N30", signed_date=d("2025-12-15"), contract_band_code="MAJOR", supplier_key=supplierKey, amendment_number=None,

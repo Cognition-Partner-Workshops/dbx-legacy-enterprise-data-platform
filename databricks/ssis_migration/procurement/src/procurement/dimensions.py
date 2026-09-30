@@ -181,14 +181,13 @@ def runDimSupplier(spark, batchId, asOf=None):
     target = qualified(GOLD_DIM_SUPPLIER)
     asOf = asOf or spark.sql("SELECT date_format(current_timestamp(), 'yyyy-MM-dd HH:mm:ss') AS ts").collect()[0]["ts"]
     if io.tableExists(spark, target):
-        existing = spark.table(target)
+        existing = alignToSchema(spark.table(target), SUPPLIER_DIM_SCHEMA)
     else:
         existing = seedFromLegacySupplierDimension(spark.table(f"{LEGACY_DW}.Dimension.Supplier"))
     incoming = incomingSupplierVersions(spark.table(qualified(SILVER_SUPPLIER)))
     before = existing.count()
-    result = applyHybridScd(existing, incoming, batchId, asOf).cache()
-    after = result.count()
-    io.writeDelta(result, target)
+    io.writeThroughWork(spark, applyHybridScd(existing, incoming, batchId, asOf), target)
+    after = spark.table(target).count()
     io.logPackageRun(spark, batchId, packageName, "Succeeded", rowsRead=incoming.count(), rowsInserted=after - before,
                      message=f"as_of={asOf}")
     return after
@@ -198,7 +197,7 @@ def runDimSupplier(spark, batchId, asOf=None):
 # DIM_Load_VendorContract  (SCD2 amendment versions)
 # --------------------------------------------------------------------------------------
 VENDOR_CONTRACT_BUSINESS_COLUMNS = [
-    "contract_number", "supplier_business_key", "source_supplier_id", "contract_type_code", "source_status_code",
+    "contract_number", "contract_business_key", "supplier_business_key", "source_supplier_id", "contract_type_code", "source_status_code",
     "region_code", "contract_currency_code", "contract_start_date", "contract_end_date", "auto_renew_flag",
     "notice_period_days", "committed_amount", "committed_amount_usd", "rebate_percent", "price_protection_flag",
     "payment_terms_code", "signed_date", "contract_band_code",
@@ -208,7 +207,7 @@ VENDOR_CONTRACT_DIM_SCHEMA = T.StructType(
     + [
         T.StructField(c, t)
         for c, t in [
-            ("contract_number", T.StringType()), ("supplier_business_key", T.StringType()), ("source_supplier_id", T.LongType()),
+            ("contract_number", T.StringType()), ("contract_business_key", T.LongType()), ("supplier_business_key", T.StringType()), ("source_supplier_id", T.LongType()),
             ("contract_type_code", T.StringType()), ("source_status_code", T.StringType()), ("region_code", T.StringType()),
             ("contract_currency_code", T.StringType()), ("contract_start_date", T.DateType()), ("contract_end_date", T.DateType()),
             ("auto_renew_flag", T.StringType()), ("notice_period_days", T.IntegerType()), ("committed_amount", T.DecimalType(19, 4)),
@@ -229,6 +228,15 @@ VENDOR_CONTRACT_DIM_SCHEMA = T.StructType(
     ]
 )
 VC_DIM_COLUMNS = [f.name for f in VENDOR_CONTRACT_DIM_SCHEMA.fields]
+
+
+def alignToSchema(df: DataFrame, schema: T.StructType) -> DataFrame:
+    """Existing dimension rows widened to the current dimension schema (new attribute columns are null
+    on historical versions)."""
+    for f in schema.fields:
+        if f.name not in df.columns:
+            df = df.withColumn(f.name, F.lit(None).cast(f.dataType))
+    return df.select(*[f.name for f in schema.fields])
 
 
 def emptyVendorContractDimension(spark):
@@ -297,11 +305,10 @@ def runDimVendorContract(spark, batchId, asOf=None):
     packageName = "DIM_Load_VendorContract"
     target = qualified(GOLD_DIM_VENDOR_CONTRACT)
     asOf = asOf or spark.sql("SELECT date_format(current_timestamp(), 'yyyy-MM-dd HH:mm:ss') AS ts").collect()[0]["ts"]
-    existing = spark.table(target) if io.tableExists(spark, target) else emptyVendorContractDimension(spark)
+    existing = alignToSchema(spark.table(target), VENDOR_CONTRACT_DIM_SCHEMA) if io.tableExists(spark, target) else emptyVendorContractDimension(spark)
     incoming = incomingContractVersions(spark.table(qualified(SILVER_VENDOR_CONTRACT)), spark.table(qualified(GOLD_DIM_SUPPLIER)))
     before = existing.count()
-    result = applyScd2(existing, incoming, batchId, asOf).cache()
-    after = result.count()
-    io.writeDelta(result, target)
+    io.writeThroughWork(spark, applyScd2(existing, incoming, batchId, asOf), target)
+    after = spark.table(target).count()
     io.logPackageRun(spark, batchId, packageName, "Succeeded", rowsRead=incoming.count(), rowsInserted=after - before, message=f"as_of={asOf}")
     return after

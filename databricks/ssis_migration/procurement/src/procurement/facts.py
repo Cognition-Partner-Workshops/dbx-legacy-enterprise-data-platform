@@ -118,7 +118,8 @@ def conformPurchase(silverPo: DataFrame, silverPoLine: DataFrame, silverSupplier
     po = silverPo.select(
         "purchase_order_business_key", "purchase_order_number", "source_supplier_id", "order_date", "promised_date",
         F.col("region_code").alias("po_region_code"), "buyer_code", "contract_business_key", "transaction_currency_code",
-        "fx_rate_to_usd", "freight_amount", "order_total_amount", "order_status_code", "source_modified_date",
+        "fx_rate_to_usd", "freight_amount", "order_total_amount", "order_status_code",
+        F.col("source_modified_date").alias("header_modified_date"),
     )
     supp = silverSupplier.where("is_survivor_row").select(
         "source_supplier_id", "supplier_business_key", F.col("region_code").alias("supplier_region_code"),
@@ -184,7 +185,7 @@ def conformPurchase(silverPo: DataFrame, silverPoLine: DataFrame, silverSupplier
         F.col("transaction_currency_code").alias("transaction_currency"), "fx_rate_to_usd", "extended_amount", "extended_amount_usd",
         "recoverable_tax_amount", "supplier_region_code", "buyer_code", "contract_business_key", "order_status_code",
         "receipted_quantity", "invoiced_quantity", "three_way_match_status_code", "price_variance_percent",
-        F.col("source_modified_date").alias("last_modified_at"), "dq_status_code",
+        F.greatest(F.col("source_modified_date"), F.col("header_modified_date")).alias("last_modified_at"), "dq_status_code",
         F.sha2(F.concat_ws("|", F.col("purchase_order_line_business_key"), F.col("order_quantity"), F.col("unit_price_amount"), F.col("order_date"), F.col("three_way_match_status_code")), 256).alias("row_hash"),
         F.lit(int(batchId)).cast("long").alias("batch_id"),
     )
@@ -308,7 +309,7 @@ def buildPurchaseReceiptFact(receipts: DataFrame, silverPoLine: DataFrame, silve
     po = silverPo.select("purchase_order_business_key", "purchase_order_number", "source_supplier_id", "order_date", "promised_date",
                          F.col("region_code").alias("po_region_code"), "transaction_currency_code", "fx_rate_to_usd", "contract_business_key")
     supplierKeys = dimSupplier.where("is_current_row").select(F.col("wwi_supplier_id").alias("source_supplier_id"), F.col("supplier_key").alias("_sk"), F.col("region_code").alias("_sregion"))
-    r = receipts.where(F.col("receipt_line_id") > int(keyFrom))
+    r = receipts.drop("po_unit_price", "po_order_qty").where(F.col("receipt_line_id") > int(keyFrom))
     j = r.join(lines, "po_line_id", "left").join(po, "purchase_order_business_key", "left")
     j = j.withColumn("source_supplier_id", F.coalesce(F.col("source_supplier_id"), F.col("supp_id").cast("long")))
     j = j.join(supplierKeys, "source_supplier_id", "left")

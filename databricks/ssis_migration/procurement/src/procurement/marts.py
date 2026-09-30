@@ -1,6 +1,8 @@
 """PRC_* procurement marts: spend classification, three-way receipt matching, contract compliance,
 supplier scorecard and the outbound supplier statement file."""
 
+import os
+
 from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 
@@ -31,8 +33,8 @@ def classifySpend(poLine: DataFrame, poHdr: DataFrame, contracts: DataFrame, sup
                        "buyer_code", "contract_business_key", "transaction_currency_code", "fx_rate_to_usd", "order_status_code")
     supp = suppliers.where("is_survivor_row").select("source_supplier_id", "supplier_business_key", F.col("preferred_supplier_flag").alias("_pref"),
                                                      F.col("strategic_tier_code"))
-    c = contracts.where(F.col("dq_status_code") != "FAIL").select(
-        F.col("source_supplier_id").alias("_c_sid"), F.col("contract_number").alias("_c_number"), F.col("contract_start_date").alias("_c_start"),
+    c = contracts.select(
+        F.col("source_supplier_id").alias("_c_sid"), F.col("contract_business_key").alias("_c_id"), F.col("contract_number").alias("_c_number"), F.col("contract_start_date").alias("_c_start"),
         F.col("contract_end_date").alias("_c_end"), F.col("rebate_percent").alias("_c_rebate"), F.col("committed_amount_usd").alias("_c_committed"),
     )
     j = poLine.join(hdr, "purchase_order_business_key", "inner").where(~F.col("order_status_code").isin("CANC", "DRAFT")).join(supp, "source_supplier_id", "left")
@@ -45,7 +47,7 @@ def classifySpend(poLine: DataFrame, poHdr: DataFrame, contracts: DataFrame, sup
     )
     # prefer the contract the header references, otherwise the most recent covering contract
     pick = Window.partitionBy("purchase_order_line_business_key").orderBy(
-        F.when(F.col("_c_number") == F.col("contract_business_key"), 0).otherwise(1), F.col("_c_start").desc_nulls_last()
+        F.when(F.col("_c_id") == F.col("contract_business_key"), 0).otherwise(1), F.col("_c_start").desc_nulls_last()
     )
     j = j.withColumn("_rn", F.row_number().over(pick)).where("_rn = 1").drop("_rn")
     amountUsd = F.round(F.col("extended_amount") * F.coalesce(F.col("fx_rate_to_usd"), F.lit(1)), 2)
@@ -89,7 +91,7 @@ def matchReceipts(receiptFact: DataFrame, apInvoiceLines: DataFrame, apInvoiceHd
     il = lowerColumns(apInvoiceLines).select(
         F.col("invoice_line_id").alias("_il_id"), F.col("invoice_id").alias("_inv_id"), F.col("receipt_line_id").alias("_il_rcpt"),
         F.col("po_line_id").alias("_il_po_line"), F.col("quantity").alias("invoiced_quantity"), F.col("unit_price").alias("invoiced_unit_price"),
-        F.col("line_amount").alias("invoiced_amount"),
+        F.col("line_amt").alias("invoiced_amount"),
     )
     ih = lowerColumns(apInvoiceHdr).select(F.col("invoice_id").alias("_inv_id"), F.col("invoice_nbr").alias("supplier_invoice_number"), F.to_date("invoice_dt").alias("invoice_date"))
     il = il.join(ih, "_inv_id", "left")
@@ -152,7 +154,7 @@ def contractCompliance(spend: DataFrame, contracts: DataFrame, asOf, batchId, wi
         F.sum("expected_rebate_usd").alias("expected_rebate_usd"),
         F.max("contract_number").alias("contract_number"),
     )
-    c = contracts.where(F.col("dq_status_code") != "FAIL").groupBy("source_supplier_id").agg(
+    c = contracts.groupBy("source_supplier_id").agg(
         F.count("*").alias("contract_count"), F.max("contract_end_date").alias("_latest_end"), F.sum("committed_amount_usd").alias("committed_spend_usd"),
     )
     j = monthly.join(c, "source_supplier_id", "left")
@@ -276,13 +278,12 @@ def runSupplierStatement(spark, batchId, statementPeriod=None):
     packageName = "PRC_Export_SupplierStatement"
     fact = spark.table(qualified(GOLD_FACT_SUPPLIER_TRANSACTION))
     statementPeriod = statementPeriod or fact.agg(F.max(F.date_format("transaction_date_key", "yyyy-MM"))).collect()[0][0]
-    out = buildSupplierStatement(fact, spark.table(qualified(GOLD_DIM_SUPPLIER)), statementPeriod, batchId).cache()
-    io.writeDelta(out, qualified(GOLD_SUPPLIER_STATEMENT))
+    io.writeDelta(buildSupplierStatement(fact, spark.table(qualified(GOLD_DIM_SUPPLIER)), statementPeriod, batchId), qualified(GOLD_SUPPLIER_STATEMENT))
+    out = spark.table(qualified(GOLD_SUPPLIER_STATEMENT))
     exportDir = f"{volumePath('exports')}/supplier_statement"
     fileName = f"{STATEMENT_FILE_PREFIX}_{statementPeriod.replace('-', '')}.csv"
     csvCols = [c for c in out.columns if c not in ("batch_id", "load_datetime")]
     pdf = out.select(*csvCols).orderBy("wwi_supplier_id", "statement_line_number").toPandas()
-    import os
     os.makedirs(exportDir, exist_ok=True)
     pdf.to_csv(f"{exportDir}/{fileName}", index=False, encoding="utf-8")
     rows = len(pdf)

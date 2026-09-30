@@ -45,6 +45,15 @@ def writeDelta(df: DataFrame, tableName, mode="overwrite", partitionBy=None, mer
     writer.saveAsTable(tableName)
 
 
+def writeThroughWork(spark, df: DataFrame, tableName):
+    """SCD rewrite that reads and replaces the same table: materialise into a work table first
+    (the SSIS `work.*` pattern) so the target swap is a single deterministic overwrite."""
+    workTable = f"{tableName}__work"
+    writeDelta(df, workTable)
+    writeDelta(spark.table(workTable), tableName)
+    spark.sql(f"DROP TABLE IF EXISTS {workTable}")
+
+
 def replaceWhere(df: DataFrame, tableName, predicate):
     """Idempotent window rewrite (the SSIS 'DELETE window then INSERT' pattern)."""
     if not tableExists(df.sparkSession, tableName):
