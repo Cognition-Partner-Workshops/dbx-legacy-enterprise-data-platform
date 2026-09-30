@@ -62,7 +62,7 @@ def normalise(df: DataFrame, columns: list[str]) -> DataFrame:
 
 def checksum(df: DataFrame, columns: list[str]) -> tuple[int, str]:
     n = normalise(df, columns)
-    row = n.agg(F.count("*").alias("c"), F.sum(F.xxhash64(F.concat_ws("|", *columns))).alias("h")).first()
+    row = n.agg(F.count("*").alias("c"), F.sum(F.xxhash64(F.concat_ws("|", *columns)).cast("decimal(38,0)")).alias("h")).first()
     return int(row["c"]), str(row["h"]) if row["h"] is not None else "0"
 
 
@@ -82,7 +82,7 @@ def reconcile(spark: SparkSession, spec: ReconSpec) -> tuple[str, list[dict], st
     if legacy is not None and legacyCount > 0:
         _, legacyHash = checksum(legacy, spec.businessColumns)
         checks.append({"check": "row_count", "source": legacyCount, "target": targetCount, "pass": legacyCount == targetCount})
-        checks.append({"check": "checksum", "method": f"sum(xxhash64({', '.join(spec.businessColumns)}))", "source": legacyHash, "target": targetHash, "pass": legacyHash == targetHash})
+        checks.append({"check": "checksum", "method": f"sum(cast(xxhash64({', '.join(spec.businessColumns)}) as decimal(38,0)))", "source": legacyHash, "target": targetHash, "pass": legacyHash == targetHash})
         if spec.nullRateColumn:
             checks.append({"check": "column_null_rate", "column": spec.nullRateColumn, "source": nullRate(legacy, spec.nullRateColumn), "target": nullRate(target, spec.nullRateColumn), "pass": True})
         checks.extend(spec.extraChecks(spark))
@@ -92,7 +92,7 @@ def reconcile(spark: SparkSession, spec: ReconSpec) -> tuple[str, list[dict], st
     expected = spec.expectedBuilder(spark)
     expectedCount, expectedHash = checksum(expected, spec.businessColumns)
     checks.append({"check": "row_count", "baseline": "source_derived", "source": expectedCount, "target": targetCount, "pass": expectedCount == targetCount})
-    checks.append({"check": "checksum", "baseline": "source_derived", "method": f"sum(xxhash64({', '.join(spec.businessColumns)}))", "source": expectedHash, "target": targetHash, "pass": expectedHash == targetHash})
+    checks.append({"check": "checksum", "baseline": "source_derived", "method": f"sum(cast(xxhash64({', '.join(spec.businessColumns)}) as decimal(38,0)))", "source": expectedHash, "target": targetHash, "pass": expectedHash == targetHash})
     checks.append({"check": "legacy_target_rows", "source": legacyCount, "target": targetCount, "pass": True, "note": "legacy target unpopulated on host"})
     if spec.nullRateColumn:
         checks.append({"check": "column_null_rate", "column": spec.nullRateColumn, "source": nullRate(expected, spec.nullRateColumn), "target": nullRate(target, spec.nullRateColumn), "pass": True})
@@ -307,8 +307,8 @@ def buildSpecs() -> list[ReconSpec]:
     t = config.tbl
     return [
         ReconSpec("EXT_ORA_CodeTranslation", f"{STG}.raw.OracleCustomerMaster (inventory) / WWI_REF.CODE_TRANSLATION", t("bronze_oracle_code_translation"),
-                  ["translation_id", "code_set_cd", "source_system_cd", "source_value", "target_value"], stagingTable("raw", "OracleCustomerMaster"), expectedCodeTranslation,
-                  "Full reload of the Oracle code translation table (86 rows on the source).", nullRateColumn="target_value"),
+                  ["translation_id", "code_set_cd", "source_sys_cd", "source_value_txt", "target_value_txt"], stagingTable("raw", "OracleCustomerMaster"), expectedCodeTranslation,
+                  "Full reload of the Oracle code translation table (86 rows on the source).", nullRateColumn="target_value_txt"),
         ReconSpec("EXT_ORA_Currency", f"{STG}.raw.OracleCurrency", t("bronze_oracle_currency"), ["ccy_code", "ccy_name", "minor_units", "active_flg"],
                   stagingTable("raw", "OracleCurrency"), expectedCurrency, "Full reload of WWI_REF.CURRENCY_CODE landed as strings, as the OLE DB destination did.", nullRateColumn="ccy_name"),
         ReconSpec("EXT_ORA_Geography", f"{STG}.raw.OracleGeography (RecordKind ORAGEO)", t("bronze_oracle_geography"),
