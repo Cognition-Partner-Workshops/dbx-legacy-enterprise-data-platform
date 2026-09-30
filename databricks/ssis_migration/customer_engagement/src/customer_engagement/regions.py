@@ -115,3 +115,9 @@ def nullIfBlank(col: Column) -> Column:
     """NULL when the trimmed value is empty (SSIS: TRIM(x) == "" ? NULL : x)."""
     trimmed = F.trim(col)
     return F.when(trimmed == "", F.lit(None).cast("string")).otherwise(trimmed)
+
+
+def isCurrentDimensionRow(isCurrentRowCol: Column, validToCol: Column) -> Column:
+    """SSIS filters ``[Is Current Row] = 1``; the live baseline leaves that flag NULL on every real customer,
+    so fall back to the SCD2 ``Valid To`` sentinel (see README: deliberate deviation)."""
+    return F.coalesce(isCurrentRowCol, validToCol > F.current_timestamp())

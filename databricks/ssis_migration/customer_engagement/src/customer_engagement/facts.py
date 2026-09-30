@@ -8,7 +8,7 @@ from typing import Tuple
 from pyspark.sql import DataFrame, SparkSession, Window
 from pyspark.sql import functions as F
 
-from customer_engagement import tables
+from customer_engagement import regions, tables
 from customer_engagement.config import CeConfig
 
 LOYALTY_WATERMARK = "Fact.Loyalty Points"
@@ -20,7 +20,7 @@ POINT_CASH_VALUE = {"NA": 0.0100, "EU": 0.0085, "APAC": 0.0060}
 def currentCustomerKeys(customerDim: DataFrame) -> DataFrame:
     """Lookup Customer Key: Dimension.Customer WHERE [Is Current Row] = 1 keyed on [WWI Customer ID]."""
     return (
-        customerDim.where(F.col("Is Current Row"))
+        customerDim.where(regions.isCurrentDimensionRow(F.col("Is Current Row"), F.col("Valid To")))
         .select(F.col("Customer Key").alias("CustomerKey"), F.col("WWI Customer ID").cast("string").alias("CustomerBusinessKey"))
         .dropDuplicates(["CustomerBusinessKey"])
     )

@@ -69,10 +69,11 @@ def sqlExpectation(sqlTemplate: str) -> Expectation:
     return run
 
 
+CURRENT_ROW_SQL = "coalesce(`Is Current Row`, `Valid To` > current_timestamp())"
 CUSTOMER_CTE = (
     "cust AS (SELECT `Customer Key` AS k, `WWI Customer ID` AS cid, "
     "coalesce(nullif(upper(trim(`Region Code`)), ''), '{region}') AS r, `Valid To` AS vt, `Is On Credit Hold` AS hold "
-    "FROM {dw}.dimension.customer WHERE `Is Current Row`)"
+    "FROM {dw}.dimension.customer WHERE " + CURRENT_ROW_SQL + ")"
 )
 SALE_CTE = (
     "sale AS (SELECT `Customer Key` AS k, coalesce(`Invoice Number`, cast(`WWI Invoice ID` as string)) AS inv, "
@@ -120,7 +121,7 @@ SPECS: List[ReconSpec] = [
         tables.SILVER_LOYALTY_LEDGER,
         ["LoyaltyEntryId", "CustomerId", "EntryTypeCode", "PointsDelta"],
         "{stg}.stg.loyaltyledger",
-        None,
+        ["LoyaltyLedgerBusinessKey", "CustomerBusinessKey", "EntryTypeCode", "PointsDelta"],
         sqlExpectation(
             "SELECT count(*) AS cnt, "
             + checksumExpr(["LoyaltyEntryId", "CustomerId", "EntryTypeCode", "PointsDelta"])
@@ -136,7 +137,7 @@ SPECS: List[ReconSpec] = [
         tables.SILVER_WEB_SESSION,
         ["SessionBusinessKey", "PageViewCount", "CountryIsoCode"],
         "{stg}.stg.websession",
-        None,
+        ["WebSessionBusinessKey", "PageViewCount", "CountryCode"],
         sqlExpectation(
             "SELECT count(*) AS cnt, "
             + checksumExpr(["SessionBusinessKey", "PageViewCount", "CountryIsoCode"])
@@ -159,7 +160,7 @@ SPECS: List[ReconSpec] = [
             + " AS chk FROM (SELECT cast(cast(r.LoyaltyLedgerID as bigint) as string) AS MovementReference, "
             "case when upper(trim(coalesce(r.EntryTypeCode,'ADJ'))) in ('REDEEM','EXPIRE') then -abs(coalesce(cast(r.PointsDelta as int),0)) "
             "else abs(coalesce(cast(r.PointsDelta as int),0)) end AS SignedPoints FROM {stg}.raw.sqlloyaltyledger r "
-            "WHERE cast(r.CustomerID as int) IN (SELECT `WWI Customer ID` FROM {dw}.dimension.customer WHERE `Is Current Row`))"
+            "WHERE cast(r.CustomerID as int) IN (SELECT `WWI Customer ID` FROM {dw}.dimension.customer WHERE " + CURRENT_ROW_SQL + "))"
         ),
         targetFilter="MovementReference NOT LIKE 'EXP-%'",
         note="Fact.Loyalty Points is not populated/exposed on the baseline; expectation = raw ledger rows whose customer resolves in Dimension.Customer, with the package's signed-points rule. Generated EXPIRE rows are excluded from the comparison and reported separately.",
@@ -316,9 +317,9 @@ def legacyBaseline(spark: SparkSession, cfg: CeConfig, spec: ReconSpec) -> Optio
     fqn = spec.legacyTarget.format(stg=cfg.stagingCatalog, dw=cfg.dwCatalog, oltp=cfg.oltpCatalog)
     if not tables.tableExists(spark, fqn):
         return None
-    cols = spec.legacyCols or spec.businessCols
-    count, chk = countAndChecksum(spark, fqn, cols)
-    return (count, chk) if count > 0 else (0, None)
+    if int(spark.sql(f"SELECT count(*) AS cnt FROM {fqn}").first()["cnt"]) == 0:
+        return (0, None)
+    return countAndChecksum(spark, fqn, spec.legacyCols or spec.businessCols)
 
 
 def reconcilePackage(spark: SparkSession, cfg: CeConfig, spec: ReconSpec, asOf: date) -> Tuple[str, List[Dict], str]:

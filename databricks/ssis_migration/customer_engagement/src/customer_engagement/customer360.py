@@ -70,7 +70,7 @@ def customerView(customer: DataFrame, defaultRegion: str) -> DataFrame:
         F.col("Credit Limit Amount").alias("CreditLimitAmount"),
         F.col("Valid From").alias("ValidFrom"),
         F.col("Valid To").alias("ValidTo"),
-        F.col("Is Current Row").alias("IsCurrentRow"),
+        regions.isCurrentDimensionRow(F.col("Is Current Row"), F.col("Valid To")).alias("IsCurrentRow"),
         F.col("Customer Segment Key").alias("CustomerSegmentKey"),
         F.col("Erasure Requested On").alias("ErasureRequestedOn"),
         F.col("Account Manager Employee Key").alias("AccountManagerEmployeeKey"),
