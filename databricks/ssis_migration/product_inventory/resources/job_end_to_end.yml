@@ -1,0 +1,114 @@
+resources:
+  jobs:
+    ssis_product_inventory_end_to_end:
+      name: ssis_product_inventory_end_to_end
+      description: >-
+        Databricks-native replacement for the 21 product_inventory SSIS packages
+        (Master_Daily_ETL slice): Oracle/SQL extracts -> staging -> dimensions ->
+        facts -> inventory marts -> aggregate -> reconciliation evidence.
+      max_concurrent_runs: 1
+      timeout_seconds: 14400
+      tags:
+        ssis_group: product_inventory
+        harness: ssis-migration-v1
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: batch_id
+          default: ""
+        - name: business_date
+          default: ""
+        - name: reload_full_history
+          default: "true"
+        - name: git_sha
+          default: ${var.git_sha}
+        - name: position_window_days
+          default: "90"
+        - name: cover_days
+          default: "21"
+        - name: suppress_chiller_suggestions
+          default: "false"
+        - name: in_transit_age_alert_days
+          default: "10"
+        - name: timing_window_minutes
+          default: "30"
+        - name: site_scope
+          default: ALL
+        - name: retention_days
+          default: "400"
+        - name: agg_days_back
+          default: "7"
+      tasks:
+        - task_key: bronze
+          notebook_task:
+            notebook_path: ../notebooks/run_stage.py
+            base_parameters:
+              stage: bronze
+        - task_key: silver
+          depends_on:
+            - task_key: bronze
+          notebook_task:
+            notebook_path: ../notebooks/run_stage.py
+            base_parameters:
+              stage: silver
+        - task_key: dimensions
+          depends_on:
+            - task_key: silver
+          notebook_task:
+            notebook_path: ../notebooks/run_stage.py
+            base_parameters:
+              stage: dimensions
+        - task_key: facts
+          depends_on:
+            - task_key: dimensions
+          notebook_task:
+            notebook_path: ../notebooks/run_stage.py
+            base_parameters:
+              stage: facts
+        - task_key: inventory
+          depends_on:
+            - task_key: facts
+          notebook_task:
+            notebook_path: ../notebooks/run_stage.py
+            base_parameters:
+              stage: inventory
+        - task_key: aggregates
+          depends_on:
+            - task_key: inventory
+          notebook_task:
+            notebook_path: ../notebooks/run_stage.py
+            base_parameters:
+              stage: aggregates
+        - task_key: recon
+          depends_on:
+            - task_key: aggregates
+          notebook_task:
+            notebook_path: ../notebooks/run_recon.py
+
+    ssis_product_inventory_recon:
+      name: ssis_product_inventory_recon
+      description: Re-runnable reconciliation evidence writer (one recon_results row per package).
+      max_concurrent_runs: 1
+      timeout_seconds: 3600
+      tags:
+        ssis_group: product_inventory
+        harness: ssis-migration-v1
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: business_date
+          default: ""
+        - name: git_sha
+          default: ${var.git_sha}
+        - name: site_scope
+          default: ALL
+        - name: agg_days_back
+          default: "7"
+      tasks:
+        - task_key: recon
+          notebook_task:
+            notebook_path: ../notebooks/run_recon.py
