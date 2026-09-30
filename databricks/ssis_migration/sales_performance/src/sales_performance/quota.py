@@ -115,7 +115,7 @@ def runQuotaAttainment(spark: SparkSession, batchId: int):
         "region_code string, territory_code string, salesperson_id bigint, fiscal_calendar_code string, fiscal_period_label string, credit_amount decimal(19,4)",
     )
     revenue = regionalRevenue(lines, orders, creditNotes)
-    attainment = withAudit(calculateQuotaAttainment(revenue, quotas), PACKAGE, batchId).cache()
+    attainment = withAudit(calculateQuotaAttainment(revenue, quotas), PACKAGE, batchId)
     saveTable(attainment, ATTAINMENT_TABLE)
     metrics = {
         "attainment_row_count": attainment.count(),

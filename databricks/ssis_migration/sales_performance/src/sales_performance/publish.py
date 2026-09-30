@@ -56,6 +56,8 @@ def evaluateGates(spark: SparkSession, staleAfterHours: int = 36, allowEmpty=("g
                 ).collect()[0]["h"]
                 fresh = fresh and ageHours <= staleAfterHours
                 gate["age_hours"] = round(float(ageHours), 2)
+            if gate["row_count"] == 0 and table in allowEmpty:
+                fresh = True
             gate["fresh"] = fresh
             gate["non_empty"] = gate["row_count"] > 0 or table in allowEmpty
             gate["passed"] = gate["non_empty"] and nullKeys == 0 and fresh

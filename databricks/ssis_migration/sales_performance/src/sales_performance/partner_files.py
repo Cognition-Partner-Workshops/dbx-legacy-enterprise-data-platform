@@ -355,7 +355,7 @@ def processFeedFile(spark: SparkSession, spec: FeedSpec, path: str, batchId: int
     unknown = lines.filter(~isKnown | (isDetail & ~wellFormed))
     footer = lines.filter(isFooter & isKnown)
 
-    parsed = PARSERS[spec.regionCode](detail).cache()
+    parsed = PARSERS[spec.regionCode](detail)
     valid = parsed.filter(F.col("is_valid")).drop("is_valid", "raw_record")
     malformed = parsed.filter(~F.col("is_valid") | F.col("is_valid").isNull())
 

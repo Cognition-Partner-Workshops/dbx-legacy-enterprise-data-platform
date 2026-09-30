@@ -128,7 +128,7 @@ def runPartnerFeed(
         PACKAGE,
         batchId,
     )
-    feed = feed.withColumn("feed_as_of_date", F.lit(asOf)).cache()
+    feed = feed.withColumn("feed_as_of_date", F.lit(asOf))
     saveTable(feed, FEED_TABLE)
     path = writeFeedFile(feed, outboundDir, asOf)
     metrics = {"export_row_count": feed.count()}

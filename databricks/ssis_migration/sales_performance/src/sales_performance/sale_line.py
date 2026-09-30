@@ -316,9 +316,9 @@ def loadGoldFacts(spark: SparkSession, batchId: int, resetCorrections: bool = Fa
     fullName = config.tableName(FACT_SALE_TABLE)
     if spark.catalog.tableExists(fullName) and not resetCorrections:
         existing = spark.table(fullName)
-        extra = existing.filter(F.col("is_correction") | F.col("is_reversal"))
+        extra = existing.filter(F.col("reverses_sale_key").isNotNull())
         if extra.limit(1).count() > 0:
-            reversed_ = extra.filter(F.col("reverses_sale_key").isNotNull()).select(F.col("reverses_sale_key").alias("sale_key")).distinct()
+            reversed_ = extra.select(F.col("reverses_sale_key").alias("sale_key")).distinct()
             saleLine = (
                 saleLine.join(reversed_, "sale_key", "left_anti")
                 .unionByName(existing.join(reversed_, "sale_key", "inner"), allowMissingColumns=True)
@@ -332,7 +332,28 @@ def loadGoldFacts(spark: SparkSession, batchId: int, resetCorrections: bool = Fa
         spark.table(config.tableName(EMPLOYEE_TABLE)),
         snakeCaseColumns(readDw(spark, "Dimension", "City")).drop("location"),
     )
-    saveTable(withAudit(order, "gold", batchId), FACT_ORDER_TABLE)
-    payment = snakeCaseColumns(readDw(spark, "Fact", "Payment"))
-    saveTable(withAudit(payment.withColumn("is_restated", F.lit(False)), "gold", batchId), FACT_PAYMENT_TABLE)
+    order = _keepRestated(
+        spark, withAudit(order, "gold", batchId), FACT_ORDER_TABLE, ["order_number", "order_line_number"], resetCorrections
+    )
+    saveTable(order, FACT_ORDER_TABLE)
+    payment = snakeCaseColumns(readDw(spark, "Fact", "Payment")).withColumn("is_restated", F.lit(False))
+    payment = _keepRestated(
+        spark, withAudit(payment, "gold", batchId), FACT_PAYMENT_TABLE, ["receipt_number", "receipt_line_number"], resetCorrections
+    )
+    saveTable(payment, FACT_PAYMENT_TABLE)
     return spark.table(fullName).count()
+
+
+def _keepRestated(spark: SparkSession, fresh: DataFrame, table: str, keys, reset: bool) -> DataFrame:
+    """Rows restated in place by FACT_Apply_Corrections win over the legacy copy on reload."""
+    fullName = config.tableName(table)
+    if reset or not spark.catalog.tableExists(fullName):
+        return fresh
+    existing = spark.table(fullName)
+    if "is_restated" not in existing.columns:
+        return fresh
+    restated = existing.filter(F.col("is_restated"))
+    if restated.limit(1).count() == 0:
+        return fresh
+    restated = spark.createDataFrame(restated.collect(), restated.schema)
+    return fresh.join(restated.select(*keys), keys, "left_anti").unionByName(restated, allowMissingColumns=True)

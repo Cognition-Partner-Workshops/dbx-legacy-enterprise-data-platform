@@ -105,7 +105,9 @@ def calculateNaCommission(lines: DataFrame, plans: DataFrame, quotas: DataFrame 
         .withColumn("house_account_factor", houseFactor.cast("decimal(9,4)"))
         .withColumn(
             "commission_amount",
-            ((F.col("base_commission_amount") + F.col("accelerator_commission_amount")) * F.col("house_account_factor")).cast(MONEY),
+            (
+                (F.col("commissionable_amount") * F.col("band1_rate_percent") / 100 + overThreshold * acceleratorRate / 100) * houseFactor
+            ).cast(MONEY),
         )
     )
     accruals = out.select(
@@ -328,7 +330,7 @@ def runRegion(spark: SparkSession, regionCode: str, batchId: int, params: dict =
         metrics["unplanned_rep_count"] = unplanned.select("salesperson_key").distinct().count()
         metrics["missing_fx_row_count"] = rejected.count()
         metrics["period_boundary_line_count"] = accruals.filter(F.col("is_period_boundary_line")).count()
-    accruals = withAudit(accruals, packageName, batchId).cache()
+    accruals = withAudit(accruals, packageName, batchId)
     fullName = config.tableName(ACCRUAL_TABLE)
     if spark.catalog.tableExists(fullName):
         spark.sql(f"DELETE FROM {fullName} WHERE region_code = '{regionCode}'")

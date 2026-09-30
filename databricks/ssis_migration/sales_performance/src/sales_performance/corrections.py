@@ -231,7 +231,7 @@ def loadQueue(spark: SparkSession) -> DataFrame:
 def runCorrections(spark: SparkSession, batchId: int, correctionPeriodCode: str = None, maxCorrections: int = 50000):
     queue = loadQueue(spark)
     supported, rejected = classifyQueue(queue, maxCorrections)
-    supported = supported.cache()
+    supported = supported
     sourceCount = queue.filter(~F.coalesce(F.col("applied_flag"), F.lit(False))).count()
     fact = readTable(spark, FACT_SALE_TABLE)
     if "is_correction" not in fact.columns:
@@ -240,10 +240,14 @@ def runCorrections(spark: SparkSession, batchId: int, correctionPeriodCode: str 
         fact = fact.withColumn("correction_lineage_key", F.lit(None).cast("bigint"))
     saleQueue = supported.filter(F.col("fact_object_name") == "Fact.Sale")
     newRows, reversedKeys, audit = applySaleCorrections(fact, saleQueue, batchId)
+    # Materialise everything derived from the fact table before appending to it: Delta reads are
+    # lazy, so the audit/reversed keys would otherwise see the rows being inserted.
+    reversedList = [r["sale_key"] for r in reversedKeys.collect()]
+    audit = spark.createDataFrame(audit.collect(), audit.schema)
+    newRows = spark.createDataFrame(newRows.select(*fact.columns).collect(), fact.schema)
     insertCount = newRows.count()
     if insertCount:
-        saveTable(newRows.select(*fact.columns), FACT_SALE_TABLE, mode="append")
-        reversedList = [r["sale_key"] for r in reversedKeys.collect()]
+        saveTable(newRows, FACT_SALE_TABLE, mode="append")
         spark.sql(
             "UPDATE {t} SET is_correction = true WHERE sale_key IN ({keys})".format(
                 t=config.tableName(FACT_SALE_TABLE), keys=",".join(str(k) for k in reversedList)

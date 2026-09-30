@@ -89,8 +89,9 @@ def _expectedFeedRows(spark: SparkSession, regionCode: str, rootPath: str) -> Da
     """Independent Python re-parse of every file in inbound/archive/quarantine for the region."""
     spec = partner_files.FEEDS[regionCode]
     rows = []
-    for sub in ("", "archive", "quarantine"):
-        folder = os.path.join(rootPath, spec.folder, sub)
+    regionFolder = spec.folder.split("/", 1)[1]
+    for sub in ("inbound", "archive", "quarantine"):
+        folder = os.path.join(rootPath, sub, regionFolder)
         if not os.path.isdir(folder):
             continue
         for name in sorted(os.listdir(folder)):
@@ -387,16 +388,16 @@ def reconPartnerFeed(spark: SparkSession, outboundDir: str):
         "partner_code",
         F.col("invoice_number").cast("string"),
         "stock_item_code",
-        F.col("quantity").cast("decimal(18,3)").cast("string"),
-        F.col("net_amount").cast("decimal(19,4)").cast("string"),
+        F.col("quantity").cast("decimal(18,3)").cast("string").alias("quantity"),
+        F.col("net_amount").cast("decimal(19,4)").cast("string").alias("net_amount"),
     )
     fileTyped = (
         fileDf.select(
             "partner_code",
             F.col("invoice_number").cast("string"),
             "stock_item_code",
-            F.col("quantity").cast("decimal(18,3)").cast("string"),
-            F.col("net_amount").cast("decimal(19,4)").cast("string"),
+            F.col("quantity").cast("decimal(18,3)").cast("string").alias("quantity"),
+            F.col("net_amount").cast("decimal(19,4)").cast("string").alias("net_amount"),
         )
         if fileRows
         else _empty(spark, "partner_code string, invoice_number string, stock_item_code string, quantity string, net_amount string")

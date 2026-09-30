@@ -134,7 +134,7 @@ def runPromotionRedemption(spark: SparkSession, batchId: int, strictMode: bool =
     promotions, lines, redemptions = loadPromotionSources(spark)
     saveTable(withAudit(promotions, PACKAGE, batchId), PROMOTION_TABLE)
     saveTable(withAudit(lines, PACKAGE, batchId), PROMOTION_LINE_TABLE)
-    attributed = withAudit(attributeRedemptions(redemptions, promotions, lines, strictMode), PACKAGE, batchId).cache()
+    attributed = withAudit(attributeRedemptions(redemptions, promotions, lines, strictMode), PACKAGE, batchId)
     saveTable(attributed, REDEMPTION_TABLE)
     summary = withAudit(summarizePromotions(attributed, promotions), PACKAGE, batchId)
     saveTable(summary, SUMMARY_TABLE)
