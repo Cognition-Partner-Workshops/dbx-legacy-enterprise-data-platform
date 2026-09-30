@@ -1,0 +1,99 @@
+resources:
+  jobs:
+    ssis_finance_run_all:
+      name: ssis_finance_run_all
+      description: >-
+        End-to-end bootstrap/regression run of the finance group in dependency order: Oracle extracts ->
+        staging + payment matching + DQ -> cost-center dimension (SCD2) -> incremental facts -> finance close ->
+        month-end aggregate -> reconciliation evidence. The individual master-equivalent jobs
+        (daily_etl / weekly_reference_load / close / month_end / recon) mirror the SSIS masters for scheduled use.
+      tags:
+        project: ssis_migration
+        group: finance
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: evidence_schema
+          default: ${var.evidence_schema}
+        - name: accounting_period
+          default: ${var.accounting_period}
+        - name: business_date
+          default: ${var.business_date}
+        - name: git_sha
+          default: ${var.git_sha}
+        - name: allow_unbalanced_journals
+          default: "false"
+        - name: fail_on_missing_rate
+          default: "false"
+        - name: include_disputed
+          default: "false"
+        - name: ledger_scope
+          default: ALL
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "3"
+      tasks:
+        - task_key: extracts
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: >-
+                EXT_ORA_ApInvoiceHdr,EXT_ORA_ApInvoiceLine,EXT_ORA_ApPayment,EXT_ORA_ApPaymentApply,
+                EXT_ORA_ApAging,EXT_ORA_GlJournalLine,EXT_ORA_CostCenter
+        - task_key: staging
+          depends_on:
+            - task_key: extracts
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: >-
+                STG_Load_CostCenter,STG_Load_ApInvoice,STG_Load_GlJournal,STG_Load_Payment,
+                STG_Work_PaymentMatch,DQ_Payment_Screen
+        - task_key: reference_load
+          depends_on:
+            - task_key: staging
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: REF_Load_CostCenter
+        - task_key: facts
+          depends_on:
+            - task_key: reference_load
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: FACT_Load_GLPosting,FACT_Load_Payment,FACT_Load_SupplierPayment
+        - task_key: finance_close
+          depends_on:
+            - task_key: facts
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: >-
+                FIN_Currency_Revaluation,FIN_Load_GlPostings,FIN_Load_ApAging,FIN_Load_CostAllocation,
+                FIN_Load_WithholdingTax,FIN_Reconcile_SubledgerToGl,FIN_Close_PeriodLock
+        - task_key: month_end
+          depends_on:
+            - task_key: finance_close
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: AGG_Refresh_FinanceCloseSummary
+        - task_key: recon
+          depends_on:
+            - task_key: month_end
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/recon.py

@@ -1,0 +1,158 @@
+resources:
+  jobs:
+    ssis_finance_daily_etl:
+      name: ssis_finance_daily_etl
+      description: Master_Daily_ETL (finance slice) - Oracle extracts, staging, payment matching, DQ screen, incremental facts
+      tags:
+        project: ssis_migration
+        group: finance
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: evidence_schema
+          default: ${var.evidence_schema}
+        - name: accounting_period
+          default: ${var.accounting_period}
+        - name: business_date
+          default: ${var.business_date}
+        - name: git_sha
+          default: ${var.git_sha}
+        - name: allow_unbalanced_journals
+          default: "false"
+        - name: fail_on_missing_rate
+          default: "false"
+        - name: include_disputed
+          default: "false"
+        - name: ledger_scope
+          default: ALL
+
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "3"
+      tasks:
+        - task_key: ext_ora_ap_invoice_hdr
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "EXT_ORA_ApInvoiceHdr"
+        - task_key: ext_ora_ap_invoice_line
+          depends_on:
+            - task_key: ext_ora_ap_invoice_hdr
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "EXT_ORA_ApInvoiceLine"
+        - task_key: ext_ora_ap_payment
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "EXT_ORA_ApPayment"
+        - task_key: ext_ora_ap_payment_apply
+          depends_on:
+            - task_key: ext_ora_ap_payment
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "EXT_ORA_ApPaymentApply"
+        - task_key: ext_ora_ap_aging
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "EXT_ORA_ApAging"
+        - task_key: ext_ora_gl_journal_line
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "EXT_ORA_GlJournalLine"
+        - task_key: ext_ora_cost_center
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "EXT_ORA_CostCenter"
+        - task_key: stg_load_cost_center
+          depends_on:
+            - task_key: ext_ora_cost_center
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "STG_Load_CostCenter"
+        - task_key: stg_load_ap_invoice
+          depends_on:
+            - task_key: ext_ora_ap_invoice_line
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "STG_Load_ApInvoice"
+        - task_key: stg_load_gl_journal
+          depends_on:
+            - task_key: ext_ora_gl_journal_line
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "STG_Load_GlJournal"
+        - task_key: stg_load_payment
+          depends_on:
+            - task_key: ext_ora_ap_payment_apply
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "STG_Load_Payment"
+        - task_key: stg_work_payment_match
+          depends_on:
+            - task_key: stg_load_ap_invoice
+            - task_key: stg_load_payment
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "STG_Work_PaymentMatch"
+        - task_key: dq_payment_screen
+          depends_on:
+            - task_key: stg_work_payment_match
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "DQ_Payment_Screen"
+        - task_key: fact_load_gl_posting
+          depends_on:
+            - task_key: stg_load_gl_journal
+            - task_key: stg_load_cost_center
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "FACT_Load_GLPosting"
+        - task_key: fact_load_payment
+          depends_on:
+            - task_key: dq_payment_screen
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "FACT_Load_Payment"
+        - task_key: fact_load_supplier_payment
+          depends_on:
+            - task_key: fact_load_payment
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "FACT_Load_SupplierPayment"
