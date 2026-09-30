@@ -1,0 +1,68 @@
+resources:
+  volumes:
+    ssis_ref_calendar_landing:
+      catalog_name: otterorders_migration
+      schema_name: ssis_ref_calendar
+      name: landing
+      volume_type: MANAGED
+      comment: Landing zone for the ING_FILE_FxOverride feed (inbound/archive/quarantine per C:\WWI\Landing).
+
+  jobs:
+    ssis_ref_calendar_reference_load:
+      name: ssis_ref_calendar_reference_load
+      description: >-
+        Databricks-native reimplementation of the 27 ref_calendar SSIS packages (Oracle/SQL extracts,
+        FxOverride file ingest, staging, conformed reference dimensions, Date/UnknownMembers generation,
+        City SCD2) followed by the reconciliation evidence task.
+      max_concurrent_runs: 1
+      timeout_seconds: 10800
+      parameters:
+        - name: git_sha
+          default: ${var.git_sha}
+        - name: fx_window_from
+          default: ""
+        - name: fx_window_to
+          default: ""
+      tasks:
+        - task_key: seed_landing
+          notebook_task:
+            notebook_path: ../notebooks/run_step.py
+            base_parameters: {step: seed_landing}
+        - task_key: extracts
+          depends_on: [{task_key: seed_landing}]
+          notebook_task:
+            notebook_path: ../notebooks/run_step.py
+            base_parameters: {step: extracts}
+        - task_key: fx_override
+          depends_on: [{task_key: extracts}]
+          notebook_task:
+            notebook_path: ../notebooks/run_step.py
+            base_parameters: {step: fx_override}
+        - task_key: reference
+          depends_on: [{task_key: fx_override}]
+          notebook_task:
+            notebook_path: ../notebooks/run_step.py
+            base_parameters: {step: reference}
+        - task_key: staging
+          depends_on: [{task_key: reference}]
+          notebook_task:
+            notebook_path: ../notebooks/run_step.py
+            base_parameters: {step: staging}
+        - task_key: dimensions
+          depends_on: [{task_key: staging}]
+          notebook_task:
+            notebook_path: ../notebooks/run_step.py
+            base_parameters: {step: dimensions}
+        - task_key: city
+          depends_on: [{task_key: dimensions}]
+          notebook_task:
+            notebook_path: ../notebooks/run_step.py
+            base_parameters: {step: city}
+        - task_key: recon
+          depends_on: [{task_key: city}]
+          notebook_task:
+            notebook_path: ../notebooks/run_step.py
+            base_parameters: {step: recon}
+      tags:
+        migration_group: ref_calendar
+        harness: ssis-migration-v1
