@@ -27,7 +27,7 @@ QUARANTINE = "quarantine/treasury"
 def readFeed(spark: SparkSession, path: str) -> DataFrame:
     return (
         spark.read.format("csv").option("header", "true").option("encoding", "windows-1252").option("mode", "PERMISSIVE")
-        .schema(FEED_SCHEMA).load(path).withColumn("source_file_name", F.element_at(F.split(F.input_file_name(), "/"), -1))
+        .schema(FEED_SCHEMA).load(path).withColumn("source_file_name", F.element_at(F.split(F.col("_metadata.file_path"), "/"), -1))
     )
 
 
