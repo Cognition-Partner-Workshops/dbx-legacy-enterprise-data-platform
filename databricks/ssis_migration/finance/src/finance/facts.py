@@ -70,12 +70,15 @@ def unknownCostCenterRow(spark: SparkSession) -> DataFrame:
         cost_center_name="Unknown",
         region_code="UNK",
         is_active=True,
-        valid_from=datetime(1900, 1, 1),
-        valid_to=datetime(9999, 12, 31),
         is_current=True,
         batch_id=0,
     )
-    return spark.createDataFrame([row], DIM_SCHEMA)
+    return spark.createDataFrame([row], DIM_SCHEMA).withColumns(
+        {
+            "valid_from": F.lit("1900-01-01 00:00:00").cast("timestamp"),
+            "valid_to": F.lit(END_OF_TIME).cast("timestamp"),
+        }
+    )
 
 
 def applyScd2(

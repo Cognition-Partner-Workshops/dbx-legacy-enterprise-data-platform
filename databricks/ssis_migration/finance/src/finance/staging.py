@@ -96,7 +96,7 @@ def transformStgInvoices(hdr: DataFrame, supplierDim: DataFrame) -> tuple[DataFr
         .withColumn("paid_amount", F.coalesce(F.col("paid_amt"), F.lit(0.0)).cast("decimal(18,5)"))
         .withColumn(
             "open_amount",
-            F.coalesce(F.col("outstanding_amt"), F.col("invoice_amt") - F.col("paid_amt")).cast(
+            (F.coalesce(F.col("invoice_amt"), F.lit(0.0)) - F.coalesce(F.col("paid_amt"), F.lit(0.0))).cast(
                 "decimal(18,5)"
             ),
         )

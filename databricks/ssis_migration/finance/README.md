@@ -130,6 +130,18 @@ Control tables (all in the landing schema): `etl_watermark` (per-package high-wa
   (`*_rate_missing`) and either fail the package (`fail_on_missing_rate=true`) or leave the converted amount
   null and report it in the control table.
 * Watermarks are stored in `etl_watermark` (Delta) rather than SSISDB environment variables.
+* `silver_ap_invoice.open_amount` follows the legacy `stg.ApInvoice.OpenAmount` computed column
+  (`ISNULL(InvoiceAmount,0) - ISNULL(AmountPaid,0)`), *not* Oracle `BALANCE_AMT`. On the host every
+  `AP_INVOICE_HDR.BALANCE_AMT` / `PAID_AMT` is 0, so using the ERP balance would leave nothing for
+  `STG_Work_PaymentMatch`, `FIN_Load_ApAging` or `FIN_Currency_Revaluation` to work on; the bronze table
+  still carries the raw Oracle balance as `outstanding_amt`.
+* Payment matching pass 1 uses Oracle `AP_PAYMENT_APPLY` rows as the remittance evidence (the legacy proc
+  scans `RemittanceReference` for the invoice number); like the proc it still requires payment and invoice to
+  share a supplier, so applies flagged `supplier_mismatch_flag = 'Y'` on the host (~89% of them) fall
+  through to the EXACT_AMT / RESIDUAL passes.
+* Serverless-compute constraints: no `DataFrame.cache()`/`persist()` (unsupported on serverless) and
+  end-of-time SCD2 timestamps are built as Spark literals (`9999-12-31`) rather than Python `datetime`,
+  which Spark Connect cannot serialise.
 
 ## Evidence / reconciliation
 
