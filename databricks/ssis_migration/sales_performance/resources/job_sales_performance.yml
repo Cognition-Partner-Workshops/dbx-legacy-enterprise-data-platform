@@ -1,0 +1,104 @@
+# One dependency-ordered job covering all 17 packages of the group. Task names carry the SSIS
+# package they reimplement; ``batch_id`` is the job run id so every table row can be traced to a run.
+resources:
+  jobs:
+    ssis_sales_performance_pipeline:
+      name: ssis_sales_performance_pipeline
+      description: SSIS sales_performance group (17 packages) reimplemented on Databricks - partner file ingestion, staging, commissions, quota, promotions, corrections, aggregates, publish and reconciliation evidence.
+      max_concurrent_runs: 1
+      tags:
+        ssis_group: sales_performance
+      parameters:
+        - name: batch_id
+          default: "{{job.run_id}}"
+        - name: git_sha
+          default: ${var.git_sha}
+        - name: landing_root
+          default: /Volumes/${var.catalog}/${var.schema}/landing
+        - name: outbound_dir
+          default: /Volumes/${var.catalog}/${var.schema}/landing/outbound/partner_feed
+        - name: months_back
+          default: "0"
+        - name: force_publish
+          default: "false"
+      tasks:
+        - task_key: ing_file_partner_sales_na
+          description: ING_FILE_PartnerSales_NA
+          notebook_task:
+            notebook_path: ../notebooks/ingest_partner_files.py
+            base_parameters: { region: NA }
+        - task_key: ing_file_partner_sales_eu
+          description: ING_FILE_PartnerSales_EU
+          depends_on: [{ task_key: ing_file_partner_sales_na }]
+          notebook_task:
+            notebook_path: ../notebooks/ingest_partner_files.py
+            base_parameters: { region: EU }
+        - task_key: ing_file_partner_sales_apac
+          description: ING_FILE_PartnerSales_APAC
+          depends_on: [{ task_key: ing_file_partner_sales_eu }]
+          notebook_task:
+            notebook_path: ../notebooks/ingest_partner_files.py
+            base_parameters: { region: APAC }
+        - task_key: stg_load_partner_sale
+          description: STG_Load_PartnerSale
+          depends_on: [{ task_key: ing_file_partner_sales_apac }]
+          notebook_task:
+            notebook_path: ../notebooks/stage_partner_sales.py
+        - task_key: load_silver_and_gold_facts
+          description: silver_sale_line + gold_fact_sale/order/payment from wwi_legacy_dw (shared input of the SLS_/FACT_/AGG_ packages)
+          notebook_task:
+            notebook_path: ../notebooks/load_silver.py
+        - task_key: sls_na_load_commission
+          description: SLS_NA_Load_Commission
+          depends_on: [{ task_key: load_silver_and_gold_facts }]
+          notebook_task:
+            notebook_path: ../notebooks/load_commission.py
+            base_parameters: { region: NA }
+        - task_key: sls_eu_load_commission
+          description: SLS_EU_Load_Commission
+          depends_on: [{ task_key: sls_na_load_commission }]
+          notebook_task:
+            notebook_path: ../notebooks/load_commission.py
+            base_parameters: { region: EU }
+        - task_key: sls_apac_load_commission
+          description: SLS_APAC_Load_Commission
+          depends_on: [{ task_key: sls_eu_load_commission }]
+          notebook_task:
+            notebook_path: ../notebooks/load_commission.py
+            base_parameters: { region: APAC }
+        - task_key: sls_load_promotion_redemption
+          description: SLS_Load_PromotionRedemption
+          depends_on: [{ task_key: load_silver_and_gold_facts }]
+          notebook_task:
+            notebook_path: ../notebooks/load_promotion_redemption.py
+        - task_key: sls_load_quota_attainment
+          description: SLS_Load_QuotaAttainment
+          depends_on: [{ task_key: sls_apac_load_commission }]
+          notebook_task:
+            notebook_path: ../notebooks/load_quota_attainment.py
+        - task_key: fact_apply_corrections
+          description: FACT_Apply_Corrections (month-end)
+          depends_on: [{ task_key: sls_apac_load_commission }]
+          notebook_task:
+            notebook_path: ../notebooks/apply_corrections.py
+        - task_key: sls_export_partner_feed
+          description: SLS_Export_PartnerFeed
+          depends_on: [{ task_key: fact_apply_corrections }]
+          notebook_task:
+            notebook_path: ../notebooks/export_partner_feed.py
+        - task_key: agg_publish_reporting_layer
+          description: AGG_Publish_ReportingLayer (runs AGG_Refresh_MonthlySalesSummary/RegionalSalesPerformance/ProductPerformance/PromotionEffectiveness/MonthlyMarginAnalysis in dependency order, then gates + publishes)
+          depends_on:
+            - { task_key: fact_apply_corrections }
+            - { task_key: sls_load_quota_attainment }
+            - { task_key: sls_load_promotion_redemption }
+          notebook_task:
+            notebook_path: ../notebooks/publish_reporting_layer.py
+        - task_key: recon
+          description: Reconciliation evidence for all 17 packages -> otterorders_migration.evidence.recon_results
+          depends_on:
+            - { task_key: agg_publish_reporting_layer }
+            - { task_key: sls_export_partner_feed }
+            - { task_key: stg_load_partner_sale }
+          notebook_task:
+            notebook_path: ../notebooks/recon.py
