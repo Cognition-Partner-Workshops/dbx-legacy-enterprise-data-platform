@@ -1,0 +1,93 @@
+resources:
+  jobs:
+    ssis_finance_close:
+      name: ssis_finance_close
+      description: Master_Finance_Close - FIN_* close rules; period lock last
+      tags:
+        project: ssis_migration
+        group: finance
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: evidence_schema
+          default: ${var.evidence_schema}
+        - name: accounting_period
+          default: ${var.accounting_period}
+        - name: business_date
+          default: ${var.business_date}
+        - name: git_sha
+          default: ${var.git_sha}
+        - name: allow_unbalanced_journals
+          default: "false"
+        - name: fail_on_missing_rate
+          default: "false"
+        - name: include_disputed
+          default: "false"
+        - name: ledger_scope
+          default: ALL
+
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "3"
+      tasks:
+        - task_key: fin_currency_revaluation
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "FIN_Currency_Revaluation"
+        - task_key: fin_load_gl_postings
+          depends_on:
+            - task_key: fin_currency_revaluation
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "FIN_Load_GlPostings"
+        - task_key: fin_load_ap_aging
+          depends_on:
+            - task_key: fin_currency_revaluation
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "FIN_Load_ApAging"
+        - task_key: fin_load_cost_allocation
+          depends_on:
+            - task_key: fin_load_gl_postings
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "FIN_Load_CostAllocation"
+        - task_key: fin_load_withholding_tax
+          depends_on:
+            - task_key: fin_load_ap_aging
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "FIN_Load_WithholdingTax"
+        - task_key: fin_reconcile_subledger_to_gl
+          depends_on:
+            - task_key: fin_load_cost_allocation
+            - task_key: fin_load_withholding_tax
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "FIN_Reconcile_SubledgerToGl"
+        - task_key: fin_close_period_lock
+          depends_on:
+            - task_key: fin_reconcile_subledger_to_gl
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters:
+              packages: "FIN_Close_PeriodLock"
