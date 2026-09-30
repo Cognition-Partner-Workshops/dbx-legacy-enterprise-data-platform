@@ -109,7 +109,7 @@ def runIngFileFxOverride(spark: SparkSession, batchId: int, volumePath: str = co
         return {"files": 0, "approved": 0, "rejected": 0, "quarantined": []}
     raw = readFeed(spark, [os.path.join(inboundPath, f) for f in files])
     parts = parseFeed(raw, publishedSpotRates(spark))
-    totals = controlTotals(parts["detail"], parts["control"]).cache()
+    totals = controlTotals(parts["detail"], parts["control"])
     reconciled = [r["source_file_name"] for r in totals.where("is_reconciled").collect()]
     quarantined = [f for f in files if f not in reconciled]
     okFiles = F.col("source_file_name").isin(reconciled) if reconciled else F.lit(False)
