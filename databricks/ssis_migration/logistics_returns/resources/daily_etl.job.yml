@@ -1,0 +1,95 @@
+# End-to-end run of the group: the Master_Daily_ETL / Master_Hourly_Incremental / Master_Month_End slices that belong to
+# logistics_returns, wired in the SSISDB dependency order, followed by the reconciliation-evidence task. Serverless compute.
+resources:
+  jobs:
+    ssis_logistics_returns_daily_etl:
+      name: ssis_logistics_returns_daily_etl
+      description: SSIS group logistics_returns (12 packages) -> ${var.catalog}.${var.schema}, plus recon evidence
+      tags:
+        ssis_group: logistics_returns
+      max_concurrent_runs: 1
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: git_sha
+          default: ${var.git_sha}
+        - name: batch_id
+          default: ""
+        - name: reload_full_history
+          default: "false"
+        - name: seed_from_legacy_raw
+          default: "true"
+      tasks:
+        - task_key: stage_landing_files
+          notebook_task:
+            notebook_path: ../notebooks/stage_landing_files.py
+        - task_key: ING_FILE_CarrierScan
+          depends_on: [{task_key: stage_landing_files}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: ING_FILE_CarrierScan}
+        - task_key: EXT_SQL_Shipments
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: EXT_SQL_Shipments}
+        - task_key: EXT_SQL_ShipmentLines
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: EXT_SQL_ShipmentLines}
+        - task_key: EXT_SQL_Returns
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: EXT_SQL_Returns}
+        - task_key: EXT_SQL_CreditNotes
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: EXT_SQL_CreditNotes}
+        - task_key: STG_Load_Shipment
+          depends_on:
+            - task_key: EXT_SQL_Shipments
+            - task_key: EXT_SQL_ShipmentLines
+            - task_key: ING_FILE_CarrierScan
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: STG_Load_Shipment}
+        - task_key: STG_Load_ReturnAndCredit
+          depends_on:
+            - task_key: EXT_SQL_Returns
+            - task_key: EXT_SQL_CreditNotes
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: STG_Load_ReturnAndCredit}
+        - task_key: FACT_Load_Shipment
+          depends_on: [{task_key: STG_Load_Shipment}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: FACT_Load_Shipment}
+        - task_key: FACT_Load_OrderFulfilment
+          depends_on: [{task_key: FACT_Load_Shipment}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: FACT_Load_OrderFulfilment}
+        - task_key: FACT_Load_Return
+          depends_on: [{task_key: STG_Load_ReturnAndCredit}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: FACT_Load_Return}
+        - task_key: FACT_Load_CreditNote
+          depends_on: [{task_key: FACT_Load_Return}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: FACT_Load_CreditNote}
+        - task_key: AGG_Refresh_DeliveryPerformanceSummary
+          depends_on: [{task_key: FACT_Load_Shipment}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: AGG_Refresh_DeliveryPerformanceSummary}
+        - task_key: recon
+          depends_on:
+            - task_key: FACT_Load_OrderFulfilment
+            - task_key: FACT_Load_CreditNote
+            - task_key: AGG_Refresh_DeliveryPerformanceSummary
+          notebook_task:
+            notebook_path: ../notebooks/recon.py
