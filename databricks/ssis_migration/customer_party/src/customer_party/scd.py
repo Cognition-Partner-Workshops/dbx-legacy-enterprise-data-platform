@@ -69,6 +69,13 @@ def reservedMembers(spark: SparkSession, schema: StructType, spec: ScdSpec, name
     )
 
 
+def conformTypes(df: DataFrame, reference: DataFrame) -> DataFrame:
+    """Cast the columns `df` shares with `reference` to the reference types, so the persisted
+    dimension keeps the schema the candidate builder declares rather than the one an earlier run wrote."""
+    referenceTypes = {f.name: f.dataType for f in reference.schema.fields}
+    return df.select(*[F.col(c).cast(referenceTypes[c]).alias(c) if c in referenceTypes else F.col(c) for c in df.columns])
+
+
 def applyScd2(existing: DataFrame | None, incoming: DataFrame, spec: ScdSpec, effectiveTs: Column) -> DataFrame:
     """Return the complete new content of an SCD2 dimension.
 
@@ -123,7 +130,7 @@ def applyScd2(existing: DataFrame | None, incoming: DataFrame, spec: ScdSpec, ef
         .withColumn(spec.isCurrentCol, F.when(F.col("_cbk").isNotNull(), F.lit(False)).otherwise(F.col(spec.isCurrentCol)))
         .drop("_cbk", "_new_from")
     )
-    return closed.unionByName(versioned, allowMissingColumns=True)
+    return conformTypes(closed, versioned).unionByName(versioned, allowMissingColumns=True)
 
 
 def applyScd1(existing: DataFrame | None, incoming: DataFrame, spec: ScdSpec) -> DataFrame:

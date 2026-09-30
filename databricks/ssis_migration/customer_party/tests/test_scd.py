@@ -65,3 +65,14 @@ def test_scd1_overwrites_in_place(spark):
     assert rows["T1"].customer_name == "North East" and rows["T1"].customer_key == 1
     assert rows["T2"].customer_key == 2
     assert second.count() == 2
+
+
+def test_scd2_keeps_incoming_column_types_over_existing_table_types(spark):
+    first = applyScd2(None, _incoming(spark, [("ORA:1", "Alpha", "US")]), SPEC, F.lit(T1).cast("timestamp"))
+    widened = first.withColumn("credit_limit_usd", F.lit(1500.0).cast("double"))
+    incoming = _incoming(spark, [("ORA:1", "Alpha", "US"), ("ORA:2", "Beta", "DE")]).withColumn(
+        "credit_limit_usd", F.lit(2000).cast("decimal(18,2)")
+    )
+    second = applyScd2(widened, incoming, SPEC, F.lit(T2).cast("timestamp"))
+    assert dict(second.dtypes)["credit_limit_usd"] == "decimal(18,2)"
+    assert {r.customer_business_key: str(r.credit_limit_usd) for r in second.collect()} == {"ORA:1": "1500.00", "ORA:2": "2000.00"}
