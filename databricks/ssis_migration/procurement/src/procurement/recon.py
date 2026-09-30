@@ -173,6 +173,15 @@ def tbl(name):
     return lambda spark: spark.table(qualified(name))
 
 
+def latestRejects(spark, packageName):
+    """Rejects written by the most recent execution of a truncate/reload package (earlier batches are superseded)."""
+    latestBatch = (
+        spark.table(qualified(io.RUN_LOG_TABLE)).where(F.col("package_name") == packageName)
+        .orderBy(F.col("logged_at").desc()).select("batch_id").limit(1)
+    )
+    return spark.table(qualified(io.REJECT_TABLE)).where(F.col("package_name") == packageName).join(latestBatch, "batch_id", "inner")
+
+
 def catalogFilesExpected(spark):
     """Independent re-parse of the landed files: DTL rows of Processed files minus rejected rows."""
     raw = spark.read.text(f"{volumePath(LANDING_VOLUME)}/{FEED_SUBDIR}/*.psv").select(
@@ -181,14 +190,14 @@ def catalogFilesExpected(spark):
     parts = F.split(F.col("value"), "\\|")
     lineKey = ["source_file_name", "supplier_code", "supplier_item_code", "list_price", "net_price"]
     dtl = raw.where(parts[0] == "DTL").select(
-        "source_file_name", parts[1].alias("supplier_code"), F.nullif(parts[2], F.lit("")).alias("supplier_item_code"),
+        "source_file_name", parts[1].alias("supplier_code"), F.coalesce(parts[2], F.lit("")).alias("supplier_item_code"),
         parts[7].cast("decimal(19,4)").alias("list_price"), parts[8].cast("decimal(19,4)").alias("net_price"),
     )
     processed = spark.table(qualified("ctl_landing_file")).where("file_status = 'Processed'").select("source_file_name").distinct()
     rejectTable = qualified(REJECTED_FILE_ROW)
     rejected = (
         spark.table(rejectTable).select(
-            "source_file_name", F.col("SupplierCode").alias("supplier_code"), F.nullif(F.col("SupplierItemCode"), F.lit("")).alias("supplier_item_code"),
+            "source_file_name", F.col("SupplierCode").alias("supplier_code"), F.coalesce(F.col("SupplierItemCode"), F.lit("")).alias("supplier_item_code"),
             F.col("ListPriceText").cast("decimal(19,4)").alias("list_price"), F.col("NetPriceText").cast("decimal(19,4)").alias("net_price"))
         if io.tableExists(spark, rejectTable)
         else spark.createDataFrame([], "source_file_name string, supplier_code string, supplier_item_code string, list_price decimal(19,4), net_price decimal(19,4)")
@@ -289,7 +298,7 @@ def buildSpecs() -> List[ReconSpec]:
             "STG_Load_VendorContract", "WideWorldImporters_Staging.stg.VendorContract", SILVER_VENDOR_CONTRACT,
             {"contract_business_key": "long", "contract_number": "string"},
             lambda spark: spark.table(qualified(BRONZE_VENDOR_CONTRACT)).select(F.col("contract_id").alias("contract_business_key"), F.upper(F.trim(F.col("contract_nbr"))).alias("contract_number"))
-            .join(spark.table(qualified("err_rejected_row")).where("package_name = 'STG_Load_VendorContract'").select(F.col("business_key").alias("contract_number")), "contract_number", "left_anti"),
+            .join(latestRejects(spark, "STG_Load_VendorContract").select(F.col("business_key").alias("contract_number")), "contract_number", "left_anti"),
             tbl(SILVER_VENDOR_CONTRACT), False,
             src + "bronze contracts minus the rows rejected to err_rejected_row (err.RejectedLookup: inverted dates / unknown supplier / missing FX); legacy stg.VendorContract empty.",
             legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) AS n FROM stg.VendorContract"),
@@ -298,7 +307,7 @@ def buildSpecs() -> List[ReconSpec]:
             "DQ_Supplier_Screen", "WideWorldImporters_Staging.err.RejectedSupplier", DQ_RESULT_TABLE,
             {"supplier_business_key": "string"},
             lambda spark: spark.table(qualified(SILVER_SUPPLIER)).where("is_survivor_row").select("supplier_business_key")
-            .join(spark.table(qualified("err_rejected_row")).where("package_name = 'DQ_Supplier_Screen'").select(F.col("business_key").alias("supplier_business_key")), "supplier_business_key", "left_anti"),
+            .join(latestRejects(spark, "DQ_Supplier_Screen").select(F.col("business_key").alias("supplier_business_key")), "supplier_business_key", "left_anti"),
             lambda spark: spark.table(qualified(DQ_RESULT_TABLE)).select("supplier_business_key").distinct(), False,
             src + "screened suppliers = survivors minus rows rejected to err_rejected_row(err.RejectedSupplier); legacy err.RejectedSupplier empty.",
             legacyCountSql(LEGACY_STG_DB, "SELECT COUNT(*) AS n FROM err.RejectedSupplier"),
