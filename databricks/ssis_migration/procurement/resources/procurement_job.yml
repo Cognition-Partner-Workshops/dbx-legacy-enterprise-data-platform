@@ -1,0 +1,55 @@
+resources:
+  jobs:
+    ssis_procurement_daily:
+      name: ssis_procurement_daily
+      description: >-
+        Databricks-native replacement for the 22 procurement / procure-to-pay SSIS packages
+        (Master_Daily_ETL + Master_Month_End AGG_Refresh_SupplierPerformance) plus the reconciliation
+        evidence writer. Tasks run in SSIS precedence order on serverless compute; the job run id is
+        the SSIS batch id shared by every package.
+      max_concurrent_runs: 1
+      timeout_seconds: 10800
+      tags:
+        ssis_group: procurement
+        harness: ssis-migration-v1
+      parameters:
+        - name: git_sha
+          default: ${var.git_sha}
+      environments:
+        - environment_key: default
+          spec:
+            client: "2"
+      tasks:
+        - task_key: setup_landing
+          notebook_task:
+            notebook_path: ../notebooks/setup_landing.py
+        - task_key: extract
+          depends_on: [{ task_key: setup_landing }]
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters: { packages: extract, batch_id: "{{job.run_id}}" }
+        - task_key: stage
+          depends_on: [{ task_key: extract }]
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters: { packages: stage, batch_id: "{{job.run_id}}" }
+        - task_key: dimension
+          depends_on: [{ task_key: stage }]
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters: { packages: dimension, batch_id: "{{job.run_id}}" }
+        - task_key: fact
+          depends_on: [{ task_key: dimension }]
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters: { packages: fact, batch_id: "{{job.run_id}}" }
+        - task_key: mart
+          depends_on: [{ task_key: fact }]
+          notebook_task:
+            notebook_path: ../notebooks/run_packages.py
+            base_parameters: { packages: mart, batch_id: "{{job.run_id}}" }
+        - task_key: recon
+          depends_on: [{ task_key: mart }]
+          notebook_task:
+            notebook_path: ../notebooks/recon.py
+            base_parameters: { git_sha: "{{job.parameters.git_sha}}" }
