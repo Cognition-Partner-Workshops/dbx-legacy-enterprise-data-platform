@@ -1,0 +1,134 @@
+# One job = the sales_o2c slice of Master_Daily_ETL. Task names are the SSIS package
+# names; edges follow docs/inventories/package-dependencies.csv and ssis/orchestration-plan.json.
+resources:
+  jobs:
+    ssis_sales_o2c_daily_etl:
+      name: ssis_sales_o2c_daily_etl
+      description: SSIS sales order-to-cash group (18 packages) migrated to Databricks; serverless.
+      max_concurrent_runs: 1
+      tags:
+        ssis_group: sales_o2c
+        harness: ssis-migration-v1
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: evidence_schema
+          default: ${var.evidence_schema}
+        - name: git_sha
+          default: ${var.git_sha}
+        - name: reload_full_history
+          default: ${var.reload_full_history}
+        - name: batch_id
+          default: "{{job.run_id}}"
+        - name: snapshot_date
+          default: ""
+        - name: agg_from_date
+          default: ""
+        - name: agg_to_date
+          default: ""
+      environments:
+        - environment_key: serverless
+          spec:
+            client: "3"
+      tasks:
+        # ---- 02_sqlserver_extract -------------------------------------------------
+        - task_key: EXT_SQL_Orders
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: EXT_SQL_Orders, task_run_id: "{{task.run_id}}"}
+        - task_key: EXT_SQL_OrderLines
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: EXT_SQL_OrderLines, task_run_id: "{{task.run_id}}"}
+        - task_key: EXT_SQL_Invoices
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: EXT_SQL_Invoices, task_run_id: "{{task.run_id}}"}
+        - task_key: EXT_SQL_InvoiceLines
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: EXT_SQL_InvoiceLines, task_run_id: "{{task.run_id}}"}
+        - task_key: EXT_SQL_CustomerTransactions
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: EXT_SQL_CustomerTransactions, task_run_id: "{{task.run_id}}"}
+        # ---- 04_staging -----------------------------------------------------------
+        - task_key: STG_Load_Order
+          depends_on: [{task_key: EXT_SQL_Orders}, {task_key: EXT_SQL_OrderLines}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: STG_Load_Order, task_run_id: "{{task.run_id}}"}
+        - task_key: STG_Load_Sale
+          depends_on: [{task_key: EXT_SQL_Invoices}, {task_key: EXT_SQL_InvoiceLines}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: STG_Load_Sale, task_run_id: "{{task.run_id}}"}
+        # ---- 05_data_quality ------------------------------------------------------
+        - task_key: DQ_OrderLine_Screen
+          depends_on: [{task_key: STG_Load_Order}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: DQ_OrderLine_Screen, task_run_id: "{{task.run_id}}"}
+        - task_key: DQ_InvoiceLine_Screen
+          depends_on: [{task_key: STG_Load_Sale}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: DQ_InvoiceLine_Screen, task_run_id: "{{task.run_id}}"}
+        # ---- 08_facts: Fact.Sale (regional) + dedup --------------------------------
+        - task_key: FACT_NA_Load_Sale
+          depends_on: [{task_key: DQ_InvoiceLine_Screen}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: FACT_NA_Load_Sale, task_run_id: "{{task.run_id}}"}
+        - task_key: FACT_EU_Load_Sale
+          depends_on: [{task_key: FACT_NA_Load_Sale}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: FACT_EU_Load_Sale, task_run_id: "{{task.run_id}}"}
+        - task_key: FACT_APAC_Load_Sale
+          depends_on: [{task_key: FACT_EU_Load_Sale}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: FACT_APAC_Load_Sale, task_run_id: "{{task.run_id}}"}
+        - task_key: FACT_Dedup_Sale
+          depends_on: [{task_key: FACT_APAC_Load_Sale}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: FACT_Dedup_Sale, task_run_id: "{{task.run_id}}"}
+        # ---- 08_facts: order / AR / ledger -----------------------------------------
+        - task_key: FACT_Load_Order
+          depends_on: [{task_key: DQ_OrderLine_Screen}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: FACT_Load_Order, task_run_id: "{{task.run_id}}"}
+        - task_key: FACT_Load_CustomerTransaction
+          depends_on: [{task_key: EXT_SQL_CustomerTransactions}, {task_key: STG_Load_Sale}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: FACT_Load_CustomerTransaction, task_run_id: "{{task.run_id}}"}
+        - task_key: FACT_Load_Transaction
+          depends_on: [{task_key: FACT_Load_CustomerTransaction}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: FACT_Load_Transaction, task_run_id: "{{task.run_id}}"}
+        # ---- 08_facts snapshot + 09_aggregates -------------------------------------
+        - task_key: FACT_Load_DailySalesSnapshot
+          depends_on: [{task_key: FACT_Dedup_Sale}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: FACT_Load_DailySalesSnapshot, task_run_id: "{{task.run_id}}"}
+        - task_key: AGG_Refresh_DailySalesSummary
+          depends_on: [{task_key: FACT_Load_DailySalesSnapshot}]
+          notebook_task:
+            notebook_path: ../notebooks/run_package.py
+            base_parameters: {package: AGG_Refresh_DailySalesSummary, task_run_id: "{{task.run_id}}"}
+        # ---- reconciliation evidence (re-runnable) ---------------------------------
+        - task_key: recon
+          depends_on:
+            - {task_key: AGG_Refresh_DailySalesSummary}
+            - {task_key: FACT_Load_Order}
+            - {task_key: FACT_Load_Transaction}
+          notebook_task:
+            notebook_path: ../notebooks/recon.py
