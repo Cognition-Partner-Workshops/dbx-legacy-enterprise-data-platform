@@ -28,8 +28,14 @@ def snakeCaseColumns(df: DataFrame) -> DataFrame:
     return df.toDF(*[c.lower() for c in df.columns])
 
 
+def stripCharTypes(df: DataFrame) -> DataFrame:
+    """Federated char(n)/varchar(n) columns keep their length constraint in the Delta schema; land plain strings."""
+    return df.select(*[F.col(f.name).cast("string").alias(f.name) if isinstance(f.dataType, T.StringType) else F.col(f.name) for f in df.schema.fields])
+
+
 def writeTable(df: DataFrame, tableName: str, mode: str = "overwrite", replaceWhere: str | None = None) -> None:
     """Delta write with schema evolution; `replaceWhere` implements the legacy DELETE-then-INSERT idiom."""
+    df = stripCharTypes(df)
     writer = df.write.format("delta").mode(mode)
     if replaceWhere:
         writer = writer.option("replaceWhere", replaceWhere)
