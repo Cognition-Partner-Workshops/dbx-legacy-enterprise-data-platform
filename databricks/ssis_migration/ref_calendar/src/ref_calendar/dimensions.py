@@ -90,6 +90,7 @@ def buildDimTransactionType(bronze: DataFrame, crosswalk: DataFrame) -> DataFram
         F.upper(name).alias("source_code"),
     )
     df = translateCode(df, crosswalk, "TRANSACTION_TYPE", config.SOURCE_SYSTEM_OLTP, "source_code", None, "transaction_type_code")
+    name = F.col("transaction_type")
     isCustomer, isSupplier, isStock = name.like("Customer%"), name.like("Supplier%"), name.like("Stock%")
     return df.select(
         "wwi_transaction_type_id", "transaction_type", "valid_from", "valid_to", "is_history", "transaction_type_code",
