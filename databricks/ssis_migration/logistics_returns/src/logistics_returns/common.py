@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from pyspark.errors import AnalysisException
 from pyspark.sql import Column, DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
@@ -40,8 +41,14 @@ def overwriteTable(df: DataFrame, qualifiedName: str) -> None:
 
 
 def ensureTable(spark: SparkSession, qualifiedName: str, schema: T.StructType) -> None:
-    if not tableExists(spark, qualifiedName):
+    """Create an empty Delta table if missing; tolerant of parallel tasks racing to create the same control table."""
+    if tableExists(spark, qualifiedName):
+        return
+    try:
         spark.createDataFrame([], schema).write.format("delta").saveAsTable(qualifiedName)
+    except AnalysisException as error:
+        if "ALREADY_EXISTS" not in str(error):
+            raise
 
 
 def readTableOrEmpty(spark: SparkSession, qualifiedName: str, schema: T.StructType) -> DataFrame:

@@ -332,7 +332,6 @@ def runFactLoadShipment(ctx: RunContext) -> FactResult:
         )
     else:
         snapshot = incoming
-    snapshot = snapshot.cache()
     total = snapshot.count()
     overwriteTable(snapshot, target)
     inserted = max(total - existingCount, 0)
@@ -625,7 +624,6 @@ def runFactLoadOrderFulfilment(ctx: RunContext, seedFromFactOrder: bool = True, 
         snapshot = mergeOrderFulfilmentSnapshot(existing, incoming, reopenClosed=reopenClosed)
     else:
         snapshot = incoming
-    snapshot = snapshot.cache()
     total = snapshot.count()
     overwriteTable(snapshot, target)
     inserted = max(total - existingCount, 0)
@@ -794,7 +792,6 @@ def runFactLoadReturn(ctx: RunContext) -> FactResult:
     rows = _load(ctx, rows).withColumn(
         "natural_key_hash", rowHash(F.col("rma_number"), F.col("rma_line_number"), F.lit(SOURCE_SYSTEM_OLTP))
     )
-    rows = rows.cache()
     inserted = rows.count()
 
     if inserted:
@@ -979,7 +976,6 @@ def runFactLoadCreditNote(ctx: RunContext, approvalThreshold: float = CREDIT_APP
         spark, ctx.table(Tables.goldFactReturn), T.StructType([T.StructField("credit_note_number", T.StringType())])
     )
     toLoad, duplicates, linked, held = splitCreditNotes(rows, existing, returns, approvalThreshold)
-    toLoad = toLoad.cache()
     inserted = toLoad.count()
 
     helperColumns = {

@@ -257,7 +257,7 @@ def runAggRefreshDeliveryPerformance(ctx: RunContext, weeksToRefresh: int = DEFA
     fromDate = refreshWindowStart(ctx.startedAtUtc.date(), weeksToRefresh, ctx.reloadFullHistory)
     rowsRead = fact.where(F.col("despatch_date_key") >= F.lit(fromDate).cast("date")).count() if fromDate else fact.count()
 
-    incoming = buildWeeklyDeliveryPerformance(fact, fromDate, ctx.batchId).cache()
+    incoming = buildWeeklyDeliveryPerformance(fact, fromDate, ctx.batchId)
     aggregated = incoming.count()
     deleted = 0
     if tableExists(spark, target) and fromDate is not None:

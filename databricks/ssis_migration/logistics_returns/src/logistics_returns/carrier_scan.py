@@ -212,7 +212,7 @@ def readCarrierFile(spark: SparkSession, filePath: str) -> DataFrame:
 def ingestFile(ctx: RunContext, filePath: str, sidecarText: str | None) -> FileResult:
     spark = ctx.spark
     fileName = os.path.basename(filePath)
-    parsed = parseScanEvent(readCarrierFile(spark, filePath)).cache()
+    parsed = parseScanEvent(readCarrierFile(spark, filePath))
     valid = parsed.where(validScanRow())
     rejected = parsed.where(~validScanRow())
 
