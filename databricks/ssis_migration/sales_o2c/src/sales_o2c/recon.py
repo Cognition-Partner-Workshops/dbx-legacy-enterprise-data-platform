@@ -280,7 +280,8 @@ def reconSnapshot(spark, ctx):
     src = (
         _legacySale(spark).filter(F.col("`Invoice Date Key`").between(F.lit(lo), F.lit(hi)))
         .groupBy(F.col("`Invoice Date Key`").alias("dk"), F.col("`Salesperson Key`").alias("sk"))
-        .agg(F.count("*").alias("lines"), F.sum("`Total Excluding Tax`").alias("net"), F.countDistinct("`WWI Invoice ID`").alias("inv"))
+        .agg(F.count("*").alias("lines"), F.sum("`Total Excluding Tax`").alias("net"), F.countDistinct("`WWI Invoice ID`").alias("inv"), F.sum("Profit").alias("margin"))
+        .filter((F.col("margin") >= 0) & (F.col("net") != 0))  # the package rejects NEGATIVE_MARGIN / ZERO_VALUE cells
     )
     tgtAgg = tgt.groupBy(F.col("snapshot_date_key").alias("dk"), F.col("salesperson_key").alias("sk")).agg(F.sum("line_count").alias("lines"), F.sum("net_sales_amount").alias("net"), F.sum("invoice_count").alias("inv"))
     exprs = [dt("dk"), i("sk"), i("lines"), d2("net"), i("inv")]

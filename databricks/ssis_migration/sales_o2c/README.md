@@ -16,24 +16,24 @@ All packages run through `notebooks/run_package.py` → `src/sales_o2c/packages.
 
 | Package | Load type | Source (legacy) | Target (Delta, `otterorders_migration.ssis_sales_o2c.`) | Module | Verdict |
 |---|---|---|---|---|---|
-| `EXT_SQL_Orders` | incremental_key (OrderID watermark) | `Sales.Orders` (+ Customers/SalesTerritories/SalesChannels/OrderLines pick summary) | `raw_sql_order` | `extract.py` | VERDICT_EXT_SQL_Orders |
-| `EXT_SQL_OrderLines` | incremental_key | `Sales.vw_OrderLineExtract` | `raw_sql_order_line` | `extract.py` | VERDICT_EXT_SQL_OrderLines |
-| `EXT_SQL_Invoices` | incremental_key | `Sales.vw_InvoiceExtract` | `raw_sql_invoice` | `extract.py` | VERDICT_EXT_SQL_Invoices |
-| `EXT_SQL_InvoiceLines` | incremental_key | `Sales.InvoiceLines` (+ StockItems/PackageTypes/holdings) | `raw_sql_invoice_line` | `extract.py` | VERDICT_EXT_SQL_InvoiceLines |
-| `EXT_SQL_CustomerTransactions` | incremental_key | `Sales.CustomerTransactions` (+ TransactionTypes/PaymentMethods) | `raw_sql_customer_transaction` (inventory says `raw.SqlInvoice`, see deviations) | `extract.py` | VERDICT_EXT_SQL_CustomerTransactions |
-| `STG_Load_Order` | incremental_append (timestamp watermark, MERGE) | `raw_sql_order`, `raw_sql_order_line` | `stg_order`, `stg_order_line`, `err_rejected_order_line`, `work_late_arriving_dimension_queue` | `staging.py` | VERDICT_STG_Load_Order |
-| `STG_Load_Sale` | incremental_append | `raw_sql_invoice`, `raw_sql_invoice_line` | `stg_sale`, `stg_sale_line`, `err_rejected_invoice_line` | `staging.py` | VERDICT_STG_Load_Sale |
-| `DQ_OrderLine_Screen` | quality_screen | `stg_order_line` | `err_rejected_order_line` (+ `dq_status_code` stamp, `etl_data_quality_result`) | `dq.py` | VERDICT_DQ_OrderLine_Screen |
-| `DQ_InvoiceLine_Screen` | quality_screen | `stg_sale_line` | `err_rejected_invoice_line` (+ stamp, `etl_data_quality_result`) | `dq.py` | VERDICT_DQ_InvoiceLine_Screen |
-| `FACT_NA_Load_Sale` | incremental_fact (region = NA, sales tax, USD) | `stg_sale_line` + `Dimension.*` | `gold_fact_sale`, `work_sale_line_enriched`, `err_rejected_lookup_failure` | `fact_sale.py` | VERDICT_FACT_NA_Load_Sale |
-| `FACT_EU_Load_Sale` | incremental_fact (region = EU, VAT / reverse charge, EUR) | `stg_sale_line` + `Dimension.*` | `gold_fact_sale` | `fact_sale.py` | VERDICT_FACT_EU_Load_Sale |
-| `FACT_APAC_Load_Sale` | incremental_fact (region = APAC, GST, AUD, July FY, 2.5 % rebate) | `stg_sale_line` + `Dimension.*` | `gold_fact_sale` | `fact_sale.py` | VERDICT_FACT_APAC_Load_Sale |
-| `FACT_Dedup_Sale` | dedup (natural key, survivor = latest lineage then highest key) | `gold_fact_sale` | `gold_fact_sale`, `work_fact_sale_duplicate_archive` | `fact_sale.py` | VERDICT_FACT_Dedup_Sale |
-| `FACT_Load_Order` | incremental_fact (order-line grain, hold-and-retry) | `stg_order` + `stg_order_line` + `Dimension.*` | `gold_fact_order`, `work_order_line_enriched`, `work_late_arriving_dimension_queue`, `err_rejected_order_line` | `fact_order.py` | VERDICT_FACT_Load_Order |
-| `FACT_Load_CustomerTransaction` | incremental_fact | `raw_sql_customer_transaction` → `stg_customer_transaction` | `gold_fact_customer_transaction`, `err_rejected_lookup_failure` | `fact_transaction.py` | VERDICT_FACT_Load_CustomerTransaction |
-| `FACT_Load_Transaction` | incremental_fact (AR + AP sub-ledgers) | `stg_customer_transaction` + `Purchasing.SupplierTransactions` → `stg_transaction` | `gold_fact_transaction`, `err_rejected_constraint_violation` | `fact_transaction.py` | VERDICT_FACT_Load_Transaction |
-| `FACT_Load_DailySalesSnapshot` | snapshot_fact (delete window + rebuild) | `gold_fact_sale` + `Dimension.Date` | `gold_fact_daily_sales_snapshot`, `err_rejected_snapshot_row` | `snapshot_agg.py` | VERDICT_FACT_Load_DailySalesSnapshot |
-| `AGG_Refresh_DailySalesSummary` | aggregate_rebuild (window rebuild) | `gold_fact_sale` + `Dimension.Date` | `gold_agg_daily_sales_summary`, `err_rejected_summary_cell`, `etl_loss_making_day` | `snapshot_agg.py` | VERDICT_AGG_Refresh_DailySalesSummary |
+| `EXT_SQL_Orders` | incremental_key (OrderID watermark) | `Sales.Orders` (+ Customers/SalesTerritories/SalesChannels/OrderLines pick summary) | `raw_sql_order` | `extract.py` | PARTIAL |
+| `EXT_SQL_OrderLines` | incremental_key | `Sales.vw_OrderLineExtract` | `raw_sql_order_line` | `extract.py` | PARTIAL |
+| `EXT_SQL_Invoices` | incremental_key | `Sales.vw_InvoiceExtract` | `raw_sql_invoice` | `extract.py` | PARTIAL |
+| `EXT_SQL_InvoiceLines` | incremental_key | `Sales.InvoiceLines` (+ StockItems/PackageTypes/holdings) | `raw_sql_invoice_line` | `extract.py` | PARTIAL |
+| `EXT_SQL_CustomerTransactions` | incremental_key | `Sales.CustomerTransactions` (+ TransactionTypes/PaymentMethods) | `raw_sql_customer_transaction` (inventory says `raw.SqlInvoice`, see deviations) | `extract.py` | PARTIAL |
+| `STG_Load_Order` | incremental_append (timestamp watermark, MERGE) | `raw_sql_order`, `raw_sql_order_line` | `stg_order`, `stg_order_line`, `err_rejected_order_line`, `work_late_arriving_dimension_queue` | `staging.py` | PARTIAL |
+| `STG_Load_Sale` | incremental_append | `raw_sql_invoice`, `raw_sql_invoice_line` | `stg_sale`, `stg_sale_line`, `err_rejected_invoice_line` | `staging.py` | PARTIAL |
+| `DQ_OrderLine_Screen` | quality_screen | `stg_order_line` | `err_rejected_order_line` (+ `dq_status_code` stamp, `etl_data_quality_result`) | `dq.py` | PARTIAL |
+| `DQ_InvoiceLine_Screen` | quality_screen | `stg_sale_line` | `err_rejected_invoice_line` (+ stamp, `etl_data_quality_result`) | `dq.py` | PARTIAL |
+| `FACT_NA_Load_Sale` | incremental_fact (region = NA, sales tax, USD) | `stg_sale_line` + `Dimension.*` | `gold_fact_sale`, `work_sale_line_enriched`, `err_rejected_lookup_failure` | `fact_sale.py` | PASS |
+| `FACT_EU_Load_Sale` | incremental_fact (region = EU, VAT / reverse charge, EUR) | `stg_sale_line` + `Dimension.*` | `gold_fact_sale` | `fact_sale.py` | PARTIAL |
+| `FACT_APAC_Load_Sale` | incremental_fact (region = APAC, GST, AUD, July FY, 2.5 % rebate) | `stg_sale_line` + `Dimension.*` | `gold_fact_sale` | `fact_sale.py` | PARTIAL |
+| `FACT_Dedup_Sale` | dedup (natural key, survivor = latest lineage then highest key) | `gold_fact_sale` | `gold_fact_sale`, `work_fact_sale_duplicate_archive` | `fact_sale.py` | PASS |
+| `FACT_Load_Order` | incremental_fact (order-line grain, hold-and-retry) | `stg_order` + `stg_order_line` + `Dimension.*` | `gold_fact_order`, `work_order_line_enriched`, `work_late_arriving_dimension_queue`, `err_rejected_order_line` | `fact_order.py` | PASS |
+| `FACT_Load_CustomerTransaction` | incremental_fact | `raw_sql_customer_transaction` → `stg_customer_transaction` | `gold_fact_customer_transaction`, `err_rejected_lookup_failure` | `fact_transaction.py` | PARTIAL |
+| `FACT_Load_Transaction` | incremental_fact (AR + AP sub-ledgers) | `stg_customer_transaction` + `Purchasing.SupplierTransactions` → `stg_transaction` | `gold_fact_transaction`, `err_rejected_constraint_violation` | `fact_transaction.py` | PASS |
+| `FACT_Load_DailySalesSnapshot` | snapshot_fact (delete window + rebuild) | `gold_fact_sale` + `Dimension.Date` | `gold_fact_daily_sales_snapshot`, `err_rejected_snapshot_row` | `snapshot_agg.py` | PARTIAL |
+| `AGG_Refresh_DailySalesSummary` | aggregate_rebuild (window rebuild) | `gold_fact_sale` + `Dimension.Date` | `gold_agg_daily_sales_summary`, `err_rejected_summary_cell`, `etl_loss_making_day` | `snapshot_agg.py` | PARTIAL |
 
 Control tables (all in the landing schema): `etl_watermark` (`etl.usp_Get/SetWatermark`), `etl_package_execution`
 (`etl.usp_LogPackageStart/End`), `etl_data_quality_result`.
@@ -83,6 +83,14 @@ Deploy/run: `databricks bundle validate --strict -t dev && databricks bundle dep
 
 ## Deliberate deviations from the SSIS packages
 
+* **Hold-and-retry on a full-history reload**: `FACT_Load_Order` parks order lines whose customer/stock item is unresolved in
+  `work_order_line_enriched` for up to 3 runs (SSIS behaviour). On `reload_full_history=true` there is no later run to retry into, so the
+  retry budget is treated as exhausted and the 85,469 lines whose customer is absent from `Dimension.Customer` load with the unknown member
+  (`customer_key = 0`) at once - which is exactly what the populated legacy `Fact.Order` contains. Incremental runs keep the 3-retry hold.
+* **Duplicate SCD2 versions in the legacy dimensions**: `Dimension.City` / `Dimension.Employee` carry two rows with identical
+  `[Valid From, Valid To)` for one business key. The SSIS lookup (cached, first match) resolved the lowest surrogate key; `asOfLookup`
+  orders by `valid_from, dim_key` to reproduce that instead of picking an arbitrary duplicate.
+
 | # | SSIS behaviour | Databricks behaviour | Why |
 |---|---|---|---|
 | 1 | `EXT_SQL_CustomerTransactions` is inventoried (and its DTSX destination is declared) as `raw.SqlInvoice`. | Lands in `raw_sql_customer_transaction`; `stg_customer_transaction` is conformed from it. | Generator defect: the legacy `stg.usp_ConformCustomerTransactionForFact` had to synthesise AR rows from `stg.Sale` because the real rows were never landed. The evidence row keeps `source_object = WideWorldImporters_Staging.raw.SqlInvoice` and explains this. |
@@ -93,6 +101,17 @@ Deploy/run: `databricks bundle validate --strict -t dev && databricks bundle dep
 | 6 | AP side of `FACT_Load_Transaction` comes from the Purchasing extract (another group). | Read `wwi_legacy_oltp.Purchasing.SupplierTransactions` directly. | Cross-group dependency — read the legacy source rather than a sibling schema. |
 | 7 | Legacy raw tables store every column as `nvarchar` and hold a 3 000-row synthetic sample (`OrderID 60000–62999`, `OrderLineID 1–999` repeated). | Typed Delta columns; full OLTP extract. | The legacy sample is not an extract of the OLTP, so EXT_* recon compares against the OLTP source (`source_derived`) and reports the legacy count as an informational check. |
 | 8 | `Fact.Sale` `Bill To Customer Key` / `Total Dry Items` are SSIS lookups on `stg.Sale` header columns. | Same derivation (`Invoices.BillToCustomerID`, `Invoices.TotalDryItems`), read from the header row. | Verified column-by-column against the populated `Fact.Sale` (see recon checks). |
+
+## Evidence summary (latest `ssis_sales_o2c_recon` run)
+
+| Verdict | Packages |
+|---|---|
+| PASS (4) | `FACT_NA_Load_Sale`, `FACT_Dedup_Sale`, `FACT_Load_Order`, `FACT_Load_Transaction` - row count and business-column checksum equal the populated legacy `Fact.Sale` (228,265), `Fact.Order` (231,412) and `Fact.Transaction` (99,585) |
+| PARTIAL (14) | the 5 `EXT_SQL_*` (legacy `raw.*` is a 3k-row synthetic sample, extract matched the OLTP source row-for-row), `STG_Load_*`, `DQ_*_Screen`, `FACT_Load_CustomerTransaction`, `FACT_Load_DailySalesSnapshot`, `AGG_Refresh_DailySalesSummary` (legacy targets empty, matched a source-derived expectation), `FACT_EU_Load_Sale` / `FACT_APAC_Load_Sale` (0 EU/APAC invoices in the OLTP baseline) |
+| FAIL (0) | - |
+| NOT_APPLICABLE (0) | - |
+
+Query: `SELECT unit, verdict, checks FROM otterorders_migration.evidence.recon_results WHERE branch = 'ssis_sales_o2c' AND run_id = (SELECT run_id FROM otterorders_migration.evidence.recon_results WHERE branch = 'ssis_sales_o2c' ORDER BY run_at DESC LIMIT 1)`.
 
 ## Open questions / limitations
 
