@@ -155,8 +155,11 @@ source-derived expectation computed independently in `recon.py` and are `PARTIAL
 
 ## Evidence
 
-See the "Latest evidence run" section at the bottom (filled from the recon task of the last end-to-end job run).
-Query:
+Latest end-to-end run of `ssis_procurement_daily` (job `273029780406148`, run `18611557330537`, all seven tasks
+`SUCCESS`) wrote evidence run `b300787d-c59b-44b4-ba89-89c6ba7fd2dd` (git_sha `9b592350d2a8`): 22 rows, one per
+package — **PASS 1** (`FACT_Load_Purchase`, 8,367 rows and checksum equal to `wwi_legacy_dw.Fact.Purchase`),
+**PARTIAL 21** (every other legacy target is empty on the host; row count and checksum match the source-derived
+expectation in all 21), **FAIL 0**, **NOT_APPLICABLE 0**. Query:
 
 ```sql
 WITH latest AS (SELECT run_id FROM otterorders_migration.evidence.recon_results
