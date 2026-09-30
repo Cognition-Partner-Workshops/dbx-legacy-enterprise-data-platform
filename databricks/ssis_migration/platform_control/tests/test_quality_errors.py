@@ -23,13 +23,13 @@ def _batch(cf, name):
 
 def testReferentialScreenFindsOrphansAndDedupes(spark, cf):
     orderLine = spark.createDataFrame(
-        [Row(OrderId=1, OrderLineId=1, StockItemId=10, PackageTypeCode="EA"), Row(OrderId=1, OrderLineId=2, StockItemId=99, PackageTypeCode="EA"),
-         Row(OrderId=1, OrderLineId=2, StockItemId=99, PackageTypeCode="EA"), Row(OrderId=2, OrderLineId=1, StockItemId=10, PackageTypeCode="ZZ")]
+        [Row(OrderLineBusinessKey="WWI|1|1", StockItemBusinessKey="WWI|10", PackageTypeCode="EA"), Row(OrderLineBusinessKey="WWI|1|2", StockItemBusinessKey="WWI|99", PackageTypeCode="EA"),
+         Row(OrderLineBusinessKey="WWI|1|2", StockItemBusinessKey="WWI|99", PackageTypeCode="EA"), Row(OrderLineBusinessKey="WWI|2|1", StockItemBusinessKey="WWI|10", PackageTypeCode="ZZ")]
     )
-    stockItem = spark.createDataFrame([Row(StockItemId=10)])
+    stockItem = spark.createDataFrame([Row(StockItemBusinessKey="WWI|10")])
     packageType = spark.createDataFrame([Row(PackageTypeCode="EA")])
-    saleLine = spark.createDataFrame([Row(InvoiceId=5, InvoiceLineId=1)])
-    sale = spark.createDataFrame([Row(InvoiceId=5, SalesTerritoryCode="NA-E", SaleCurrencyCode="XXX")])
+    saleLine = spark.createDataFrame([Row(SaleLineBusinessKey="WWI|5|1", SaleBusinessKey="WWI|5")])
+    sale = spark.createDataFrame([Row(SaleBusinessKey="WWI|5", SalesTerritoryCode="NA-E", TransactionCurrencyCode="XXX")])
     currency = spark.createDataFrame([Row(CurrencyCode="USD")])
     territory = spark.createDataFrame([Row(SalesTerritoryCode="NA-E")])
     sources = {"stg.OrderLine": orderLine, "stg.StockItem": stockItem, "ref.PackageType": packageType, "stg.SaleLine": saleLine,
@@ -50,22 +50,22 @@ def testRejectReprocessReplaysLateArrivingStockItems(spark, cf):
         "err_rejected_lookup_failure",
         [
             {"batch_id": batchId, "package_execution_id": execId, "source_object_name": "stg.OrderLine", "source_business_key": "7|1", "lookup_name": "StockItem",
-             "lookup_column_name": "StockItemId", "lookup_value": "42", "source_system_code": "STAGING", "reject_reason_code": "DQ_REF_ORDERLINE", "reject_reason": "x",
+             "lookup_column_name": "StockItemBusinessKey", "lookup_value": "WWI|42", "source_system_code": "STAGING", "reject_reason_code": "DQ_REF_ORDERLINE", "reject_reason": "x",
              "reject_stage": "Referential", "routed_to_unknown_member": False, "queued_for_late_arrival": True, "occurrence_count": 1,
              "record_payload": json.dumps({"OrderId": 7, "OrderLineId": 1, "StockItemId": 42}), "reprocess_status_code": "Pending", "reprocess_attempt_count": 0,
              "rejected_at_utc": now - timedelta(days=1)},
             {"batch_id": batchId, "package_execution_id": execId, "source_object_name": "stg.OrderLine", "source_business_key": "8|1", "lookup_name": "StockItem",
-             "lookup_column_name": "StockItemId", "lookup_value": "43", "source_system_code": "STAGING", "reject_reason_code": "DQ_REF_ORDERLINE", "reject_reason": "x",
+             "lookup_column_name": "StockItemBusinessKey", "lookup_value": "WWI|43", "source_system_code": "STAGING", "reject_reason_code": "DQ_REF_ORDERLINE", "reject_reason": "x",
              "reject_stage": "Referential", "routed_to_unknown_member": False, "queued_for_late_arrival": True, "occurrence_count": 1,
              "record_payload": json.dumps({"OrderId": 8, "OrderLineId": 1, "StockItemId": 43}), "reprocess_status_code": "Pending", "reprocess_attempt_count": 0,
              "rejected_at_utc": now - timedelta(days=1)},
         ],
     )
-    stockItems = spark.createDataFrame([Row(StockItemId=42)])
+    stockItems = spark.createDataFrame([Row(StockItemBusinessKey="WWI|42")])
     batch2, exec2 = _batch(cf, "reject-reprocess-2")
     result = quality.rejectReprocess(cf, batch2, exec2, stockItems=stockItems)
     statuses = {r["lookup_value"]: r["reprocess_status_code"] for r in spark.sql(f"SELECT lookup_value, reprocess_status_code FROM {cf.t('err_rejected_lookup_failure')} WHERE batch_id = {batchId}").collect()}
-    assert statuses["42"] == "Reprocessed" and statuses["43"] == "Unresolved"
+    assert statuses["WWI|42"] == "Reprocessed" and statuses["WWI|43"] == "Unresolved"
     assert spark.sql(f"SELECT COUNT(*) AS n FROM {cf.t('stg_order_line_replay')} WHERE package_execution_id = {exec2}").first()["n"] == 1
     assert result
 

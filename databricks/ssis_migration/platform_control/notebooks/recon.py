@@ -9,6 +9,7 @@ from platform_control.control import ControlFramework
 from platform_control.recon import runRecon
 from platform_control.spark import getSpark
 
+bindDbutils(dbutils)  # noqa: F821
 cfg = platformConfig()
 spark = getSpark()
 cf = ControlFramework(spark, cfg)

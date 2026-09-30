@@ -280,6 +280,14 @@ def _legacySources(cf: ControlFramework, overrides: dict[str, DataFrame] | None)
     return sources
 
 
+def _firstPresent(df: DataFrame, *candidates: list[str]) -> list[str]:
+    """First candidate column list fully present in df (legacy business-key names first), else the last one."""
+    for cols in candidates:
+        if all(c in df.columns for c in cols):
+            return cols
+    return candidates[-1]
+
+
 def _orphans(source: DataFrame, lookup: DataFrame, sourceCol: str, lookupCol: str, keyCols: list[str], lookupName: str, sourceObject: str, reasonCode: str) -> DataFrame:
     matched = lookup.select(F.col(lookupCol).alias("__lk")).dropna().distinct()
     joined = source.join(matched, source[sourceCol] == matched["__lk"], "left_anti")
@@ -300,16 +308,24 @@ def referentialScreen(
     orphanWarnThreshold: int = 0, orphanFailThreshold: int = 1000,
 ) -> dict:
     src = _legacySources(cf, sources)
-    orderLine, saleLine = src["stg.OrderLine"], src["stg.SaleLine"]
-    olKeys = ["OrderId", "OrderLineId"] if "OrderLineId" in orderLine.columns else [c for c in orderLine.columns if c.lower().endswith("id")][:2]
-    slKeys = ["InvoiceId", "InvoiceLineId"] if "InvoiceLineId" in saleLine.columns else [c for c in saleLine.columns if c.lower().endswith("id")][:2]
+    orderLine, saleLine, sale = src["stg.OrderLine"], src["stg.SaleLine"], src["stg.Sale"]
+    # legacy stg.* carries business keys (OrderLineBusinessKey, StockItemBusinessKey, SaleBusinessKey); the
+    # OLTP-style *Id names are accepted so the same screen runs over raw extracts and test frames
+    olKeys = _firstPresent(orderLine, ["OrderLineBusinessKey"], ["OrderId", "OrderLineId"])
+    slKeys = _firstPresent(saleLine, ["SaleLineBusinessKey"], ["InvoiceId", "InvoiceLineId"])
+    stockItemCol = _firstPresent(orderLine, ["StockItemBusinessKey"], ["StockItemId"])[0]
+    saleKey = _firstPresent(saleLine, ["SaleBusinessKey"], ["InvoiceId"])[0]
+    currencyCol = _firstPresent(sale, ["TransactionCurrencyCode"], ["SaleCurrencyCode"])[0]
+    territoryCol = _firstPresent(sale, ["SalesTerritoryCode"], [])
     frames = [
-        _orphans(orderLine, src["stg.StockItem"], "StockItemId", "StockItemId", olKeys, "StockItem", "stg.OrderLine", "DQ_REF_ORDERLINE"),
+        _orphans(orderLine, src["stg.StockItem"], stockItemCol, stockItemCol, olKeys, "StockItem", "stg.OrderLine", "DQ_REF_ORDERLINE"),
         _orphans(orderLine, src["ref.PackageType"], "PackageTypeCode", "PackageTypeCode", olKeys, "PackageType", "stg.OrderLine", "DQ_REF_ORDERLINE"),
     ]
-    saleJoined = saleLine.join(src["stg.Sale"].select("InvoiceId", "SalesTerritoryCode", "SaleCurrencyCode"), "InvoiceId", "left") if "InvoiceId" in saleLine.columns else saleLine
-    frames.append(_orphans(saleJoined, src["ref.Currency"], "SaleCurrencyCode", "CurrencyCode", slKeys, "Currency", "stg.SaleLine", "DQ_REF_SALELINE"))
-    frames.append(_orphans(saleJoined, src["stg.SalesTerritory"], "SalesTerritoryCode", "SalesTerritoryCode", slKeys, "SalesTerritory", "stg.SaleLine", "DQ_REF_SALELINE"))
+    saleCols = [saleKey, currencyCol] + territoryCol
+    saleJoined = saleLine.join(sale.select(*saleCols), saleKey, "left") if saleKey in saleLine.columns else saleLine
+    frames.append(_orphans(saleJoined, src["ref.Currency"], currencyCol, "CurrencyCode", slKeys, "Currency", "stg.SaleLine", "DQ_REF_SALELINE"))
+    if territoryCol:
+        frames.append(_orphans(saleJoined, src["stg.SalesTerritory"], territoryCol[0], "SalesTerritoryCode", slKeys, "SalesTerritory", "stg.SaleLine", "DQ_REF_SALELINE"))
     orphans = frames[0]
     for f in frames[1:]:
         orphans = orphans.unionByName(f)
@@ -350,7 +366,8 @@ def referentialScreen(
 def rejectReprocess(cf: ControlFramework, batchId: int, packageExecutionId: int | None = None, stockItems: DataFrame | None = None, now: datetime | None = None) -> dict:
     now = now or utcNow()
     stockItemDf = stockItems if stockItems is not None else cf.spark.table(cf.cfg.legacyStaging("stg", "StockItem"))
-    knownStockItems = {int(r[0]) for r in stockItemDf.select("StockItemId").dropna().distinct().collect()}
+    stockItemCol = _firstPresent(stockItemDf, ["StockItemBusinessKey"], ["StockItemId"])[0]
+    knownStockItems = {str(r[0]) for r in stockItemDf.select(stockItemCol).dropna().distinct().collect()}
     candidates = cf.spark.sql(
         f"SELECT reject_id, source_business_key, lookup_column_name, lookup_value, reprocess_attempt_count, rejected_at_utc, record_payload, package_execution_id "
         f"FROM {cf.t('err_rejected_lookup_failure')} WHERE lookup_name = 'StockItem' "
@@ -360,12 +377,13 @@ def rejectReprocess(cf: ControlFramework, batchId: int, packageExecutionId: int 
     replayRows = []
     statusFor = {"REPLAY": "Reprocessed", "AGED_OUT": "Abandoned", "UNRESOLVED": "Unresolved", "EXHAUSTED": "Exhausted"}
     for c in candidates:
-        stockItemId = None
-        if c["lookup_column_name"] == "StockItemId" and c["lookup_value"] is not None:
-            stockItemId = int(c["lookup_value"])
-        if stockItemId is None:
-            stockItemId = stockItemIdFromBusinessKey(c["source_business_key"])
-        decision = rejectReprocessDecision(c["reprocess_attempt_count"], c["rejected_at_utc"], now, stockItemId in knownStockItems)
+        stockItemKey = c["lookup_value"]
+        if stockItemKey is None:
+            legacyId = stockItemIdFromBusinessKey(c["source_business_key"])
+            stockItemKey = None if legacyId is None else str(legacyId)
+        decision = rejectReprocessDecision(c["reprocess_attempt_count"], c["rejected_at_utc"], now, stockItemKey in knownStockItems)
+        # replay rows keep the numeric OLTP id when the business key carries one (TOKEN(key, "|", 2) in the SSIS derived column)
+        stockItemId = int(stockItemKey) if stockItemKey and stockItemKey.isdigit() else stockItemIdFromBusinessKey(stockItemKey)
         counts[decision] += 1
         assignments = {"reprocess_status_code": statusFor[decision], "reprocess_attempt_count": int(c["reprocess_attempt_count"] or 0) + 1}
         if decision == "REPLAY":
@@ -420,7 +438,7 @@ def partnerSalesRawView(df: DataFrame) -> DataFrame:
 def fileScreen(cf: ControlFramework, batchId: int, packageExecutionId: int | None = None, source: DataFrame | None = None, sourceSystemCode: str = "PARTNER_NA") -> dict:
     raw = source if source is not None else cf.spark.table(cf.cfg.legacyStaging("raw", "FilePartnerSales"))
     rows = partnerSalesRawView(raw).withColumn("screen", _screenUdf("RawLine", "SaleDateText", "AmountText"))
-    rows = rows.select("*", "screen.*").drop("screen").cache()
+    rows = rows.select("*", "screen.*").drop("screen")
     total = rows.count()
     malformed = rows.filter(~F.col("well_formed"))
     now = utcNow()

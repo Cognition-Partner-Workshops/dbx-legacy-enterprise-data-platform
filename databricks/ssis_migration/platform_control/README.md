@@ -28,18 +28,18 @@ last `ssis_platform_control_recon` run (see [Evidence](#evidence)).
 | `Master_Month_End` | orchestration | SQL Agent 04:00 + `ref.FiscalCalendar` gate | `resources/master_month_end.job.yml` (43 tasks) + `fiscalCalendarGate` | PARTIAL |
 | `Master_Weekly_Maintenance` | orchestration | SQL Agent Sat 22:00 | `resources/master_weekly_maintenance.job.yml` (29 tasks) | PARTIAL |
 | `Master_Weekly_Reference_Load` | orchestration | SQL Agent Sun 03:00 | `resources/master_weekly_reference_load.job.yml` (37 tasks) | PARTIAL |
-| `DQ_Rule_Engine` | quality_screen | `etl.DataQualityRule` → `etl.DataQualityResult` | `quality.runRuleEngine` → `etl_data_quality_result` | see evidence |
-| `DQ_Threshold_Gate` | quality_screen | `etl.RowCountAudit` → `etl.ReconciliationResult` | `quality.thresholdGate` → `etl_reconciliation_result` | see evidence |
-| `DQ_Referential_Screen` | quality_screen | `stg.OrderLine`/`stg.SaleLine` → `err.RejectedLookupFailure` | `quality.referentialScreen` → `err_rejected_lookup_failure` | see evidence |
-| `DQ_Reject_Reprocess` | quality_screen | `err.RejectedLookupFailure` → `stg.OrderLine` | `quality.rejectReprocess` → `stg_order_line_replay` | see evidence |
-| `DQ_File_Screen` | quality_screen | `raw.FilePartnerSales` → `err.RejectedFileRow` | `quality.fileScreen` → `err_rejected_file_row` | see evidence |
-| `ING_FILE_QuarantineMalformed` | file_ingest | `quarantine/*` → `err.RejectedFileRow` | `quality.quarantineSweep` over volume `landing/quarantine` | see evidence |
+| `DQ_Rule_Engine` | quality_screen | `etl.DataQualityRule` → `etl.DataQualityResult` | `quality.runRuleEngine` → `etl_data_quality_result` | FAIL (fixed, not re-run) |
+| `DQ_Threshold_Gate` | quality_screen | `etl.RowCountAudit` → `etl.ReconciliationResult` | `quality.thresholdGate` → `etl_reconciliation_result` | PARTIAL |
+| `DQ_Referential_Screen` | quality_screen | `stg.OrderLine`/`stg.SaleLine` → `err.RejectedLookupFailure` | `quality.referentialScreen` → `err_rejected_lookup_failure` | FAIL (fixed, not re-run) |
+| `DQ_Reject_Reprocess` | quality_screen | `err.RejectedLookupFailure` → `stg.OrderLine` | `quality.rejectReprocess` → `stg_order_line_replay` | PARTIAL |
+| `DQ_File_Screen` | quality_screen | `raw.FilePartnerSales` → `err.RejectedFileRow` | `quality.fileScreen` → `err_rejected_file_row` | FAIL (fixed, not re-run) |
+| `ING_FILE_QuarantineMalformed` | file_ingest | `quarantine/*` → `err.RejectedFileRow` | `quality.quarantineSweep` over volume `landing/quarantine` | PARTIAL |
 | `ERR_Handle_PackageFailure` | utility | `err.*` → `etl.ErrorLog` | `errors.handlePackageFailure` (+ job `on_failure` notifications) | NOT_APPLICABLE |
 | `ERR_Notify_Operations` | utility | `etl.ErrorLog` → e-mail | `errors.notifyOperations` → `etl_operator_notification` + job email notifications | NOT_APPLICABLE |
 | `ERR_Quarantine_BadFiles` | utility | file share → `quarantine/` | `errors.quarantineBadFiles` (volume move + `work_bad_file_queue`) | NOT_APPLICABLE |
-| `ERR_Reconcile_RowCounts` | utility | `etl.RowCountAudit` → `work.RowCountReconciliation` | `errors.reconcileRowCounts` → `work_row_count_reconciliation` | see evidence |
+| `ERR_Reconcile_RowCounts` | utility | `etl.RowCountAudit` → `work.RowCountReconciliation` | `errors.reconcileRowCounts` → `work_row_count_reconciliation` | PARTIAL |
 | `ERR_Retry_FailedSteps` | utility | `etl.BatchStep` → `etl.BatchStepRerunRequest` | `errors.retryFailedSteps` + Lakeflow task `max_retries` | NOT_APPLICABLE |
-| `ERR_Route_RejectedRows` | utility | `err.*` → `file:errors` + escalation | `errors.routeRejectedRows` → `work_reject_routing_history`, `errors/` volume folder | see evidence |
+| `ERR_Route_RejectedRows` | utility | `err.*` → `file:errors` + escalation | `errors.routeRejectedRows` → `work_reject_routing_history`, `errors/` volume folder | PARTIAL |
 | `MNT_Archive_ProcessedFiles` | utility | file share `processed/` → `archive/` | `maintenance.archiveProcessedFiles` over the volume | NOT_APPLICABLE |
 | `MNT_Check_DiskSpace` | utility | `xp_fixeddrives` | `maintenance.checkDiskSpace` (volume + Delta table size) | NOT_APPLICABLE |
 | `MNT_Purge_ControlHistory` | utility | `etl.*` retention delete | `maintenance.purgeControlHistory` → `etl_purge_audit` | NOT_APPLICABLE |
@@ -161,7 +161,41 @@ Written by `src/platform_control/recon.py` (`runRecon`) — one `run_id` per run
 * Utility packages (ERR_Handle/Notify/Quarantine/Retry, all `MNT_*`) → `NOT_APPLICABLE` with the
   Databricks-native equivalent in `summary`.
 
-EVIDENCE_SUMMARY_PLACEHOLDER
+### Latest evidence run (kept as the PR's evidence — see "Open questions")
+
+| | |
+|---|---|
+| `run_id` | `05e91654-ebea-4a29-8e7a-d46d2516481a` |
+| `run_at` | 2026-09-30 20:45 UTC |
+| `git_sha` | `f131fbb97850857c991105e7f41cba3897ee1fbf` (the deployed commit that produced the run; later commits in this PR are fixes + docs, see below) |
+| Produced by | job `ssis_platform_control_e2e_smoke` run `562253133667727` (setup → 19 standalone packages → recon), 16/19 packages succeeded |
+| Rows | 28 (one per owned package) |
+
+| Verdict | Count | Packages |
+|---|---|---|
+| `NOT_APPLICABLE` | 11 | ERR_Handle_PackageFailure, ERR_Notify_Operations, ERR_Quarantine_BadFiles, ERR_Retry_FailedSteps, MNT_* (7) |
+| `PARTIAL` | 14 | Master_* (9, structural), DQ_Threshold_Gate, DQ_Reject_Reprocess, ERR_Reconcile_RowCounts, ERR_Route_RejectedRows, ING_FILE_QuarantineMalformed (source-derived baselines match) |
+| `FAIL` | 3 | DQ_Rule_Engine, DQ_Referential_Screen, DQ_File_Screen |
+| `PASS` | 0 | every legacy DQ/ERR output table is empty on the host, so `PASS` is unreachable by contract |
+
+FAIL causes (one line each; all three are fixed in the PR head but could not be re-run, see below):
+
+* `DQ_Rule_Engine` — package ran fine (29 rules evaluated) but the source-derived checksum hit
+  `ARITHMETIC_OVERFLOW`: `SUM(xxhash64(...))` overflows BIGINT under ANSI mode on Databricks (local
+  Spark is non-ANSI, so tests passed). Fixed: the accumulator is now `SUM(CAST(xxhash64(...) AS DECIMAL(38,0)))`.
+* `DQ_Referential_Screen` (and `DQ_Reject_Reprocess`'s first attempt) — legacy `stg.OrderLine` /
+  `stg.SaleLine` / `stg.StockItem` carry `*BusinessKey` columns, not the OLTP `StockItemId` /
+  `OrderLineId` the screen assumed (`UNRESOLVED_COLUMN StockItemId`). Fixed: the screen resolves
+  `OrderLineBusinessKey` / `StockItemBusinessKey` / `SaleBusinessKey` / `TransactionCurrencyCode` first
+  and falls back to the id names.
+* `DQ_File_Screen` — first attempt failed with `PERSIST TABLE is not supported on serverless compute`
+  (a `DataFrame.cache()`); the retry then failed with `FAILED_JDBC.CONNECTION` because the legacy SQL
+  Server host had just been stopped by the operator. Fixed: the `cache()` is gone.
+
+The three `FAIL` rows also carry `FAILED_JDBC.CONNECTION` errors on their legacy `row_count` /
+`checksum` checks: the operator stopped the legacy hosts while the recon task was running, so the
+second half of the run could not read `wwi_legacy_staging`. `recon.py` now emits an explicit
+`{"check":"source_unavailable","pass":false}` in that situation.
 
 ## Sibling jobs referenced by the master jobs
 
@@ -192,4 +226,32 @@ them up.
 
 ## Open questions / not done
 
-OPEN_QUESTIONS_PLACEHOLDER
+* **Legacy hosts stopped before re-verification.** The operator shut the SQL Server / Oracle EC2 hosts
+  down at ~20:50 UTC on 2026-09-30, minutes after the e2e run above. The fixes for the three FAILs
+  (overflow-safe checksum, business-key referential screen, no `cache()` on serverless) are in this
+  PR, pass the local suite (41 tests), and are deployed to the workspace, but the packages and the recon
+  could not be re-run against the sources. Re-run `ssis_platform_control_e2e_smoke` (or
+  `databricks bundle run ssis_platform_control_recon -t dev --var git_sha=<head>`) once the hosts are
+  back; a run with the hosts down records every data package as `FAIL` / `source_unavailable`, which is
+  why the 20:45 run was kept as the evidence of record rather than overwritten. Consequently the
+  evidence `git_sha` (`f131fbb`) is the deployed code commit, not the PR head.
+* **Sibling jobs are not deployed.** The nine master jobs reference 176 `ssis_<slug>_<package>` jobs
+  owned by the other nine sessions. None existed at deploy time; the master jobs deploy (their tasks are
+  our own notebooks that dispatch by job *name* at runtime) and unresolved siblings are logged as
+  `Unresolved` and skipped (`sibling_dispatch_on_missing=skip`). Set it to `fail` once the estate is
+  complete. No master job was run end-to-end on the workspace for that reason; the orchestration
+  runtime is covered by the local suite (happy path, failure/retry path, Daily-ETL stand-down, Month-End
+  calendar gate, unresolved siblings).
+* **`PASS` is unreachable for this group.** All legacy DQ/ERR output tables
+  (`etl.DataQualityResult`, `etl.ReconciliationResult`, `err.RejectedLookupFailure`,
+  `err.RejectedFileRow`, `work.RejectRoutingHistory`) are empty on the host, so the contract forces
+  `PARTIAL` (source-derived baseline) at best.
+* **Delta identity.** OSS Delta 3.2 (local tests) has no identity columns, so surrogate ids are
+  time-ordered BIGINTs allocated in `ControlFramework.nextId` (`unix_micros << 10 | rand`). The first
+  e2e run exposed that `MAX(id)+1` collides when 19 tasks insert concurrently; that is why ids are large.
+* **Notifications** are job-level e-mail (`${var.operator_email}`) plus `etl_operator_notification`
+  rows; there is no SMTP/Teams delivery from inside a task.
+* **`databricks bundle validate` warnings**: several jobs per `resources/*.job.yml` (generated
+  files; intentional) and the writable `/Workspace/Shared/...` root (mandated by the brief).
+* **Bundle host** is hard-coded in `databricks.yml` because the CLI rejects interpolation on
+  `workspace.host`; override with `--var`/profile when re-targeting.

@@ -10,6 +10,7 @@ from platform_control.runners import runStandalone
 from platform_control.spark import getSpark
 from platform_control.tables import ensureControlTables
 
+bindDbutils(dbutils)  # noqa: F821
 cfg = platformConfig()
 spark = getSpark()
 cf = ControlFramework(spark, cfg)

@@ -11,6 +11,8 @@ from __future__ import annotations
 import getpass
 import json
 import platform
+import random
+import time
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -54,9 +56,10 @@ class ControlFramework:
         return ", ".join(f"{c} {ty}" for c, ty in CONTROL_TABLES[name][0])
 
     def nextId(self, name: str) -> int:
-        idColumn = ID_COLUMNS[name]
-        row = self.spark.sql(f"SELECT COALESCE(MAX({idColumn}), 0) + 1 AS next_id FROM {self.t(name)}").first()
-        return int(row["next_id"])
+        """Identity substitute: time-ordered BIGINT (unix micros << 10 | random) so concurrent job
+        tasks never collide the way MAX(id)+1 did; ORDER BY id still means chronological."""
+        ID_COLUMNS[name]
+        return (int(time.time() * 1_000_000) << 10) | random.getrandbits(10)
 
     def insertRows(self, name: str, rows: list[dict]) -> list[dict]:
         """Insert dict rows into a control table, allocating identity values when absent."""

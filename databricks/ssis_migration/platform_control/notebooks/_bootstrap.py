@@ -10,10 +10,23 @@ for candidate in (os.path.join(_here, "..", "src"), os.path.join(_here, "src")):
         sys.path.insert(0, os.path.abspath(candidate))
 
 
+_dbutils = None
+
+
+def bindDbutils(handle) -> None:
+    """Called by each task notebook after %run: functions defined here do not see the caller's dbutils."""
+    global _dbutils
+    _dbutils = handle
+
+
 def widget(name: str, default: str = "") -> str:
+    if _dbutils is None:
+        return default
     try:
-        value = dbutils.widgets.get(name)  # noqa: F821
-    except Exception:  # noqa: BLE001 - widget not defined for this run
+        value = _dbutils.widgets.get(name)
+    except Exception as exc:  # noqa: BLE001 - widget not defined for this run
+        if "InputWidgetNotDefined" not in str(exc) and "not defined" not in str(exc):
+            print(f"widget {name}: {type(exc).__name__}: {exc}")
         return default
     return default if value is None else value
 

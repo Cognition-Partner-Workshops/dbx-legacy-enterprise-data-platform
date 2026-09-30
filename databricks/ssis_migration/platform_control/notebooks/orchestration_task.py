@@ -21,6 +21,7 @@ cfg = platformConfig()
 spark = getSpark()
 cf = ControlFramework(spark, cfg)
 
+bindDbutils(dbutils)  # noqa: F821
 action = widget("action", "node")
 master = widget("master")
 nodeName = widget("node")

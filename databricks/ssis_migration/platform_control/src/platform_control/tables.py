@@ -2,7 +2,7 @@
 
 Every table is declared once here so DDL, tests and the recon task share a single catalog.
 Surrogate identity columns (BIGINT IDENTITY in SQL Server) are allocated by
-``control.IdAllocator`` because the orchestrator is the single writer of control rows.
+``ControlFramework.nextId`` as time-ordered BIGINTs (OSS Delta 3.2 has no identity columns).
 """
 
 from __future__ import annotations

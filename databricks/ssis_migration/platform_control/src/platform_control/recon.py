@@ -54,7 +54,8 @@ LEGACY_STAGING_DB = "WideWorldImporters_Staging"
 # ----------------------------------------------------------------------------- generic measurements
 def _hashExpr(exprs: list[str]) -> str:
     parts = ", ".join(f"COALESCE(CAST({e} AS STRING), '')" for e in exprs)
-    return f"SUM(xxhash64(concat_ws('|', {parts})))"
+    # DECIMAL(38,0) accumulator: SUM over BIGINT hashes overflows under ANSI mode on Databricks
+    return f"SUM(CAST(xxhash64(concat_ws('|', {parts})) AS DECIMAL(38,0)))"
 
 
 def tableStats(cf: ControlFramework, fqName: str, exprs: list[str], where: str = "1=1") -> dict:
@@ -64,6 +65,16 @@ def tableStats(cf: ControlFramework, fqName: str, exprs: list[str], where: str =
         return {"count": int(row["n"]), "checksum": None if row["cs"] is None else str(row["cs"]), "error": None}
     except Exception as exc:  # noqa: BLE001 - unreadable legacy object is itself a finding
         return {"count": None, "checksum": None, "error": f"{type(exc).__name__}: {str(exc)[:300]}"}
+
+
+SOURCE_UNAVAILABLE_NOTE = (
+    "the legacy SQL Server/Oracle hosts were stopped by the operator while this evidence run was in flight, "
+    "so the federation read failed; re-run ssis_platform_control_recon once the hosts are back."
+)
+
+
+def _sourceUnavailable(error: str | None) -> dict:
+    return {"check": "source_unavailable", "pass": False, "error": error}
 
 
 def compareChecks(source: dict, target: dict, method: str, baseline: str = "legacy", extra: dict | None = None) -> list[dict]:
@@ -124,7 +135,7 @@ def _scoped(cf: ControlFramework, spec: DataSpec, execution: dict | None) -> str
 def _setStats(cf: ControlFramework, sql: str) -> dict:
     """COUNT + checksum over the rows returned by an arbitrary SELECT that yields a single string column `k`."""
     try:
-        row = cf.spark.sql(f"SELECT COUNT(*) AS n, SUM(xxhash64(k)) AS cs FROM ({sql})").first()
+        row = cf.spark.sql(f"SELECT COUNT(*) AS n, SUM(CAST(xxhash64(k) AS DECIMAL(38,0))) AS cs FROM ({sql})").first()
         return {"count": int(row["n"]), "checksum": None if row["cs"] is None else str(row["cs"]), "error": None}
     except Exception as exc:  # noqa: BLE001
         return {"count": None, "checksum": None, "error": f"{type(exc).__name__}: {str(exc)[:300]}"}
@@ -156,19 +167,15 @@ def derivedReferentialScreen(cf, execution):
     expected = _setStats(
         cf,
         f"""
-        SELECT concat_ws('|', 'stg.OrderLine', CAST(ol.OrderId AS STRING) || '|' || CAST(ol.OrderLineId AS STRING), 'StockItem') AS k
-        FROM {stg('stg', 'OrderLine')} ol LEFT ANTI JOIN {stg('stg', 'StockItem')} si ON si.StockItemId = ol.StockItemId
+        SELECT concat_ws('|', 'stg.OrderLine', ol.OrderLineBusinessKey, 'StockItem') AS k
+        FROM {stg('stg', 'OrderLine')} ol LEFT ANTI JOIN {stg('stg', 'StockItem')} si ON si.StockItemBusinessKey = ol.StockItemBusinessKey
         UNION ALL
-        SELECT concat_ws('|', 'stg.OrderLine', CAST(ol.OrderId AS STRING) || '|' || CAST(ol.OrderLineId AS STRING), 'PackageType')
+        SELECT concat_ws('|', 'stg.OrderLine', ol.OrderLineBusinessKey, 'PackageType')
         FROM {stg('stg', 'OrderLine')} ol LEFT ANTI JOIN {stg('ref', 'PackageType')} pt ON pt.PackageTypeCode = ol.PackageTypeCode
         UNION ALL
-        SELECT concat_ws('|', 'stg.SaleLine', CAST(sl.InvoiceId AS STRING) || '|' || CAST(sl.InvoiceLineId AS STRING), 'Currency')
-        FROM {stg('stg', 'SaleLine')} sl LEFT JOIN {stg('stg', 'Sale')} s ON s.InvoiceId = sl.InvoiceId
-        LEFT ANTI JOIN {stg('ref', 'Currency')} c ON c.CurrencyCode = s.SaleCurrencyCode
-        UNION ALL
-        SELECT concat_ws('|', 'stg.SaleLine', CAST(sl.InvoiceId AS STRING) || '|' || CAST(sl.InvoiceLineId AS STRING), 'SalesTerritory')
-        FROM {stg('stg', 'SaleLine')} sl LEFT JOIN {stg('stg', 'Sale')} s ON s.InvoiceId = sl.InvoiceId
-        LEFT ANTI JOIN {stg('stg', 'SalesTerritory')} t ON t.SalesTerritoryCode = s.SalesTerritoryCode
+        SELECT concat_ws('|', 'stg.SaleLine', sl.SaleLineBusinessKey, 'Currency')
+        FROM {stg('stg', 'SaleLine')} sl LEFT JOIN {stg('stg', 'Sale')} s ON s.SaleBusinessKey = sl.SaleBusinessKey
+        LEFT ANTI JOIN {stg('ref', 'Currency')} c ON c.CurrencyCode = s.TransactionCurrencyCode
         """,
     )
     actual = _setStats(
@@ -404,11 +411,18 @@ def reconcileData(cf: ControlFramework, package: str) -> tuple[str, list[dict], 
     target = tableStats(cf, targetFq, targetExprs, _scoped(cf, spec, execution))
     checks = compareChecks(legacy, target, method)
     runNote = "no execution of this package recorded yet" if execution is None else f"latest execution {execution['package_execution_id']} ({execution['status']}) in batch {execution['batch_id']}"
+    if legacy["error"]:
+        return "FAIL", checks + [_sourceUnavailable(legacy["error"])], legacyFq, targetFq, (
+            f"Legacy {spec.legacySchema}.{spec.legacyTable} could not be read ({runNote}): {SOURCE_UNAVAILABLE_NOTE} {spec.summary}"
+        )
     if legacy["count"] and checks[0]["pass"] and checks[1]["pass"]:
         return "PASS", checks, legacyFq, targetFq, f"Row count and checksum match the legacy SSIS output ({runNote}). {spec.summary}"
     if legacy["count"]:
         # the legacy table has rows from the estate's own history; also record the source-derived expectation
-        expected, actual, description = spec.derived(cf, execution) if spec.derived else ({}, {}, "")
+        try:
+            expected, actual, description = spec.derived(cf, execution) if spec.derived else ({}, {}, "")
+        except Exception as exc:  # noqa: BLE001 - federation read failed mid-run
+            return "FAIL", checks + [_sourceUnavailable(f"{type(exc).__name__}: {str(exc)[:300]}")], legacyFq, targetFq, f"Source-derived expectation could not be computed ({runNote}): {SOURCE_UNAVAILABLE_NOTE} {spec.summary}"
         if expected and actual:
             checks += compareChecks(expected, actual, "sum(xxhash64(k))", baseline="source_derived", extra={"expectation": description})
         derivedOk = bool(expected) and expected.get("count") is not None and expected["count"] == actual.get("count") and expected["checksum"] == actual["checksum"]
@@ -420,7 +434,13 @@ def reconcileData(cf: ControlFramework, package: str) -> tuple[str, list[dict], 
         )
     if spec.derived is None or execution is None:
         return "FAIL", checks, legacyFq, targetFq, f"Legacy target empty and {runNote}; nothing to derive. {spec.summary}"
-    expected, actual, description = spec.derived(cf, execution)
+    try:
+        expected, actual, description = spec.derived(cf, execution)
+    except Exception as exc:  # noqa: BLE001 - federation read failed mid-run
+        return "FAIL", checks + [_sourceUnavailable(f"{type(exc).__name__}: {str(exc)[:300]}")], legacyFq, targetFq, f"Source-derived expectation could not be computed ({runNote}): {SOURCE_UNAVAILABLE_NOTE} {spec.summary}"
+    if expected.get("error") or actual.get("error"):
+        checks += compareChecks(expected, actual, "sum(xxhash64(k))", baseline="source_derived", extra={"expectation": description})
+        return "FAIL", checks + [_sourceUnavailable(expected.get("error") or actual.get("error"))], legacyFq, targetFq, f"Source-derived expectation could not be computed ({runNote}): {SOURCE_UNAVAILABLE_NOTE} {spec.summary}"
     checks += compareChecks(expected, actual, "sum(xxhash64(k))", baseline="source_derived", extra={"expectation": description})
     derivedOk = expected["count"] is not None and expected["count"] == actual["count"] and expected["checksum"] == actual["checksum"]
     verdict = "PARTIAL" if derivedOk else "FAIL"

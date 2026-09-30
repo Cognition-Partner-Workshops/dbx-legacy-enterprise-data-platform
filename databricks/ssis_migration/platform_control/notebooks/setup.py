@@ -12,6 +12,7 @@ from platform_control.seed import seedAll
 from platform_control.spark import getSpark
 from platform_control.tables import ensureControlTables, ensureLandingVolume, ensureSchema
 
+bindDbutils(dbutils)  # noqa: F821
 cfg = platformConfig()
 spark = getSpark()
 ensureSchema(spark, cfg)
