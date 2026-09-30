@@ -127,8 +127,9 @@ def runIngFileFxOverride(spark: SparkSession, batchId: int, volumePath: str = co
         "file_status", F.when(F.col("is_reconciled"), "PROCESSED").otherwise("QUARANTINED")
     ).withColumn("processed_at_utc", F.current_timestamp())
     writeTable(registry, config.tbl("etl_file_registry"), mode="append")
+    approvedCount, rejectedCount = approved.count(), rejected.count()
     for f in files:
         dest = ARCHIVE if f in reconciled else QUARANTINE
         os.makedirs(os.path.join(volumePath, dest), exist_ok=True)
         shutil.move(os.path.join(inboundPath, f), os.path.join(volumePath, dest, f))
-    return {"files": len(files), "approved": approved.count(), "rejected": rejected.count(), "quarantined": quarantined}
+    return {"files": len(files), "approved": approvedCount, "rejected": rejectedCount, "quarantined": quarantined}
