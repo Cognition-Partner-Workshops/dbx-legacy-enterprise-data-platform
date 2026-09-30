@@ -78,7 +78,7 @@ def applyScd2(existing: DataFrame | None, incoming: DataFrame, spec: ScdSpec, ef
     closed at `effectiveTs - 1 second`. Reserved members (key < 0) are preserved.
     """
     incoming = incoming.withColumn(spec.hashCol, rowHash(spec.trackedCols)) if spec.hashCol not in incoming.columns else incoming
-    if existing is None or existing.rdd.isEmpty():
+    if existing is None or existing.isEmpty():
         maxKey = 0
         current = incoming.limit(0).select(
             F.col(spec.businessKeyCol).alias("_bk"), F.lit(None).cast("string").alias("_hash"), F.lit(None).cast("int").alias("_ver"),
@@ -123,13 +123,13 @@ def applyScd2(existing: DataFrame | None, incoming: DataFrame, spec: ScdSpec, ef
         .withColumn(spec.isCurrentCol, F.when(F.col("_cbk").isNotNull(), F.lit(False)).otherwise(F.col(spec.isCurrentCol)))
         .drop("_cbk", "_new_from")
     )
-    return closed.unionByName(versioned.select(*closed.columns), allowMissingColumns=True)
+    return closed.unionByName(versioned, allowMissingColumns=True)
 
 
 def applyScd1(existing: DataFrame | None, incoming: DataFrame, spec: ScdSpec) -> DataFrame:
     """Return the complete new content of an SCD1 dimension: overwrite in place, insert new keys."""
     incoming = incoming.withColumn(spec.hashCol, rowHash(spec.trackedCols)) if spec.hashCol not in incoming.columns else incoming
-    if existing is None or existing.rdd.isEmpty():
+    if existing is None or existing.isEmpty():
         maxKey = 0
         keyed = incoming.withColumn("_existing_key", F.lit(None).cast("bigint"))
         reserved = None

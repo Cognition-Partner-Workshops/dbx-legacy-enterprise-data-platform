@@ -56,10 +56,14 @@ def setWatermark(
     incoming = spark.createDataFrame(
         [(sourceSystemCode, objectName, watermarkTo, cfg.batchId, utcNow())], WATERMARK_SCHEMA
     )
-    if not tableExists(spark, fqn):
-        incoming.write.format("delta").saveAsTable(fqn)
-        return
-    current = spark.table(fqn).where(
-        ~((F.col("source_system_code") == sourceSystemCode) & (F.col("object_name") == objectName))
+    spark.sql(f"CREATE TABLE IF NOT EXISTS {fqn} ({WATERMARK_SCHEMA}) USING DELTA")
+    incoming.createOrReplaceTempView("_cp_watermark_incoming")
+    spark.sql(
+        f"""
+        MERGE INTO {fqn} AS t
+        USING _cp_watermark_incoming AS s
+          ON t.source_system_code = s.source_system_code AND t.object_name = s.object_name
+        WHEN MATCHED THEN UPDATE SET *
+        WHEN NOT MATCHED THEN INSERT *
+        """
     )
-    current.unionByName(incoming).write.format("delta").mode("overwrite").saveAsTable(fqn)
