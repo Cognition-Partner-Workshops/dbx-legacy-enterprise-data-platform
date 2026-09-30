@@ -75,6 +75,14 @@ def conformCityForDimension(bronzeGeography: DataFrame, refCountry: DataFrame) -
     return staged.withColumn("row_hash_type_2", rowHash(*TYPE2_COLUMNS))
 
 
+def cityRowsFrame(spark: SparkSession, rows: list[dict]) -> DataFrame:
+    """Build CITY_SCHEMA rows from Python dicts; timestamps travel as ISO strings so the 9999-12-31 high
+    date survives the client-side Arrow conversion regardless of the session time zone."""
+    localSchema = T.StructType([T.StructField(f.name, T.StringType() if isinstance(f.dataType, T.TimestampType) else f.dataType, True) for f in CITY_SCHEMA.fields])
+    data = [tuple(r[f.name].isoformat(sep=" ") if isinstance(r[f.name], datetime) else r[f.name] for f in CITY_SCHEMA.fields) for r in rows]
+    return spark.createDataFrame(data, localSchema).select(*[F.col(f.name).cast(f.dataType).alias(f.name) for f in CITY_SCHEMA.fields])
+
+
 def reservedCityRows(spark: SparkSession) -> DataFrame:
     def row(key, label, other, validFrom):
         return {
@@ -90,7 +98,7 @@ def reservedCityRows(spark: SparkSession) -> DataFrame:
 
     low, epoch = datetime(1900, 1, 1), datetime(2013, 1, 1)
     rows = [row(-2, "Not Applicable", "N/A", low), row(-1, "Unknown", "Unknown", low), row(0, "Unknown", "N/A", epoch)]
-    return spark.createDataFrame([tuple(r[f.name] for f in CITY_SCHEMA.fields) for r in rows], CITY_SCHEMA)
+    return cityRowsFrame(spark, rows)
 
 
 def _asDimensionRows(df: DataFrame, batchId: int, isInferred: bool = False) -> DataFrame:
@@ -182,7 +190,7 @@ def insertInferredCityMembers(spark: SparkSession, existing: DataFrame, cityIds:
             "effective_from": nowTs, "effective_to": datetime.fromisoformat("9999-12-31 23:59:59.999"), "is_current_row": True, "version_number": 1,
             "is_inferred_member": True, "lineage_key": batchId, "last_load_batch_id": batchId,
         })
-    inferred = spark.createDataFrame([tuple(r[f.name] for f in CITY_SCHEMA.fields) for r in rows], CITY_SCHEMA)
+    inferred = cityRowsFrame(spark, rows)
     return existing.unionByName(inferred)
 
 
