@@ -42,7 +42,7 @@ fallback, `Fact.Sale` original-sale view), `recon.py` (evidence), `runner.py` (p
 
 ## Evidence summary (latest run)
 
-`run_id = d1789eec-1567-4f1a-9a22-777bacf10fa1`, `git_sha = f265314c…`, one row per package (12 rows):
+`run_id = c7076e42-ee0b-471a-9ae8-8bd6d3fad352`, `git_sha = 4024a915…`, one row per package (12 rows):
 
 | Verdict | Count | Packages |
 |---|---|---|
@@ -124,7 +124,7 @@ databricks bundle run ssis_logistics_returns_month_end_aggregate -t dev
 Job parameters (`daily_etl`): `catalog`, `schema`, `batch_id`, `package_execution_id`, `git_sha`,
 `reload_full_history` (`true` re-seeds bronze and rebuilds snapshots/aggregates), `seed_from_legacy_raw`.
 
-Last successful run: <https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/215317092544738/runs/885109454560538?o=7474651138173478>
+Last successful end-to-end run (all 14 tasks, run 885109454560538); latest recon-only run (evidence above): <https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/215317092544738/runs/458789302138973?o=7474651138173478>
 
 ## Local development
 
