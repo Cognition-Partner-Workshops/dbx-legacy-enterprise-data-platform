@@ -1,0 +1,81 @@
+resources:
+  jobs:
+    wave1_finance_ap_bronze:
+      name: wave1_finance_ap_bronze
+      description: >
+        Wave 1 Finance AP bronze load. Reads each legacy Oracle extract through the
+        configured SourceReader (volume_delimited today), appends it to its bronze
+        Delta table with ingest metadata, then publishes per-table row counts.
+      tags:
+        wave: "1"
+        domain: finance-ap
+        layer: bronze
+      max_concurrent_runs: 1
+      environments:
+        - environment_key: serverless
+          spec:
+            environment_version: "3"
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: landing_path
+          default: /Volumes/${var.catalog}/${var.landing_schema}/${var.landing_volume}
+        - name: bronze_prefix
+          default: ${var.bronze_prefix}
+        - name: source_kind
+          default: ${var.source_kind}
+        - name: source_tables
+          default: ${var.source_tables}
+        - name: src_root
+          default: ${workspace.file_path}/src/wave1_bronze
+      tasks:
+        - task_key: load_bronze_tables
+          for_each_task:
+            inputs: "{{tasks.plan.values.tables}}"
+            concurrency: 5
+            task:
+              task_key: load_bronze_table
+              environment_key: serverless
+              spark_python_task:
+                python_file: ../src/wave1_bronze/load_bronze.py
+                parameters:
+                  - --table
+                  - "{{input}}"
+                  - --catalog
+                  - "{{job.parameters.catalog}}"
+                  - --landing-path
+                  - "{{job.parameters.landing_path}}"
+                  - --bronze-prefix
+                  - "{{job.parameters.bronze_prefix}}"
+                  - --source-kind
+                  - "{{job.parameters.source_kind}}"
+                  - --run-id
+                  - "{{job.run_id}}"
+                  - --src-root
+                  - "{{job.parameters.src_root}}"
+          depends_on:
+            - task_key: plan
+        - task_key: plan
+          environment_key: serverless
+          spark_python_task:
+            python_file: ../src/wave1_bronze/plan_tables.py
+            parameters:
+              - --source-tables
+              - "{{job.parameters.source_tables}}"
+        - task_key: publish_row_counts
+          depends_on:
+            - task_key: load_bronze_tables
+          environment_key: serverless
+          spark_python_task:
+            python_file: ../src/wave1_bronze/publish_row_counts.py
+            parameters:
+              - --catalog
+              - "{{job.parameters.catalog}}"
+              - --bronze-prefix
+              - "{{job.parameters.bronze_prefix}}"
+              - --source-tables
+              - "{{job.parameters.source_tables}}"
+              - --run-id
+              - "{{job.run_id}}"
+              - --src-root
+              - "{{job.parameters.src_root}}"
