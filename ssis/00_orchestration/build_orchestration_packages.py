@@ -754,9 +754,13 @@ def build_master_finance_close():
     period_check = pkg.add(ExecuteSql(
         "Read Period Status",
         CONN_STAGING,
-        "SELECT TOP (1) ConfigurationValue AS PeriodStatus FROM etl.Configuration "
+        # A single row result set fails outright when the query returns none,
+        # so an unconfigured environment must still yield a status - and the
+        # one it yields must not open the close.
+        "SELECT ISNULL(MAX(ConfigurationValue), N'Unknown') AS PeriodStatus FROM "
+        "(SELECT TOP (1) ConfigurationValue FROM etl.Configuration "
         "WHERE ConfigurationKey = N'Finance.PeriodStatus' "
-        "AND EnvironmentCode IN (?, N'ALL') ORDER BY EnvironmentCode DESC;",
+        "AND EnvironmentCode IN (?, N'ALL') ORDER BY EnvironmentCode DESC) AS c;",
         result_type="ResultSetType_SingleRow",
         parameter_bindings=[("$Package::EnvironmentCode", 0, "NVARCHAR")],
         result_bindings=[("0", "User::PeriodStatus")],

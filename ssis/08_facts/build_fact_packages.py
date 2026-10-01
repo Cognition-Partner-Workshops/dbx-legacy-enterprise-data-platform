@@ -225,6 +225,7 @@ def _sale_line_source(flow, region_code, extra_predicate=""):
         "ORDER BY sl.InvoiceDate, sl.InvoiceNumber, sl.InvoiceLineNumber;" % (region_code, extra_predicate),
         list(SALE_LINE_COLUMNS),
         timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
 
 
@@ -695,6 +696,7 @@ def build_fact_load_order():
         "ORDER BY o.OrderDate, o.OrderNumber, o.OrderLineNumber;",
         columns,
         timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
     _lookup_customer(flow)
     _lookup_stock_item(flow)
@@ -810,6 +812,7 @@ def build_fact_load_payment():
         "FROM stg.Payment AS p WHERE p.LastModifiedAt > ? AND p.LastModifiedAt <= ?;",
         columns,
         timeout=1800,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
     flow.sort("Sort By Bank Reference", ["BankReference", "PaymentDate"], eliminate_duplicates=True)
     _lookup_customer(flow)
@@ -916,6 +919,7 @@ def build_fact_load_customer_transaction():
         "FROM stg.CustomerTransaction AS ct WHERE ct.LastModifiedAt > ? AND ct.LastModifiedAt <= ?;",
         columns,
         timeout=1800,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
     _lookup_customer(flow)
     _lookup_date(flow, "TransactionDate", "TransactionDateKey", "Lookup Transaction Date Key")
@@ -1017,6 +1021,7 @@ def build_fact_load_loyalty_points():
         "lp.SourceInvoiceNumber "
         "FROM stg.LoyaltyPoints AS lp WHERE lp.LastModifiedAt > ? AND lp.LastModifiedAt <= ?;",
         columns,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
     _lookup_customer(flow)
     _lookup_date(flow, "EventDate", "EventDateKey", "Lookup Event Date Key")
@@ -1129,6 +1134,7 @@ def build_fact_load_web_session():
         "FROM stg.WebSession AS ws WHERE ws.LastModifiedAt > ? AND ws.LastModifiedAt <= ?;",
         columns,
         timeout=3600,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
     flow.sort("Deduplicate Sessions", ["SessionBusinessKey"], eliminate_duplicates=True)
     _lookup_customer(flow, no_match="IG")
@@ -1230,6 +1236,7 @@ def build_fact_load_purchase():
         "FROM stg.Purchase AS p WHERE p.LastModifiedAt > ? AND p.LastModifiedAt <= ?;",
         columns,
         timeout=1800,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
     _lookup_supplier(flow)
     _lookup_stock_item(flow)
@@ -1340,6 +1347,7 @@ def build_fact_load_purchase_receipt():
         "FROM stg.PurchaseReceipt AS pr WHERE pr.LastModifiedAt > ? AND pr.LastModifiedAt <= ?;",
         columns,
         timeout=1800,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
     _lookup_supplier(flow)
     _lookup_stock_item(flow)
@@ -1478,6 +1486,7 @@ def build_fact_load_supplier_payment():
         "sp.SettlementDiscountAmount, sp.TransactionCurrency, sp.PaymentRunCode "
         "FROM stg.SupplierPayment AS sp WHERE sp.LastModifiedAt > ? AND sp.LastModifiedAt <= ?;",
         columns,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
     _lookup_supplier(flow)
     flow.derived_column(
@@ -1592,6 +1601,7 @@ def build_fact_load_supplier_transaction():
         "st.OutstandingBalance, st.TransactionCurrency, st.IsAccrual, st.AccountingPeriodCode "
         "FROM stg.SupplierTransaction AS st WHERE st.LastModifiedAt > ? AND st.LastModifiedAt <= ?;",
         columns,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
     _lookup_supplier(flow)
     _lookup_date(flow, "TransactionDate", "TransactionDateKey", "Lookup Transaction Date Key")
@@ -1699,6 +1709,7 @@ def build_fact_load_movement():
         "FROM stg.Movement AS m WHERE m.LastModifiedAt > ? AND m.LastModifiedAt <= ?;",
         columns,
         timeout=2400,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
     _lookup_stock_item(flow)
     _lookup_date(flow, "MovementDate", "MovementDateKey", "Lookup Movement Date Key")
@@ -1803,6 +1814,7 @@ def build_fact_load_stock_holding():
         "FROM stg.StockHolding AS sh WHERE sh.PositionDate = CAST(? AS date);",
         columns,
         timeout=2400,
+        parameters=("$Package::SnapshotDate",),
     )
     _lookup_stock_item(flow)
     _lookup_date(flow, "PositionDate", "PositionDateKey", "Lookup Position Date Key")
@@ -1911,6 +1923,7 @@ def build_fact_load_daily_inventory_snapshot():
         "FROM stg.DailyInventorySnapshot AS dis WHERE dis.PositionDate = CAST(? AS date);",
         columns,
         timeout=3600,
+        parameters=("$Package::SnapshotDate",),
     )
     _lookup_stock_item(flow)
     _lookup_date(flow, "PositionDate", "PositionDateKey", "Lookup Position Date Key")
@@ -2024,6 +2037,7 @@ def build_fact_load_daily_sales_snapshot():
         "FROM stg.DailySalesSnapshot AS dss WHERE dss.SnapshotDate = CAST(? AS date);",
         columns,
         timeout=3600,
+        parameters=("$Package::SnapshotDate",),
     )
     flow.aggregate(
         "Aggregate To Customer Product Day",
@@ -2147,6 +2161,7 @@ def build_fact_load_shipment():
         "FROM stg.Shipment AS s WHERE s.LastModifiedAt > ? AND s.LastModifiedAt <= ?;",
         columns,
         timeout=1800,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
     _lookup_customer(flow)
     _lookup_date(flow, "DispatchedAt", "DispatchedDateKey", "Lookup Dispatched Date Key")
@@ -2285,6 +2300,7 @@ def build_fact_load_order_fulfilment():
         "FROM stg.OrderFulfilment AS ofm WHERE ofm.LastModifiedAt > ? AND ofm.LastModifiedAt <= ?;",
         columns,
         timeout=1800,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
     _lookup_customer(flow)
     _lookup_date(flow, "OrderedAt", "OrderedDateKey", "Lookup Ordered Date Key")
@@ -2429,6 +2445,7 @@ def build_fact_load_return():
         "r.RegionCode, r.TransactionCurrency "
         "FROM stg.[Return] AS r WHERE r.LastModifiedAt > ? AND r.LastModifiedAt <= ?;",
         columns,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
     _lookup_customer(flow)
     _lookup_stock_item(flow)
@@ -2539,6 +2556,7 @@ def build_fact_load_credit_note():
         "cn.TaxCreditAmount, cn.CreditReasonCode, cn.ApprovedByCode, cn.TransactionCurrency, cn.RegionCode "
         "FROM stg.CreditNote AS cn WHERE cn.LastModifiedAt > ? AND cn.LastModifiedAt <= ?;",
         columns,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
     _lookup_customer(flow)
     _lookup_date(flow, "CreditNoteDate", "CreditNoteDateKey", "Lookup Credit Note Date Key")
@@ -2664,6 +2682,7 @@ def build_fact_load_transaction():
         "FROM stg.[Transaction] AS t WHERE t.LastModifiedAt > ? AND t.LastModifiedAt <= ?;",
         columns,
         timeout=2400,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
     flow.lookup(
         "Lookup Transaction Type",
@@ -2764,6 +2783,7 @@ def build_fact_load_gl_posting():
         "ORDER BY gl.JournalBatchNumber, gl.JournalLineNumber;",
         columns,
         timeout=2400,
+        parameters=("User::WatermarkFrom", "User::WatermarkTo"),
     )
     flow.lookup(
         "Lookup GL Account Key",
@@ -2887,6 +2907,7 @@ def build_fact_dedup_sale():
         "ORDER BY f.[Invoice Number], f.[Invoice Line Number], f.[Lineage Key] DESC;",
         columns,
         timeout=3600,
+        parameters=("$Package::LookbackDays",),
     )
     flow.sort("Sort By Natural Key", ["InvoiceNumber", "InvoiceLineNumber", "LineageKey"])
     flow.aggregate(

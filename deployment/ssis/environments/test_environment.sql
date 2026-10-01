@@ -139,29 +139,6 @@ EXEC SSISDB.catalog.create_environment_variable
      @description      = N'Bound to project parameter OracleUser. Source: ORACLE_USER.';
 GO
 
-/* OracleProvider (String) <- ORACLE_PROVIDER */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.environment_variables AS v
-           INNER JOIN SSISDB.catalog.environments AS e ON e.environment_id = v.environment_id
-           INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = e.folder_id
-           WHERE v.name = N'OracleProvider' AND e.name = N'WWI_TEST' AND f.name = N'WWI_TEST')
-BEGIN
-    EXEC SSISDB.catalog.delete_environment_variable
-         @folder_name = N'WWI_TEST', @environment_name = N'WWI_TEST',
-         @variable_name = N'OracleProvider';
-END
-
-DECLARE @Value NVARCHAR(4000) = N'$(OracleProvider)';
-EXEC SSISDB.catalog.create_environment_variable
-     @folder_name      = N'WWI_TEST',
-     @environment_name = N'WWI_TEST',
-     @variable_name    = N'OracleProvider',
-     @data_type        = N'String',
-     @sensitive        = 0,
-     @value            = @Value,
-     @description      = N'Bound to project parameter OracleProvider. Source: ORACLE_PROVIDER.';
-GO
-
 /* OraclePassword (String, sensitive) <- ORACLE_PASSWORD */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.environment_variables AS v
@@ -252,52 +229,6 @@ EXEC SSISDB.catalog.create_environment_variable
      @sensitive        = 0,
      @value            = @Value,
      @description      = N'Bound to project parameter SqlServerUser. Source: SQLSERVER_USER.';
-GO
-
-/* SqlServerProvider (String) <- SQLSERVER_PROVIDER */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.environment_variables AS v
-           INNER JOIN SSISDB.catalog.environments AS e ON e.environment_id = v.environment_id
-           INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = e.folder_id
-           WHERE v.name = N'SqlServerProvider' AND e.name = N'WWI_TEST' AND f.name = N'WWI_TEST')
-BEGIN
-    EXEC SSISDB.catalog.delete_environment_variable
-         @folder_name = N'WWI_TEST', @environment_name = N'WWI_TEST',
-         @variable_name = N'SqlServerProvider';
-END
-
-DECLARE @Value NVARCHAR(4000) = N'$(SqlServerProvider)';
-EXEC SSISDB.catalog.create_environment_variable
-     @folder_name      = N'WWI_TEST',
-     @environment_name = N'WWI_TEST',
-     @variable_name    = N'SqlServerProvider',
-     @data_type        = N'String',
-     @sensitive        = 0,
-     @value            = @Value,
-     @description      = N'Bound to project parameter SqlServerProvider. Source: SQLSERVER_PROVIDER.';
-GO
-
-/* SqlServerTrustServerCertificate (Boolean) <- SQLSERVER_TRUST_SERVER_CERTIFICATE */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.environment_variables AS v
-           INNER JOIN SSISDB.catalog.environments AS e ON e.environment_id = v.environment_id
-           INNER JOIN SSISDB.catalog.folders AS f ON f.folder_id = e.folder_id
-           WHERE v.name = N'SqlServerTrustServerCertificate' AND e.name = N'WWI_TEST' AND f.name = N'WWI_TEST')
-BEGIN
-    EXEC SSISDB.catalog.delete_environment_variable
-         @folder_name = N'WWI_TEST', @environment_name = N'WWI_TEST',
-         @variable_name = N'SqlServerTrustServerCertificate';
-END
-
-DECLARE @Value BIT = N'$(SqlServerTrustServerCertificate)';
-EXEC SSISDB.catalog.create_environment_variable
-     @folder_name      = N'WWI_TEST',
-     @environment_name = N'WWI_TEST',
-     @variable_name    = N'SqlServerTrustServerCertificate',
-     @data_type        = N'Boolean',
-     @sensitive        = 0,
-     @value            = @Value,
-     @description      = N'Bound to project parameter SqlServerTrustServerCertificate. Source: SQLSERVER_TRUST_SERVER_CERTIFICATE.';
 GO
 
 /* SqlServerPassword (String, sensitive) <- SQLSERVER_PASSWORD */
@@ -643,24 +574,6 @@ BEGIN
 END
 GO
 
-/* OracleProvider <- environment variable OracleProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Orchestration'
-             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Orchestration',
-         @parameter_name = N'OracleProvider',
-         @parameter_value = N'OracleProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
 /* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.object_parameters AS op
@@ -729,42 +642,6 @@ BEGIN
          @project_name   = N'WWI_Orchestration',
          @parameter_name = N'SqlServerUser',
          @parameter_value = N'SqlServerUser',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerProvider <- environment variable SqlServerProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Orchestration'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Orchestration',
-         @parameter_name = N'SqlServerProvider',
-         @parameter_value = N'SqlServerProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Orchestration'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Orchestration',
-         @parameter_name = N'SqlServerTrustServerCertificate',
-         @parameter_value = N'SqlServerTrustServerCertificate',
          @value_type     = 'R';                    /* referenced environment variable */
 END
 GO
@@ -1093,24 +970,6 @@ BEGIN
 END
 GO
 
-/* OracleProvider <- environment variable OracleProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Extract_Oracle'
-             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Extract_Oracle',
-         @parameter_name = N'OracleProvider',
-         @parameter_value = N'OracleProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
 /* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.object_parameters AS op
@@ -1179,42 +1038,6 @@ BEGIN
          @project_name   = N'WWI_Extract_Oracle',
          @parameter_name = N'SqlServerUser',
          @parameter_value = N'SqlServerUser',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerProvider <- environment variable SqlServerProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Extract_Oracle'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Extract_Oracle',
-         @parameter_name = N'SqlServerProvider',
-         @parameter_value = N'SqlServerProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Extract_Oracle'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Extract_Oracle',
-         @parameter_name = N'SqlServerTrustServerCertificate',
-         @parameter_value = N'SqlServerTrustServerCertificate',
          @value_type     = 'R';                    /* referenced environment variable */
 END
 GO
@@ -1543,24 +1366,6 @@ BEGIN
 END
 GO
 
-/* OracleProvider <- environment variable OracleProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Extract_SqlServer'
-             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Extract_SqlServer',
-         @parameter_name = N'OracleProvider',
-         @parameter_value = N'OracleProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
 /* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.object_parameters AS op
@@ -1629,42 +1434,6 @@ BEGIN
          @project_name   = N'WWI_Extract_SqlServer',
          @parameter_name = N'SqlServerUser',
          @parameter_value = N'SqlServerUser',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerProvider <- environment variable SqlServerProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Extract_SqlServer'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Extract_SqlServer',
-         @parameter_name = N'SqlServerProvider',
-         @parameter_value = N'SqlServerProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Extract_SqlServer'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Extract_SqlServer',
-         @parameter_name = N'SqlServerTrustServerCertificate',
-         @parameter_value = N'SqlServerTrustServerCertificate',
          @value_type     = 'R';                    /* referenced environment variable */
 END
 GO
@@ -1993,24 +1762,6 @@ BEGIN
 END
 GO
 
-/* OracleProvider <- environment variable OracleProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Ingest_Files'
-             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Ingest_Files',
-         @parameter_name = N'OracleProvider',
-         @parameter_value = N'OracleProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
 /* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.object_parameters AS op
@@ -2079,42 +1830,6 @@ BEGIN
          @project_name   = N'WWI_Ingest_Files',
          @parameter_name = N'SqlServerUser',
          @parameter_value = N'SqlServerUser',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerProvider <- environment variable SqlServerProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Ingest_Files'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Ingest_Files',
-         @parameter_name = N'SqlServerProvider',
-         @parameter_value = N'SqlServerProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Ingest_Files'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Ingest_Files',
-         @parameter_name = N'SqlServerTrustServerCertificate',
-         @parameter_value = N'SqlServerTrustServerCertificate',
          @value_type     = 'R';                    /* referenced environment variable */
 END
 GO
@@ -2443,24 +2158,6 @@ BEGIN
 END
 GO
 
-/* OracleProvider <- environment variable OracleProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Staging'
-             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Staging',
-         @parameter_name = N'OracleProvider',
-         @parameter_value = N'OracleProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
 /* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.object_parameters AS op
@@ -2529,42 +2226,6 @@ BEGIN
          @project_name   = N'WWI_Staging',
          @parameter_name = N'SqlServerUser',
          @parameter_value = N'SqlServerUser',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerProvider <- environment variable SqlServerProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Staging'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Staging',
-         @parameter_name = N'SqlServerProvider',
-         @parameter_value = N'SqlServerProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Staging'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Staging',
-         @parameter_name = N'SqlServerTrustServerCertificate',
-         @parameter_value = N'SqlServerTrustServerCertificate',
          @value_type     = 'R';                    /* referenced environment variable */
 END
 GO
@@ -2893,24 +2554,6 @@ BEGIN
 END
 GO
 
-/* OracleProvider <- environment variable OracleProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_DataQuality'
-             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_DataQuality',
-         @parameter_name = N'OracleProvider',
-         @parameter_value = N'OracleProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
 /* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.object_parameters AS op
@@ -2979,42 +2622,6 @@ BEGIN
          @project_name   = N'WWI_DataQuality',
          @parameter_name = N'SqlServerUser',
          @parameter_value = N'SqlServerUser',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerProvider <- environment variable SqlServerProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_DataQuality'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_DataQuality',
-         @parameter_name = N'SqlServerProvider',
-         @parameter_value = N'SqlServerProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_DataQuality'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_DataQuality',
-         @parameter_name = N'SqlServerTrustServerCertificate',
-         @parameter_value = N'SqlServerTrustServerCertificate',
          @value_type     = 'R';                    /* referenced environment variable */
 END
 GO
@@ -3343,24 +2950,6 @@ BEGIN
 END
 GO
 
-/* OracleProvider <- environment variable OracleProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_ReferenceData'
-             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_ReferenceData',
-         @parameter_name = N'OracleProvider',
-         @parameter_value = N'OracleProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
 /* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.object_parameters AS op
@@ -3429,42 +3018,6 @@ BEGIN
          @project_name   = N'WWI_ReferenceData',
          @parameter_name = N'SqlServerUser',
          @parameter_value = N'SqlServerUser',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerProvider <- environment variable SqlServerProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_ReferenceData'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_ReferenceData',
-         @parameter_name = N'SqlServerProvider',
-         @parameter_value = N'SqlServerProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_ReferenceData'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_ReferenceData',
-         @parameter_name = N'SqlServerTrustServerCertificate',
-         @parameter_value = N'SqlServerTrustServerCertificate',
          @value_type     = 'R';                    /* referenced environment variable */
 END
 GO
@@ -3793,24 +3346,6 @@ BEGIN
 END
 GO
 
-/* OracleProvider <- environment variable OracleProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Dimensions'
-             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Dimensions',
-         @parameter_name = N'OracleProvider',
-         @parameter_value = N'OracleProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
 /* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.object_parameters AS op
@@ -3879,42 +3414,6 @@ BEGIN
          @project_name   = N'WWI_Dimensions',
          @parameter_name = N'SqlServerUser',
          @parameter_value = N'SqlServerUser',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerProvider <- environment variable SqlServerProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Dimensions'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Dimensions',
-         @parameter_name = N'SqlServerProvider',
-         @parameter_value = N'SqlServerProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Dimensions'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Dimensions',
-         @parameter_name = N'SqlServerTrustServerCertificate',
-         @parameter_value = N'SqlServerTrustServerCertificate',
          @value_type     = 'R';                    /* referenced environment variable */
 END
 GO
@@ -4243,24 +3742,6 @@ BEGIN
 END
 GO
 
-/* OracleProvider <- environment variable OracleProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Facts'
-             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Facts',
-         @parameter_name = N'OracleProvider',
-         @parameter_value = N'OracleProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
 /* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.object_parameters AS op
@@ -4329,42 +3810,6 @@ BEGIN
          @project_name   = N'WWI_Facts',
          @parameter_name = N'SqlServerUser',
          @parameter_value = N'SqlServerUser',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerProvider <- environment variable SqlServerProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Facts'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Facts',
-         @parameter_name = N'SqlServerProvider',
-         @parameter_value = N'SqlServerProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Facts'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Facts',
-         @parameter_name = N'SqlServerTrustServerCertificate',
-         @parameter_value = N'SqlServerTrustServerCertificate',
          @value_type     = 'R';                    /* referenced environment variable */
 END
 GO
@@ -4693,24 +4138,6 @@ BEGIN
 END
 GO
 
-/* OracleProvider <- environment variable OracleProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Aggregates'
-             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Aggregates',
-         @parameter_name = N'OracleProvider',
-         @parameter_value = N'OracleProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
 /* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.object_parameters AS op
@@ -4779,42 +4206,6 @@ BEGIN
          @project_name   = N'WWI_Aggregates',
          @parameter_name = N'SqlServerUser',
          @parameter_value = N'SqlServerUser',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerProvider <- environment variable SqlServerProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Aggregates'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Aggregates',
-         @parameter_name = N'SqlServerProvider',
-         @parameter_value = N'SqlServerProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Aggregates'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Aggregates',
-         @parameter_name = N'SqlServerTrustServerCertificate',
-         @parameter_value = N'SqlServerTrustServerCertificate',
          @value_type     = 'R';                    /* referenced environment variable */
 END
 GO
@@ -5143,24 +4534,6 @@ BEGIN
 END
 GO
 
-/* OracleProvider <- environment variable OracleProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Finance'
-             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Finance',
-         @parameter_name = N'OracleProvider',
-         @parameter_value = N'OracleProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
 /* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.object_parameters AS op
@@ -5229,42 +4602,6 @@ BEGIN
          @project_name   = N'WWI_Finance',
          @parameter_name = N'SqlServerUser',
          @parameter_value = N'SqlServerUser',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerProvider <- environment variable SqlServerProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Finance'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Finance',
-         @parameter_name = N'SqlServerProvider',
-         @parameter_value = N'SqlServerProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Finance'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Finance',
-         @parameter_name = N'SqlServerTrustServerCertificate',
-         @parameter_value = N'SqlServerTrustServerCertificate',
          @value_type     = 'R';                    /* referenced environment variable */
 END
 GO
@@ -5593,24 +4930,6 @@ BEGIN
 END
 GO
 
-/* OracleProvider <- environment variable OracleProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Sales'
-             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Sales',
-         @parameter_name = N'OracleProvider',
-         @parameter_value = N'OracleProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
 /* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.object_parameters AS op
@@ -5679,42 +4998,6 @@ BEGIN
          @project_name   = N'WWI_Sales',
          @parameter_name = N'SqlServerUser',
          @parameter_value = N'SqlServerUser',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerProvider <- environment variable SqlServerProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Sales'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Sales',
-         @parameter_name = N'SqlServerProvider',
-         @parameter_value = N'SqlServerProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Sales'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Sales',
-         @parameter_name = N'SqlServerTrustServerCertificate',
-         @parameter_value = N'SqlServerTrustServerCertificate',
          @value_type     = 'R';                    /* referenced environment variable */
 END
 GO
@@ -6043,24 +5326,6 @@ BEGIN
 END
 GO
 
-/* OracleProvider <- environment variable OracleProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Inventory'
-             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Inventory',
-         @parameter_name = N'OracleProvider',
-         @parameter_value = N'OracleProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
 /* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.object_parameters AS op
@@ -6129,42 +5394,6 @@ BEGIN
          @project_name   = N'WWI_Inventory',
          @parameter_name = N'SqlServerUser',
          @parameter_value = N'SqlServerUser',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerProvider <- environment variable SqlServerProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Inventory'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Inventory',
-         @parameter_name = N'SqlServerProvider',
-         @parameter_value = N'SqlServerProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Inventory'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Inventory',
-         @parameter_name = N'SqlServerTrustServerCertificate',
-         @parameter_value = N'SqlServerTrustServerCertificate',
          @value_type     = 'R';                    /* referenced environment variable */
 END
 GO
@@ -6493,24 +5722,6 @@ BEGIN
 END
 GO
 
-/* OracleProvider <- environment variable OracleProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Procurement'
-             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Procurement',
-         @parameter_name = N'OracleProvider',
-         @parameter_value = N'OracleProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
 /* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.object_parameters AS op
@@ -6579,42 +5790,6 @@ BEGIN
          @project_name   = N'WWI_Procurement',
          @parameter_name = N'SqlServerUser',
          @parameter_value = N'SqlServerUser',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerProvider <- environment variable SqlServerProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Procurement'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Procurement',
-         @parameter_name = N'SqlServerProvider',
-         @parameter_value = N'SqlServerProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Procurement'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Procurement',
-         @parameter_name = N'SqlServerTrustServerCertificate',
-         @parameter_value = N'SqlServerTrustServerCertificate',
          @value_type     = 'R';                    /* referenced environment variable */
 END
 GO
@@ -6943,24 +6118,6 @@ BEGIN
 END
 GO
 
-/* OracleProvider <- environment variable OracleProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Customer360'
-             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Customer360',
-         @parameter_name = N'OracleProvider',
-         @parameter_value = N'OracleProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
 /* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.object_parameters AS op
@@ -7029,42 +6186,6 @@ BEGIN
          @project_name   = N'WWI_Customer360',
          @parameter_name = N'SqlServerUser',
          @parameter_value = N'SqlServerUser',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerProvider <- environment variable SqlServerProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Customer360'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Customer360',
-         @parameter_name = N'SqlServerProvider',
-         @parameter_value = N'SqlServerProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Customer360'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Customer360',
-         @parameter_name = N'SqlServerTrustServerCertificate',
-         @parameter_value = N'SqlServerTrustServerCertificate',
          @value_type     = 'R';                    /* referenced environment variable */
 END
 GO
@@ -7393,24 +6514,6 @@ BEGIN
 END
 GO
 
-/* OracleProvider <- environment variable OracleProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_ErrorHandling'
-             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_ErrorHandling',
-         @parameter_name = N'OracleProvider',
-         @parameter_value = N'OracleProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
 /* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.object_parameters AS op
@@ -7479,42 +6582,6 @@ BEGIN
          @project_name   = N'WWI_ErrorHandling',
          @parameter_name = N'SqlServerUser',
          @parameter_value = N'SqlServerUser',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerProvider <- environment variable SqlServerProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_ErrorHandling'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_ErrorHandling',
-         @parameter_name = N'SqlServerProvider',
-         @parameter_value = N'SqlServerProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_ErrorHandling'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_ErrorHandling',
-         @parameter_name = N'SqlServerTrustServerCertificate',
-         @parameter_value = N'SqlServerTrustServerCertificate',
          @value_type     = 'R';                    /* referenced environment variable */
 END
 GO
@@ -7843,24 +6910,6 @@ BEGIN
 END
 GO
 
-/* OracleProvider <- environment variable OracleProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Maintenance'
-             AND op.object_type = 20 AND op.parameter_name = N'OracleProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Maintenance',
-         @parameter_name = N'OracleProvider',
-         @parameter_value = N'OracleProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
 /* CM.WWI_Oracle_ERP.Password <- environment variable OraclePassword */
 IF EXISTS (SELECT 1
            FROM SSISDB.catalog.object_parameters AS op
@@ -7929,42 +6978,6 @@ BEGIN
          @project_name   = N'WWI_Maintenance',
          @parameter_name = N'SqlServerUser',
          @parameter_value = N'SqlServerUser',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerProvider <- environment variable SqlServerProvider */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Maintenance'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerProvider')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Maintenance',
-         @parameter_name = N'SqlServerProvider',
-         @parameter_value = N'SqlServerProvider',
-         @value_type     = 'R';                    /* referenced environment variable */
-END
-GO
-
-/* SqlServerTrustServerCertificate <- environment variable SqlServerTrustServerCertificate */
-IF EXISTS (SELECT 1
-           FROM SSISDB.catalog.object_parameters AS op
-           INNER JOIN SSISDB.catalog.projects AS pr ON pr.project_id = op.project_id
-           INNER JOIN SSISDB.catalog.folders  AS f  ON f.folder_id  = pr.folder_id
-           WHERE f.name = N'WWI_TEST' AND pr.name = N'WWI_Maintenance'
-             AND op.object_type = 20 AND op.parameter_name = N'SqlServerTrustServerCertificate')
-BEGIN
-    EXEC SSISDB.catalog.set_object_parameter_value
-         @object_type    = 20,                     /* project parameter */
-         @folder_name    = N'WWI_TEST',
-         @project_name   = N'WWI_Maintenance',
-         @parameter_name = N'SqlServerTrustServerCertificate',
-         @parameter_value = N'SqlServerTrustServerCertificate',
          @value_type     = 'R';                    /* referenced environment variable */
 END
 GO

@@ -30,6 +30,8 @@ import sys
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 
+import yaml
+
 SOURCE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # The tree the file checks walk. Overridable so the negative fixtures in
 # validation/static/run_negative_fixtures.py can point the same checks at a
@@ -237,6 +239,384 @@ def check_dtsx_pipeline(result, prefixes):
                             "log provider creation name %r is not a runtime type" % creation)
 
 
+def _component_properties(node):
+    """name -> text of the <properties> a component or column carries."""
+    properties = {}
+    for holder in node.findall("properties"):
+        for prop in holder.findall("property"):
+            properties[prop.get("name")] = (prop.text or "").strip()
+    return properties
+
+
+FLAT_FILE_COLUMN_PROPERTIES = ("FastParse", "UseBinaryFormat")
+
+# Transforms the runtime rejects unless they carry a normal and an error
+# output, and nothing else.
+TWO_OUTPUT_COMPONENTS = ("Microsoft.DerivedColumn", "Microsoft.DataConvert")
+
+
+def check_component_contracts(result, prefixes):
+    """Pipeline components must carry the custom properties the runtime demands.
+
+    These are the shapes a component validates itself against when the package
+    is loaded, so a package missing one fails validation as VS_ISCORRUPT before
+    a single row moves - and nothing else in this file would notice. A flat file
+    column without FastParse, a derived column without its error output and a
+    conditional split whose default output is written as a case have all put a
+    package in that state.
+    """
+    components = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for component in root.iter("component"):
+            class_id = component.get("componentClassID") or ""
+            name = component.get("name") or component.get("refId") or "?"
+            outputs = component.findall("outputs/output")
+            components += 1
+
+            if class_id == "Microsoft.FlatFileSource":
+                if not component.get("localeId"):
+                    result.fail("component-contracts", rel,
+                                "flat file source %r has no localeId" % name)
+                for output in outputs:
+                    if output.get("isErrorOut") == "true":
+                        continue
+                    for column in output.findall("outputColumns/outputColumn"):
+                        properties = _component_properties(column)
+                        missing = [p for p in FLAT_FILE_COLUMN_PROPERTIES
+                                   if p not in properties]
+                        if missing:
+                            result.fail("component-contracts", rel,
+                                        "flat file source %r column %r is missing the required "
+                                        "custom propert%s %s"
+                                        % (name, column.get("name"),
+                                           "y" if len(missing) == 1 else "ies",
+                                           ", ".join(missing)))
+
+            if class_id in TWO_OUTPUT_COMPONENTS:
+                if len(outputs) != 2:
+                    result.fail("component-contracts", rel,
+                                "%s %r declares %d output(s); the runtime requires exactly 2"
+                                % (class_id.split(".")[-1], name, len(outputs)))
+                error_outputs = [o for o in outputs if o.get("isErrorOut") == "true"]
+                if not error_outputs:
+                    result.fail("component-contracts", rel,
+                                "%s %r has no error output"
+                                % (class_id.split(".")[-1], name))
+                for output in error_outputs:
+                    carried = {c.get("name")
+                               for c in output.findall("outputColumns/outputColumn")}
+                    missing = [c for c in ("ErrorCode", "ErrorColumn") if c not in carried]
+                    if missing:
+                        result.fail("component-contracts", rel,
+                                    "%s %r error output does not carry %s"
+                                    % (class_id.split(".")[-1], name, ", ".join(missing)))
+
+            if class_id == "Microsoft.ConditionalSplit":
+                defaults, orders = [], []
+                for output in outputs:
+                    if output.get("isErrorOut") == "true":
+                        continue
+                    properties = _component_properties(output)
+                    if properties.get("IsDefaultOut", "").lower() == "true":
+                        defaults.append(output.get("name"))
+                        if properties.get("Expression"):
+                            result.fail("component-contracts", rel,
+                                        "conditional split %r default output %r carries a case "
+                                        "expression" % (name, output.get("name")))
+                        continue
+                    if not properties.get("Expression"):
+                        result.fail("component-contracts", rel,
+                                    "conditional split %r output %r has no Expression and is "
+                                    "not the default output" % (name, output.get("name")))
+                    order = properties.get("EvaluationOrder")
+                    if order is not None and order.lstrip("-").isdigit():
+                        orders.append(int(order))
+                if len(defaults) != 1:
+                    result.fail("component-contracts", rel,
+                                "conditional split %r has %d default output(s); it must have "
+                                "exactly 1" % (name, len(defaults)))
+                if orders and sorted(orders) != list(range(len(orders))):
+                    result.fail("component-contracts", rel,
+                                "conditional split %r case evaluation orders are %s; they must "
+                                "be 0..%d" % (name, sorted(orders), len(orders) - 1))
+    result.count("pipeline_components_checked", components)
+
+
+def check_input_column_cache(result, prefixes):
+    """Every input column must cache the type of the column arriving on it.
+
+    A component revalidates its cached input metadata against the buffer its
+    upstream path offers, and an input column that caches only a name has
+    nothing to compare, so the component fails validation as
+    VS_NEEDSNEWMETADATA before a row moves:
+
+        Column Normalize Partner Text.Inputs[Derived Column Input]
+        .Columns[PartnerCode] does not have a valid cache
+
+    which is how the live STG_Load_PartnerSale validation failed. Derived
+    Column replacements, Data Conversion sources and Union All inputs have all
+    been emitted in that state.
+    """
+    columns = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for component in root.iter("component"):
+            name = component.get("name") or component.get("refId") or "?"
+            for column in component.iter("inputColumn"):
+                columns += 1
+                if not column.get("cachedDataType"):
+                    result.fail("input-column-cache", rel,
+                                "input column %r of %r caches no data type"
+                                % (column.get("name"), name))
+    result.count("input_columns_checked", columns)
+
+
+def check_written_input_dispositions(result, prefixes):
+    """An input column a component writes must say what a failure does to its row.
+
+    A readWrite column is computed in place, so it carries the dispositions the
+    computation obeys. Without them the column validates as VS_ISCORRUPT:
+
+        The Normalize Partner Text.Inputs[Derived Column Input]
+        .Columns[PartnerCode] has an invalid error or truncation row disposition
+
+    which is how the live STG_Load_PartnerSale validation failed.
+    """
+    columns = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for component in root.iter("component"):
+            name = component.get("name") or component.get("refId") or "?"
+            for column in component.iter("inputColumn"):
+                if column.get("usageType") != "readWrite":
+                    continue
+                columns += 1
+                missing = [attr for attr in ("errorRowDisposition",
+                                             "truncationRowDisposition")
+                           if not column.get(attr)]
+                if missing:
+                    result.fail("input-column-disposition", rel,
+                                "written input column %r of %r declares no %s"
+                                % (column.get("name"), name, ", ".join(missing)))
+    result.count("written_input_columns_checked", columns)
+
+
+def check_lookup_reference_mapping(result, prefixes):
+    """A lookup must map every key and every copied column to its reference query.
+
+    The join lives on the input column as joinToReferenceColumn and the copy in
+    the match output column's CopyFromReferenceColumn property. A lookup missing
+    either has no relation to the reference set it names and fails validation
+    with 0xC0010009, which is how the live STG_Load_Currency validation failed.
+    """
+    lookups = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for component in root.iter("component"):
+            if component.get("componentClassID") != "Microsoft.Lookup":
+                continue
+            lookups += 1
+            name = component.get("name") or component.get("refId") or "?"
+            for column in component.iter("inputColumn"):
+                if not column.get("joinToReferenceColumn"):
+                    result.fail("lookup-reference-mapping", rel,
+                                "lookup %r joins input column %r to no reference column"
+                                % (name, column.get("name")))
+            for output in component.iter("output"):
+                if output.get("name") != "Lookup Match Output":
+                    continue
+                for column in output.iter("outputColumn"):
+                    copied = [prop.text for prop in column.iter("property")
+                              if prop.get("name") == "CopyFromReferenceColumn"]
+                    if not any(copied):
+                        result.fail("lookup-reference-mapping", rel,
+                                    "lookup %r copies output column %r from no reference column"
+                                    % (name, column.get("name")))
+                    # The copy can truncate, so the column says what that does
+                    # to the row; without it the column is corrupt.
+                    missing = [attr for attr in ("errorOrTruncationOperation",
+                                                 "truncationRowDisposition")
+                               if not column.get(attr)]
+                    if missing:
+                        result.fail("lookup-reference-mapping", rel,
+                                    "lookup %r copies output column %r with no %s"
+                                    % (name, column.get("name"), ", ".join(missing)))
+    result.count("lookups_checked", lookups)
+
+
+# The property set a component gives itself when the SSIS runtime creates one,
+# read off the components on the execution host. A component asks the runtime
+# for each of these by name while it validates and the runtime supplies no
+# default for a property that was never persisted, so anything missing here
+# fails the component with DTS_E_ELEMENTNOTFOUND (0xC0010009) before the
+# component looks at its query, its columns or its connection. The runtime
+# itself is the authority - Test-PackageRuntimeContracts.ps1 asks every
+# component class on a host that has SSIS - and this table repeats the classes
+# whose set is easy to under-declare so the estate is still held to it offline.
+RUNTIME_COMPONENT_PROPERTIES = {
+    "Microsoft.Lookup": (
+        "SqlCommand", "SqlCommandParam", "ConnectionType", "CacheType",
+        "NoMatchBehavior", "NoMatchCachePercentage", "MaxMemoryUsage",
+        "MaxMemoryUsage64", "ReferenceMetadataXml", "ParameterMap",
+        "DefaultCodePage", "TreatDuplicateKeysAsError",
+    ),
+    "Microsoft.Sort": ("EliminateDuplicates", "MaximumThreads"),
+    "Microsoft.Aggregate": (
+        "KeyScale", "Keys", "CountDistinctScale", "CountDistinctKeys",
+        "AutoExtendFactor",
+    ),
+}
+
+
+def check_component_property_sets(result, prefixes):
+    """A component must persist every property the component gives itself.
+
+    The runtime restores a pipeline component from what the package holds and
+    adds nothing: the first property the component reads and does not find
+    fails it with 0xC0010009, whatever the value would have been. That is how a
+    lookup that built, deployed and matched the catalog byte for byte still
+    could not start in the live estate.
+    """
+    components = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for component in root.iter("component"):
+            expected = RUNTIME_COMPONENT_PROPERTIES.get(component.get("componentClassID"))
+            if not expected:
+                continue
+            components += 1
+            written = set()
+            for properties in component.findall("properties"):
+                for prop in properties.findall("property"):
+                    written.add(prop.get("name"))
+            missing = [name for name in expected if name not in written]
+            if missing:
+                result.fail("component-property-set", rel,
+                            "component %r persists no %s"
+                            % (component.get("name") or component.get("refId") or "?",
+                               ", ".join(missing)))
+    result.count("component_property_sets_checked", components)
+
+
+def check_foreach_file_enumerators(result, prefixes):
+    """A file loop must enumerate the folder and the files it was configured with.
+
+    The Directory expression belongs to the enumerator: on the loop container it
+    is never applied, the enumerator keeps its design-time folder, and the loop
+    silently walks whatever that path resolves to. A file specification of
+    ``*.*`` has the same effect within a folder - unrelated files are ingested
+    and logged as feed files.
+    """
+    ns = "www.microsoft.com/SqlServer/Dts"
+    loops = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for executable in root.iter("{%s}Executable" % ns):
+            enumerator = executable.find("{%s}ForEachEnumerator" % ns)
+            if enumerator is None:
+                continue
+            if (enumerator.get("{%s}CreationName" % ns) or "") != "Microsoft.ForEachFileEnumerator":
+                continue
+            loops += 1
+            where = executable.get("{%s}ObjectName" % ns) or executable.get("{%s}refId" % ns)
+            on_container = [e for e in executable.findall("{%s}PropertyExpression" % ns)
+                            if e.get("{%s}Name" % ns) == "Directory"]
+            on_enumerator = [e for e in enumerator.findall("{%s}PropertyExpression" % ns)
+                             if e.get("{%s}Name" % ns) == "Directory"]
+            if on_container:
+                result.fail("foreach-file-enumerator", rel,
+                            "foreach loop %r sets the Directory expression on the container; "
+                            "the enumerator owns that property" % where)
+            if not on_enumerator:
+                result.fail("foreach-file-enumerator", rel,
+                            "foreach loop %r has no Directory expression on its enumerator, so "
+                            "it walks the folder baked in at design time" % where)
+            spec = None
+            for prop in enumerator.iter("FEFEProperty"):
+                if prop.get("FileSpec") is not None:
+                    spec = prop.get("FileSpec")
+            # A feed loop reads one feed out of a shared drop folder; a sweep
+            # over a quarantine or archive folder is meant to take everything.
+            if rel.startswith("ssis/03_file_ingestion/") and (not spec or spec in ("*", "*.*")):
+                result.fail("foreach-file-enumerator", rel,
+                            "foreach loop %r enumerates %r; it must name the feed's files"
+                            % (where, spec or ""))
+    result.count("foreach_file_loops", loops)
+
+
+# A single row result set that reads a table returns nothing when the table has
+# no matching row, and the assignment to the variable fails. An aggregate over
+# the same predicate always returns exactly one row.
+AGGREGATE_SELECT_RE = re.compile(
+    r"\b(MAX|MIN|COUNT|COUNT_BIG|SUM|AVG|ISNULL|NVL|COALESCE)\b", re.I)
+
+
+def _outermost(sql):
+    """*sql* with every parenthesised subexpression removed.
+
+    A derived table's own GROUP BY says nothing about how many rows the
+    statement returns; only the outermost query shape does.
+    """
+    out, depth = [], 0
+    for char in sql:
+        if char == "(":
+            depth += 1
+            out.append(" ")
+        elif char == ")":
+            depth = max(0, depth - 1)
+        elif depth == 0:
+            out.append(char)
+    return "".join(out)
+
+
+def check_single_row_result_sets(result, prefixes):
+    """An Execute SQL Task taking a single row must be unable to return none."""
+    ns = "www.microsoft.com/sqlserver/dts/tasks/sqltask"
+    tasks = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for task in root.iter("{%s}SqlTaskData" % ns):
+            if (task.get("{%s}ResultType" % ns) or "") != "ResultSetType_SingleRow":
+                continue
+            tasks += 1
+            sql = (task.get("{%s}SqlStatementSource" % ns) or "").strip()
+            if not sql.upper().startswith("SELECT"):
+                continue
+            outer = " ".join(_outermost(sql).split())
+            if not re.search(r"\bFROM\b", outer, re.I):
+                # A select over no table - a scalar function, a literal - is
+                # itself the one row.
+                continue
+            if (re.search(r"\bGROUP\s+BY\b", outer, re.I)
+                    or not AGGREGATE_SELECT_RE.search(sql)):
+                result.fail("single-row-result-set", rel,
+                            "single row result set reads %r, which returns no row when nothing "
+                            "matches" % " ".join(sql.split())[:120])
+    result.count("single_row_result_sets", tasks)
+
+
 def _project_connection_managers(package_full_path):
     """DTSID -> name for the .conmgr files of the project owning a package."""
     ns = {"DTS": "www.microsoft.com/SqlServer/Dts"}
@@ -420,6 +800,19 @@ def check_dtproj_structure(result, prefixes):
     result.count("dtproj_files_checked", checked)
 
 
+# The properties an OLE DB connection manager is retargeted through. Its whole
+# ConnectionString is deliberately absent: assigning it rebuilds the connection
+# and drops the password the catalog applied to CM.<connection>.Password, which
+# is what made every task fail with 'Login failed for user' followed by
+# DTS_E_CANNOTACQUIRECONNECTIONFROMCONNECTIONMANAGER.
+# Oracle addresses the whole service through ServerName, so it has no catalog
+# of its own to retarget.
+OLEDB_BOUND_PROPERTIES = {
+    "MSOLEDBSQL19.1": ("ServerName", "InitialCatalog", "UserName"),
+    "OraOLEDB.Oracle.1": ("ServerName", "UserName"),
+}
+
+
 def check_conmgr_binding(result, prefixes):
     """Connection managers must bind at run time, not carry a literal token."""
     ns = {"DTS": "www.microsoft.com/SqlServer/Dts"}
@@ -430,9 +823,28 @@ def check_conmgr_binding(result, prefixes):
             root = ET.parse(full).getroot()
         except ET.ParseError:
             continue
-        expressions = [node for node in root.iter("{%s}PropertyExpression" % ns["DTS"])
-                       if node.get("{%s}Name" % ns["DTS"]) == "ConnectionString"]
-        if not expressions:
+        kind = root.get("{%s}CreationName" % ns["DTS"]) or ""
+        expressed = [node.get("{%s}Name" % ns["DTS"])
+                     for node in root.iter("{%s}PropertyExpression" % ns["DTS"])]
+        if kind == "OLEDB":
+            if "ConnectionString" in expressed:
+                result.fail("conmgr-binding", rel,
+                            "OLE DB connection manager expresses ConnectionString; "
+                            "evaluating it rebuilds the connection and discards the "
+                            "password the catalog applied through CM.<connection>.Password")
+            literal = ""
+            for node in root.iter():
+                literal = node.get("{%s}ConnectionString" % ns["DTS"]) or literal
+            required = ()
+            for provider, properties in OLEDB_BOUND_PROPERTIES.items():
+                if provider in literal:
+                    required = properties
+            for prop in required:
+                if prop not in expressed:
+                    result.fail("conmgr-binding", rel,
+                                "no %s property expression; the connection cannot be "
+                                "retargeted at run time" % prop)
+        elif "ConnectionString" not in expressed:
             result.fail("conmgr-binding", rel,
                         "no ConnectionString property expression; the connection cannot be "
                         "retargeted at run time")
@@ -450,22 +862,32 @@ def check_conmgr_binding(result, prefixes):
 TLS_KEYWORD = "Trust Server Certificate=True;"
 TLS_KEYWORD_WRONG = re.compile(r"TrustServerCertificate\s*=")
 
+# The providers the estate is validated against; both are fixed in the
+# design-time connection string because no connection manager property carries
+# them and rewriting the whole connection string would drop the password.
+SQLSERVER_PROVIDER = "MSOLEDBSQL19.1"
+ORACLE_PROVIDER = "OraOLEDB.Oracle.1"
+
 
 SENSITIVE_TOKEN_RE = re.compile(
     r"@\[\$Project::(\w*(?:Password|Secret|Pwd)\w*)\]", re.IGNORECASE)
 
 
+PASSWORD_KEYWORD_RE = re.compile(r"(?i)\b(password|pwd)\s*=")
+
+
 def check_conmgr_credentials(result, prefixes):
-    """No connection expression may name a credential.
+    """No connection expression may name a credential, and no literal may hold one.
 
     A Sensitive project parameter cannot be read by the SSIS expression
     evaluator: the package fails validation with 0xC0017010 before the
     credential would ever be used. The password therefore travels on the
     connection manager's own ``CM.<connection>.Password`` project parameter,
-    which the runtime applies to the connection manager object before the
-    ConnectionString expression is evaluated, and which the catalog environment
-    binds by reference. Everything else about the connection string - host,
-    port, service, catalog, provider, user, TLS - stays in the expression.
+    which the runtime applies to the connection manager object and which the
+    catalog environment binds by reference. Host, catalog and user are
+    retargeted by property expression; the provider and the TLS keyword cannot
+    be, so they are asserted on the design-time literal that ships with the
+    package and is what the connection actually starts from.
     """
     ns = {"DTS": "www.microsoft.com/SqlServer/Dts"}
     oracle = sql = 0
@@ -474,35 +896,42 @@ def check_conmgr_credentials(result, prefixes):
             root = ET.parse(full).getroot()
         except ET.ParseError:
             continue
-        expression = ""
+        expressions = {}
         for node in root.iter("{%s}PropertyExpression" % ns["DTS"]):
-            if node.get("{%s}Name" % ns["DTS"]) == "ConnectionString":
-                expression = node.text or ""
-        if not expression:
+            expressions[node.get("{%s}Name" % ns["DTS"])] = node.text or ""
+        for name, expression in sorted(expressions.items()):
+            for match in SENSITIVE_TOKEN_RE.finditer(expression):
+                result.fail("conmgr-credentials", rel,
+                            "the %s expression references the sensitive project parameter "
+                            "$Project::%s; a sensitive parameter cannot be read by the "
+                            "expression evaluator (0xC0017010) - bind the credential through "
+                            "CM.<connection>.Password" % (name, match.group(1)))
+        if (root.get("{%s}CreationName" % ns["DTS"]) or "") != "OLEDB":
             continue
-        for match in SENSITIVE_TOKEN_RE.finditer(expression):
+        literal = ""
+        for node in root.iter():
+            literal = node.get("{%s}ConnectionString" % ns["DTS"]) or literal
+        if PASSWORD_KEYWORD_RE.search(literal):
             result.fail("conmgr-credentials", rel,
-                        "connection expression references the sensitive project parameter "
-                        "$Project::%s; a sensitive parameter cannot be read by the "
-                        "expression evaluator (0xC0017010) - bind the credential through "
-                        "CM.<connection>.Password" % match.group(1))
-        if "OracleProvider" in expression:
+                        "the design-time connection string holds a password keyword")
+        if ORACLE_PROVIDER in literal:
             oracle += 1
-            if "@[$Project::OracleUser]" not in expression:
+            if "UserName" not in expressions:
                 result.fail("conmgr-credentials", rel,
-                            "Oracle connection expression does not consume $Project::OracleUser")
-        if "SqlServerProvider" in expression:
+                            "Oracle connection manager does not retarget UserName")
+        if SQLSERVER_PROVIDER in literal:
             sql += 1
-            if "Integrated Security=SSPI;" not in expression:
+            if TLS_KEYWORD not in literal:
                 result.fail("conmgr-credentials", rel,
-                            "SQL Server connection expression has no Windows authentication branch")
-            if TLS_KEYWORD not in expression:
+                            "SQL Server connection string does not carry %r" % TLS_KEYWORD)
+            if TLS_KEYWORD_WRONG.search(literal):
                 result.fail("conmgr-credentials", rel,
-                            "SQL Server connection expression does not emit %r" % TLS_KEYWORD)
-            if TLS_KEYWORD_WRONG.search(expression):
-                result.fail("conmgr-credentials", rel,
-                            "SQL Server connection expression emits the unspaced TrustServerCertificate "
+                            "SQL Server connection string carries the unspaced TrustServerCertificate "
                             "keyword, which OLE DB Driver 19 ignores")
+        elif ORACLE_PROVIDER not in literal:
+            result.fail("conmgr-credentials", rel,
+                        "OLE DB connection string names no supported provider; the provider "
+                        "cannot be retargeted at run time, so it has to be in the literal")
     result.count("oracle_connections_checked", oracle)
     result.count("sqlserver_connections_checked", sql)
 
@@ -578,6 +1007,82 @@ def check_catalog_binding_surface(result, prefixes):
     result.count("catalog_password_bindings", bindings)
 
 
+def check_environment_binding_parity(result, prefixes):
+    """Every catalog environment variable must have a parameter to bind to.
+
+    config/environments/<env>.env.yaml is what deployment/ssis/render_environment_sql.py
+    turns into `catalog.set_object_parameter_value @value_type = 'R'` calls. A
+    variable whose target parameter no longer exists in the project manifest is
+    bound to nothing: the deployment still succeeds, and the execution then runs
+    with the design-time default - an empty password, in the case that took the
+    Master_File_Ingestion run down. A CM.<connection>.ConnectionString target is
+    refused outright, because applying it rebuilds the connection manager and
+    discards CM.<connection>.Password with it.
+    """
+    ssis_ns = "www.microsoft.com/SqlServer/SSIS"
+    dts_ns = "www.microsoft.com/SqlServer/Dts"
+    # The deployable parameter surface of a project is its manifest - the
+    # CM.<connection>.* parameters - plus Project.params.
+    declared = set()
+    credential_parameters = set()
+    for _rel, full in walk_files(prefixes, (".dtproj", ".params")):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for node in root.iter("{%s}Parameter" % ssis_ns):
+            name = node.get("{%s}Name" % ssis_ns)
+            declared.add(name)
+            if name.startswith("CM.") and name.endswith(".Password"):
+                credential_parameters.add(name)
+    if not declared:
+        return
+
+    oledb = set()
+    for _rel, full in walk_files(prefixes, (".conmgr",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        if (root.get("{%s}CreationName" % dts_ns) or "") == "OLEDB":
+            oledb.add(os.path.basename(full)[: -len(".conmgr")])
+
+    environments = 0
+    directory = os.path.join(REPO_ROOT, "config", "environments")
+    if not os.path.isdir(directory):
+        return
+    for name in sorted(os.listdir(directory)):
+        if not name.endswith(".env.yaml"):
+            continue
+        rel = "config/environments/%s" % name
+        with open(os.path.join(REPO_ROOT, rel)) as handle:
+            document = yaml.safe_load(handle)
+        environments += 1
+        bound = set()
+        for variable in document.get("ssis_environment_variables") or []:
+            for target in variable.get("binds_to") or [variable["parameter"]]:
+                bound.add(target)
+                if (target.endswith(".ConnectionString")
+                        and target[len("CM."):-len(".ConnectionString")] in oledb):
+                    result.fail("environment-binding", rel,
+                                "%s binds %s; applying a whole connection string "
+                                "rebuilds the connection manager and discards the "
+                                "password bound to CM.<connection>.Password"
+                                % (variable["parameter"], target))
+                elif target not in declared:
+                    result.fail("environment-binding", rel,
+                                "%s binds %s, which no project manifest declares; the "
+                                "binding is skipped at deployment and the execution "
+                                "runs on the design-time default"
+                                % (variable["parameter"], target))
+        for parameter in sorted(credential_parameters - bound):
+            result.fail("environment-binding", rel,
+                        "no environment variable binds %s, so that connection "
+                        "manager would authenticate with an empty password"
+                        % parameter)
+    result.count("environments_checked", environments)
+
+
 def check_file_locality(result, prefixes):
     """A file package must resolve its folder and its file at run time.
 
@@ -604,11 +1109,12 @@ def check_file_locality(result, prefixes):
             if executable.find(".//{%s}ForEachEnumerator" % dts) is None:
                 continue
             enumerator = executable.find(".//{%s}ForEachEnumerator" % dts)
-            if enumerator.find(".//FEFE") is None:
+            if enumerator.find(".//FEFEProperty") is None:
                 continue  # not a file enumerator
             loops += 1
             name = executable.get("{%s}ObjectName" % dts)
-            expressions = [node.text or "" for node in executable
+            # Directory belongs to the enumerator; see check_foreach_file_enumerators.
+            expressions = [node.text or "" for node in enumerator
                            if node.tag == "{%s}PropertyExpression" % dts
                            and node.get("{%s}Name" % dts) == "Directory"]
             if not expressions:
@@ -636,6 +1142,214 @@ def check_file_locality(result, prefixes):
                             "design-time file" % name)
     result.count("foreach_file_loops_checked", loops)
     result.count("flatfile_managers_checked", managers)
+
+
+FILE_SYSTEM_OPERATIONS = ("CopyFile", "MoveFile", "DeleteFile", "RenameFile",
+                          "CopyDirectory", "MoveDirectory", "DeleteDirectory",
+                          "DeleteDirectoryContent", "CreateDirectory", "SetAttributes")
+
+
+def check_file_system_tasks(result, prefixes):
+    """A File System Task must serialise the attribute names the task host reads.
+
+    The task host is the only component that interprets FileSystemData, and it
+    reads TaskOperationType / TaskSourcePath / TaskDestinationPath. An element
+    spelled Operation / SourcePath / DestinationPath is still well-formed XML
+    and still builds, but the task loads on its defaults - operation CopyFile
+    with no paths - and the execution host reports
+
+        "DestinationPath" is not valid on operation type "CopyFile"
+
+    at task validation, which is how the archive step of every ING_FILE_*
+    package failed in the Master_File_Ingestion run.
+    """
+    tasks = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for data in root.iter("FileSystemData"):
+            tasks += 1
+            operation = data.get("TaskOperationType")
+            if operation is None:
+                result.fail("file-system-task", rel,
+                            "FileSystemData carries %s; the task host reads "
+                            "TaskOperationType and loads its CopyFile default instead"
+                            % (", ".join(sorted(data.attrib)) or "no attribute"))
+                continue
+            if operation not in FILE_SYSTEM_OPERATIONS:
+                result.fail("file-system-task", rel,
+                            "unknown File System Task operation %r" % operation)
+            for attribute in ("TaskSourcePath", "TaskIsSourceVariable"):
+                if not data.get(attribute):
+                    result.fail("file-system-task", rel,
+                                "operation %s has no %s" % (operation, attribute))
+            if operation.startswith(("Copy", "Move", "Rename")):
+                for attribute in ("TaskDestinationPath", "TaskIsDestinationVariable"):
+                    if not data.get(attribute):
+                        result.fail("file-system-task", rel,
+                                    "operation %s has no %s" % (operation, attribute))
+    result.count("file_system_tasks_checked", tasks)
+
+
+def check_variable_driven_file_tasks(result, prefixes):
+    """A File System Task fed by variables must not validate at package start.
+
+    CurrentFilePath and ArchiveFilePath hold their design-time empty string
+    until the Foreach loop assigns the first file, so a task that validates
+    with the package fails before the loop ever runs with
+
+        Variable "CurrentFilePath" is used as a source or destination and is empty.
+
+    which is how executions 81-83 of Master_File_Ingestion failed. The task
+    therefore has to carry DelayValidation, and every variable it addresses has
+    to be one the run time actually fills: a Foreach variable mapping or an
+    expression, never a bare empty literal.
+    """
+    dts = "www.microsoft.com/SqlServer/Dts"
+    assignment = re.compile(r"@\[(\w+::\w+)\]\s*=")
+    tasks = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+
+        # variable -> the executables that give it a value before anything reads it
+        writers = {}
+        for variable in root.iter("{%s}Variable" % dts):
+            if not variable.get("{%s}Expression" % dts):
+                continue
+            writers.setdefault("%s::%s" % (variable.get("{%s}Namespace" % dts),
+                                           variable.get("{%s}ObjectName" % dts)), set()).add(None)
+        for executable in root.iter("{%s}Executable" % dts):
+            ref = executable.get("{%s}refId" % dts)
+            for task in executable.iter("ExpressionTask"):
+                for name in assignment.findall(task.get("Expression") or ""):
+                    writers.setdefault(name, set()).add(ref)
+            for mapping in executable.findall("{%s}ForEachVariableMappings/{%s}ForEachVariableMapping"
+                                              % (dts, dts)):
+                writers.setdefault(mapping.get("{%s}VariableName" % dts), set()).add(ref)
+
+        upstream = {}
+        for constraint in root.iter("{%s}PrecedenceConstraint" % dts):
+            upstream.setdefault(constraint.get("{%s}To" % dts), set()).add(
+                constraint.get("{%s}From" % dts))
+
+        def before(ref):
+            """Every executable that must complete before *ref* starts."""
+            seen, queue = set(), [ref]
+            while queue:
+                for parent in upstream.get(queue.pop(), ()):
+                    if parent not in seen:
+                        seen.add(parent)
+                        queue.append(parent)
+            # a containing loop or sequence has already run its own assignments
+            while "\\" in ref:
+                ref = ref.rsplit("\\", 1)[0]
+                seen.add(ref)
+            return seen
+
+        for executable in root.iter("{%s}Executable" % dts):
+            data = executable.find("{%s}ObjectData/FileSystemData" % dts)
+            if data is None:
+                continue
+            variables = [data.get("TaskSourcePath")] if data.get("TaskIsSourceVariable") == "True" else []
+            if data.get("TaskIsDestinationVariable") == "True":
+                variables.append(data.get("TaskDestinationPath"))
+            if not variables:
+                continue
+            tasks += 1
+            name = executable.get("{%s}ObjectName" % dts)
+            if executable.get("{%s}DelayValidation" % dts) != "True":
+                result.fail("file-task-validation", rel,
+                            "File System Task %r addresses %s but validates at package "
+                            "start, when those variables are still empty"
+                            % (name, ", ".join(variables)))
+            preceding = before(executable.get("{%s}refId" % dts))
+            for variable in variables:
+                sources = writers.get(variable)
+                if not sources:
+                    result.fail("file-task-validation", rel,
+                                "File System Task %r reads %s, which no expression, Foreach "
+                                "mapping or Expression Task ever fills" % (name, variable))
+                elif not sources & (preceding | {None}):
+                    result.fail("file-task-validation", rel,
+                                "File System Task %r reads %s, which is only assigned by %s - "
+                                "nothing that runs before it" % (name, variable,
+                                                                 ", ".join(sorted(s for s in sources if s))))
+    result.count("variable_driven_file_tasks_checked", tasks)
+
+
+OLEDB_SOURCE_PROPERTIES = ("OpenRowset", "OpenRowsetVariable", "SqlCommand", "SqlCommandVariable",
+                           "DefaultCodePage", "AlwaysUseDefaultCodePage", "AccessMode",
+                           "ParameterMapping")
+
+
+def check_oledb_source_properties(result, prefixes):
+    """An OLE DB source must persist the whole custom property set it declares.
+
+    The component asks the run time for every property of its class by name
+    during validation, so one omission fails it outright:
+
+        The "RAW File Partner Sales" is missing the required property
+        "OpenRowsetVariable" ... validation status "VS_ISCORRUPT"
+
+    which is how execution 84 failed. Beyond presence, a command with ?
+    markers needs one ParameterMapping entry per marker, in order, each
+    naming a variable or parameter DTSID the package actually declares -
+    an unmapped marker cannot be bound and a dangling DTSID binds nothing.
+    """
+    dts = "www.microsoft.com/SqlServer/Dts"
+    mapping_entry = re.compile(r'"Parameter(\d+):(\w+)",\{([0-9A-Fa-f-]{36})\};')
+    sources = 0
+    parameterised = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+
+        declared = set()
+        for node in list(root.iter("{%s}Variable" % dts)) + list(root.iter("{%s}PackageParameter" % dts)):
+            dtsid = node.get("{%s}DTSID" % dts) or ""
+            declared.add(dtsid.strip("{}").upper())
+
+        for component in root.iter("component"):
+            if component.get("componentClassID") != "Microsoft.OLEDBSource":
+                continue
+            sources += 1
+            name = component.get("name")
+            properties = {node.get("name"): (node.text or "")
+                          for node in component.iter("property")}
+            for required in OLEDB_SOURCE_PROPERTIES:
+                if required not in properties:
+                    result.fail("oledb-source-properties", rel,
+                                "OLE DB source %r does not persist the required property %r, "
+                                "so the component fails validation as VS_ISCORRUPT"
+                                % (name, required))
+            markers = _sql_placeholders(properties.get("SqlCommand", ""))
+            if not markers:
+                continue
+            parameterised += 1
+            entries = mapping_entry.findall(properties.get("ParameterMapping", ""))
+            if len(entries) != markers:
+                result.fail("oledb-source-properties", rel,
+                            "OLE DB source %r has %d parameter marker(s) but %d "
+                            "ParameterMapping entr(y|ies)" % (name, markers, len(entries)))
+                continue
+            if [int(index) for index, _direction, _dtsid in entries] != list(range(markers)):
+                result.fail("oledb-source-properties", rel,
+                            "OLE DB source %r maps parameters out of placeholder order: %s"
+                            % (name, properties.get("ParameterMapping")))
+            for _index, _direction, dtsid in entries:
+                if dtsid.upper() not in declared:
+                    result.fail("oledb-source-properties", rel,
+                                "OLE DB source %r binds a parameter to DTSID {%s}, which no "
+                                "variable or package parameter owns" % (name, dtsid))
+    result.count("oledb_sources_checked", sources)
+    result.count("parameterised_oledb_sources_checked", parameterised)
 
 
 def check_feed_manifest(result, prefixes):
@@ -1203,18 +1917,396 @@ def check_attribution(result):
                         "README no longer references the WideWorldImporters sample")
 
 
+def _expression_statements(text):
+    """Statements the SSIS expression evaluator reads in *text*.
+
+    Deliberately independent of tools/ssisgen: this is the artifact the run time
+    parses, so it is checked without asking the generator what it meant.
+    """
+    count = 1
+    in_literal = False
+    escaped = False
+    for char in text:
+        if escaped:
+            escaped = False
+        elif char == "\\" and in_literal:
+            escaped = True
+        elif char == '"':
+            in_literal = not in_literal
+        elif char == ";" and not in_literal:
+            count += 1
+    return count
+
+
+def check_expression_task_statements(result, prefixes):
+    """An Expression Task holds exactly one expression.
+
+    The task hands its whole Expression attribute to the evaluator, which reads
+    one expression and refuses the separator, so several assignments strung
+    together with semicolons fail task validation before anything runs:
+
+        Attempt to parse the expression ... failed. The token ";" at line
+        number "1", character number "93" was not recognized.
+
+    which is how executions 102-104 failed. Several assignments belong in
+    several tasks, sequenced so the order still holds.
+    """
+    tasks = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for node in root.iter():
+            if not node.tag.endswith("ExpressionTask"):
+                continue
+            tasks += 1
+            expression = ""
+            for name, value in node.attrib.items():
+                if name.endswith("Expression"):
+                    expression = value
+            statements = _expression_statements(expression)
+            if statements > 1:
+                result.fail("expression-task-statements", rel,
+                            "expression task carries %d statements; the evaluator reads one "
+                            "expression and refuses the ';' token: %r"
+                            % (statements, expression[:120]))
+    result.count("expression_tasks_checked", tasks)
+
+
+def _table_columns():
+    """Column names per schema-qualified table, from the deployed DDL.
+
+    Read from the checked-in tree rather than the walked one: the DDL is the
+    contract a package is judged against, and the negative fixtures point the
+    checks at a scratch copy holding only the artifact under test.
+    """
+    create_re = re.compile(r"CREATE\s+TABLE\s+\[?(\w+)\]?\.\[?(\w+)\]?\s*\(", re.I)
+    skip = ("CONSTRAINT", "INDEX", "PRIMARY", "UNIQUE", "FOREIGN", "CHECK", "PERIOD", "WITH")
+    tables = {}
+    sql_files = []
+    for directory, _dirs, names in os.walk(os.path.join(SOURCE_ROOT, "sqlserver")):
+        sql_files.extend(os.path.join(directory, name) for name in names
+                         if name.endswith(".sql"))
+    for full in sorted(sql_files):
+        with open(full, errors="replace") as handle:
+            text = handle.read()
+        for match in create_re.finditer(text):
+            table = "%s.%s" % (match.group(1).lower(), match.group(2).lower())
+            columns = set()
+            depth = 1
+            for line in text[match.end():].splitlines():
+                depth += line.count("(") - line.count(")")
+                token = line.strip().lstrip("[").split(" ")[0].rstrip("],")
+                if token.upper() not in skip and re.match(r"^\w+$", token):
+                    columns.add(token.lower())
+                if depth <= 0:
+                    break
+            tables.setdefault(table, set()).update(columns)
+    return tables
+
+
+def _sql_contract_baseline():
+    """Package/column pairs already known to name a column their table lacks."""
+    path = os.path.join(SOURCE_ROOT, "validation", "static",
+                        "sql-column-contract-baseline.txt")
+    if not os.path.exists(path):
+        return set()
+    entries = set()
+    with open(path, errors="replace") as handle:
+        for line in handle:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                entries.add(line)
+    return entries
+
+
+def check_sql_column_contract(result, prefixes):
+    """A package's SELECT list must name columns the target table has.
+
+    A generated statement is never compiled until the component validates it
+    against the server, where a name the table does not carry fails the whole
+    data flow:
+
+        "The batch could not be analyzed because of compile errors.";
+        "Invalid column name 'AmountText'." ... validation status "VS_ISBROKEN"
+
+    which is how execution 105 failed. Only single-table statements over tables
+    this repository owns the DDL for are checked, and only the bare column names
+    in their select list, so the check reports a broken contract rather than the
+    limits of a SQL parser.
+
+    The estate carries the same defect in packages outside the failing run; those
+    pairs are listed in sql-column-contract-baseline.txt and reported as warnings
+    so this check guards what has been repaired without hiding the rest. A pair
+    that leaves the baseline may not come back.
+    """
+    baseline = _sql_contract_baseline()
+    dts_sq = "www.microsoft.com/sqlserver/dts/tasks/sqltask"
+    select_re = re.compile(r"^\s*SELECT\s+(?P<list>.+?)\s+FROM\s+\[?(?P<schema>\w+)\]?\.\[?(?P<table>\w+)\]?"
+                           r"(?P<rest>\s|;|$)", re.I | re.S)
+    tables = _table_columns()
+    statements = 0
+    seen = set()
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        sql_texts = []
+        for component in root.iter("component"):
+            for node in component.iter("property"):
+                if node.get("name") == "SqlCommand" and (node.text or "").strip():
+                    sql_texts.append((component.get("name"), node.text))
+        for task in root.iter("{%s}SqlTaskData" % dts_sq):
+            sql = task.get("{%s}SqlStatementSource" % dts_sq)
+            if sql:
+                sql_texts.append(("Execute SQL Task", sql))
+        for name, sql in sql_texts:
+            match = select_re.match(sql)
+            if not match:
+                continue
+            table = "%s.%s" % (match.group("schema").lower(), match.group("table").lower())
+            known = tables.get(table)
+            if not known:
+                continue
+            tail = sql[match.end("table"):].upper()
+            if " JOIN " in tail or "," in sql[match.end("table"):].split("WHERE")[0]:
+                continue  # more than one table in play
+            column_list = match.group("list")
+            if "(" in column_list or "*" in column_list or " SELECT " in column_list.upper():
+                continue  # expressions and sub-selects are not a column contract
+            statements += 1
+            # A renamed column is still a column of the table: the name the
+            # server has to resolve is the one in front of the AS, which is how
+            # the live STG_Load_PartnerSale lookup failed to load its metadata.
+            references = []
+            for item in column_list.split(","):
+                item = item.strip()
+                alias = re.match(r"^\[?(\w+)\]?\s+AS\s+\[?\w+\]?$", item, re.I)
+                references.append(alias.group(1) if alias else item.strip("[]"))
+            where = re.split(r"\bWHERE\b", sql, 1, re.I)
+            if len(where) == 2:
+                body = re.split(r"\b(?:GROUP|ORDER|HAVING)\b", where[1], 1, re.I)[0]
+                references.extend(re.findall(r"\b(\w+)\s*(?:=|<>|>=|<=|>|<|\bLIKE\b|\bIN\b)",
+                                             body, re.I))
+            for column in references:
+                if not re.match(r"^\w+$", column):
+                    continue
+                if column.upper() in ("NULL", "AND", "OR", "NOT", "N"):
+                    continue
+                if column.lower() not in known:
+                    detail = ("%s selects %r from %s, which has no such column"
+                              % (name, column, table))
+                    key = "%s|%s" % (rel, detail)
+                    if key in baseline:
+                        seen.add(key)
+                        result.warn("sql-column-contract", rel,
+                                    "known contract drift: %s" % detail)
+                    else:
+                        result.fail("sql-column-contract", rel, detail)
+    for key in sorted(baseline - seen):
+        rel, _, detail = key.partition("|")
+        result.warn("sql-column-contract", rel,
+                    "baseline entry no longer reported, remove it: %s" % detail)
+    result.count("single_table_selects_checked", statements)
+    result.count("sql_contract_drift_baselined", len(seen))
+
+
+def _ddl_catalog():
+    """The deployed DDL as ordered column metadata, or None when unreadable."""
+    path = os.path.join(SOURCE_ROOT, "tools", "ssisgen")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+    try:
+        import dbschema
+    except ImportError:
+        return None
+    return dbschema
+
+
+def _destination_debt(dbschema):
+    """Destinations recorded as still unable to honour their table contract."""
+    path = os.path.join(SOURCE_ROOT, "ssis", "destination-metadata-debt.txt")
+    entries = {}
+    if not os.path.exists(path):
+        return entries
+    with open(path, errors="replace") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            flow, destination, table, reason = (line.split("|") + ["", "", "", ""])[:4]
+            entries["%s|%s|%s" % (flow.strip(), destination.strip(),
+                                  dbschema.normalise_table(table.strip()))] = reason
+    return entries
+
+
+# The orchestration roots whose whole subtree is validated against the live
+# SSISDB catalog before it is run; see deployment/ssis/Test-SsisPackageValidation.ps1.
+LIVE_VALIDATED_ROOTS = ("Master_File_Ingestion",)
+
+
+def _orchestrated_packages():
+    """The packages every orchestration root executes, by root."""
+    path = os.path.join(SOURCE_ROOT, "ssis", "orchestration-plan.json")
+    roots = {}
+    if not os.path.exists(path):
+        return roots
+    with open(path, errors="replace") as handle:
+        plan = json.load(handle)
+
+    def walk(nodes, into):
+        for node in nodes or []:
+            package = node.get("package")
+            if package:
+                into.add(package)
+            for key in ("children", "in_package_children", "nodes"):
+                walk(node.get(key), into)
+
+    for root in plan.get("roots", []):
+        packages = set()
+        walk(root.get("nodes"), packages)
+        roots[root["root"]] = packages
+    return roots
+
+
+def check_destination_metadata(result, prefixes):
+    """An OLE DB destination's external metadata must be its target table's.
+
+    The destination revalidates its cached external columns against OpenRowset
+    when the package starts, and a cached shape the table does not have fails
+    the whole task before a row moves:
+
+        "raw FilePartnerSales NA" failed validation and returned validation
+        status "VS_NEEDSNEWMETADATA"
+
+    which is how executions 144-147 failed. A destination that publishes its
+    buffer's columns instead of its table's - the defect behind that run - is
+    reported here, offline, against the DDL this repository deploys. Columns the
+    table has and the flow does not supply are legitimate (the server defaults
+    them), so only NOT NULL columns without a default are required.
+
+    Destinations still carrying the defect are listed in
+    ssis/destination-metadata-debt.txt and reported as warnings; an entry that
+    no longer reproduces has to be removed. The register cannot excuse a
+    buffer-derived shape in a package a live-validated root executes, because
+    catalog validation of that root fails on it - which is how STG PartnerSale
+    reached a live run.
+    """
+    dbschema = _ddl_catalog()
+    if dbschema is None:
+        result.fail("destination-metadata", "tools/ssisgen/dbschema.py",
+                    "the DDL catalog could not be imported, so no destination "
+                    "could be checked against its table")
+        return
+    debt = _destination_debt(dbschema)
+    # A destination that publishes its buffer's shape fails catalog validation
+    # before a row moves, so the register cannot carry one in a root the estate
+    # validates against the live catalog: the root's own validation fails on it.
+    plan = _orchestrated_packages()
+    orchestrated = set()
+    for root in LIVE_VALIDATED_ROOTS:
+        orchestrated |= plan.get(root, set())
+    seen = set()
+    destinations = 0
+    for rel, full in walk_files(prefixes, (".dtsx",)):
+        try:
+            root = ET.parse(full).getroot()
+        except ET.ParseError:
+            continue
+        for component in root.iter("component"):
+            if component.get("componentClassID") != "Microsoft.OLEDBDestination":
+                continue
+            properties = _component_properties(component)
+            table = (properties.get("OpenRowset") or "").strip()
+            name = component.get("name") or "?"
+            ref = component.get("refId") or ""
+            flow = ref.split("\\")[1] if ref.count("\\") >= 2 else ""
+            if not table or not dbschema.has_table(table):
+                continue
+            destinations += 1
+            key = "%s|%s|%s" % (flow, name, dbschema.normalise_table(table))
+            registered = key in debt
+            columns = dbschema.table_columns(table)
+            declared = [node.get("name") for node in
+                        component.iter("externalMetadataColumn")]
+            mapped = set()
+            for node in component.iter("inputColumn"):
+                external = node.get("externalMetadataColumnId") or ""
+                if "ExternalColumns[" in external:
+                    mapped.add(external.rsplit("ExternalColumns[", 1)[1].rstrip("]"))
+            problems = []
+            if not mapped:
+                # SSIS reports an input with no columns as VS_ISBROKEN when the
+                # package validates: "The number of input columns for ...
+                # cannot be zero."
+                problems.append("has no input column, so its input into %s is empty" % table)
+            if declared != [col.name for col in columns]:
+                problems.append("declares external columns %s; %s has %s"
+                                % (", ".join(declared) or "none", table,
+                                   ", ".join(col.name for col in columns)))
+            else:
+                missing = [col.name for col in columns
+                           if col.name not in mapped and not col.nullable
+                           and not col.identity and not col.has_default]
+                if missing:
+                    problems.append("maps no value into NOT NULL column(s) %s of %s"
+                                    % (", ".join(missing), table))
+            package = os.path.splitext(os.path.basename(rel))[0]
+            for problem in problems:
+                detail = "destination %r in %r %s" % (name, flow, problem)
+                if registered and problem.startswith("declares external columns") \
+                        and package in orchestrated:
+                    seen.add(key)
+                    result.fail("destination-metadata", rel,
+                                "%s, and a live-validated root executes %s: SSIS "
+                                "answers that shape with VS_NEEDSNEWMETADATA at "
+                                "validation, so the register cannot carry it"
+                                % (detail, package))
+                elif registered:
+                    seen.add(key)
+                    result.warn("destination-metadata", rel,
+                                "known destination debt: %s" % detail)
+                else:
+                    result.fail("destination-metadata", rel, detail)
+    for key in sorted(set(debt) - seen):
+        flow, destination, table = key.split("|")
+        if prefixes:
+            continue  # a restricted walk cannot prove an entry is obsolete
+        if not dbschema.has_table(table):
+            continue  # the register also pins destinations with no DDL at all
+        result.warn("destination-metadata", "ssis/destination-metadata-debt.txt",
+                    "entry no longer reproduces, remove it: %s|%s|%s"
+                    % (flow, destination, table))
+    result.count("oledb_destinations_checked", destinations)
+
+
 CHECKS = [
     ("xml", check_dtsx_xml),
     ("dtsx-structure", check_dtsx_structure),
     ("dtsx-references", check_dtsx_references),
     ("dtsx-pipeline", check_dtsx_pipeline),
     ("dtsx-connection-refs", check_dtsx_connection_refs),
+    ("component-contracts", check_component_contracts),
+    ("input-column-cache", check_input_column_cache),
+    ("input-column-disposition", check_written_input_dispositions),
+    ("lookup-reference-mapping", check_lookup_reference_mapping),
+    ("component-property-set", check_component_property_sets),
+    ("foreach-file-enumerator", check_foreach_file_enumerators),
+    ("single-row-result-set", check_single_row_result_sets),
     ("execute-sql-parameters", check_execute_sql_parameters),
+    ("expression-task-statements", check_expression_task_statements),
+    ("sql-column-contract", check_sql_column_contract),
+    ("destination-metadata", check_destination_metadata),
     ("dtproj-structure", check_dtproj_structure),
     ("conmgr-binding", check_conmgr_binding),
     ("conmgr-credentials", check_conmgr_credentials),
     ("catalog-binding", check_catalog_binding_surface),
+    ("environment-binding", check_environment_binding_parity),
     ("file-locality", check_file_locality),
+    ("file-task-validation", check_variable_driven_file_tasks),
+    ("oledb-source-properties", check_oledb_source_properties),
     ("feed-manifest", check_feed_manifest),
     ("orchestration-edges", check_project_reference_scope),
     ("sql-exec-arguments", check_sql_exec_arguments),
@@ -1249,12 +2341,26 @@ def main():
     check_dtsx_references(result, prefixes)
     check_dtsx_pipeline(result, prefixes)
     check_dtsx_connection_refs(result, prefixes)
+    check_component_contracts(result, prefixes)
+    check_input_column_cache(result, prefixes)
+    check_written_input_dispositions(result, prefixes)
+    check_lookup_reference_mapping(result, prefixes)
+    check_component_property_sets(result, prefixes)
+    check_foreach_file_enumerators(result, prefixes)
+    check_single_row_result_sets(result, prefixes)
     check_execute_sql_parameters(result, prefixes)
+    check_expression_task_statements(result, prefixes)
+    check_sql_column_contract(result, prefixes)
+    check_destination_metadata(result, prefixes)
     check_dtproj_structure(result, prefixes)
     check_conmgr_binding(result, prefixes)
     check_conmgr_credentials(result, prefixes)
     check_catalog_binding_surface(result, prefixes)
+    check_environment_binding_parity(result, prefixes)
     check_file_locality(result, prefixes)
+    check_file_system_tasks(result, prefixes)
+    check_variable_driven_file_tasks(result, prefixes)
+    check_oledb_source_properties(result, prefixes)
     check_feed_manifest(result, prefixes)
     check_project_reference_scope(result, prefixes)
     check_sql_exec_arguments(result, prefixes)

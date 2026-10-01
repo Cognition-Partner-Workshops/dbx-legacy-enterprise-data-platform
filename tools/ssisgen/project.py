@@ -6,21 +6,28 @@ manifest carrying ``SSIS:Project`` with its packages, connection managers and
 deployment info. Anything else is rejected by the SSIS build tooling.
 
 Connection managers never contain credentials, and no credential is ever named
-by an expression. The connection string is a property expression built from the
-non-sensitive project parameters - host, port, service, catalog, provider, user
-- so the deployed package picks the environment up at runtime; the literal
-``ConnectionString`` attribute is only the design-time default.
+by an expression. A sensitive parameter read from an expression fails the
+package at validation with 0xC0017010 ("the variable is used in an expression
+but is not accessible"), because the expression evaluator refuses to read a
+sensitive value. The password therefore travels on the connection manager's own
+``CM.<connection>.Password`` project parameter, which the SSIS runtime applies
+to the connection manager object and which the catalog environment binds by
+reference.
 
-The password is not part of that expression. A sensitive parameter read from an
-expression fails the package at validation with 0xC0017010 ("the variable is
-used in an expression but is not accessible"), because the expression evaluator
-refuses to read a sensitive value. The supported binding surface is the
-connection manager's own parameter, ``CM.<connection>.Password``, a project
-parameter the SSIS runtime applies to the connection manager object itself
-before the ConnectionString expression is evaluated; the catalog environment
-binds it by reference. That is why the OLE DB connection managers emit
-``CM.<name>.Password`` / ``CM.<name>.UserName`` into the project manifest and
-why no ``;Password=`` fragment appears in any expression.
+An OLE DB connection manager is retargeted property by property - ServerName,
+InitialCatalog, UserName - and never through a ``ConnectionString`` property
+expression. Writing ``ConnectionString`` rebuilds the connection from the string
+alone and discards the password the catalog applied, and property expressions
+are evaluated after every parameter value has been applied, so a ConnectionString
+expression always wins and always leaves the connection with an empty password:
+the provider then reports 0x80040E4D "Login failed for user" and the task fails
+with DTS_E_CANNOTACQUIRECONNECTIONFROMCONNECTIONMANAGER. The properties that are
+not separately settable - provider, Auto Translate, the TLS trust keyword - stay
+in the design-time ``ConnectionString`` literal, which is deployed with the
+package and is never rewritten at run time.
+
+FILE connection managers hold no credential, so they keep a plain
+``ConnectionString`` property expression.
 
 File roots come from the landing zone, not from this module: the SSIS roots are
 derived from ``generators.wwigen.landing.DEFAULT_ROOT`` so the packages, the
@@ -66,32 +73,32 @@ ORACLE_PROVIDER = "OraOLEDB.Oracle.1"
 # OLE DB Driver 19 spells the keyword with spaces. The unspaced SqlClient form
 # `TrustServerCertificate` parses without error and is then ignored, so an
 # untrusted certificate chain still fails the connect; the estate's SQL Server
-# certificate is self-signed, which is how the difference surfaces.
+# certificate is self-signed, which is how the difference surfaces. It lives in
+# the design-time literal because no connection manager property carries it and
+# a ConnectionString expression would discard the catalog-applied password.
 SQLSERVER_TRUST_KEYWORD = "Trust Server Certificate=True;"
 
-# name -> (kind, description, design-time connection string, ConnectionString expression)
+# name -> (kind, description, design-time connection string,
+#          ((property, expression), ...))
 #
-# The expression is evaluated by the SSIS runtime; the literal string is what
-# the designer shows before evaluation. Both are derived from the same project
-# parameters so they cannot drift.
+# Each expression retargets one connection manager property at run time; the
+# literal string is the design-time default the designer shows. Both are derived
+# from the same project parameters so they cannot drift.
 
 
 def _sql_connection(catalog_param):
     literal = (
         "Data Source=sqlserver.internal.example,1433;Initial Catalog=%s;"
-        "Provider=%s;Auto Translate=False;" % (catalog_param[1], SQLSERVER_PROVIDER)
+        "Provider=%s;Auto Translate=False;%s"
+        % (catalog_param[1], SQLSERVER_PROVIDER, SQLSERVER_TRUST_KEYWORD)
     )
-    expression = (
-        '"Data Source=" + @[$Project::SqlServerHost] + "," + (DT_WSTR, 12) @[$Project::SqlServerPort] '
-        '+ ";Initial Catalog=" + @[$Project::%s] '
-        '+ ";Provider=" + @[$Project::SqlServerProvider] '
-        '+ ";Auto Translate=False;" '
-        '+ (LEN(@[$Project::SqlServerUser]) > 0 ? "User ID=" + @[$Project::SqlServerUser] '
-        '+ ";" : "Integrated Security=SSPI;") '
-        '+ (@[$Project::SqlServerTrustServerCertificate] ? "%s" : "")'
-        % (catalog_param[0], SQLSERVER_TRUST_KEYWORD)
+    expressions = (
+        ("ServerName",
+         '@[$Project::SqlServerHost] + "," + (DT_WSTR, 12) @[$Project::SqlServerPort]'),
+        ("InitialCatalog", '@[$Project::%s]' % catalog_param[0]),
+        ("UserName", '@[$Project::SqlServerUser]'),
     )
-    return literal, expression
+    return literal, expressions
 
 
 _OLTP = _sql_connection(("SqlServerOltpDb", "WideWorldImporters"))
@@ -101,11 +108,11 @@ _DW = _sql_connection(("SqlServerDwDb", "WideWorldImportersDW"))
 _ORACLE_LITERAL = (
     "Data Source=oracle-erp.internal.example:1521/WWIGERP;User ID=WWI_EXTRACT;Provider=%s;" % ORACLE_PROVIDER
 )
-_ORACLE_EXPRESSION = (
-    '"Data Source=" + @[$Project::OracleHost] + ":" + (DT_WSTR, 12) @[$Project::OraclePort] '
-    '+ "/" + @[$Project::OracleService] '
-    '+ ";User ID=" + @[$Project::OracleUser] '
-    '+ ";Provider=" + @[$Project::OracleProvider] + ";"'
+_ORACLE_EXPRESSIONS = (
+    ("ServerName",
+     '@[$Project::OracleHost] + ":" + (DT_WSTR, 12) @[$Project::OraclePort] '
+     '+ "/" + @[$Project::OracleService]'),
+    ("UserName", '@[$Project::OracleUser]'),
 )
 
 CONNECTION_MANAGERS = {
@@ -113,7 +120,7 @@ CONNECTION_MANAGERS = {
         "OLEDB",
         "Oracle ERP source (customer/supplier/product master, procurement, finance).",
         _ORACLE_LITERAL,
-        _ORACLE_EXPRESSION,
+        _ORACLE_EXPRESSIONS,
     ),
     "WWI_Source_DB": (
         "OLEDB",
@@ -137,19 +144,19 @@ CONNECTION_MANAGERS = {
         "FILE",
         "Inbound partner/carrier/bank file drop root.",
         INBOUND_ROOT,
-        '@[$Project::InboundFileRoot]',
+        (("ConnectionString", '@[$Project::InboundFileRoot]'),),
     ),
     "WWI_Archive_Files": (
         "FILE",
         "Archive root for successfully processed inbound files.",
         ARCHIVE_ROOT,
-        '@[$Project::ArchiveFileRoot]',
+        (("ConnectionString", '@[$Project::ArchiveFileRoot]'),),
     ),
     "WWI_Quarantine_Files": (
         "FILE",
         "Quarantine root for malformed inbound records.",
         QUARANTINE_ROOT,
-        '@[$Project::QuarantineFileRoot]',
+        (("ConnectionString", '@[$Project::QuarantineFileRoot]'),),
     ),
 }
 
@@ -159,13 +166,9 @@ PROJECT_PARAMETERS = [
     ("OraclePort", "Int32", "1521", False, "ORACLE_PORT"),
     ("OracleService", "String", "WWIGERP", False, "ORACLE_SERVICE"),
     ("OracleUser", "String", "WWI_EXTRACT", False, "ORACLE_USER"),
-    ("OracleProvider", "String", ORACLE_PROVIDER, False, "Oracle OLE DB provider progid"),
     ("SqlServerHost", "String", "sqlserver.internal.example", False, "SQLSERVER_HOST"),
     ("SqlServerPort", "Int32", "1433", False, "SQLSERVER_PORT"),
-    ("SqlServerUser", "String", "", False, "SQLSERVER_USER - empty selects Windows authentication"),
-    ("SqlServerProvider", "String", SQLSERVER_PROVIDER, False, "SQL Server OLE DB provider progid"),
-    ("SqlServerTrustServerCertificate", "Boolean", "false", False,
-     "Trust a server certificate that is not chain-validated (non-production only)"),
+    ("SqlServerUser", "String", "WWI_ETL", False, "SQLSERVER_USER"),
     ("SqlServerOltpDb", "String", "WideWorldImporters", False, "SQLSERVER_OLTP_DB"),
     ("SqlServerStagingDb", "String", "WideWorldImporters_Staging", False, "SQLSERVER_STAGING_DB"),
     ("SqlServerDwDb", "String", "WideWorldImportersDW", False, "SQLSERVER_DW_DB"),
@@ -191,6 +194,11 @@ def connection_string(name):
     return CONNECTION_MANAGERS[name][2]
 
 
+def connection_expressions(name):
+    """The (property, expression) pairs that retarget a connection at run time."""
+    return CONNECTION_MANAGERS[name][3]
+
+
 def assert_expressions_are_credential_free():
     """Generation-time guard: no connection expression may name a secret.
 
@@ -198,8 +206,15 @@ def assert_expressions_are_credential_free():
     password back into an expression fails the build rather than shipping a
     package that dies at validation with 0xC0017010.
     """
-    for name, (_kind, _description, _literal, expression) in sorted(CONNECTION_MANAGERS.items()):
-        assert_no_sensitive(expression, "connection manager %s" % name)
+    for name, (kind, _description, _literal, expressions) in sorted(CONNECTION_MANAGERS.items()):
+        for prop, expression in expressions:
+            assert_no_sensitive(expression, "connection manager %s (%s)" % (name, prop))
+            if kind == "OLEDB" and prop == "ConnectionString":
+                raise ValueError(
+                    "connection manager %s expresses ConnectionString; evaluating it "
+                    "rebuilds the connection and discards the password the catalog "
+                    "applied through CM.%s.Password. Retarget ServerName, "
+                    "InitialCatalog and UserName instead." % (name, name))
     sensitive = [entry[0] for entry in PROJECT_PARAMETERS if entry[3]]
     if sensitive:
         raise ValueError(
@@ -211,8 +226,9 @@ assert_expressions_are_credential_free()
 
 
 def write_conmgr(directory, name):
-    kind, description, conn, expression = CONNECTION_MANAGERS[name]
-    assert_no_sensitive(expression, "connection manager %s" % name)
+    kind, description, conn, expressions = CONNECTION_MANAGERS[name]
+    for prop, expression in expressions:
+        assert_no_sensitive(expression, "connection manager %s (%s)" % (name, prop))
     body = (
         '<?xml version="1.0"?>\n'
         '<DTS:ConnectionManager xmlns:DTS="www.microsoft.com/SqlServer/Dts"\n'
@@ -220,14 +236,16 @@ def write_conmgr(directory, name):
         '  DTS:DTSID="%s"\n'
         '  DTS:CreationName="%s"\n'
         '  DTS:Description=%s>\n'
-        '  <DTS:PropertyExpression DTS:Name="ConnectionString">%s</DTS:PropertyExpression>\n'
+        '%s'
         '  <DTS:ObjectData>\n'
         '    <DTS:ConnectionManager\n'
         '      DTS:ConnectionString=%s />\n'
         '  </DTS:ObjectData>\n'
         '</DTS:ConnectionManager>\n'
         % (quoteattr(name), guid("cm:" + name), kind, quoteattr(description),
-           escape(expression), quoteattr(conn))
+           "".join('  <DTS:PropertyExpression DTS:Name="%s">%s</DTS:PropertyExpression>\n'
+                   % (prop, escape(expression)) for prop, expression in expressions),
+           quoteattr(conn))
     )
     path = os.path.join(directory, name + ".conmgr")
     with open(path, "w") as handle:
@@ -283,12 +301,16 @@ def _connection_parameters(indent, connection_names):
     out = []
     for name in connection_names:
         kind = CONNECTION_MANAGERS[name][0]
-        out.extend(_manifest_parameter(indent, "CM.%s.ConnectionString" % name,
-                                       CONNECTION_MANAGERS[name][2], "18"))
         if kind == "OLEDB":
+            # No CM.<name>.ConnectionString: the catalog applying it would rebuild
+            # the connection and drop CM.<name>.Password, exactly as a
+            # ConnectionString property expression does. Host, catalog and user
+            # are retargeted by the connection manager's own property expressions.
             out.extend(_manifest_parameter(indent, "CM.%s.Password" % name, "", "18", sensitive=True))
             out.extend(_manifest_parameter(indent, "CM.%s.RetainSameConnection" % name, "false", "3"))
-            out.extend(_manifest_parameter(indent, "CM.%s.UserName" % name, "", "18"))
+        else:
+            out.extend(_manifest_parameter(indent, "CM.%s.ConnectionString" % name,
+                                           CONNECTION_MANAGERS[name][2], "18"))
     return out
 
 

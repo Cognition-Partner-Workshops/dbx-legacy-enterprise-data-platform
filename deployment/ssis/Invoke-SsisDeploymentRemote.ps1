@@ -31,15 +31,27 @@
       .\deployment\ssis\Invoke-SsisDeploymentRemote.ps1 -InstanceId i-0... -Step environment
       .\deployment\ssis\Invoke-SsisDeploymentRemote.ps1 -InstanceId i-0... -Step preflight
 
+    The parity step answers what the verify step cannot: verify counts projects
+    and packages, which a stale deployment satisfies just as well as a current
+    one. Parity hashes every .dtsx inside the built .ispac files, ships that
+    manifest, and compares it to the project streams SSISDB actually holds.
+
     The preflight step is the same read-only Preflight.ps1 the deploy host runs,
     executed where the catalog spawns ISServerExec, which is the only place its
     answer means anything.
+
+    The validate step is the gate between a deployment and a run:
+    catalog.validate_package for every package named by -ValidateRoot or
+    -ValidateFamily, through the environment reference, which resolves the
+    parameters and opens the connections without executing a data flow. It is
+    started here because SSISDB refuses a validation from a SQL-authenticated
+    login, the same reason the deployment itself runs on the host.
 #>
 
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string] $InstanceId,
-    [ValidateSet('deploy', 'verify', 'environment', 'preflight')][string] $Step = 'deploy',
+    [ValidateSet('deploy', 'verify', 'environment', 'preflight', 'parity', 'validate')][string] $Step = 'deploy',
     [string] $Region = $env:AWS_DEFAULT_REGION,
     [string] $RemoteRoot = 'C:\WWI\deploy',
     [string] $Folder = 'WWI_DEV',
@@ -56,6 +68,13 @@ param(
     # over the VPC, not over Oracle's Elastic IP, so this is the Oracle
     # instance's private address (terraform output oracle_private_ip).
     [string] $CatalogOracleHost = '',
+    # What the validate step validates: orchestration roots expanded through the
+    # plan, and package-name wildcards matched against the catalog.
+    [string[]] $ValidateRoot = @('Master_File_Ingestion'),
+    [string[]] $ValidateFamily = @(),
+    # The catalog environment the projects reference. It is named after the
+    # folder, not after -Environment, which names the rendered definition.
+    [string] $EnvironmentName = '',
     [switch] $DryRun
 )
 
@@ -178,10 +197,25 @@ if ($Step -eq 'deploy') {
     }
     $payloadFiles += @(Get-ChildItem -Path $artifacts -Filter '*.ispac' -File)
 }
+if ($Step -eq 'parity') {
+    if (-not (Test-Path $artifacts)) {
+        Stop-WwiWithError "$artifacts does not exist. Run deployment/ssis/Build-SsisProject.ps1 first."
+    }
+    $manifestPath = Join-Path $artifacts 'package-manifest.json'
+    $builder = Join-Path $repoRoot 'validation\checks\build_package_manifest.py'
+    & python $builder $artifacts --output $manifestPath | ForEach-Object { Write-WwiLog "manifest $_" }
+    if ($LASTEXITCODE -ne 0) { Stop-WwiWithError 'building the package manifest failed.' }
+    $payloadFiles += @(Get-Item -LiteralPath $manifestPath)
+}
 if ($Step -eq 'preflight') {
     $preflight = Join-Path $repoRoot 'deployment\preflight'
     $payloadFiles += @(Get-ChildItem -Path $preflight -File |
         Where-Object { $_.Extension -in @('.ps1', '.json') })
+}
+if ($Step -eq 'validate') {
+    # The plan is what -ValidateRoot is expanded through, so it travels with the
+    # scripts.
+    $payloadFiles += @(Get-Item -LiteralPath (Join-Path $repoRoot 'ssis\orchestration-plan.json'))
 }
 if ($Step -eq 'environment') {
     # Only the environment being deployed travels: the others are large and the
@@ -217,9 +251,12 @@ if ($Step -eq 'environment') {
     # Non-credential configuration is forwarded from this host's environment,
     # so the catalog is bound to the estate's real hosts and accounts instead of
     # the placeholder defaults rendered into <env>_environment.vars.psd1.
-    $forwarded = @('ORACLE_HOST', 'ORACLE_PORT', 'ORACLE_SERVICE', 'ORACLE_PROVIDER',
-                   'SQLSERVER_HOST', 'SQLSERVER_PORT', 'SQLSERVER_PROVIDER',
-                   'SQLSERVER_TRUST_SERVER_CERTIFICATE', 'SQLSERVER_OLTP_DB', 'SQLSERVER_STAGING_DB',
+    # Provider and TLS trust are not forwarded: they are part of the connection
+    # string as a whole, which the catalog cannot rebind without discarding the
+    # password, so they ship in the connection manager literal instead.
+    $forwarded = @('ORACLE_HOST', 'ORACLE_PORT', 'ORACLE_SERVICE',
+                   'SQLSERVER_HOST', 'SQLSERVER_PORT',
+                   'SQLSERVER_OLTP_DB', 'SQLSERVER_STAGING_DB',
                    'SQLSERVER_DW_DB', 'ETL_INBOUND_FILE_ROOT', 'ETL_ARCHIVE_FILE_ROOT',
                    'ETL_QUARANTINE_FILE_ROOT')
     foreach ($name in $forwarded) {
@@ -289,6 +326,22 @@ elseif ($Step -eq 'preflight') {
         "`$env:WWI_LANDING_ROOT = [Environment]::GetEnvironmentVariable('WWI_LANDING_ROOT', 'Machine')",
         "& '$RemoteRoot\deployment\preflight\Preflight.ps1' -Connectivity -ExecutionHost"
     )
+}
+elseif ($Step -eq 'validate') {
+    $arguments = @("-PlanPath '$RemoteRoot\ssis\orchestration-plan.json'")
+    if ($ValidateRoot.Count -gt 0) {
+        $arguments += "-Root @($((($ValidateRoot | ForEach-Object { "'$_'" }) -join ',')))"
+    }
+    if ($ValidateFamily.Count -gt 0) {
+        $arguments += "-Family @($((($ValidateFamily | ForEach-Object { "'$_'" }) -join ',')))"
+    }
+    $environmentName = if ($EnvironmentName) { $EnvironmentName } else { $Folder }
+    $run += "`$env:SSIS_ENVIRONMENT = '$environmentName'"
+    $run += ("& '$RemoteRoot\deployment\ssis\Test-SsisPackageValidation.ps1' " + ($arguments -join ' '))
+}
+elseif ($Step -eq 'parity') {
+    $run += ("& '$RemoteRoot\deployment\ssis\Test-SsisCatalogParity.ps1'" +
+             " -ManifestPath '$RemoteRoot\artifacts\package-manifest.json'")
 }
 else {
     $deployArguments = if ($Step -eq 'verify') { '-VerifyOnly' } else { '-UseCatalogProcedure' }

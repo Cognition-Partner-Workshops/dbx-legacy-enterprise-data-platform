@@ -32,7 +32,10 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from xml.sax.saxutils import escape, quoteattr
+
+import dbschema
 
 DTS_NS = "www.microsoft.com/SqlServer/Dts"
 
@@ -78,6 +81,7 @@ DT = {
     "i8": ("i8", None, None, None),
     "bool": ("bool", None, None, None),
     "date": ("date", None, None, None),
+    "dbDate": ("dbDate", None, None, None),
     "dbTimeStamp": ("dbTimeStamp", None, None, None),
     "guid": ("guid", None, None, None),
 }
@@ -107,6 +111,84 @@ def safe_name(name):
     for char in INVALID_NAME_CHARS:
         out = out.replace(char, "_")
     return out
+
+
+class ContractError(ValueError):
+    """A spec asks for XML the SSIS runtime would reject at validation."""
+
+
+# Destinations the estate has never been able to describe from their target
+# table: the table is not deployed by any DDL under sqlserver/, or the buffer
+# carries a column the destination cannot insert into the column of that name.
+# They keep the buffer-derived metadata they have always had, which is exactly
+# the metadata SSIS rejects with VS_NEEDSNEWMETADATA, so every entry is a known
+# defect waiting for its package to be repaired - not a licence to write more.
+# The register only shrinks: a destination that can honour its table contract
+# fails generation while it is still listed here, and one that cannot and is not
+# listed fails generation too.
+DEBT_REGISTER = os.path.join(dbschema.REPO_ROOT, "ssis", "destination-metadata-debt.txt")
+
+_DEBT = None
+
+
+def destination_debt():
+    """The registered destinations, keyed 'data flow|destination|table'."""
+    global _DEBT
+    if _DEBT is None:
+        entries = {}
+        if os.path.exists(DEBT_REGISTER):
+            with open(DEBT_REGISTER, encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    flow, destination, table, reason = (line.split("|") + ["", "", "", ""])[:4]
+                    entries[debt_key(flow.strip(), destination.strip(), table.strip())] = reason.strip()
+        _DEBT = entries
+    return _DEBT
+
+
+def debt_key(flow, destination, table):
+    return "%s|%s|%s" % (flow, destination, dbschema.normalise_table(table))
+
+
+def sql_parameter_count(sql):
+    """Number of ``?`` placeholders the OLE DB provider binds in *sql*.
+
+    Question marks inside string literals belong to the data, not to the
+    parameter list, so they are skipped.
+    """
+    count = 0
+    in_literal = False
+    for char in sql:
+        if char == "'":
+            in_literal = not in_literal
+        elif char == "?" and not in_literal:
+            count += 1
+    return count
+
+
+def expression_statement_count(expression):
+    """Number of statements the expression evaluator would read in *expression*.
+
+    The Expression Task evaluates one expression, so a semicolon that is not
+    inside a string literal is a second statement the parser refuses with 'The
+    token ";" ... was not recognized'.
+    """
+    count = 1
+    in_literal = False
+    escaped = False
+    for char in expression:
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\" and in_literal:
+            escaped = True
+        elif char == '"':
+            in_literal = not in_literal
+        elif char == ";" and not in_literal:
+            count += 1
+    return count
 
 
 def guid(seed: str) -> str:
@@ -195,6 +277,144 @@ def date_col(name):
     return Column(name, "dbTimeStamp")
 
 
+def day_col(name):
+    """A whole-day column, which is what a SQL DATE hands the buffer.
+
+    Declaring one as a timestamp leaves the source's external metadata out of
+    synchronisation with the column the server describes.
+    """
+    return Column(name, "dbDate")
+
+
+# The aggregate names its summaries by number, and a summary applied to a type
+# it does not produce - a count landing in a decimal column, say - is rejected.
+AGGREGATION_TYPES = {
+    "group": 0,
+    "count": 1,
+    "countdistinct": 2,
+    "sum": 3,
+    "avg": 4,
+    "min": 5,
+    "minimum": 5,
+    "max": 6,
+    "maximum": 6,
+    "average": 4,
+    "count distinct": 2,
+}
+
+
+def aggregation_type(op):
+    """The number the aggregate gives the summary *op*."""
+    try:
+        return AGGREGATION_TYPES[op.lower()]
+    except KeyError:
+        raise ContractError("unknown aggregation %r, expected one of %s"
+                            % (op, ", ".join(sorted(AGGREGATION_TYPES))))
+
+
+def aggregate_output_column(name, op, source):
+    """The column *op* over *source* produces, named *name*.
+
+    A count is an unsigned four byte counter whatever it counted - the wider
+    counter is the component's big-count shape, which no expression downstream
+    can compare against a plain integer. Every other summary carries the type
+    of the column it summarises, which is the only type the component accepts.
+    """
+    op = op.lower()
+    if op in ("count", "countdistinct", "count distinct"):
+        return Column(name, "ui4")
+    return Column(name, source.dtype, length=source.length,
+                  precision=source.precision, scale=source.scale,
+                  codepage=source.codepage)
+
+
+# The single column a flat file source puts its unparsable line into.
+FLAT_FILE_ERROR_COLUMN = "Flat File Source Error Output Column"
+
+LOCALE_ID = 1033
+
+# The columns every error output carries to describe the failure.
+ERROR_COLUMNS = ("ErrorCode", "ErrorColumn")
+
+
+def text_col(name, codepage=1252):
+    return Column(name, "text", codepage=codepage)
+
+
+def ntext_col(name):
+    return Column(name, "nText")
+
+
+def plain_table(table):
+    """'[stg].[Currency]' as the estate writes it in a log: 'stg.Currency'."""
+    return table.replace("[", "").replace("]", "").strip()
+
+
+# Words that name the shape of a pipeline output rather than the reason rows
+# were routed down it.
+OUTPUT_NOISE = ("ole", "db", "output", "input", "flat", "file", "1")
+
+
+def reason_code(output_name):
+    """The reject reason an output's name states, as a code.
+
+    'Invalid Currency' rejects for INVALID_CURRENCY, and the source error
+    output for SOURCE_ERROR: the routing decision is the reason, so the
+    generator does not invent a second vocabulary for it.
+    """
+    words = [word for word in re.findall(r"[A-Za-z0-9]+", output_name)
+             if word.lower() not in OUTPUT_NOISE]
+    return "_".join(word.upper() for word in words) or "REJECTED"
+
+
+def lookup_subject(component_name):
+    """'Lookup Sales Territory (Full Cache)' looks up 'Sales Territory'."""
+    subject = re.sub(r"\([^)]*\)", " ", component_name)
+    subject = re.sub(r"(?i)^\s*lookup\s+", "", subject.strip())
+    return " ".join(subject.split()) or component_name
+
+
+def literal_expression(column, value):
+    """*value* as an expression of *column*'s type, or None when it has none."""
+    text = value.replace('"', "'")
+    if column.dtype == "wstr":
+        return '(DT_WSTR,%d)"%s"' % (column.length or len(text), text[:column.length or len(text)])
+    if column.dtype == "str":
+        return '(DT_STR,%d,%d)"%s"' % (column.length or len(text), column.codepage or 1252,
+                                       text[:column.length or len(text)])
+    return None
+
+
+def envelope_expression(target, object_name, from_component, from_output):
+    """What the generator can honestly derive for error column *target*."""
+    name = target.name.lower()
+    if name == "batchid":
+        return "(DT_I8) @[$Package::BatchId]"
+    if name in ("targetobjectname", "sourceobjectname", "objectname"):
+        return literal_expression(target, plain_table(object_name))
+    if name == "rejectreasoncode":
+        return literal_expression(target, reason_code(from_output))
+    if name == "lookupname":
+        return literal_expression(target, lookup_subject(from_component))
+    return None
+
+
+VARIABLE_REFERENCE = re.compile(r"[@$]\[[^\]]*\]")
+
+
+def referenced_columns(expression, candidates):
+    """The column names *expression* reads, in *candidates* order.
+
+    A transform only sees the input columns it asks for, so an expression over
+    a column the component never claimed fails to parse at validation time. A
+    column reads either bare or bracketed; variable and parameter references are
+    dropped first so a name inside one is not read as a column.
+    """
+    text = VARIABLE_REFERENCE.sub(" ", expression)
+    return [name for name in candidates
+            if re.search(r"(?<![\w:])\[?%s\]?(?![\w])" % re.escape(name), text)]
+
+
 # ---------------------------------------------------------------------------
 # Data flow
 # ---------------------------------------------------------------------------
@@ -225,18 +445,51 @@ class DataFlow:
         self._paths = []
         self._last_output = None
         self._columns = []
+        self._primary_table = None
+        self._envelope_columns = set()
 
     # -- sources ------------------------------------------------------------
 
-    def oledb_source(self, name, connection, sql, columns, timeout=0):
+    def oledb_source(self, name, connection, sql, columns, timeout=0, parameters=()):
+        """Read a rowset with an SQL command.
+
+        ``parameters`` names the variables or package parameters bound to the
+        ``?`` placeholders of *sql*, in placeholder order. A parameterised
+        command with no bindings cannot be executed, so the count is enforced
+        when the package emits (see :meth:`bind`).
+        """
         self._columns = list(columns)
         self._components.append(
-            dict(kind="oledb_source", name=name, connection=connection, sql=sql, columns=list(columns), timeout=timeout)
+            dict(kind="oledb_source", name=name, connection=connection, sql=sql, columns=list(columns),
+                 timeout=timeout, parameters=list(parameters), parameter_mapping="")
         )
         self._last_output = (name, "OLE DB Source Output")
         return self
 
-    def flatfile_source(self, name, connection, columns, connection_scope="Project"):
+    def bind(self, package):
+        """Resolve variable-addressed component metadata against *package*.
+
+        An OLE DB source persists its parameter list as ``ParameterMapping``:
+        placeholder name plus the DTSID of the variable feeding it. The DTSID
+        is derived from the owning package, so it can only be resolved once the
+        data flow is attached to one.
+        """
+        for comp in self._components:
+            if comp["kind"] != "oledb_source":
+                continue
+            expected = sql_parameter_count(comp["sql"])
+            bound = comp["parameters"]
+            if len(bound) != expected:
+                raise ContractError(
+                    "OLE DB source %r in %r has %d '?' placeholder(s) but %d bound "
+                    "parameter(s); an unbound placeholder fails component validation "
+                    "at run time" % (comp["name"], self.name, expected, len(bound)))
+            comp["parameter_mapping"] = "".join(
+                '"Parameter%d:Input",%s;' % (index, package.variable_dtsid(variable))
+                for index, variable in enumerate(bound))
+        return self
+
+    def flatfile_source(self, name, connection, columns, connection_scope="Project", code_page=1252):
         """Read a delimited file through a flat file connection manager.
 
         ``connection_scope`` is ``Package`` for a per-feed flat file connection
@@ -246,20 +499,59 @@ class DataFlow:
         """
         self._columns = list(columns)
         self._components.append(dict(kind="flatfile_source", name=name, connection=connection,
-                                     columns=list(columns), connection_scope=connection_scope))
+                                     columns=list(columns), connection_scope=connection_scope,
+                                     code_page=code_page))
         self._last_output = (name, "Flat File Source Output")
         return self
 
     # -- transforms ---------------------------------------------------------
 
-    def derived_column(self, name, derivations):
-        """derivations: list of (column_name, expression, Column)."""
-        self._components.append(dict(kind="derived", name=name, derivations=list(derivations)))
-        for _, _, col in derivations:
-            self._columns.append(col)
-        self._paths.append((self._last_output, (name, "Derived Column Input")))
-        self._last_output = (name, "Derived Column Output")
+    def derived_column(self, name, derivations, source=None):
+        """derivations: list of (column_name, expression, Column).
+
+        ``source`` attaches the derivation to a named upstream output - a split
+        case or an error output - instead of continuing the main path, which is
+        how a branch gets the columns only its own destination needs.
+        """
+        for stage, group in enumerate(self._stage_derivations(name, list(derivations))):
+            stage_name = name if stage == 0 else "%s %d" % (name, stage + 1)
+            self._components.append(dict(kind="derived", name=stage_name, derivations=group))
+            for _, _, col in group:
+                self._columns.append(col)
+            upstream = source if (stage == 0 and source) else self._last_output
+            self._paths.append((upstream, (stage_name, "Derived Column Input")))
+            self._last_output = (stage_name, "Derived Column Output")
         return self
+
+    def _stage_derivations(self, name, derivations):
+        """*derivations* grouped into the components that can evaluate them.
+
+        A derived column evaluates every expression against its input row, so a
+        column the same component adds is not there to be read: a derivation
+        over one has to run in a later component. A derivation that replaces an
+        upstream column is not such a case - the input still carries the value
+        the upstream component produced - so it stays with its readers.
+        """
+        upstream = set(col.name for col in self._columns)
+        added = [col_name for col_name, _expr, _col in derivations if col_name not in upstream]
+        pending = list(derivations)
+        available = set(upstream)
+        stages = []
+        while pending:
+            ready, deferred = [], []
+            for derivation in pending:
+                col_name, expr, _col = derivation
+                waiting = [other for other in referenced_columns(expr, added)
+                           if other != col_name and other not in available]
+                (deferred if waiting else ready).append(derivation)
+            if not ready:
+                raise ContractError(
+                    "derived column %r in %r has derivations that read each other: %s"
+                    % (name, self.name, ", ".join(sorted(col for col, _e, _c in deferred))))
+            stages.append(ready)
+            available.update(col_name for col_name, _e, _c in ready)
+            pending = deferred
+        return stages
 
     def lookup(self, name, connection, sql, join_columns, output_columns, no_match="RD"):
         """no_match: 'RD' redirect rows to no-match output, 'FC' fail component,
@@ -323,19 +615,120 @@ class DataFlow:
         self._last_output = (name, "Union All Output 1")
         return self
 
-    def data_conversion(self, name, conversions):
-        """conversions: list of (source_column, output_column, Column)."""
+    def data_conversion(self, name, conversions, source=None):
+        """conversions: list of (source_column, output_column, Column).
+
+        ``source`` names the (component, output) the conversion reads when it
+        starts a branch off an earlier output rather than continuing the chain.
+        """
         self._components.append(dict(kind="convert", name=name, conversions=list(conversions)))
         for _, _, col in conversions:
             self._columns.append(col)
-        self._paths.append((self._last_output, (name, "Data Conversion Input")))
+        self._paths.append((source or self._last_output, (name, "Data Conversion Input")))
         self._last_output = (name, "Data Conversion Output")
         return self
 
     # -- destinations -------------------------------------------------------
 
+    def _destination_mapping(self, name, table, mapping):
+        """Validate a spec-supplied ``{target column: pipeline column}`` mapping.
+
+        A mapping naming a column the table does not have, or a buffer column
+        the flow never produces, describes an insert the destination cannot
+        make, so it fails generation instead of the run.
+        """
+        mapping = dict(mapping or {})
+        if not mapping or not dbschema.has_table(table):
+            return mapping
+        table_columns = set(col.name.lower() for col in dbschema.table_columns(table))
+        buffer_columns = set(col.name.lower() for col in self._columns)
+        for target, source in sorted(mapping.items()):
+            if target.lower() not in table_columns:
+                raise ContractError(
+                    "destination %r in %r maps %r to %s, which has no such column"
+                    % (name, self.name, source, table))
+            if source.lower() not in buffer_columns:
+                raise ContractError(
+                    "destination %r in %r maps %s.%s from buffer column %r, which "
+                    "the data flow does not produce" % (name, self.name, table, target, source))
+        return mapping
+
+    def _destination_contract(self, comp, lineage):
+        """The ``(external column, buffer column or None)`` pairs to emit.
+
+        The external columns are the target table's, because that is what the
+        destination revalidates against when the package starts. A destination
+        that cannot be described that way - no DDL deploys its table, or the
+        buffer holds a column the table cannot accept under that name - keeps
+        the buffer-derived metadata the estate has always given it, and only
+        while :data:`DEBT_REGISTER` still records it as unrepaired.
+
+        A destination that describes its table but leaves a NOT NULL column
+        without a default unmapped would validate and then fail its first
+        insert, so it needs a register entry too - it keeps the table-derived
+        metadata, because reverting it to the buffer's would only move the
+        failure back to validation.
+        """
+        key = debt_key(self.name, comp["name"], comp["table"])
+        registered = key in destination_debt()
+        buffer_columns = dict((col.name.lower(), col) for col in comp["columns"])
+        sources = dict((target.lower(), source) for target, source in comp["mapping"].items())
+        broken = None
+        pairs = []
+        if dbschema.has_table(comp["table"]):
+            for target in dbschema.table_columns(comp["table"]):
+                col = buffer_columns.get(sources.get(target.name.lower(), target.name).lower())
+                if col is None or col.name not in lineage:
+                    pairs.append((target, None))
+                    continue
+                if not dbschema.compatible(col.dtype, target.dtype):
+                    broken = ("buffer column %s (%s) cannot be inserted into %s.%s (%s)"
+                              % (col.name, col.dtype, comp["table"], target.name, target.dtype))
+                    break
+                pairs.append((target, col))
+        else:
+            broken = ("no CREATE TABLE under sqlserver/ deploys %s" % comp["table"])
+        unmapped = None
+        if not broken:
+            if not any(col is not None for _target, col in pairs):
+                # SSIS answers VS_ISBROKEN to an input with no columns: "The
+                # number of input columns for ... cannot be zero."
+                unmapped = ("the data flow maps no column into %s, so the destination "
+                            "input is empty" % comp["table"])
+            missing = [target.name for target, col in pairs
+                       if col is None and not target.nullable
+                       and not target.identity and not target.has_default]
+            if missing and not unmapped:
+                unmapped = ("the data flow supplies no value for NOT NULL column(s) %s"
+                            % ", ".join(missing))
+        broken = broken or unmapped
+        if broken and not registered:
+            raise ContractError(
+                "destination %r in %r does not honour its table contract: %s. Fix the "
+                "spec, or record the destination in %s as '%s|%s|%s|<reason>'"
+                % (comp["name"], self.name, broken,
+                   os.path.relpath(DEBT_REGISTER, dbschema.REPO_ROOT).replace(os.sep, "/"),
+                   self.name, comp["name"], comp["table"]))
+        if registered and not broken:
+            raise ContractError(
+                "destination %r in %r now describes %s from its table, so its entry in "
+                "%s is stale and must be deleted"
+                % (comp["name"], self.name, comp["table"],
+                   os.path.relpath(DEBT_REGISTER, dbschema.REPO_ROOT).replace(os.sep, "/")))
+        if broken and not unmapped:
+            return [(col, col) for col in comp["columns"] if col.name in lineage]
+        return pairs
+
     def oledb_destination(self, name, connection, table, fast_load=True, keep_identity=False,
-                          batch_size=100000, error_disposition="FailComponent"):
+                          batch_size=100000, error_disposition="FailComponent", mapping=None):
+        """Insert the buffer into *table*.
+
+        Buffer columns are mapped to the columns of the same name in the target
+        table; ``mapping`` ({target column: buffer column}) carries the pairs
+        whose names differ.
+        """
+        if self._primary_table is None:
+            self._primary_table = table
         self._components.append(
             dict(
                 kind="oledb_dest",
@@ -347,26 +740,75 @@ class DataFlow:
                 batch_size=batch_size,
                 error_disposition=error_disposition,
                 columns=list(self._columns),
+                mapping=self._destination_mapping(name, table, mapping),
             )
         )
         self._paths.append((self._last_output, (name, "OLE DB Destination Input")))
         return self
 
-    def reject_destination(self, name, connection, table, from_component, from_output="OLE DB Source Error Output"):
+    def _reject_envelope(self, name, table, from_component, from_output):
+        """The bookkeeping columns an error table asks of the branch itself.
+
+        An error table records why a row was routed away, which is a property
+        of the branch rather than of the row: the pipeline carries no BatchId,
+        no object name and no reason code, so a branch destination that only
+        maps the row's own columns leaves the table's mandatory columns unfed -
+        and where none of the row's columns share a name with the table, the
+        destination has no input column at all and fails validation with
+        VS_ISBROKEN. The generator derives those columns onto the branch from
+        what it already knows: the batch parameter, the table the flow loads,
+        the output the rows were routed down and the lookup that missed.
+        """
+        if not dbschema.has_table(table):
+            return []
+        carried = set(col.name.lower() for col in self._columns) - self._envelope_columns
+        derivations = []
+        for target in dbschema.table_columns(table):
+            if target.supplied_by_the_server or target.name.lower() in carried:
+                continue
+            expression = envelope_expression(
+                target, self._primary_table or self.name, from_component, from_output)
+            if expression is None:
+                continue
+            derivations.append((target.name, expression,
+                                Column(target.name, target.dtype, length=target.length,
+                                       precision=target.precision, scale=target.scale,
+                                       codepage=target.codepage)))
+        return derivations
+
+    def _reject_source(self, name, table, from_component, from_output):
+        """The output a reject destination reads, enveloped where it must be."""
+        derivations = self._reject_envelope(name, table, from_component, from_output)
+        if not derivations:
+            return (from_component, from_output)
+        envelope = safe_name("Envelope %s" % name)
+        self._components.append(dict(kind="derived", name=envelope, derivations=derivations))
+        self._paths.append(((from_component, from_output), (envelope, "Derived Column Input")))
+        for col_name, _expr, col in derivations:
+            self._columns.append(col)
+            self._envelope_columns.add(col_name.lower())
+        return (envelope, "Derived Column Output")
+
+    def reject_destination(self, name, connection, table, from_component,
+                           from_output="OLE DB Source Error Output", mapping=None):
+        source = self._reject_source(name, table, from_component, from_output)
         self._components.append(
             dict(kind="oledb_dest", name=name, connection=connection, table=table, fast_load=False,
-                 keep_identity=False, batch_size=0, error_disposition="FailComponent", columns=list(self._columns))
+                 keep_identity=False, batch_size=0, error_disposition="FailComponent",
+                 columns=list(self._columns), mapping=self._destination_mapping(name, table, mapping))
         )
-        self._paths.append(((from_component, from_output), (name, "OLE DB Destination Input")))
+        self._paths.append((source, (name, "OLE DB Destination Input")))
         return self
 
-    def branch_destination(self, name, connection, table, from_component, from_output):
+    def branch_destination(self, name, connection, table, from_component, from_output, mapping=None):
         """Attach an extra destination to a named upstream output (e.g. a split case)."""
+        source = self._reject_source(name, table, from_component, from_output)
         self._components.append(
             dict(kind="oledb_dest", name=name, connection=connection, table=table, fast_load=True,
-                 keep_identity=False, batch_size=10000, error_disposition="FailComponent", columns=list(self._columns))
+                 keep_identity=False, batch_size=10000, error_disposition="FailComponent",
+                 columns=list(self._columns), mapping=self._destination_mapping(name, table, mapping))
         )
-        self._paths.append(((from_component, from_output), (name, "OLE DB Destination Input")))
+        self._paths.append((source, (name, "OLE DB Destination Input")))
         return self
 
     # -- emission -----------------------------------------------------------
@@ -433,8 +875,13 @@ class DataFlow:
                 main = "Flat File Source Output" if is_flat else "OLE DB Source Output"
                 error = "Flat File Source Error Output" if is_flat else "OLE DB Source Error Output"
                 outputs[(name, main)] = cols_of(comp, main, comp["columns"])
+                # A flat file source cannot describe the row it failed to parse
+                # column by column, so its error output carries the whole line
+                # as one blob instead of a copy of the source columns.
+                error_columns = ([text_col(FLAT_FILE_ERROR_COLUMN, comp["code_page"])] if is_flat
+                                 else list(comp["columns"]))
                 outputs[(name, error)] = cols_of(
-                    comp, error, list(comp["columns"]) + [int_col("ErrorCode"), int_col("ErrorColumn")])
+                    comp, error, error_columns + [int_col("ErrorCode"), int_col("ErrorColumn")])
             elif kind == "derived":
                 base = inherited(comp, "Derived Column Input")
                 existing = set(col_name for col_name, _rid, _col in base)
@@ -469,14 +916,21 @@ class DataFlow:
                          for _src, dest, col in comp["conversions"] if dest not in existing]
                 outputs[(name, "Data Conversion Output")] = base + added
                 # The error output is synchronous, so the passthrough columns keep
-                # their upstream lineage ids and only the error columns are new.
-                outputs[(name, "Data Conversion Error Output")] = base + [
+                # their upstream lineage ids. Its own error columns replace any
+                # the upstream error output already carried, which would
+                # otherwise be declared twice under two different lineage ids.
+                outputs[(name, "Data Conversion Error Output")] = [
+                    entry for entry in base if entry[0] not in ERROR_COLUMNS] + [
                     (col.name, "%s.Outputs[Data Conversion Error Output].Columns[%s]" % (ref, col.name), col)
                     for col in (int_col("ErrorCode"), int_col("ErrorColumn"))]
             elif kind == "aggregate":
                 base = dict((col_name, col) for col_name, _rid, col in inherited(comp, "Aggregate Input 1"))
                 produced = [(gb, base.get(gb, str_col(gb))) for gb in comp["group_by"]]
-                produced += [(dest, base.get(src, int_col(dest))) for src, dest, _op in comp["aggregations"]]
+                # A summary carries the type of the column it summarises, except
+                # a count, which the component always produces as an unsigned
+                # eight byte counter whatever it counted.
+                produced += [(dest, aggregate_output_column(dest, op, base.get(src, int_col(dest))))
+                             for src, dest, op in comp["aggregations"]]
                 seen = set()
                 outputs[(name, "Aggregate Output 1")] = [
                     (col_name, "%s.Outputs[Aggregate Output 1].Columns[%s]" % (ref, col_name), col)
@@ -526,6 +980,36 @@ class DataFlow:
             escape(str(value)),
         )
 
+    def _read_columns(self, expressions, upstream, exclude):
+        """Upstream columns the expressions read, as (name, Column) pairs."""
+        names = set()
+        candidates = [col_name for col_name, _rid, _col in upstream if col_name not in exclude]
+        for expression in expressions:
+            names.update(referenced_columns(expression, candidates))
+        return [(col_name, col) for col_name, _rid, col in upstream
+                if col_name in names]
+
+    def _error_output_xml(self, pad, ref, component):
+        """The error output a synchronous transform is required to declare.
+
+        A transform that redirects nothing still has to carry the error output
+        the component creates for itself; otherwise the output count is wrong
+        and the component fails validation with VS_ISCORRUPT.
+        """
+        name = "%s Error Output" % component
+        input_ref = "%s.Inputs[%s Input]" % (ref, component)
+        lines = ['%s    <output refId=%s exclusionGroup="1" isErrorOut="true" name=%s synchronousInputId=%s>'
+                 % (pad, quoteattr("%s.Outputs[%s]" % (ref, name)), quoteattr(name), quoteattr(input_ref)),
+                 "%s      <outputColumns>" % pad]
+        for extra, flags in (("ErrorCode", 1), ("ErrorColumn", 2)):
+            col_ref = "%s.Outputs[%s].Columns[%s]" % (ref, name, extra)
+            lines.append('%s        <outputColumn refId=%s dataType="i4" lineageId=%s name="%s" specialFlags="%d" />'
+                         % (pad, quoteattr(col_ref), quoteattr(col_ref), extra, flags))
+        lines.append("%s      </outputColumns>" % pad)
+        lines.append("%s      <externalMetadataColumns />" % pad)
+        lines.append("%s    </output>" % pad)
+        return "\n".join(lines)
+
     def _component_xml(self, comp, base_ref, indent, outputs, upstream_of):
         pad = " " * indent
         ref = "%s\\%s" % (base_ref, comp["name"])
@@ -537,28 +1021,49 @@ class DataFlow:
 
         def lineage_of(input_name):
             return dict((col_name, rid) for col_name, rid, _col in upstream_cols(input_name))
+
+        def column_of(input_name):
+            return dict((col_name, col) for col_name, _rid, col in upstream_cols(input_name))
         if kind in ("oledb_source", "flatfile_source"):
             is_flat = kind == "flatfile_source"
             class_id = "Microsoft.FlatFileSource" if is_flat else "Microsoft.OLEDBSource"
+            # A flat file adapter parses text against a locale, and it reads that
+            # locale from the component rather than from the connection manager.
             out.append(
-                '%s<component refId=%s componentClassID="%s" contactInfo="%s" description="%s" name=%s usesDispositions="true" version="%d">'
+                '%s<component refId=%s componentClassID="%s" contactInfo="%s" description="%s"%s name=%s usesDispositions="true" version="%d">'
                 % (pad, quoteattr(ref), class_id,
                    "Flat File Source" if is_flat else "OLE DB Source",
                    "Flat File Source" if is_flat else "OLE DB Source",
+                   ' localeId="%d"' % LOCALE_ID if is_flat else "",
                    quoteattr(comp["name"]), 1 if is_flat else 7)
             )
             out.append("%s  <properties>" % pad)
             if not is_flat:
                 out.append(self._prop(pad + "    ", "System.Int32", "CommandTimeout", comp["timeout"],
                                       "The number of seconds before a command times out."))
+                # The OLE DB source declares the whole custom property set it
+                # supports, not just the ones the chosen access mode reads. The
+                # component asks the runtime for every property by name during
+                # validation, and a missing one - OpenRowsetVariable is the
+                # first it looks for - fails the component with VS_ISCORRUPT
+                # before the access mode is ever consulted.
                 out.append(self._prop(pad + "    ", "System.String", "OpenRowset", "",
                                       "Specifies the name of the database object used to open a rowset."))
+                out.append(self._prop(pad + "    ", "System.String", "OpenRowsetVariable", "",
+                                      "Specifies the variable that contains the name of the database object used to open a rowset."))
                 out.append(self._prop(pad + "    ", "System.String", "SqlCommand", comp["sql"],
                                       "The SQL command to be executed."))
-                out.append(self._prop(pad + "    ", "System.Int32", "AccessMode", 2,
-                                      "Specifies the mode used to access the database."))
+                out.append(self._prop(pad + "    ", "System.String", "SqlCommandVariable", "",
+                                      "The variable that contains the SQL command to be executed."))
                 out.append(self._prop(pad + "    ", "System.Int32", "DefaultCodePage", 1252,
                                       "Specifies the column code page to use when code page information is unavailable."))
+                out.append(self._prop(pad + "    ", "System.Boolean", "AlwaysUseDefaultCodePage", "false",
+                                      "Forces the use of the DefaultCodePage property value when describing character data."))
+                out.append(self._prop(pad + "    ", "System.Int32", "AccessMode", 2,
+                                      "Specifies the mode used to access the database."))
+                out.append(self._prop(pad + "    ", "System.String", "ParameterMapping",
+                                      comp.get("parameter_mapping", ""),
+                                      "The mapping from parameter to variables."))
             else:
                 out.append(self._prop(pad + "    ", "System.Boolean", "RetainNulls", "false",
                                       "Specifies whether zero-length strings are converted to nulls."))
@@ -582,13 +1087,25 @@ class DataFlow:
             out.append("%s      <outputColumns>" % pad)
             for col in comp["columns"]:
                 out.append(
-                    '%s        <outputColumn refId=%s %s errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId=%s lineageId=%s name=%s truncationRowDisposition="RedirectRow" />'
+                    '%s        <outputColumn refId=%s %s errorOrTruncationOperation="Conversion" errorRowDisposition="RedirectRow" externalMetadataColumnId=%s lineageId=%s name=%s truncationRowDisposition="RedirectRow"%s'
                     % (pad, quoteattr("%s.Outputs[%s].Columns[%s]" % (ref, output_name, col.name)),
                        col.metadata_attrs(),
                        quoteattr("%s.Outputs[%s].ExternalColumns[%s]" % (ref, output_name, col.name)),
                        quoteattr("%s.Outputs[%s].Columns[%s]" % (ref, output_name, col.name)),
-                       quoteattr(col.name))
+                       quoteattr(col.name),
+                       ">" if is_flat else " />")
                 )
+                if is_flat:
+                    # The flat file source asks each of its output columns for
+                    # the per-column parsing properties by name and fails the
+                    # whole component with VS_ISCORRUPT when one is absent.
+                    out.append("%s          <properties>" % pad)
+                    out.append(self._prop(pad + "            ", "System.Boolean", "FastParse", "false",
+                                          "Indicates whether the column uses the faster, locale-neutral parsing routines."))
+                    out.append(self._prop(pad + "            ", "System.Boolean", "UseBinaryFormat", "false",
+                                          "Indicates whether the data is in binary format."))
+                    out.append("%s          </properties>" % pad)
+                    out.append("%s        </outputColumn>" % pad)
             out.append("%s      </outputColumns>" % pad)
             out.append("%s      <externalMetadataColumns isUsed=\"True\">" % pad)
             for col in comp["columns"]:
@@ -601,11 +1118,14 @@ class DataFlow:
             out.append("%s    </output>" % pad)
             out.append('%s    <output refId=%s isErrorOut="true" name="%s">' % (pad, quoteattr("%s.Outputs[%s]" % (ref, error_name)), error_name))
             out.append("%s      <outputColumns>" % pad)
-            for col in comp["columns"]:
+            error_columns = ([text_col(FLAT_FILE_ERROR_COLUMN, comp["code_page"])] if is_flat
+                             else list(comp["columns"]))
+            for col in error_columns:
                 out.append(
-                    '%s        <outputColumn refId=%s %s lineageId=%s name=%s />'
+                    '%s        <outputColumn refId=%s %s%s lineageId=%s name=%s />'
                     % (pad, quoteattr("%s.Outputs[%s].Columns[%s]" % (ref, error_name, col.name)),
                        col.metadata_attrs(),
+                       ' description=%s' % quoteattr(col.name) if is_flat else "",
                        quoteattr("%s.Outputs[%s].Columns[%s]" % (ref, error_name, col.name)),
                        quoteattr(col.name))
                 )
@@ -627,15 +1147,35 @@ class DataFlow:
                 % (pad, quoteattr(ref), quoteattr(comp["name"]))
             )
             lineage = lineage_of("Derived Column Input")
+            upstream = upstream_cols("Derived Column Input")
             replacements = [(col_name, expr) for col_name, expr, _col in comp["derivations"] if col_name in lineage]
+            replaced = set(col_name for col_name, _expr in replacements)
+            read = self._read_columns([expr for _name, expr, _col in comp["derivations"]], upstream, replaced)
+            # A replaced column is written in place, so its cache describes the
+            # column arriving on the input - the upstream type, not the type the
+            # derivation names. An input column carrying only a cachedName has no
+            # cache the component can compare against the buffer, which fails
+            # validation with VS_NEEDSNEWMETADATA before a row moves.
+            upstream_by_name = dict((col_name, col) for col_name, _rid, col in upstream)
             out.append("%s  <inputs>" % pad)
-            if replacements:
+            if replacements or read:
                 out.append('%s    <input refId=%s name="Derived Column Input">' % (pad, quoteattr("%s.Inputs[Derived Column Input]" % ref)))
                 out.append("%s      <inputColumns>" % pad)
-                for col_name, expr in replacements:
-                    out.append('%s        <inputColumn refId=%s cachedName=%s lineageId=%s name=%s usageType="readWrite">'
+                for col_name, col in read:
+                    out.append('%s        <inputColumn refId=%s %s lineageId=%s name=%s usageType="readOnly" />'
                                % (pad, quoteattr("%s.Inputs[Derived Column Input].Columns[%s]" % (ref, col_name)),
-                                  quoteattr(col_name), quoteattr(lineage[col_name]), quoteattr(col_name)))
+                                  col.cached_attrs(), quoteattr(lineage[col_name]), quoteattr(col_name)))
+                for col_name, expr in replacements:
+                    # A written column computes, so it needs the dispositions
+                    # that say what a computation error does; without them the
+                    # column validates as VS_ISCORRUPT: "has an invalid error
+                    # or truncation row disposition".
+                    out.append('%s        <inputColumn refId=%s %s errorOrTruncationOperation="Computation"'
+                               ' errorRowDisposition="FailComponent" lineageId=%s name=%s'
+                               ' truncationRowDisposition="FailComponent" usageType="readWrite">'
+                               % (pad, quoteattr("%s.Inputs[Derived Column Input].Columns[%s]" % (ref, col_name)),
+                                  upstream_by_name[col_name].cached_attrs(),
+                                  quoteattr(lineage[col_name]), quoteattr(col_name)))
                     out.append("%s          <properties>" % pad)
                     out.append(self._prop(pad + "            ", "System.String", "Expression", expr,
                                           "The expression used to compute this column."))
@@ -656,7 +1196,7 @@ class DataFlow:
                 if col_name in lineage:
                     continue
                 col_ref = "%s.Outputs[Derived Column Output].Columns[%s]" % (ref, col_name)
-                out.append('%s        <outputColumn refId=%s %s lineageId=%s name=%s>'
+                out.append('%s        <outputColumn refId=%s %s errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" lineageId=%s name=%s truncationRowDisposition="FailComponent">'
                            % (pad, quoteattr(col_ref), col.metadata_attrs(), quoteattr(col_ref), quoteattr(col_name)))
                 out.append("%s          <properties>" % pad)
                 out.append(self._prop(pad + "            ", "System.String", "Expression", expr,
@@ -668,6 +1208,7 @@ class DataFlow:
             out.append("%s      </outputColumns>" % pad)
             out.append("%s      <externalMetadataColumns />" % pad)
             out.append("%s    </output>" % pad)
+            out.append(self._error_output_xml(pad, ref, "Derived Column"))
             out.append("%s  </outputs>" % pad)
             out.append("%s</component>" % pad)
 
@@ -677,12 +1218,40 @@ class DataFlow:
                 % (pad, quoteattr(ref), quoteattr(comp["name"]))
             )
             out.append("%s  <properties>" % pad)
+            # Like the OLE DB source, the lookup reads its whole property set by
+            # name while it validates, so every property the component gives
+            # itself has to be persisted even where the default is wanted: the
+            # first one missing fails the component with DTS_E_ELEMENTNOTFOUND
+            # (0xC0010009) before the reference query is looked at.
             out.append(self._prop(pad + "    ", "System.String", "SqlCommand", comp["sql"],
                                   "The SQL command used to populate the lookup cache."))
+            out.append(self._prop(pad + "    ", "System.String", "SqlCommandParam", "",
+                                  "The parameterized SQL command used to populate the lookup cache."))
+            out.append(self._prop(pad + "    ", "System.Int32", "ConnectionType", 0,
+                                  "Specifies whether the reference rows come from a database or a cache."))
+            # The component knows two behaviours: 0 treats a miss as an error
+            # row - what the match output's disposition then decides the fate of
+            # - and 1 sends it to the no match output, which leaves nothing for
+            # that disposition to say.
+            redirects = comp["no_match"] == "RD"
             out.append(self._prop(pad + "    ", "System.Int32", "NoMatchBehavior",
-                                  1 if comp["no_match"] == "IG" else 0,
+                                  1 if redirects else 0,
                                   "Determines the behaviour when a lookup finds no match."))
+            out.append(self._prop(pad + "    ", "System.Int32", "NoMatchCachePercentage", 0,
+                                  "The share of the cache held for rows with no matching entry."))
             out.append(self._prop(pad + "    ", "System.Int32", "CacheType", 0, "Full cache."))
+            out.append(self._prop(pad + "    ", "System.Int32", "MaxMemoryUsage", 25,
+                                  "The maximum cache size, in megabytes, of the 32-bit runtime."))
+            out.append(self._prop(pad + "    ", "System.Int64", "MaxMemoryUsage64", 25,
+                                  "The maximum cache size, in megabytes, of the 64-bit runtime."))
+            out.append(self._prop(pad + "    ", "System.String", "ReferenceMetadataXml", "",
+                                  "The cached description of the reference query's columns."))
+            out.append(self._prop(pad + "    ", "System.String", "ParameterMap", "",
+                                  "The input columns bound to the parameters of the reference query."))
+            out.append(self._prop(pad + "    ", "System.Int32", "DefaultCodePage", 1252,
+                                  "Specifies the code page to use when code page information is unavailable."))
+            out.append(self._prop(pad + "    ", "System.Boolean", "TreatDuplicateKeysAsError", "false",
+                                  "Whether duplicate keys in the reference rows fail the component."))
             out.append("%s  </properties>" % pad)
             out.append("%s  <connections>" % pad)
             out.append(
@@ -693,49 +1262,112 @@ class DataFlow:
             )
             out.append("%s  </connections>" % pad)
             out.append("%s  <inputs>" % pad)
-            out.append('%s    <input refId=%s errorRowDisposition="%s" name="Lookup Input">'
-                       % (pad, quoteattr("%s.Inputs[Lookup Input]" % ref),
-                          "RedirectRow" if comp["no_match"] == "RD" else "FailComponent"))
+            # The lookup carries its dispositions on the match output, not on
+            # the input: a disposition on the input is rejected outright.
+            out.append('%s    <input refId=%s name="Lookup Input">'
+                       % (pad, quoteattr("%s.Inputs[Lookup Input]" % ref)))
             out.append("%s      <inputColumns>" % pad)
             lineage = lineage_of("Lookup Input")
+            join_columns = column_of("Lookup Input")
             for jc in comp["join_columns"]:
                 if jc not in lineage:
                     continue
-                out.append('%s        <inputColumn refId=%s cachedName=%s lineageId=%s name=%s />'
-                           % (pad, quoteattr("%s.Inputs[Lookup Input].Columns[%s]" % (ref, jc)), quoteattr(jc),
+                # joinToReferenceColumn names the reference column the key is
+                # matched against; without it the component has no join at all
+                # and answers 0xC0010009 at validation.
+                out.append('%s        <inputColumn refId=%s %s externalMetadataColumnId=%s joinToReferenceColumn=%s lineageId=%s name=%s />'
+                           % (pad, quoteattr("%s.Inputs[Lookup Input].Columns[%s]" % (ref, jc)),
+                              join_columns[jc].cached_attrs(),
+                              quoteattr("%s.Inputs[Lookup Input].ExternalColumns[%s]" % (ref, jc)),
+                              quoteattr(jc),
                               quoteattr(lineage[jc]), quoteattr(jc)))
             out.append("%s      </inputColumns>" % pad)
+            # The reference set the join and the copies name has to be described
+            # on the input, or the component resolves them against an empty
+            # collection and returns 0xC0010009.
+            out.append('%s      <externalMetadataColumns isUsed="True">' % pad)
+            for jc in comp["join_columns"]:
+                if jc not in lineage:
+                    continue
+                out.append('%s        <externalMetadataColumn refId=%s %s name=%s />'
+                           % (pad, quoteattr("%s.Inputs[Lookup Input].ExternalColumns[%s]" % (ref, jc)),
+                              join_columns[jc].metadata_attrs(), quoteattr(jc)))
+            for col in comp["output_columns"]:
+                out.append('%s        <externalMetadataColumn refId=%s %s name=%s />'
+                           % (pad, quoteattr("%s.Inputs[Lookup Input].ExternalColumns[%s]"
+                                             % (ref, col.name)),
+                              col.metadata_attrs(), quoteattr(col.name)))
+            out.append("%s      </externalMetadataColumns>" % pad)
             out.append("%s    </input>" % pad)
             out.append("%s  </inputs>" % pad)
             out.append("%s  <outputs>" % pad)
-            out.append('%s    <output refId=%s name="Lookup Match Output" synchronousInputId=%s>'
-                       % (pad, quoteattr("%s.Outputs[Lookup Match Output]" % ref), quoteattr("%s.Inputs[Lookup Input]" % ref)))
+            out.append('%s    <output refId=%s errorOrTruncationOperation="Lookup" errorRowDisposition="%s" exclusionGroup="1" name="Lookup Match Output" synchronousInputId=%s>'
+                       % (pad, quoteattr("%s.Outputs[Lookup Match Output]" % ref),
+                          "NotUsed" if redirects
+                          else ("IgnoreFailure" if comp["no_match"] == "IG" else "FailComponent"),
+                          quoteattr("%s.Inputs[Lookup Input]" % ref)))
             out.append("%s      <outputColumns>" % pad)
             for col in comp["output_columns"]:
                 col_ref = "%s.Outputs[Lookup Match Output].Columns[%s]" % (ref, col.name)
-                out.append('%s        <outputColumn refId=%s %s lineageId=%s name=%s />'
-                           % (pad, quoteattr(col_ref), col.metadata_attrs(), quoteattr(col_ref), quoteattr(col.name)))
+                # The lookup names the reference column it copies in a property
+                # of the output column, not in an attribute of it, and treats a
+                # copied column that carries no such property as corrupt. The
+                # copy can only truncate, so the column carries a truncation
+                # disposition and no error disposition.
+                out.append('%s        <outputColumn refId=%s %s '
+                           'errorOrTruncationOperation="Copy Column" '
+                           'lineageId=%s name=%s truncationRowDisposition="FailComponent">'
+                           % (pad, quoteattr(col_ref), col.metadata_attrs(),
+                              quoteattr(col_ref), quoteattr(col.name)))
+                out.append("%s          <properties>" % pad)
+                out.append(self._prop(pad + "            ", "System.String",
+                                      "CopyFromReferenceColumn", col.name,
+                                      "Specifies the column in the reference table "
+                                      "from which a column is copied."))
+                out.append("%s          </properties>" % pad)
+                out.append("%s        </outputColumn>" % pad)
             out.append("%s      </outputColumns>" % pad)
             out.append("%s      <externalMetadataColumns />" % pad)
             out.append("%s    </output>" % pad)
-            out.append('%s    <output refId=%s name="Lookup No Match Output" synchronousInputId=%s />'
+            out.append('%s    <output refId=%s exclusionGroup="1" name="Lookup No Match Output" synchronousInputId=%s />'
                        % (pad, quoteattr("%s.Outputs[Lookup No Match Output]" % ref), quoteattr("%s.Inputs[Lookup Input]" % ref)))
-            out.append('%s    <output refId=%s isErrorOut="true" name="Lookup Error Output" synchronousInputId=%s />'
+            out.append('%s    <output refId=%s exclusionGroup="1" isErrorOut="true" name="Lookup Error Output" synchronousInputId=%s>'
                        % (pad, quoteattr("%s.Outputs[Lookup Error Output]" % ref), quoteattr("%s.Inputs[Lookup Input]" % ref)))
+            out.append("%s      <outputColumns>" % pad)
+            for col, flag in ((int_col("ErrorCode"), 1), (int_col("ErrorColumn"), 2)):
+                col_ref = "%s.Outputs[Lookup Error Output].Columns[%s]" % (ref, col.name)
+                out.append('%s        <outputColumn refId=%s %s lineageId=%s name=%s specialFlags="%d" />'
+                           % (pad, quoteattr(col_ref), col.metadata_attrs(), quoteattr(col_ref),
+                              quoteattr(col.name), flag))
+            out.append("%s      </outputColumns>" % pad)
+            out.append("%s    </output>" % pad)
             out.append("%s  </outputs>" % pad)
             out.append("%s</component>" % pad)
 
         elif kind == "split":
             out.append(
-                '%s<component refId=%s componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name=%s>'
+                '%s<component refId=%s componentClassID="Microsoft.ConditionalSplit" description="Conditional Split" name=%s usesDispositions="true">'
                 % (pad, quoteattr(ref), quoteattr(comp["name"]))
             )
+            lineage = lineage_of("Conditional Split Input")
+            read = self._read_columns([expr for _name, expr in comp["cases"]],
+                                      upstream_cols("Conditional Split Input"), set())
             out.append("%s  <inputs>" % pad)
-            out.append('%s    <input refId=%s name="Conditional Split Input" />' % (pad, quoteattr("%s.Inputs[Conditional Split Input]" % ref)))
+            if read:
+                out.append('%s    <input refId=%s name="Conditional Split Input">' % (pad, quoteattr("%s.Inputs[Conditional Split Input]" % ref)))
+                out.append("%s      <inputColumns>" % pad)
+                for col_name, col in read:
+                    out.append('%s        <inputColumn refId=%s %s lineageId=%s name=%s usageType="readOnly" />'
+                               % (pad, quoteattr("%s.Inputs[Conditional Split Input].Columns[%s]" % (ref, col_name)),
+                                  col.cached_attrs(), quoteattr(lineage[col_name]), quoteattr(col_name)))
+                out.append("%s      </inputColumns>" % pad)
+                out.append("%s    </input>" % pad)
+            else:
+                out.append('%s    <input refId=%s name="Conditional Split Input" />' % (pad, quoteattr("%s.Inputs[Conditional Split Input]" % ref)))
             out.append("%s  </inputs>" % pad)
             out.append("%s  <outputs>" % pad)
             for order, (out_name, expr) in enumerate(comp["cases"]):
-                out.append('%s    <output refId=%s exclusionGroup="1" name=%s synchronousInputId=%s>'
+                out.append('%s    <output refId=%s errorOrTruncationOperation="Computation" errorRowDisposition="FailComponent" exclusionGroup="1" name=%s synchronousInputId=%s truncationRowDisposition="FailComponent">'
                            % (pad, quoteattr("%s.Outputs[%s]" % (ref, out_name)), quoteattr(out_name),
                               quoteattr("%s.Inputs[Conditional Split Input]" % ref)))
                 out.append("%s      <properties>" % pad)
@@ -744,9 +1376,18 @@ class DataFlow:
                 out.append(self._prop(pad + "        ", "System.Int32", "EvaluationOrder", order, "Evaluation order."))
                 out.append("%s      </properties>" % pad)
                 out.append("%s    </output>" % pad)
-            out.append('%s    <output refId=%s exclusionGroup="1" isDefaultOut="true" name=%s synchronousInputId=%s />'
+            # The component recognises its default output by the IsDefaultOut
+            # custom property, not by an attribute; without it the output is
+            # read as another condition and fails for having no Expression.
+            out.append('%s    <output refId=%s exclusionGroup="1" name=%s synchronousInputId=%s>'
                        % (pad, quoteattr("%s.Outputs[%s]" % (ref, comp["default"])), quoteattr(comp["default"]),
                           quoteattr("%s.Inputs[Conditional Split Input]" % ref)))
+            out.append("%s      <properties>" % pad)
+            out.append(self._prop(pad + "        ", "System.Boolean", "IsDefaultOut", "true",
+                                  "Specifies the default output."))
+            out.append("%s      </properties>" % pad)
+            out.append("%s    </output>" % pad)
+            out.append(self._error_output_xml(pad, ref, "Conditional Split"))
             out.append("%s  </outputs>" % pad)
             out.append("%s</component>" % pad)
 
@@ -785,18 +1426,32 @@ class DataFlow:
 
         elif kind == "aggregate":
             out.append(
-                '%s<component refId=%s componentClassID="Microsoft.Aggregate" description="Aggregate" name=%s version="2">'
+                '%s<component refId=%s componentClassID="Microsoft.Aggregate" description="Aggregate" name=%s version="3">'
                 % (pad, quoteattr(ref), quoteattr(comp["name"]))
             )
+            out.append("%s  <properties>" % pad)
+            out.append(self._prop(pad + "    ", "System.UInt32", "KeyScale", 0,
+                                  "The approximate number of groups the component sizes its cache for."))
+            out.append(self._prop(pad + "    ", "System.UInt32", "Keys", 0,
+                                  "The exact number of groups the component sizes its cache for."))
+            out.append(self._prop(pad + "    ", "System.UInt32", "CountDistinctScale", 0,
+                                  "The approximate number of distinct values a count distinct is sized for."))
+            out.append(self._prop(pad + "    ", "System.UInt32", "CountDistinctKeys", 0,
+                                  "The exact number of distinct values a count distinct is sized for."))
+            out.append(self._prop(pad + "    ", "System.Int32", "AutoExtendFactor", 25,
+                                  "The share by which the cache may grow."))
+            out.append("%s  </properties>" % pad)
             out.append("%s  <inputs>" % pad)
             out.append('%s    <input refId=%s name="Aggregate Input 1">' % (pad, quoteattr("%s.Inputs[Aggregate Input 1]" % ref)))
             out.append("%s      <inputColumns>" % pad)
             lineage = lineage_of("Aggregate Input 1")
+            aggregate_columns = column_of("Aggregate Input 1")
             for gb in comp["group_by"]:
                 if gb not in lineage:
                     continue
-                out.append('%s        <inputColumn refId=%s cachedName=%s lineageId=%s name=%s>'
-                           % (pad, quoteattr("%s.Inputs[Aggregate Input 1].Columns[%s]" % (ref, gb)), quoteattr(gb),
+                out.append('%s        <inputColumn refId=%s %s lineageId=%s name=%s>'
+                           % (pad, quoteattr("%s.Inputs[Aggregate Input 1].Columns[%s]" % (ref, gb)),
+                              aggregate_columns[gb].cached_attrs(),
                               quoteattr(lineage[gb]), quoteattr(gb)))
                 out.append("%s          <properties>" % pad)
                 out.append(self._prop(pad + "            ", "System.Int32", "AggregationType", 0, "Group by."))
@@ -809,12 +1464,13 @@ class DataFlow:
                 if src not in lineage or src in emitted:
                     continue
                 emitted.add(src)
-                out.append('%s        <inputColumn refId=%s cachedName=%s lineageId=%s name=%s>'
-                           % (pad, quoteattr("%s.Inputs[Aggregate Input 1].Columns[%s]" % (ref, src)), quoteattr(src),
+                out.append('%s        <inputColumn refId=%s %s lineageId=%s name=%s>'
+                           % (pad, quoteattr("%s.Inputs[Aggregate Input 1].Columns[%s]" % (ref, src)),
+                              aggregate_columns[src].cached_attrs(),
                               quoteattr(lineage[src]), quoteattr(src)))
                 out.append("%s          <properties>" % pad)
                 out.append(self._prop(pad + "            ", "System.Int32", "AggregationType",
-                                      {"sum": 1, "avg": 2, "count": 3, "min": 4, "max": 5}.get(op, 1), op))
+                                      aggregation_type(op), op))
                 out.append(self._prop(pad + "            ", "System.String", "AggregationColumnName", dest, "Output column."))
                 out.append("%s          </properties>" % pad)
                 out.append("%s        </inputColumn>" % pad)
@@ -823,10 +1479,43 @@ class DataFlow:
             out.append("%s  </inputs>" % pad)
             out.append("%s  <outputs>" % pad)
             out.append('%s    <output refId=%s name="Aggregate Output 1">' % (pad, quoteattr("%s.Outputs[Aggregate Output 1]" % ref)))
+            out.append("%s      <properties>" % pad)
+            out.append(self._prop(pad + "        ", "System.UInt32", "KeyScale", 0,
+                                  "The approximate number of groups this output is sized for."))
+            out.append(self._prop(pad + "        ", "System.UInt32", "Keys", 0,
+                                  "The exact number of groups this output is sized for."))
+            out.append("%s      </properties>" % pad)
             out.append("%s      <outputColumns>" % pad)
+            # Each output column names the input column it summarises and the
+            # summary it is: the component reads both off the output column and
+            # refuses one that does not carry them.
+            aggregation_of = dict((gb, (gb, 0)) for gb in comp["group_by"])
+            for src, dest, op in comp["aggregations"]:
+                aggregation_of[dest] = (src, aggregation_type(op))
             for col_name, col_ref, col in outputs[(comp["name"], "Aggregate Output 1")]:
-                out.append('%s        <outputColumn refId=%s %s lineageId=%s name=%s />'
+                src, summary = aggregation_of.get(col_name, (col_name, 0))
+                if src not in lineage:
+                    continue
+                out.append('%s        <outputColumn refId=%s %s lineageId=%s name=%s>'
                            % (pad, quoteattr(col_ref), col.metadata_attrs(), quoteattr(col_ref), quoteattr(col_name)))
+                out.append("%s          <properties>" % pad)
+                out.append(
+                    '%s            <property containsID="true" dataType="System.Int32" '
+                    'description="The input column this column summarises." '
+                    'name="AggregationColumnId">%s</property>'
+                    % (pad, escape("#{%s}" % lineage[src])))
+                out.append(self._prop(pad + "            ", "System.Int32", "AggregationType",
+                                      summary, "The aggregation this column carries."))
+                # A count or sum is big when it is carried in an eight byte
+                # integer, and the aggregate rejects a column whose type and
+                # this flag disagree.
+                out.append(self._prop(pad + "            ", "System.Int32", "IsBig",
+                                      1 if col.dtype in ("i8", "ui8") else 0,
+                                      "Whether the column may hold a value beyond the range of a four byte integer."))
+                out.append(self._prop(pad + "            ", "System.Int32", "AggregationComparisonFlags", 0,
+                                      "The string comparison options used when grouping."))
+                out.append("%s          </properties>" % pad)
+                out.append("%s        </outputColumn>" % pad)
             out.append("%s      </outputColumns>" % pad)
             out.append("%s      <externalMetadataColumns />" % pad)
             out.append("%s    </output>" % pad)
@@ -841,15 +1530,17 @@ class DataFlow:
             out.append("%s  <properties>" % pad)
             out.append(self._prop(pad + "    ", "System.Boolean", "EliminateDuplicates",
                                   "true" if comp["dedupe"] else "false", "Remove duplicate rows."))
+            out.append(self._prop(pad + "    ", "System.Int32", "MaximumThreads", -1,
+                                  "The number of threads the sort may use, or -1 for as many as it likes."))
             out.append("%s  </properties>" % pad)
             out.append("%s  <inputs>" % pad)
             out.append('%s    <input refId=%s name="Sort Input">' % (pad, quoteattr("%s.Inputs[Sort Input]" % ref)))
             out.append("%s      <inputColumns>" % pad)
             sort_positions = dict((sc, order) for order, sc in enumerate(comp["sort_columns"], start=1))
-            for col_name, col_ref, _col in upstream_cols("Sort Input"):
-                out.append('%s        <inputColumn refId=%s cachedName=%s lineageId=%s name=%s>'
+            for col_name, col_ref, col in upstream_cols("Sort Input"):
+                out.append('%s        <inputColumn refId=%s %s lineageId=%s name=%s>'
                            % (pad, quoteattr("%s.Inputs[Sort Input].Columns[%s]" % (ref, col_name)),
-                              quoteattr(col_name), quoteattr(col_ref), quoteattr(col_name)))
+                              col.cached_attrs(), quoteattr(col_ref), quoteattr(col_name)))
                 out.append("%s          <properties>" % pad)
                 out.append(self._prop(pad + "            ", "System.Int32", "NewSortKeyPosition",
                                       sort_positions.get(col_name, 0), "Sort key position."))
@@ -861,10 +1552,22 @@ class DataFlow:
             out.append("%s  <outputs>" % pad)
             out.append('%s    <output refId=%s name="Sort Output">' % (pad, quoteattr("%s.Outputs[Sort Output]" % ref)))
             out.append("%s      <outputColumns>" % pad)
+            # The sort copies each input column through, and it finds the column
+            # to copy by the SortColumnId the output column carries.
+            sort_lineage = lineage_of("Sort Input")
             for col_name, col_ref, col in outputs[(comp["name"], "Sort Output")]:
-                out.append('%s        <outputColumn refId=%s %s lineageId=%s name=%s sourceColumn=%s />'
+                input_ref = "%s.Inputs[Sort Input].Columns[%s]" % (ref, col_name)
+                out.append('%s        <outputColumn refId=%s %s lineageId=%s name=%s sourceColumn=%s>'
                            % (pad, quoteattr(col_ref), col.metadata_attrs(), quoteattr(col_ref), quoteattr(col_name),
-                              quoteattr("%s.Inputs[Sort Input].Columns[%s]" % (ref, col_name))))
+                              quoteattr(input_ref)))
+                out.append("%s          <properties>" % pad)
+                out.append(
+                    '%s            <property containsID="true" dataType="System.Int32" '
+                    'description="The input column this column is copied from." '
+                    'name="SortColumnId">%s</property>'
+                    % (pad, escape("#{%s}" % sort_lineage[col_name])))
+                out.append("%s          </properties>" % pad)
+                out.append("%s        </outputColumn>" % pad)
             out.append("%s      </outputColumns>" % pad)
             out.append("%s      <externalMetadataColumns />" % pad)
             out.append("%s    </output>" % pad)
@@ -880,10 +1583,10 @@ class DataFlow:
             out.append('%s    <input refId=%s hasSideEffects="true" name="Union All Input 1">'
                        % (pad, quoteattr("%s.Inputs[Union All Input 1]" % ref)))
             out.append("%s      <inputColumns>" % pad)
-            for col_name, col_ref, _col in upstream_cols("Union All Input 1"):
-                out.append('%s        <inputColumn refId=%s cachedName=%s lineageId=%s name=%s>'
+            for col_name, col_ref, col in upstream_cols("Union All Input 1"):
+                out.append('%s        <inputColumn refId=%s %s lineageId=%s name=%s>'
                            % (pad, quoteattr("%s.Inputs[Union All Input 1].Columns[%s]" % (ref, col_name)),
-                              quoteattr(col_name), quoteattr(col_ref), quoteattr(col_name)))
+                              col.cached_attrs(), quoteattr(col_ref), quoteattr(col_name)))
                 out.append("%s          <properties>" % pad)
                 out.append(self._prop(pad + "            ", "System.String", "OutputColumnLineageID",
                                       "%s.Outputs[Union All Output 1].Columns[%s]" % (ref, col_name),
@@ -907,48 +1610,52 @@ class DataFlow:
 
         elif kind == "convert":
             out.append(
-                '%s<component refId=%s componentClassID="Microsoft.DataConvert" description="Data Conversion" name=%s>'
+                '%s<component refId=%s componentClassID="Microsoft.DataConvert" description="Data Conversion" name=%s usesDispositions="true">'
                 % (pad, quoteattr(ref), quoteattr(comp["name"]))
             )
             out.append("%s  <inputs>" % pad)
             out.append('%s    <input refId=%s name="Data Conversion Input">' % (pad, quoteattr("%s.Inputs[Data Conversion Input]" % ref)))
             out.append("%s      <inputColumns>" % pad)
             lineage = lineage_of("Data Conversion Input")
+            arriving = dict((col_name, col) for col_name, _rid, col
+                            in upstream_cols("Data Conversion Input"))
             for src, dest, col in comp["conversions"]:
                 if src not in lineage:
                     continue
-                out.append('%s        <inputColumn refId=%s cachedName=%s lineageId=%s name=%s />'
+                out.append('%s        <inputColumn refId=%s %s lineageId=%s name=%s />'
                            % (pad, quoteattr("%s.Inputs[Data Conversion Input].Columns[%s]" % (ref, src)),
-                              quoteattr(src), quoteattr(lineage[src]), quoteattr(src)))
+                              arriving[src].cached_attrs(), quoteattr(lineage[src]), quoteattr(src)))
             out.append("%s      </inputColumns>" % pad)
             out.append("%s    </input>" % pad)
             out.append("%s  </inputs>" % pad)
             out.append("%s  <outputs>" % pad)
-            out.append('%s    <output refId=%s name="Data Conversion Output" synchronousInputId=%s>'
+            out.append('%s    <output refId=%s exclusionGroup="1" name="Data Conversion Output" synchronousInputId=%s>'
                        % (pad, quoteattr("%s.Outputs[Data Conversion Output]" % ref), quoteattr("%s.Inputs[Data Conversion Input]" % ref)))
             out.append("%s      <outputColumns>" % pad)
             for src, dest, col in comp["conversions"]:
                 if dest in lineage:
                     continue
                 col_ref = "%s.Outputs[Data Conversion Output].Columns[%s]" % (ref, dest)
-                out.append('%s        <outputColumn refId=%s %s lineageId=%s name=%s sourceColumn=%s />'
-                           % (pad, quoteattr(col_ref), col.metadata_attrs(), quoteattr(col_ref), quoteattr(dest),
-                              quoteattr("%s.Inputs[Data Conversion Input].Columns[%s]" % (ref, src))))
+                # The property holds a lineage ID, and an input column's lineage
+                # is the upstream output column it reads - its own refId is a
+                # different ID the component cannot resolve: 'Cannot find input
+                # column with lineage ID ...'.
+                src_ref = lineage[src]
+                out.append('%s        <outputColumn refId=%s %s errorOrTruncationOperation="Conversion" errorRowDisposition="FailComponent" lineageId=%s name=%s truncationRowDisposition="FailComponent">'
+                           % (pad, quoteattr(col_ref), col.metadata_attrs(), quoteattr(col_ref), quoteattr(dest)))
+                out.append("%s          <properties>" % pad)
+                # The component reads the column to convert from this property,
+                # not from a sourceColumn attribute, and requires it by name.
+                out.append('%s            <property containsID="true" dataType="System.Int32" description="The lineage ID of the input column." name="SourceInputColumnLineageID">%s</property>'
+                           % (pad, escape("#{%s}" % src_ref)))
+                out.append(self._prop(pad + "            ", "System.Boolean", "FastParse", "false",
+                                      "Indicates whether the column uses the faster, locale-neutral parsing routines."))
+                out.append("%s          </properties>" % pad)
+                out.append("%s        </outputColumn>" % pad)
             out.append("%s      </outputColumns>" % pad)
             out.append("%s      <externalMetadataColumns />" % pad)
             out.append("%s    </output>" % pad)
-            out.append('%s    <output refId=%s exclusionGroup="1" isErrorOut="true" name="Data Conversion Error Output" synchronousInputId=%s>'
-                       % (pad, quoteattr("%s.Outputs[Data Conversion Error Output]" % ref),
-                          quoteattr("%s.Inputs[Data Conversion Input]" % ref)))
-            out.append("%s      <outputColumns>" % pad)
-            for col_name, col_ref, col in outputs[(comp["name"], "Data Conversion Error Output")]:
-                if col_name in ("ErrorCode", "ErrorColumn"):
-                    out.append('%s        <outputColumn refId=%s dataType="i4" lineageId=%s name=%s specialFlags="%d" />'
-                               % (pad, quoteattr(col_ref), quoteattr(col_ref), quoteattr(col_name),
-                                  1 if col_name == "ErrorCode" else 2))
-            out.append("%s      </outputColumns>" % pad)
-            out.append("%s      <externalMetadataColumns />" % pad)
-            out.append("%s    </output>" % pad)
+            out.append(self._error_output_xml(pad, ref, "Data Conversion"))
             out.append("%s  </outputs>" % pad)
             out.append("%s</component>" % pad)
 
@@ -961,6 +1668,16 @@ class DataFlow:
             out.append(self._prop(pad + "    ", "System.Int32", "CommandTimeout", 0, "Command timeout in seconds."))
             out.append(self._prop(pad + "    ", "System.String", "OpenRowset", comp["table"],
                                   "Specifies the name of the database object used to open a rowset."))
+            # Like the OLE DB source, the destination looks every custom
+            # property up by name during validation regardless of access mode.
+            out.append(self._prop(pad + "    ", "System.String", "OpenRowsetVariable", "",
+                                  "Specifies the variable that contains the name of the database object used to open a rowset."))
+            out.append(self._prop(pad + "    ", "System.String", "SqlCommand", "",
+                                  "The SQL command to be executed."))
+            out.append(self._prop(pad + "    ", "System.Boolean", "AlwaysUseDefaultCodePage", "false",
+                                  "Forces the use of the DefaultCodePage property value when describing character data."))
+            out.append(self._prop(pad + "    ", "System.Boolean", "FastLoadKeepNulls", "false",
+                                  "Indicates whether the columns containing null will have null inserted in the destination."))
             out.append(self._prop(pad + "    ", "System.Int32", "AccessMode", 3 if comp["fast_load"] else 0,
                                   "Specifies the mode used to access the database."))
             out.append(self._prop(pad + "    ", "System.Boolean", "FastLoadKeepIdentity",
@@ -982,28 +1699,34 @@ class DataFlow:
             out.append("%s  <inputs>" % pad)
             out.append('%s    <input refId=%s errorOrTruncationOperation="Insert" errorRowDisposition="%s" hasSideEffects="true" name="OLE DB Destination Input">'
                        % (pad, quoteattr("%s.Inputs[OLE DB Destination Input]" % ref), comp["error_disposition"]))
-            out.append("%s      <inputColumns>" % pad)
+            # External metadata describes the *table*, which is what the
+            # destination revalidates against when the package starts: metadata
+            # copied from the buffer fails with VS_NEEDSNEWMETADATA before a row
+            # moves. Buffer columns are mapped onto it by name, or by the pairs
+            # the spec supplied where the names differ.
             lineage = lineage_of("OLE DB Destination Input")
-            loaded = [col for col in comp["columns"] if col.name in lineage]
-            for col in loaded:
+            loaded = self._destination_contract(comp, lineage)
+            out.append("%s      <inputColumns>" % pad)
+            for target, col in loaded:
+                if col is None:
+                    continue
                 out.append('%s        <inputColumn refId=%s %s externalMetadataColumnId=%s lineageId=%s name=%s />'
                            % (pad, quoteattr("%s.Inputs[OLE DB Destination Input].Columns[%s]" % (ref, col.name)),
                               col.cached_attrs(),
-                              quoteattr("%s.Inputs[OLE DB Destination Input].ExternalColumns[%s]" % (ref, col.name)),
+                              quoteattr("%s.Inputs[OLE DB Destination Input].ExternalColumns[%s]" % (ref, target.name)),
                               quoteattr(lineage[col.name]),
                               quoteattr(col.name)))
             out.append("%s      </inputColumns>" % pad)
             out.append("%s      <externalMetadataColumns isUsed=\"True\">" % pad)
-            for col in loaded:
+            for target, _col in loaded:
                 out.append('%s        <externalMetadataColumn refId=%s %s name=%s />'
-                           % (pad, quoteattr("%s.Inputs[OLE DB Destination Input].ExternalColumns[%s]" % (ref, col.name)),
-                              col.metadata_attrs(), quoteattr(col.name)))
+                           % (pad, quoteattr("%s.Inputs[OLE DB Destination Input].ExternalColumns[%s]" % (ref, target.name)),
+                              target.metadata_attrs(), quoteattr(target.name)))
             out.append("%s      </externalMetadataColumns>" % pad)
             out.append("%s    </input>" % pad)
             out.append("%s  </inputs>" % pad)
             out.append("%s  <outputs>" % pad)
-            out.append('%s    <output refId=%s isErrorOut="true" name="OLE DB Destination Error Output" />'
-                       % (pad, quoteattr("%s.Outputs[OLE DB Destination Error Output]" % ref)))
+            out.append(self._error_output_xml(pad, ref, "OLE DB Destination"))
             out.append("%s  </outputs>" % pad)
             out.append("%s</component>" % pad)
 
@@ -1022,11 +1745,19 @@ class Task:
     executable_type = ""
     description = ""
 
+    # A task whose work is addressed through variables the control flow fills
+    # in at run time cannot be validated at package start; see FileSystemTask.
+    delay_validation = False
+
     def __init__(self, name):
         self.name = safe_name(name)
 
     def object_data(self, ref, indent):  # pragma: no cover - overridden
         return []
+
+    def bind(self, package):
+        """Resolve package-scoped references. Overridden where needed."""
+        return self
 
     def to_xml(self, parent_ref, indent):
         ref = "%s\\%s" % (parent_ref, self.name)
@@ -1037,12 +1768,16 @@ class Task:
             '%s  DTS:CreationName="%s"' % (pad, self.creation_name),
             "%s  %s" % (pad, attr("DTS:Description", self.description)),
             '%s  DTS:DTSID="%s"' % (pad, guid(ref)),
+        ]
+        if self.delay_validation:
+            out.append('%s  DTS:DelayValidation="True"' % pad)
+        out.extend([
             '%s  DTS:ExecutableType="%s"' % (pad, self.executable_type),
             '%s  DTS:LocaleID="-1"' % pad,
             "%s  %s" % (pad, attr("DTS:ObjectName", self.name)),
             '%s  DTS:ThreadHint="0">' % pad,
             "%s  <DTS:Variables />" % pad,
-        ]
+        ])
         body = self.object_data(ref, indent + 2)
         if body:
             out.append("%s  <DTS:ObjectData>" % pad)
@@ -1105,11 +1840,35 @@ class Expression(Task):
 
     def __init__(self, name, expression):
         Task.__init__(self, name)
+        # One task holds one <ExpressionTask Expression="..." />, so several
+        # assignments strung together with semicolons reach the evaluator as a
+        # single expression and fail task validation before the task runs.
+        # Use expression_sequence() for more than one assignment.
+        if expression_statement_count(expression) > 1:
+            raise ContractError(
+                "expression task %r carries %d statements; the Expression Task "
+                "evaluates one expression and refuses the ';' token"
+                % (name, expression_statement_count(expression)))
         self.expression = expression
 
     def object_data(self, ref, indent):
         pad = " " * indent
         return ["%s<ExpressionTask %s />" % (pad, attr("Expression", self.expression))]
+
+
+def expression_sequence(name, assignments, description=None):
+    """Sequence container running one Expression Task per assignment, in order.
+
+    ``assignments`` are expressions evaluated left to right, so a later one may
+    read a variable an earlier one wrote.
+    """
+    container = Container(name, kind="sequence",
+                          description=description or "Sequence Container")
+    steps = []
+    for index, assignment in enumerate(assignments, start=1):
+        steps.append(container.add(Expression("%s %d" % (name, index), assignment)))
+    container.chain(*steps)
+    return container
 
 
 class ExecutePackage(Task):
@@ -1155,12 +1914,40 @@ class ExecutePackage(Task):
 
 
 class FileSystemTask(Task):
+    """A File System Task that moves or copies one variable-addressed path.
+
+    The persisted attribute names are the ones the task host itself writes:
+    ``TaskOperationType``, ``TaskSourcePath``, ``TaskIsSourceVariable``,
+    ``TaskDestinationPath`` and ``TaskIsDestinationVariable``. Any other spelling
+    is well-formed XML that the task host does not recognise, so it loads with
+    its defaults - operation CopyFile over two empty literal paths - and fails
+    validation with '"DestinationPath" is not valid on operation type
+    "CopyFile"'. Nothing but loading the package through the runtime catches
+    that, which is what validation/static/Test-PackageRuntimeContracts.ps1 does.
+    """
+
     creation_name = "Microsoft.FileSystemTask"
     executable_type = "Microsoft.FileSystemTask"
     description = "File System Task"
 
+    # DTSFileSystemOperation, as the task host parses it.
+    OPERATIONS = ("CopyFile", "CopyDirectory", "MoveFile", "MoveDirectory",
+                  "DeleteFile", "DeleteDirectory", "DeleteDirectoryContent",
+                  "RenameFile", "SetAttributes", "CreateDirectory")
+
+    # Both paths are variables the control flow fills in per iteration, so the
+    # task has to be validated when it runs. Validated at package start the
+    # variables still hold their design-time empty string and the task host
+    # fails with 'Variable "X" is used as a source or destination and is
+    # empty.', which is how every ING_FILE_* archive step failed.
+    delay_validation = True
+
     def __init__(self, name, operation, source_variable, destination_variable):
         Task.__init__(self, name)
+        if operation not in self.OPERATIONS:
+            raise ValueError(
+                "file system task %r asks for operation %r; the task host only "
+                "parses %s" % (name, operation, ", ".join(self.OPERATIONS)))
         self.operation = operation
         self.source_variable = source_variable
         self.destination_variable = destination_variable
@@ -1168,9 +1955,9 @@ class FileSystemTask(Task):
     def object_data(self, ref, indent):
         pad = " " * indent
         return [
-            '%s<FileSystemData taskOperationType="%s" taskSourceVariable="%s" taskDestinationVariable="%s" '
-            'taskOperationIsSourceVariable="True" taskOperationIsDestinationVariable="True" '
-            'xmlns="www.microsoft.com/sqlserver/dts/tasks/filesystemtask" />'
+            '%s<FileSystemData TaskOperationType="%s" TaskSourcePath="%s" '
+            'TaskIsSourceVariable="True" TaskDestinationPath="%s" '
+            'TaskIsDestinationVariable="True" />'
             % (pad, self.operation, self.source_variable, self.destination_variable)
         ]
 
@@ -1180,9 +1967,14 @@ class DataFlowTask(Task):
     executable_type = "Microsoft.Pipeline"
     description = "Data Flow Task"
 
-    def __init__(self, data_flow):
+    def __init__(self, data_flow, delay_validation=False):
         Task.__init__(self, data_flow.name)
         self.data_flow = data_flow
+        self.delay_validation = delay_validation
+
+    def bind(self, package):
+        self.data_flow.bind(package)
+        return self
 
     def object_data(self, ref, indent):
         return self.data_flow.to_xml(ref, indent)
@@ -1192,22 +1984,35 @@ class Container:
     """Sequence container or Foreach loop holding child executables."""
 
     def __init__(self, name, kind="sequence", enumerator=None, variable_mappings=None, description=None,
-                 folder_expression=None):
+                 folder_expression=None, delay_validation=None):
         self.name = safe_name(name)
         self.kind = kind
         self.enumerator = enumerator or {}
         # The enumerator's Folder is a literal the runtime never evaluates, so a
         # loop that has to follow a configured root carries a Directory property
-        # expression as well; the literal stays as the design-time value.
+        # expression on the enumerator as well; the literal stays as the
+        # design-time value.
+        if folder_expression and kind != "foreach":
+            raise ContractError(
+                "%s: a Directory expression only has a home on a Foreach loop's enumerator" % self.name)
         self.folder_expression = folder_expression
         self.variable_mappings = variable_mappings or []
         self.description = description or ("Sequence Container" if kind == "sequence" else "Foreach Loop Container")
+        # A Foreach loop hands its children a file path that only exists once
+        # the loop is iterating, so its children have to be validated then and
+        # not at package start, where the mapped variables are still empty.
+        self.delay_validation = (kind == "foreach") if delay_validation is None else delay_validation
         self.tasks = []
         self.constraints = []
 
     def add(self, task):
         self.tasks.append(task)
         return task
+
+    def bind(self, package):
+        for task in self.tasks:
+            task.bind(package)
+        return self
 
     def link(self, from_task, to_task, value="Success", expression=None, logical_and=True):
         self.constraints.append((from_task, to_task, value, expression, logical_and))
@@ -1226,23 +2031,39 @@ class Container:
             '%s  DTS:CreationName="%s"' % (pad, creation),
             "%s  %s" % (pad, attr("DTS:Description", self.description)),
             '%s  DTS:DTSID="%s"' % (pad, guid(ref)),
+        ]
+        if self.delay_validation:
+            out.append('%s  DTS:DelayValidation="True"' % pad)
+        out.extend([
             '%s  DTS:ExecutableType="%s"' % (pad, creation),
             '%s  DTS:LocaleID="-1"' % pad,
             "%s  %s>" % (pad, attr("DTS:ObjectName", self.name)),
-        ]
-        if self.folder_expression:
-            out.append('%s  <DTS:PropertyExpression DTS:Name="Directory">%s</DTS:PropertyExpression>'
-                       % (pad, escape(self.folder_expression)))
+        ])
         out.append("%s  <DTS:Variables />" % pad)
         if self.kind == "foreach":
+            enumerator_ref = "%s.ForEachEnumerator" % ref
             out.append("%s  <DTS:ForEachEnumerator" % pad)
-            out.append('%s    DTS:ObjectName="ForeachFileEnumerator"' % pad)
+            out.append('%s    DTS:DTSID="%s"' % (pad, guid(enumerator_ref)))
+            out.append('%s    DTS:ObjectName="%s"' % (pad, guid(enumerator_ref)))
             out.append('%s    DTS:CreationName="Microsoft.ForEachFileEnumerator">' % pad)
+            # Directory is a property of the enumerator, not of the loop that
+            # holds it: the loop has no such property, so an expression written
+            # on the loop is dropped by the loader without a word and the loop
+            # enumerates the enumerator's own default, C:\ *.*.
+            if self.folder_expression:
+                out.append('%s    <DTS:PropertyExpression DTS:Name="Directory">%s</DTS:PropertyExpression>'
+                           % (pad, escape(self.folder_expression)))
             out.append("%s    <DTS:ObjectData>" % pad)
-            out.append(
-                '%s      <FEFE Folder="%s" FileSpec="%s" FileNameRetrieval="1" Recurse="0" />'
-                % (pad, escape(self.enumerator.get("folder", "")), escape(self.enumerator.get("file_spec", "*.csv")))
-            )
+            out.append("%s      <ForEachFileEnumeratorProperties>" % pad)
+            out.append('%s        <FEFEProperty Folder="%s" />'
+                       % (pad, escape(self.enumerator.get("folder", ""))))
+            out.append('%s        <FEFEProperty FileSpec="%s" />'
+                       % (pad, escape(self.enumerator.get("file_spec", "*.csv"))))
+            # 0 is the fully qualified name: every consumer of the mapped
+            # variable treats it as a path.
+            out.append('%s        <FEFEProperty FileNameRetrievalType="0" />' % pad)
+            out.append('%s        <FEFEProperty Recurse="0" />' % pad)
+            out.append("%s      </ForEachFileEnumeratorProperties>" % pad)
             out.append("%s    </DTS:ObjectData>" % pad)
             out.append("%s  </DTS:ForEachEnumerator>" % pad)
             if self.variable_mappings:
@@ -1348,6 +2169,40 @@ class Package:
         self.event_handlers.append((event_name, tasks, constraints or []))
         return self
 
+    def variable_dtsid(self, name):
+        """DTSID of the variable or package parameter *name* addresses.
+
+        Components that persist a variable reference by id - an OLE DB source
+        parameter mapping, for one - need the id the package will emit, and a
+        reference to something the package does not declare would load as a
+        dangling GUID, so the lookup is strict.
+        """
+        if name.startswith("$Package::"):
+            short = name[len("$Package::"):]
+            if any(entry[0] == short for entry in self.parameters):
+                return guid("Package.Variables[$Package::%s]" % short + self.name)
+            raise ContractError("package %r has no parameter %r to bind" % (self.name, short))
+        namespace, separator, short = name.partition("::")
+        if not separator:
+            namespace, short = "User", name
+        if namespace == "System":
+            raise ContractError(
+                "package %r binds system variable %r; the runtime owns its id, so it "
+                "cannot be referenced by DTSID" % (self.name, name))
+        for vname, _value, _dtype, vnamespace, _expression in self.variables:
+            if vname == short and vnamespace == namespace:
+                return guid("Package.Variables[%s::%s]" % (namespace, short) + self.name)
+        raise ContractError("package %r has no variable %r to bind" % (self.name, name))
+
+    def bind(self):
+        """Let every executable resolve its package-scoped references."""
+        for task in self.tasks:
+            task.bind(self)
+        for _event_name, tasks, _constraints in self.event_handlers:
+            for task in tasks:
+                task.bind(self)
+        return self
+
     def add_flat_file_connection(self, name, columns, delimiter=",", code_page=1252,
                                  header_in_first_row=True, design_time_path="",
                                  expression="@[User::CurrentFilePath]", description=""):
@@ -1383,7 +2238,7 @@ class Package:
             out.append("      <DTS:ObjectData>")
             out.append("        <DTS:ConnectionManager")
             out.append('          DTS:Format="Delimited"')
-            out.append('          DTS:LocaleID="1033"')
+            out.append('          DTS:LocaleID="%d"' % LOCALE_ID)
             out.append('          DTS:HeaderRowDelimiter="_x000D__x000A_"')
             out.append('          DTS:ColumnNamesInFirstDataRow="%s"'
                        % ("True" if spec["header_in_first_row"] else "False"))
@@ -1418,6 +2273,7 @@ class Package:
     # -- emission -----------------------------------------------------------
 
     def to_xml(self):
+        self.bind()
         out = ['<?xml version="1.0"?>']
         out.append('<DTS:Executable xmlns:DTS="%s"' % DTS_NS)
         out.append('  DTS:refId="Package"')
@@ -1429,7 +2285,7 @@ class Package:
         out.append("  %s" % attr("DTS:Description", self.description))
         out.append('  DTS:ExecutableType="Microsoft.Package"')
         out.append('  DTS:LastModifiedProductVersion="13.0.4001.0"')
-        out.append('  DTS:LocaleID="1033"')
+        out.append('  DTS:LocaleID="%d"' % LOCALE_ID)
         out.append("  %s" % attr("DTS:ObjectName", self.name))
         out.append('  DTS:PackageType="%s"' % self.package_type)
         out.append('  DTS:ProtectionLevel="%s"' % self.protection_level)

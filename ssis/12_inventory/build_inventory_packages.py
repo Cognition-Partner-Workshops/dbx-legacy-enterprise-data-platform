@@ -105,7 +105,10 @@ def build_inv_load_dailysnapshot():
         int_col("IsExpiredChillerStock"),
     ]
     flow = DataFlow("Load Inventory Snapshot")
-    flow.oledb_source("work InventoryPositionDaily", CONN_STAGING, SNAPSHOT_SQL, columns, timeout=3600)
+    flow.oledb_source(
+        "work InventoryPositionDaily", CONN_STAGING, SNAPSHOT_SQL, columns, timeout=3600,
+        parameters=("$Package::SnapshotBusinessDate",),
+    )
     flow.lookup("Lookup Stock Item Key", CONN_DW,
                 "SELECT [Stock Item Key] AS StockItemKey, [WWI Stock Item ID] AS StockItemId "
                 "FROM Dimension.[Stock Item] WHERE [Valid To] > SYSDATETIME();",
@@ -475,7 +478,10 @@ def build_inv_load_stocktransfer():
         str_col("ToRegionCode", 4), money_col("MovementUnitValue"),
     ]
     flow = DataFlow("Load Transfer Movements")
-    flow.oledb_source("stg StockMovement Transfers", CONN_STAGING, TRANSFER_SQL, columns, timeout=1800)
+    flow.oledb_source(
+        "stg StockMovement Transfers", CONN_STAGING, TRANSFER_SQL, columns, timeout=1800,
+        parameters=("$Package::BatchId",),
+    )
     flow.derived_column("Derive Movement Attributes", [
         ("IsCrossRegion", "FromRegionCode != ToRegionCode ? (DT_BOOL)1 : (DT_BOOL)0",
          bool_col("IsCrossRegion")),

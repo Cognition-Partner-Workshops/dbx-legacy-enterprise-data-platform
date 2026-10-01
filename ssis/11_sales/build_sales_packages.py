@@ -124,7 +124,10 @@ def build_sls_na_load_commission():
         str_col("PlanCurrencyCode", 3),
     ]
     flow = DataFlow("Calculate NA Commission")
-    flow.oledb_source("stg SaleLine NA", CONN_STAGING, NA_COMMISSION_SQL, columns, timeout=1800)
+    flow.oledb_source(
+        "stg SaleLine NA", CONN_STAGING, NA_COMMISSION_SQL, columns, timeout=1800,
+        parameters=("$Package::BatchId",),
+    )
     flow.lookup("Lookup House Account Flag", CONN_DW,
                 "SELECT [WWI Customer ID] AS CustomerId, [Is House Account] AS IsHouseAccount "
                 "FROM Dimension.Customer WHERE [Valid To] > SYSDATETIME();",
@@ -406,7 +409,10 @@ def build_sls_apac_load_commission():
         str_col("CommissionPeriod", 8), int_col("CommissionFiscalYear"), int_col("CommissionFiscalWeek"),
     ]
     flow = DataFlow("Calculate APAC Commission")
-    flow.oledb_source("stg SaleLine APAC", CONN_STAGING, APAC_COMMISSION_SQL, columns, timeout=1800)
+    flow.oledb_source(
+        "stg SaleLine APAC", CONN_STAGING, APAC_COMMISSION_SQL, columns, timeout=1800,
+        parameters=("$Package::BatchId",),
+    )
     flow.lookup("Lookup Period Average Rate", CONN_STAGING,
                 "SELECT CurrencyCode, QuoteCurrencyCode AS PlanCurrencyCode, ConversionRate "
                 "FROM stg.FxRate WHERE RateTypeCode = N'AVERAGE';",
@@ -642,7 +648,10 @@ def build_sls_load_promotionredemption():
         date_col("AttributionEndDate"),
     ]
     flow = DataFlow("Attribute Redemptions")
-    flow.oledb_source("stg Promotion Redemptions", CONN_STAGING, PROMOTION_SQL, columns, timeout=1200)
+    flow.oledb_source(
+        "stg Promotion Redemptions", CONN_STAGING, PROMOTION_SQL, columns, timeout=1200,
+        parameters=("$Package::BatchId",),
+    )
     flow.derived_column("Classify Attribution", [
         ("IsInWindow",
          'InvoiceDate >= StartDate && InvoiceDate <= (@[$Package::AttributionMode] == "STRICT" ? '

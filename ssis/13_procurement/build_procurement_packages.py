@@ -108,7 +108,10 @@ def build_prc_load_purchasespend():
         str_col("ResolvedContractNumber", 20),
     ]
     flow = DataFlow("Load Purchase Spend")
-    flow.oledb_source("stg PurchaseOrderLine", CONN_STAGING, SPEND_SQL, columns, timeout=3600)
+    flow.oledb_source(
+        "stg PurchaseOrderLine", CONN_STAGING, SPEND_SQL, columns, timeout=3600,
+        parameters=("$Package::BatchId",),
+    )
     flow.derived_column("Classify Spend", [
         ("PriceVariancePercent",
          "ISNULL(ContractPricePerOuter) || ContractPricePerOuter == 0 ? (DT_NUMERIC,18,2)0 : "
@@ -240,7 +243,10 @@ def build_prc_load_receiptmatching():
         money_col("PriceTolerancePercent"), money_col("PriceToleranceAbsolute"),
     ]
     flow = DataFlow("Match Receipts")
-    flow.oledb_source("stg Receipt", CONN_STAGING, RECEIPT_SQL, columns, timeout=3600)
+    flow.oledb_source(
+        "stg Receipt", CONN_STAGING, RECEIPT_SQL, columns, timeout=3600,
+        parameters=("$Package::BatchId",),
+    )
     flow.derived_column("Derive Match Variances", [
         ("QuantityVariance",
          "ReceivedOuters - ISNULL(InvoicedOuters) ? 0 : InvoicedOuters", int_col("QuantityVariance")),

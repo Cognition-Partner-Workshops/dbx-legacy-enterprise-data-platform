@@ -111,7 +111,10 @@ def build_fin_load_apaging():
         money_col("EarlyPaymentDiscountPercent"),
     ]
     flow = DataFlow("Load AP Aging Buckets")
-    flow.oledb_source("stg ApInvoice Open Items", CONN_STAGING, AP_AGING_SQL, columns, timeout=1800)
+    flow.oledb_source(
+        "stg ApInvoice Open Items", CONN_STAGING, AP_AGING_SQL, columns, timeout=1800,
+        parameters=("$Package::AgingAsOfDate", "$Package::AgingAsOfDate", "$Package::AgingAsOfDate", "$Package::AgingAsOfDate", "$Package::AgingAsOfDate", "$Package::BatchId"),
+    )
     flow.derived_column("Derive Aging Attributes", [
         ("IsPastDue", "DaysPastDue > 0 ? (DT_BOOL)1 : (DT_BOOL)0", bool_col("IsPastDue")),
         ("AgingBucketSort",
@@ -595,7 +598,9 @@ def build_fin_load_costallocation():
         "SELECT AllocationRuleId, SourceCostCentreCode, TargetCostCentreCode, DriverCode, "
         "AllocatedAmount, AccountingPeriod FROM work.CostAllocationResult "
         "WHERE AccountingPeriod = ?;",
-        columns, timeout=900)
+        columns, timeout=900,
+        parameters=("$Package::AccountingPeriod",),
+    )
     flow.aggregate("Summarise By Target", ["TargetCostCentreCode", "AccountingPeriod"],
                    [("AllocatedAmount", "AllocatedAmount", "SUM"),
                     ("AllocationRuleId", "RuleCount", "COUNTDISTINCT")])
@@ -659,7 +664,10 @@ def build_fin_currency_revaluation():
         str_col("RateTypeCode", 10), rate_col("ConversionRate"), str_col("RateSourceCode", 10),
     ]
     flow = DataFlow("Load Closing Rates")
-    flow.oledb_source("stg FxRate Closing", CONN_STAGING, FX_SQL, columns, timeout=600)
+    flow.oledb_source(
+        "stg FxRate Closing", CONN_STAGING, FX_SQL, columns, timeout=600,
+        parameters=("$Package::RevaluationDate",),
+    )
     flow.derived_column("Derive Inverse Rate", [
         ("InverseRate", "ConversionRate == 0 ? (DT_NUMERIC,18,8)0 : 1 / ConversionRate",
          rate_col("InverseRate")),
@@ -807,7 +815,10 @@ def build_fin_load_withholdingtax():
         money_col("WithholdingThresholdAmount"), money_col("WithholdingAmount"),
     ]
     flow = DataFlow("Split Withholding Tax")
-    flow.oledb_source("stg ApInvoiceLine", CONN_STAGING, WHT_SQL, columns, timeout=1800)
+    flow.oledb_source(
+        "stg ApInvoiceLine", CONN_STAGING, WHT_SQL, columns, timeout=1800,
+        parameters=("$Package::BatchId",),
+    )
     flow.derived_column("Derive Net Payable", [
         ("NetPayableAmount", "LineAmount - WithholdingAmount", money_col("NetPayableAmount")),
         ("IsWithheld", "WithholdingAmount > 0 ? (DT_BOOL)1 : (DT_BOOL)0", bool_col("IsWithheld")),
