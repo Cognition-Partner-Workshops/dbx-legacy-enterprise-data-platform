@@ -1,0 +1,54 @@
+# Gold fact layer (workstream 6). One notebook task per fact module, chained in the
+# dependency order used by sales_lakehouse.gold.facts.run. Serverless (no cluster block).
+resources:
+  jobs:
+    gold_facts:
+      name: "[${bundle.target}] wwi_sales gold facts"
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: mock_data_root
+          default: ${var.mock_data_root}
+        - name: batch_id
+          default: "{{job.run_id}}"
+      tasks:
+        - task_key: fact_sale
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/fact_sale.py
+        - task_key: fact_order
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/fact_order.py
+        - task_key: fact_payment
+          depends_on:
+            - task_key: fact_sale
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/fact_payment.py
+        - task_key: fact_return
+          depends_on:
+            - task_key: fact_sale
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/fact_return.py
+        - task_key: fact_credit_note
+          depends_on:
+            - task_key: fact_sale
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/fact_credit_note.py
+        - task_key: fact_sales_margin
+          depends_on:
+            - task_key: fact_return
+            - task_key: fact_credit_note
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/fact_sales_margin.py
+        - task_key: fact_daily_snapshots
+          depends_on:
+            - task_key: fact_order
+            - task_key: fact_return
+            - task_key: fact_credit_note
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/fact_daily_snapshots.py
+        - task_key: fact_order_fulfilment
+          depends_on:
+            - task_key: fact_order
+            - task_key: fact_payment
+          notebook_task:
+            notebook_path: ../notebooks/30_gold/fact_order_fulfilment.py
