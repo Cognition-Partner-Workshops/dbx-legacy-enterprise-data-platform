@@ -1,0 +1,47 @@
+# Sales Facts slice of the legacy SQL Server / SSIS warehouse, converted to a
+# Lakeflow Spark Declarative Pipeline over Delta tables.
+#
+# Deploy:  databricks bundle validate -t dev
+#          databricks bundle deploy   -t dev
+#          databricks bundle run sales_facts_pipeline -t dev
+#
+# The workspace host and the migration catalog are deliberately unset here.
+# The host comes from DATABRICKS_HOST / DATABRICKS_CONFIG_PROFILE and the
+# catalog from BUNDLE_VAR_migration_catalog, both taken from the engagement's
+# migration metadata (.migration/00_context.md, allowed_targets.json) once the
+# target workspace is confirmed.
+bundle:
+  name: sales_facts
+
+include:
+  - resources/*.yml
+
+variables:
+  migration_catalog:
+    description: Migration catalog from .migration/allowed_targets.json. Supply with --var or BUNDLE_VAR_migration_catalog.
+  catalog:
+    description: Migration catalog that owns the converted tables (never a production catalog).
+  schema:
+    description: Schema for the Sales Facts pipeline tables.
+  dimension_schema:
+    description: Fully qualified <catalog>.<schema> that holds dim_customer, dim_stock_item, dim_salesperson, dim_city, dim_sales_channel, dim_promotion.
+  landing_root:
+    description: Volume path the SQL Server extracts are landed under (…/sqlserver/Sales.Invoices, …/sqlserver/Sales.InvoiceLines, …/reference/ExchangeRateDaily).
+
+targets:
+  dev:
+    mode: development
+    default: true
+    variables:
+      catalog: ${var.migration_catalog}
+      schema: sales_facts_${workspace.current_user.short_name}
+      dimension_schema: ${var.migration_catalog}.dimensions_${workspace.current_user.short_name}
+      landing_root: /Volumes/${var.migration_catalog}/landing/legacy_extracts
+
+  parallel_run:
+    mode: production
+    variables:
+      catalog: ${var.migration_catalog}
+      schema: sales_facts
+      dimension_schema: ${var.migration_catalog}.dimensions
+      landing_root: /Volumes/${var.migration_catalog}/landing/legacy_extracts
